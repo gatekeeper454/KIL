@@ -8,3 +8,4 @@ Before proposing a new construct, the design must check KTP-Core, KTP-Identity,
 KTP-Transport, KTP-Enforce, KTP-Gravity, KTP-Audit, KTP-Emergency, and
 KTP-Conformance. Overlap is an error, not an innovation.
 
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

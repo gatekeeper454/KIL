@@ -32,3 +32,4 @@ in the local cluster.
 - Installing or changing a Kubernetes environment.
 - Modifying ShadowClaw or KTP upstream specifications.
 
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

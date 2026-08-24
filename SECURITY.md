@@ -9,3 +9,4 @@ The initial repository contains no production enforcement component. Treat all
 future releases as research software until a release explicitly states
 otherwise.
 
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

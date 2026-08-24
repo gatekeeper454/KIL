@@ -12,3 +12,4 @@ The technical timeline states that live credentials, internal hostnames, and
 specific indicators were redacted or genericized. The project must not infer
 missing values and label them `observed`.
 
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

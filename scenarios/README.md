@@ -5,3 +5,4 @@ manifest, normalized action trace, modeled context inputs, expected decisions,
 and uncertainty notes. Historical facts and modeled values must never share an
 unlabeled field.
 
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

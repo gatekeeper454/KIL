@@ -9,3 +9,4 @@ The draft bodies were supplied separately and are preserved byte-for-byte in
 specifications, or validated results. `SHA256SUMS` pins all three inputs so later
 edits cannot be confused with the originals.
 
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

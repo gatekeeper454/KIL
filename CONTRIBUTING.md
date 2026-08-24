@@ -14,3 +14,4 @@ Run the repository checks before submitting a change:
 make validate
 ```
 
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

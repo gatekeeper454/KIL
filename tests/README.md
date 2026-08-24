@@ -11,3 +11,4 @@ The implemented project will separate five suites:
 Only the package smoke test exists during bootstrap. Behavioral tests will be
 written before their implementation.
 
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

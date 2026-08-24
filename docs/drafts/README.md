@@ -11,3 +11,4 @@ source verification, KTP v2.0.0 compatibility review, calibration, and local
 experimental validation. Do not edit these originals; derived work belongs in
 `docs/paper/`, `docs/extension/`, or an approved specification.
 
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

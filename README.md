@@ -72,6 +72,8 @@ No cluster dependency is installed or downloaded by the bootstrap.
 Licensing for this new repository remains an explicit project decision. KTP
 source material retains its Apache-2.0 license and attribution requirements.
 
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
 ## Preserved starting artifacts
 
 The two original Markdown drafts supplied by the project founder are preserved
