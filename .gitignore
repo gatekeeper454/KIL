@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+build/
+dist/
+*.egg-info/
+.DS_Store
+.superpowers/
+
+# Generated replay and cluster output. Canonical fixtures remain tracked.
+artifacts/generated/
+.kind/
+

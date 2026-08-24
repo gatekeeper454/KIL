@@ -1,0 +1,13 @@
+Kinetic Infrastructure Layer (KIL)
+
+This project materially builds on the Kinetic Trust Protocol (KTP) v2.0.0 RFC
+series published by NMCITRA. KTP is available under the Apache License 2.0:
+https://github.com/nmcitra/ktp-rfc/tree/v2.0.0
+
+The historical case study is based on Hugging Face's public July 2026 incident
+disclosure and technical timeline. Sensitive values in those sources were
+redacted or genericized by the publisher.
+
+No license for original KIL material has been selected yet. Until one is
+adopted explicitly, no license is granted for that original material.
+
