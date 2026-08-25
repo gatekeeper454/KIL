@@ -1,0 +1,155 @@
+<div id="kil-hybrid-architecture">
+  <style>
+    #kil-hybrid-architecture { color: var(--foreground); }
+    #kil-hybrid-architecture .kil-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 2rem minmax(0, 1.3fr) 2rem minmax(0, 1fr);
+      gap: 0.75rem;
+      align-items: stretch;
+      margin-top: 1rem;
+    }
+    #kil-hybrid-architecture .kil-stack { display: grid; gap: 0.65rem; align-content: center; }
+    #kil-hybrid-architecture .kil-node {
+      padding: 0.8rem;
+      border-radius: 0.65rem;
+      background: color-mix(in srgb, var(--muted) 55%, transparent);
+    }
+    #kil-hybrid-architecture .kil-node[data-kind="ktp"] {
+      background: color-mix(in srgb, var(--viz-series-1) 14%, transparent);
+    }
+    #kil-hybrid-architecture .kil-node[data-kind="kil"] {
+      background: color-mix(in srgb, var(--viz-series-2) 16%, transparent);
+    }
+    #kil-hybrid-architecture .kil-node[data-kind="record"] {
+      background: color-mix(in srgb, var(--viz-series-3) 15%, transparent);
+    }
+    #kil-hybrid-architecture .kil-node strong,
+    #kil-hybrid-architecture .kil-node span { display: block; }
+    #kil-hybrid-architecture .kil-node span { color: var(--muted-foreground); margin-top: 0.25rem; }
+    #kil-hybrid-architecture .kil-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted-foreground);
+      font-size: 1.5rem;
+    }
+    #kil-hybrid-architecture .kil-engine {
+      display: grid;
+      gap: 0.65rem;
+      padding: 0.9rem;
+      border-radius: 0.8rem;
+      background: color-mix(in srgb, var(--accent) 50%, transparent);
+    }
+    #kil-hybrid-architecture .kil-gates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.55rem; }
+    #kil-hybrid-architecture .kil-gate {
+      padding: 0.65rem;
+      border-radius: 0.55rem;
+      background: color-mix(in srgb, var(--background) 72%, transparent);
+      text-align: center;
+    }
+    #kil-hybrid-architecture .kil-gate strong { display: block; }
+    #kil-hybrid-architecture .kil-gate span { display: block; color: var(--muted-foreground); margin-top: 0.2rem; }
+    #kil-hybrid-architecture .kil-rule {
+      padding: 0.65rem;
+      text-align: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--foreground);
+    }
+    #kil-hybrid-architecture .kil-rails {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
+      margin-top: 0.9rem;
+    }
+    #kil-hybrid-architecture .kil-rail {
+      padding: 0.75rem;
+      border-radius: 0.65rem;
+      background: color-mix(in srgb, var(--muted) 40%, transparent);
+    }
+    #kil-hybrid-architecture .kil-rail strong { display: block; }
+    #kil-hybrid-architecture .kil-rail span { display: block; color: var(--muted-foreground); margin-top: 0.2rem; }
+    #kil-hybrid-architecture .kil-note {
+      margin-top: 0.8rem;
+      padding-left: 0.7rem;
+      border-left: 3px solid var(--viz-series-2);
+      color: var(--muted-foreground);
+    }
+    @media (max-width: 680px) {
+      #kil-hybrid-architecture .kil-grid { grid-template-columns: 1fr; }
+      #kil-hybrid-architecture .kil-arrow { transform: rotate(90deg); }
+      #kil-hybrid-architecture .kil-gates { grid-template-columns: 1fr; }
+      #kil-hybrid-architecture .kil-rails { grid-template-columns: 1fr; }
+    }
+  </style>
+
+  <h2>Hybrid two-timescale enforcement</h2>
+  <p class="subtitle">One decision engine serves both the historical replay and the live transport adapter.</p>
+
+  <div class="kil-grid" role="img" aria-label="Telemetry and action requests flow into the KIL decision engine, pass three reducing gates, and produce an allow or deny decision plus a provenance record.">
+    <div class="kil-stack">
+      <div class="kil-node">
+        <strong>Action request</strong>
+        <span>identity · authority class · target · time</span>
+      </div>
+      <div class="kil-node">
+        <strong>Trajectory evidence</strong>
+        <span>workload history · sequence · origin · scope</span>
+      </div>
+      <div class="kil-node">
+        <strong>Evidence label</strong>
+        <span>observed · modeled · validated</span>
+      </div>
+    </div>
+
+    <div class="kil-arrow" aria-hidden="true">→</div>
+
+    <div class="kil-engine">
+      <strong>KIL deterministic decision engine</strong>
+      <div class="kil-gates">
+        <div class="kil-gate">
+          <strong>Immutable vetoes</strong>
+          <span>sovereignty + fail-safe constraints</span>
+        </div>
+        <div class="kil-gate" data-kind="ktp">
+          <strong>KTP envelope</strong>
+          <span>A(action) ≤ E(environment)</span>
+        </div>
+        <div class="kil-gate" data-kind="kil">
+          <strong>Ephemeral charge Qᵢ,c</strong>
+          <span>fresh, class-bound trajectory authority</span>
+        </div>
+      </div>
+      <div class="kil-rule">permit = veto_clear ∧ A ≤ E ∧ Qᵢ,c ≥ τc ∧ evidence_fresh</div>
+    </div>
+
+    <div class="kil-arrow" aria-hidden="true">→</div>
+
+    <div class="kil-stack">
+      <div class="kil-node" data-kind="ktp">
+        <strong>Allow</strong>
+        <span>short-lived, action-bound execution</span>
+      </div>
+      <div class="kil-node" data-kind="kil">
+        <strong>Deny / constrain</strong>
+        <span>no packet, API call, or admission proceeds</span>
+      </div>
+      <div class="kil-node" data-kind="record">
+        <strong>Decision record</strong>
+        <span>inputs · provenance · reason · counterfactual</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="kil-rails">
+    <div class="kil-rail">
+      <strong>Offline replay rail</strong>
+      <span>Versioned Hugging Face trace + modeled signals → reproducible counterfactual</span>
+    </div>
+    <div class="kil-rail">
+      <strong>Live validation rail</strong>
+      <span>Local Kubernetes telemetry → real transport allow/deny outcome</span>
+    </div>
+  </div>
+
+  <div class="kil-note">Q can reduce or withhold authority. It can never override a KTP veto or make A ≤ E when KTP says otherwise. KTP foundation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical CITATION.cff</a>.</div>
+</div>

@@ -45,6 +45,8 @@ sensor process.
 | `docs/paper/` | Publishable argument, model, results, and limitations |
 | `docs/drafts/` | Byte-preserved original draft artifacts |
 | `docs/extension/` | Narrow KTP extension proposal and compatibility analysis |
+| `docs/checkpoints/` | Durable pause/resume records for design and consultation |
+| `docs/design-drafts/` | Unapproved architecture visuals and working designs |
 | `docs/superpowers/specs/` | Approved design specifications |
 | `research/` | Primary-source register and preserved source material |
 | `scenarios/` | Replay scenarios and evidence manifests |
