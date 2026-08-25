@@ -9,8 +9,8 @@ dist/
 *.egg-info/
 .DS_Store
 .superpowers/
+research/private/
 
 # Generated replay and cluster output. Canonical fixtures remain tracked.
 artifacts/generated/
 .kind/
-

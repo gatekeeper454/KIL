@@ -18,12 +18,12 @@ instead of relying only on the validity of a credential at a checkpoint.
 - Repository boundary: separate from ShadowClaw so detection and enforcement
   remain independent processes.
 
-## Current open decision
+## Evidence contract
 
-Whether the public replay may combine disclosed Hugging Face actions with
-clearly labeled synthetic KTP context signals when the primary disclosure does
-not provide raw telemetry, while reserving `validated` for results reproduced
-in the local cluster.
+The public replay may combine disclosed Hugging Face actions with synthetic KTP
+context signals only when every value is labeled by provenance. `Observed`
+means supported by a primary source, `modeled` means an explicit counterfactual
+assumption, and `validated` is reserved for behavior reproduced locally.
 
 ## Non-goals for the bootstrap
 

@@ -1,0 +1,63 @@
+{
+  "schema_version": "1",
+  "transitioned_at": "2026-08-24",
+  "conversation_uuid": "9a53e1b5-61c4-4f86-ae36-049675efe6ba",
+  "conversation_name": "Cybersecurity and AI intersection innovation",
+  "visible_message_count": 16,
+  "human_message_count": 8,
+  "assistant_message_count": 8,
+  "extraction": {
+    "retained": [
+      "conversation metadata",
+      "message metadata",
+      "visible text content blocks"
+    ],
+    "excluded_content_types": [
+      "thinking",
+      "tool_use",
+      "tool_result"
+    ],
+    "removed_fields": [
+      "account"
+    ],
+    "unrelated_conversations_copied": false
+  },
+  "excluded_content_types": [
+    "thinking",
+    "tool_use",
+    "tool_result"
+  ],
+  "sources": {
+    "export_manifest": {
+      "location": "research/private/claude-export/export-manifest.json",
+      "sha256": "61eaed497e90a8b7cc8415eef5c31bc73bb7d147f0ee317c03b1b8b83945fa89",
+      "tracked": false
+    },
+    "conversations_zip": {
+      "original_location": "/Users/mistorm/Downloads/conversations-000.zip",
+      "sha256": "9bd150f0ab7710c856ec8aac774d259a36895c298ca445d003b2a5fcc7696ef5",
+      "tracked": false
+    },
+    "conversations_json": {
+      "original_location": "/Users/mistorm/Downloads/conversations.json",
+      "sha256": "66eaac9a63bba897f9a34e147e85fda3cdeae03ba2393d075f0f2349fa7d95f0",
+      "tracked": false
+    },
+    "private_raw_conversation": {
+      "location": "research/private/claude-export/raw-conversation.json",
+      "sha256": "109c870b6bea24386f2ff129dc9b16580fa953c28855707e34f0009af7e9ecb7",
+      "tracked": false
+    },
+    "public_safe_conversation": {
+      "location": "research/source-material/claude-origin-conversation.json",
+      "sha256": "9e1ff6295f8f460a18126f2e170130923f034a1417be10d98af9b4398bc38d78",
+      "tracked": true
+    }
+  },
+  "recovery": {
+    "previously_missing_messages": "1-9",
+    "recovered": true,
+    "original_drafts_previously_recovered": true
+  },
+  "ktp_citation": "https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff"
+}

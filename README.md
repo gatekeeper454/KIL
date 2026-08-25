@@ -80,3 +80,9 @@ The two original Markdown drafts supplied by the project founder are preserved
 unchanged in `docs/drafts/`. They are inputs to the design process, not approved
 specifications or validated findings. Their byte-level checksums are recorded in
 `research/source-material/SHA256SUMS`.
+
+The complete 16-message Claude origin conversation is preserved as a
+public-safe, provenance-bearing JSON record in `research/source-material/`.
+Private account identifiers, hidden reasoning, tool exchanges, and unrelated
+conversations are excluded from the tracked record. See
+`docs/transition/CLAUDE-ORIGIN.md` for the recovery boundary.
