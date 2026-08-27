@@ -147,4 +147,39 @@ modified yet; Architecture Section 1 remains unapproved.
 **Next gate:** Identify the existing KTP constructs that contribute to the
 derived runtime state and define the minimum new transport-enforcement contract.
 
+### T-003 — 2026-08-27 — Preliminary check against KTP v2.0.0 structure
+
+**Input:** Before refining the architecture, compare the specialist direction
+with the authoritative KTP v2.0.0 RFC inventory rather than relying on earlier
+brainstorming terminology.
+
+**Preliminary mapping:** The published KTP structure already assigns the likely
+inputs and enforcement responsibilities across existing specifications:
+
+- KTP-Core: Trust Score, Context Tensor, Trust Proof, Silent Veto, and
+  anti-Goodhart measures;
+- KTP-Identity: Vector Identity, Trajectory Chains, and Proof of Resilience;
+- KTP-Gravity: real-time constraints and the physics of denial;
+- KTP-Enforce: Policy Enforcement Points, Trust Tiers, Adaptive Dormancy, and
+  Mass Ceiling;
+- KTP-Transport: wire formats and real-time transport protocols; and
+- KTP-Audit: Decision Geometry, immutable logging, forensics, and
+  counterfactual analysis.
+
+**Working interpretation:** These existing constructs support the specialist's
+view that `Q_i,c` should be derived rather than standardized as a second trust
+score. The plausible new KIL contribution is a narrow composition and runtime
+binding contract across existing RFCs, plus reference behavior and conformance
+vectors for transport-native enforcement.
+
+**Status:** Preliminary. The RFC inventory supports the direction, but the full
+normative text must be mapped clause-by-clause before declaring an extension
+gap or selecting KTP 2.1 versus 3.0.
+
+**Primary source:** [KTP v2.0.0 RFC repository](https://github.com/nmcitra/ktp-rfc/tree/v2.0.0).
+
+**Next gate:** Decide whether KIL exposes one composite derived enforcement
+state or preserves the contributing KTP values independently through the hot
+path.
+
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
