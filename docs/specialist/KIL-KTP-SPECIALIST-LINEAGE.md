@@ -182,4 +182,51 @@ gap or selecting KTP 2.1 versus 3.0.
 state or preserves the contributing KTP values independently through the hot
 path.
 
+### T-004 — 2026-08-27 — Composite enforcement state selected
+
+**Input:** KIL enforcement points should consume a **signed, short-lived
+composite KTP enforcement state** rather than independently recomputing
+authority from all individual KTP inputs on every action.
+
+**Decision:** Confirmed architectural direction.
+
+**Interpretation:**
+
+- KTP remains authoritative for the trust semantics and derivation of the
+  effective enforcement state.
+- The hot-path KIL adapter verifies and consumes a compact, signed state rather
+  than ingesting raw Context Tensor observations or reproducing the complete
+  KTP computation.
+- The state must be bound to the relevant identity, authority class, execution
+  environment or zone, action scope, issuance time, expiry time, ordering or
+  freshness data, and the applicable veto/envelope result.
+- The state must carry or reference sufficient derivation and evidence digests
+  for KTP-Audit Decision Geometry without exposing unnecessary raw context at
+  every enforcement point.
+- Expiry or failed verification cannot expand authority. Exact stale-state
+  behavior remains part of the safety design.
+
+**Why this direction:** It gives eBPF, service-mesh, Kubernetes, and later
+enforcement adapters one stable verification contract; reduces latency and
+privacy exposure; prevents different enforcement points from deriving
+inconsistent authority; and creates a concrete candidate extension across
+KTP-Transport, KTP-Enforce, and KTP-Audit.
+
+**Still unresolved:**
+
+- the normative name and schema of the composite state;
+- which KTP component or quorum may issue and sign it;
+- TTL and refresh semantics by authority class;
+- revocation and anti-replay behavior; and
+- whether a KIL enforcement point may apply a local reducing-only overlay
+  between signed refreshes.
+
+**Affected artifacts:** The later architecture specification and extension
+proposal will define the composite-state contract. The current visual remains a
+draft until the local-overlay and failure semantics are approved.
+
+**Next gate:** Decide whether local enforcement points may immediately reduce
+the signed state using newer local evidence, or must wait for a newly signed KTP
+state for every change.
+
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
