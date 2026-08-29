@@ -618,4 +618,56 @@ status of the local reducing-only overlay.
 **Next gate:** Founder reviews the lab-validation design specification. After
 approval, produce the test-first deterministic-rail implementation plan.
 
+### T-013 — 2026-08-29 — Correction propagation status clarified
+
+**Input:** The founder asked whether all corrected elements are retroactive to
+the project's main data.
+
+**Status:** Clarification confirmed; propagation is incomplete by design and by
+current implementation stage.
+
+**Interpretation:**
+
+- The corrected terminology, evidence rules, two-timescale distinction,
+  reducing-only invariants, and initial mathematical profile are authoritative
+  in the approved-direction lab-validation specification and this lineage.
+- The canonical paper currently contains the corrected citation and evidence
+  boundary, but it does not yet contain the consolidated trust model, incident
+  analysis, or full corrected notation.
+- The saved architecture visual still requires revision to distinguish the
+  authoritative refresh loop from the fast enforcement loop and to distinguish
+  those timescales from the offline and live execution rails.
+- The two files under `docs/drafts/` intentionally retain `E_i,c`, the
+  “Mahalanobis” wording, and categorical counterfactual language because they
+  are byte-preserved source artifacts with pinned checksums. They must not be
+  retroactively edited.
+- Scenario fixtures, schemas, code, replay data, and lab run bundles do not yet
+  exist, so there is no implemented main dataset to migrate. They must be
+  created directly from the corrected specification rather than generated from
+  the preserved drafts without normalization.
+
+**Rationale:** Provenance requires preserving original source artifacts while
+canonical and generated artifacts adopt the latest approved semantics. Calling
+all data corrected before that propagation occurs would hide real drift and
+weaken the evidence chain.
+
+**Affected artifacts:**
+
+- `docs/paper/kinetic-infrastructure.md` (partial propagation)
+- `docs/design-drafts/hybrid-two-timescale-architecture.html` (revision needed)
+- `docs/drafts/kil-trust-decay-model.md` and
+  `docs/drafts/ambient-enforcement-vs-huggingface-incident.md` (intentionally
+  preserved)
+- future normalized scenario, schemas, implementation, run bundles, figures,
+  and PDF (must use corrected semantics from inception)
+
+**Unresolved questions:** Whether to add an automated semantic-invariant test
+covering canonical paper, architecture, schemas, code, and generated artifacts;
+and when to revise the architecture visual relative to deterministic-rail
+implementation planning.
+
+**Next gate:** Founder decides whether to authorize a correction-propagation
+pass across all mutable canonical artifacts before the implementation plan is
+written.
+
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
