@@ -1106,3 +1106,51 @@ historical counterfactuals, cryptographic enforcement, cluster behavior, or
 live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-024 — 2026-08-29 — Immutable V1 decision-domain records implemented
+
+**Input:** The approved V1 deterministic-kernel plan called for immutable,
+slotted domain records representing action requests, signed composite KTP
+enforcement state, optional local reducing evidence, reduction profiles, and
+decision outputs. The protocol boundary continues to treat composite-state
+authenticity as an algorithm-neutral Boolean input; concrete signature encoding
+is outside V1.
+
+**Interpretation:** The domain layer must reject runtime type bypasses and
+non-finite authority values before the decision engine performs any arithmetic
+or gate evaluation. It must preserve the reducing-only architecture without
+embedding later decision-engine policy into record construction.
+
+**Decision status:** Confirmed V1 Task 3 implementation complete; independent
+specification and quality reviews remain pending. Test-first execution recorded
+the expected missing-module failure. The implemented suite now passes 11
+focused domain tests and all 39 repository tests under bundled Python 3.12;
+preserved-source checksums and `git diff --check` also pass.
+
+**Rationale:** Frozen, slotted dataclasses provide a small immutable boundary.
+Exact integer and Boolean checks prevent Python's Boolean-as-integer behavior
+from bypassing field contracts; finite `Decimal` checks prevent NaN and
+infinity from entering authority calculations. Stable string enums preserve
+the public decision vocabulary. The records validate construction invariants
+but intentionally do not encode cryptographic formats or pre-decide engine
+outcomes.
+
+**Affected artifacts:**
+
+- `src/kil/domain.py`
+- `tests/test_domain.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent spec and quality review are pending.
+Concrete KTP signature encoding and authenticated composite-state transport
+remain a later compatibility gate, not part of this software-domain checkpoint.
+
+**Next gate:** Obtain Task 3 specification compliance and quality approval
+before implementing the deterministic decision engine in V1 Task 4.
+
+This checkpoint is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
