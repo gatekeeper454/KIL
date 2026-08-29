@@ -1458,3 +1458,46 @@ historical counterfactuals, cryptographic enforcement, cluster behavior, or
 live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-031 — 2026-08-29 — V1 pull-request publication selected; authentication pending
+
+**Input:** The user selected integration option 2: push
+`feature/v1-deterministic-kernel` and create a pull request against `main`, then
+asked to retry after the first GitHub authentication check failed.
+
+**Interpretation:** V1 is approved for publication as a reviewable feature
+branch, while merge remains a later, explicit decision. The implementation
+worktree must remain available for pull-request feedback.
+
+**Decision status:** Confirmed publication path; externally blocked before
+push. The local branch remains complete and clean, but GitHub CLI reports the
+saved token for `gatekeeper454` is invalid. A replacement device-authentication
+flow was initiated and is waiting for the user to sign in to GitHub and approve
+the one-time device authorization. No branch push or pull request has yet been
+created in this checkpoint.
+
+**Rationale:** Publishing through a pull request preserves the isolated V1
+commit history, exposes the deterministic-kernel evidence for review, and keeps
+merge authority separate from implementation completion. Authentication cannot
+be supplied or inferred by the implementation process.
+
+**Affected artifacts:**
+
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- Local branch `feature/v1-deterministic-kernel`
+- Planned remote pull request targeting `main`
+
+**Unresolved questions:** Completion of GitHub device authorization, successful
+remote push, and creation/readback of the pull request remain pending. Concrete
+KTP signature verification, calibrated telemetry, historical replay, and live
+enforcement remain outside V1.
+
+**Next gate:** After the user completes GitHub sign-in and device authorization,
+verify the authenticated account, commit this publication checkpoint, push the
+feature branch, create the pull request, and read back its URL and state.
+
+This checkpoint records repository-publication status only. It does not add or
+validate historical counterfactual, cryptographic, cluster, or live-enforcement
+evidence.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
