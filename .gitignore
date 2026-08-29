@@ -14,3 +14,4 @@ research/private/
 # Generated replay and cluster output. Canonical fixtures remain tracked.
 artifacts/generated/
 .kind/
+.worktrees/
