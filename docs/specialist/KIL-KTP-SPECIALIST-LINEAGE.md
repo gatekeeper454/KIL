@@ -404,4 +404,47 @@ demo.
 or withhold authority between signed composite-state refreshes, without ever
 increasing authority or overriding a KTP veto.
 
+### T-009 — 2026-08-29 — Authoritative KTP and incident citations required
+
+**Input:** The founder required the white paper to cite the KTP v2.0.0 RFC
+release, the official Enterprise KTP architecture, the KTP Constitution, and
+the Hugging Face technical incident timeline.
+
+**Decision:** Confirmed source and citation policy; initial citations added to
+the canonical manuscript.
+
+**Interpretation:**
+
+- KTP v2.0.0 is the versioned normative baseline for protocol terminology and
+  behavior used by the paper.
+- The Enterprise KTP architecture is an official explanatory source for the
+  action-authorization plane, enforcement surfaces, and least-trajectory
+  framing.
+- The KTP Constitution is the governing source for the principles against which
+  KIL safety, graceful degradation, accountability, and immutable constraints
+  are evaluated.
+- The Hugging Face technical timeline is the primary source for observed facts
+  in the public incident case study.
+- No citation to the incident report converts a KIL counterfactual into a
+  validated result. Modeled inputs and outcomes remain labeled as such until
+  reproduced in the local lab.
+- The canonical KTP `CITATION.cff` remains included for formal attribution.
+
+**Rationale:** Assigning each source a defined evidentiary role prevents
+explanatory pages from silently becoming normative protocol text and prevents
+incident facts from being conflated with untested KIL prevention claims.
+
+**Affected artifacts:**
+
+- `docs/paper/kinetic-infrastructure.md`
+- the future citation database, claim-evidence matrix, figure captions, and PDF
+- the future replay trace and lab result manifests
+
+**Unresolved questions:** Final bibliography style; author and institutional
+attribution; archival snapshots or persistent identifiers for web sources; and
+the exact paragraph-, event-, and figure-level citation mapping.
+
+**Next gate:** Resolve the fast-loop reducing-only authority question, then
+select the paper's primary audience and target length.
+
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
