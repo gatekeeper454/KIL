@@ -267,4 +267,49 @@ qualification in the opening remain subject to editorial review.
 enforcement points may apply an immediate reducing-only constraint between
 signed KTP state refreshes.
 
+### T-006 — 2026-08-29 — `Q_i,c` confirmed as a new KTP extension
+
+**Input:** The founder clarified that `Q_i,c` is a new extension and should
+relate to KTP as an extension for KTP 2.0, with a possible future expression in
+KTP 2.1 or 3.0.
+
+**Decision:** Confirmed architectural and protocol direction.
+
+**Clarification of earlier lineage:** Entries T-002 and T-003 correctly preserve
+the requirement that `Q_i,c` derive from existing KTP constructs and must not
+become a competing trust system. This entry supersedes any reading of those
+entries that would classify `Q_i,c` as merely an implementation-local metric or
+as having no normative extension semantics.
+
+**Current interpretation:**
+
+- `Q_i,c` is a new, signed, short-lived KIL composite enforcement state.
+- Existing KTP constructs supply its authoritative trust, trajectory,
+  constraint, identity, enforcement, transport, and audit semantics.
+- KIL adds the normative composition, binding, freshness, consumption,
+  reducing-only enforcement, and audit contract required at infrastructure
+  enforcement points.
+- The initial specification is an extension profile layered on KTP v2.0.0.
+- Backward-compatible standardization may fit KTP 2.1; changes to core
+  invariants, mandatory processing, or wire semantics may require KTP 3.0.
+
+**Rationale:** Treating the composite state as an extension makes KIL
+interoperable and testable rather than leaving a critical authorization value as
+private implementation behavior. Deriving it from KTP preserves semantic
+continuity and prevents duplication of KTP trust primitives.
+
+**Affected artifacts:**
+
+- `docs/extension/README.md`
+- `docs/checkpoints/2026-08-24-specialist-consultation.md`
+- the future architecture specification, extension schema, conformance vectors,
+  and transport adapters
+
+**Unresolved questions:** Exact contributing KTP fields, schema name, issuer and
+signature authority, TTL classes, revocation, replay protection, local
+reducing-only behavior, and final KTP version placement.
+
+**Next gate:** Decide whether local enforcement points may immediately apply a
+reducing-only constraint between signed KTP state refreshes.
+
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

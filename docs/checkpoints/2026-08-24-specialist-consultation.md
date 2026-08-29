@@ -32,20 +32,27 @@ offline replay and live transport adapter:
 permit = veto_clear ∧ A(action) ≤ E(environment) ∧ Q_i,c ≥ τ_c ∧ evidence_fresh
 ```
 
-Here `Q_i,c` is ephemeral trajectory-derived authority for identity `i` and
-authority class `c`. Its proposed governance boundary is reducing-only: it may
-constrain or withhold authority, but it may never override a KTP veto or make an
-action fit the KTP envelope when `A(action) ≤ E(environment)` is false.
+Here `Q_i,c` is a new KIL extension to KTP: an ephemeral, composite,
+trajectory-derived enforcement state for identity `i` and authority class `c`.
+It is derived from and constrained by existing KTP constructs rather than
+forming a parallel trust system. Its proposed governance boundary is
+reducing-only: it may constrain or withhold authority, but it may never override
+a KTP veto or make an action fit the KTP envelope when
+`A(action) ≤ E(environment)` is false.
+
+The first implementation will express this as an extension profile for KTP
+v2.0.0. Its future normative home may be KTP 2.1 if backward-compatible, or KTP
+3.0 if adoption requires changes to core or wire semantics.
 
 The saved visual companion is
 [`../design-drafts/hybrid-two-timescale-architecture.html`](../design-drafts/hybrid-two-timescale-architecture.html).
 
 ## Questions for the specialist
 
-1. **KTP alignment and terminology:** Is `Q_i,c` genuinely an extension, or is
-   it better expressed through existing Proof of Reality, standing, trust-trend,
-   KTP-Gravity, or environmental-envelope constructs? Where is the smallest
-   defensible extension boundary?
+1. **KTP alignment and terminology — resolved 2026-08-29:** `Q_i,c` is a new
+   KIL extension derived from existing KTP constructs. The remaining work is to
+   define the smallest extension boundary and determine whether its eventual
+   normative expression belongs in KTP 2.1 or 3.0.
 2. **Enforcement substrate:** Which first adapter best proves transport-native
    ambient enforcement without overstating what the prototype demonstrates:
    eBPF, Envoy/Istio, Kubernetes admission/network policy, SmartNIC, or SDN?
