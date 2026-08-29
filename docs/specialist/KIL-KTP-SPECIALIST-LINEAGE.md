@@ -1304,3 +1304,57 @@ historical counterfactuals, cryptographic enforcement, cluster behavior, or
 live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-028 — 2026-08-29 — Canonical V1 decision serialization implemented
+
+**Input:** The approved V1 plan called for deterministic canonical JSON and a
+SHA-256 digest for KIL decision artifacts, invariant sweeps proving that the
+fast local loop cannot increase signed-state authority, and a development
+version marking completion of the deterministic software kernel.
+
+**Interpretation:** Canonicalization is a software evidence and interoperability
+boundary, not cryptographic verification. Dataclass records, enum values,
+finite decimal values, and ordered sequences require one stable representation.
+Ambiguous non-string dictionary keys, unordered sets, binary values, floats,
+non-finite decimals, and other unsupported runtime objects must be rejected
+rather than silently coerced. The local overlay remains strictly reducing over
+the signed-state result throughout the sampled divergence domain.
+
+**Decision status:** Confirmed Task 5 implementation ready for independent
+specification and quality review. Test-first execution recorded the expected
+missing-module RED and a separate package-version RED. The focused V1 suite
+passes 59 tests and full repository validation passes 69 tests under bundled
+Python 3.12; preserved-source checksums and `git diff --check` pass.
+
+**Rationale:** Canonical JSON now recursively normalizes dataclass records,
+enums, finite `Decimal` values, dictionaries with string-only keys, lists, and
+tuples before stable JSON encoding. The digest is SHA-256 over the UTF-8
+canonical representation. Tests cover dictionary insertion-order stability,
+decision-record serialization, nested sequences, caller Decimal-context
+independence, unsupported and non-finite inputs, and reducing-only authority
+invariants across divergence sweeps. Package version `0.1.0-dev1` identifies
+this development gate without implying production or cryptographic readiness.
+
+**Affected artifacts:**
+
+- `src/kil/canonical.py`
+- `src/kil/__init__.py`
+- `tests/test_kernel_invariants.py`
+- `tests/test_package.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent Task 5 specification and quality reviews
+remain pending. Concrete KTP signature encoding and verification, live
+infrastructure adapters, historical replay, cluster enforcement, and
+telemetry-calibrated thresholds remain outside this deterministic V1 software
+gate.
+
+**Next gate:** Obtain independent Task 5 specification compliance and code
+quality approval, then perform the whole-V1 completion review.
+
+This checkpoint is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
