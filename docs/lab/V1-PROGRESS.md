@@ -12,7 +12,7 @@ an expected test-first state, not a validated KIL outcome.
 |---|---|---|---|---|---|
 | 0 — runtime pin | n/a: build configuration | Python 3.12.13; 11 tests passed | approved | approved | completed |
 | 1 — evidence contract | expected RED: initial import failure; review regressions then exposed 8 runtime type/blank-metadata bypass failures | focused suite with repository import path: 6 tests passed, 0 failed | approved | approved | completed |
-| 2 — decay arithmetic | pending | pending | pending | pending | queued |
+| 2 — decay arithmetic | expected RED: `ModuleNotFoundError: No module named 'kil.decay'`; focused run exited 1 | bundled Python 3.12; focused 6 tests and full 23-test validation passed, 0 failed; `git diff --check` passed | pending | pending | review pending |
 | 3 — domain records | pending | pending | pending | pending | queued |
 | 4 — decision engine | pending | pending | pending | pending | queued |
 | 5 — canonicalization and invariants | pending | pending | pending | pending | queued |

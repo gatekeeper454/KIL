@@ -935,3 +935,46 @@ This is software-development evidence only, not validated cryptographic,
 historical, cluster, or live enforcement behavior.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-020 — 2026-08-29 — V1 deterministic trust-decay arithmetic implemented
+
+**Input:** V1 Task 2 required a dependency-free, deterministic `Decimal`
+implementation of weighted diagonal distance, logistic squashing, passive
+decay, superlinear divergence loss, and reducing-only local charge adjustment.
+
+**Interpretation:** These functions are arithmetic primitives for the V1
+reference kernel. They encode the approved trust-decay model mechanics but do
+not independently establish a KTP authority grant, incident-prevention claim,
+cryptographic authenticity result, or live enforcement outcome.
+
+**Decision status:** Proposed implementation complete; independent spec and
+quality review are pending. The focused test-first run first failed with the
+expected missing-module error, then passed six specified behavior tests. The
+full repository validation passed 23 tests with no failures.
+
+**Rationale:** Fixed-precision local `Decimal` contexts, sorted feature-key
+iteration, explicit input domains, and reducing-only clamping make the
+arithmetic reproducible and prevent local evidence from increasing the
+decayed composite charge. The superlinear loss remains zero inside its normal
+band and rises cubically in the specified reference case.
+
+**Affected artifacts:**
+
+- `src/kil/decay.py`
+- `tests/test_decay.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent spec and quality review remain pending.
+Task 2 does not calibrate feature means, scales, weights, loss rates, or decay
+rates from local-cluster telemetry; those values remain future experimental
+inputs governed by the evidence contract.
+
+**Next gate:** Complete independent spec and quality review for Task 2, then
+proceed to V1 Task 3 immutable domain records only if both reviews approve.
+
+This checkpoint is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
