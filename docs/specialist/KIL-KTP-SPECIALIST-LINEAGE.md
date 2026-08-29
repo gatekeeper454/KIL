@@ -978,3 +978,44 @@ historical counterfactuals, cryptographic enforcement, cluster behavior, or
 live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-021 — 2026-08-29 — Decay exponent aligned with domain contract
+
+**Input:** Independent spec review found that `superlinear_loss` declared its
+exponent as `Decimal`, while the approved V1 plan and downstream
+`ReductionProfile` contract require an integer exponent greater than one.
+
+**Interpretation:** The exponent representation is part of the stable V1
+decision contract, not a calibration preference. Permitting decimal or other
+non-integer values would create an avoidable mismatch between the arithmetic
+primitive and the immutable domain record that will supply it.
+
+**Decision status:** Confirmed correction implemented; spec re-review and
+quality review remain pending. A regression test first demonstrated that a
+`Decimal("3")` exponent was silently accepted, then passed after the function
+was narrowed to an integer-only API with runtime validation. The focused suite
+passes seven tests and the full repository validation passes 24 tests.
+
+**Rationale:** Requiring a true integer greater than one keeps the arithmetic
+API aligned with the approved downstream profile and prevents callers from
+silently introducing fractional-power semantics that V1 does not specify.
+
+**Affected artifacts:**
+
+- `src/kil/decay.py`
+- `tests/test_decay.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent spec re-review and quality review remain
+pending. Calibration of the integer exponent and other profile values remains
+future experimental work subject to the evidence contract.
+
+**Next gate:** Obtain spec re-review and quality approval for Task 2 before
+proceeding to V1 Task 3 immutable domain records.
+
+This correction is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

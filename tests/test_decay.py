@@ -49,7 +49,7 @@ class TrustDecayArithmeticTest(unittest.TestCase):
     def test_superlinear_loss_is_zero_in_band_and_cubic_outside(self):
         threshold = Decimal("0.25")
         loss_rate = Decimal("25")
-        exponent = Decimal("3")
+        exponent = 3
 
         self.assertEqual(
             superlinear_loss(threshold, threshold, loss_rate, exponent),
@@ -62,6 +62,15 @@ class TrustDecayArithmeticTest(unittest.TestCase):
             Decimal("1.0"), threshold, loss_rate, exponent
         )
         self.assertEqual(full_divergence_loss, Decimal("8") * half_divergence_loss)
+
+    def test_superlinear_loss_requires_an_integer_exponent(self):
+        with self.assertRaisesRegex(ValueError, "exponent"):
+            superlinear_loss(
+                divergence=Decimal("0.5"),
+                threshold=Decimal("0.25"),
+                loss_rate=Decimal("25"),
+                exponent=Decimal("3"),
+            )
 
     def test_local_effective_charge_clamps_to_zero_and_never_increases(self):
         depleted = local_effective_charge(

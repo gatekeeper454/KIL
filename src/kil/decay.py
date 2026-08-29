@@ -66,7 +66,7 @@ def superlinear_loss(
     divergence: Decimal,
     threshold: Decimal,
     loss_rate: Decimal,
-    exponent: Decimal,
+    exponent: int,
 ) -> Decimal:
     """Return zero in-band and a superlinear penalty above the threshold."""
     if divergence < ZERO or divergence > ONE:
@@ -75,8 +75,8 @@ def superlinear_loss(
         raise ValueError("threshold must be greater than zero")
     if loss_rate < ZERO:
         raise ValueError("loss_rate must be nonnegative")
-    if exponent <= ONE:
-        raise ValueError("exponent must be greater than one")
+    if type(exponent) is not int or exponent <= 1:
+        raise ValueError("exponent must be an integer greater than one")
     if divergence <= threshold:
         return ZERO
 
