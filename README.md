@@ -15,9 +15,12 @@ KTP-Transport, KTP-Enforce, KTP-Gravity, or Vector Identity constructs.
 
 ## Status
 
-Repository scaffold only. No trust-decay equation, cutoff result, or enforcement
-claim is implemented or validated yet. Those are design decisions still under
-review.
+The deterministic V1 decision kernel and V2 historical replay are locally
+executable. V2 normalizes eight source-cited incident cut points, evaluates one
+common stream under a modeled credential-policy baseline and two KIL modes, and
+emits a reproducible, integrity-checked bundle. Historical counterfactual
+results remain **modeled**, not validated. Concrete KTP signature verification
+and live-cluster enforcement remain later gates.
 
 ## Evidence classes
 
@@ -66,10 +69,35 @@ make test
 
 No cluster dependency is installed or downloaded by the bootstrap.
 
+## Historical replay
+
+Use Python 3.11 or newer and provide an immutable implementation identity such
+as the full Git commit. `OUTPUT` is the parent directory; the command creates a
+content-addressed child directory and prints its path.
+
+```bash
+make replay \
+  PYTHON=/path/to/python3.12 \
+  OUTPUT=/absolute/path/to/replay-runs \
+  VERSION=<full-git-commit>
+```
+
+The bundle contains `manifest.json`, `scenario.json`, `states.jsonl`,
+`decisions.jsonl`, `metrics.json`, `summary.md`, and `SHA256SUMS`. Verify its
+six public artifacts from inside the emitted run directory:
+
+```bash
+shasum -a 256 -c SHA256SUMS
+```
+
+The replay uses source-cited observed incident summaries together with
+explicitly synthetic KTP state, local context signals, and credential-policy
+assumptions. Its decisions must not be relabeled as validated.
+
 ## Primary foundations
 
 - [KTP v2.0.0 RFC series](https://github.com/nmcitra/ktp-rfc/tree/v2.0.0)
-- [Hugging Face July 2026 technical timeline](https://cdn-avatars.qwak.ai/blog/agent-intrusion-technical-timeline)
+- [Hugging Face July 2026 technical timeline](https://huggingface.co/blog/agent-intrusion-technical-timeline)
 - [Hugging Face July 2026 incident disclosure](https://huggingface.co/blog/security-incident-july-2026)
 
 Licensing for this new repository remains an explicit project decision. KTP

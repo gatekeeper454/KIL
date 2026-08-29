@@ -17,7 +17,7 @@ counterfactual decisions remain **modeled**, never validated.
 | 2 — common-stream paired replay | expected RED: `ModuleNotFoundError: kil.replay`, exit 1 | focused 5 tests; full 94 tests; five source hashes passed | plan and self-review approved | completed |
 | 3 — deterministic run bundles | expected RED: `ModuleNotFoundError: kil.run_bundle`, exit 1 | focused 5 tests; full 99 tests; five source hashes passed | plan and self-review approved | completed |
 | 4 — eight-phase Hugging Face scenario | expected RED: scenario file absent; exit 1 | focused 4 tests; full 103 tests; JSON parse and five source hashes passed | plan and self-review approved | completed |
-| 5 — replay CLI and modeled report | pending | pending | pending | queued |
+| 5 — replay CLI and modeled report | running | pending | pending | in progress |
 
 ## Evidence boundary
 
