@@ -17,7 +17,7 @@ counterfactual decisions remain **modeled**, never validated.
 | 2 — common-stream paired replay | expected RED: `ModuleNotFoundError: kil.replay`, exit 1 | focused 5 tests; full 94 tests; five source hashes passed | plan and self-review approved | completed |
 | 3 — deterministic run bundles | expected RED: `ModuleNotFoundError: kil.run_bundle`, exit 1 | focused 5 tests; full 99 tests; five source hashes passed | plan and self-review approved | completed |
 | 4 — eight-phase Hugging Face scenario | expected RED: scenario file absent; exit 1 | focused 4 tests; full 103 tests; JSON parse and five source hashes passed | plan and self-review approved | completed |
-| 5 — replay CLI and modeled report | running | pending | pending | in progress |
+| 5 — replay CLI and modeled report | expected RED: missing `tools/replay.py`; subprocess exit 2 | focused 1 CLI test and 25 V2 tests; full 104 tests; six bundle hashes and five source hashes passed | plan and self-review approved | completed |
 
 ## Evidence boundary
 
@@ -26,6 +26,25 @@ state, local signals, control assumptions, and every replay decision must carry
 modeled provenance and rationale. The word **validated** is reserved for behavior
 reproduced under an approved validation protocol; V2 historical replay does not
 meet that threshold.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## First modeled report
+
+- Run ID: `1ab32d9f4ea27624`
+- Scenario: `hf-july-2026-eight-phase`
+- Implementation: `e803cd144d785c13d07f9d96670a5c52e796314f`
+- Profile: `weighted-diagonal-v0-modeled`
+- Events: 8
+- Modeled credential-policy permits: 8
+- Signed-state-only denials: 8; unreachable descendants: 7
+- Signed-plus-local-reduction denials: 8; unreachable descendants: 7
+- Integrity: all six public-artifact SHA-256 entries verified
+- Persistent local path: `artifacts/generated/v2-historical-replay/1ab32d9f4ea27624`
+
+This report is local generated evidence and is intentionally excluded from Git
+by `artifacts/generated/`. Its manifest, decisions, and metrics are modeled,
+not validated.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 

@@ -1879,3 +1879,58 @@ the modeled signal values, cryptographic enforcement, cluster behavior, or live
 KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-040 — 2026-08-29 — Reproducible V2 CLI and first modeled report completed
+
+**Input:** V2 Task 5 required a supported command-line interface, documented
+Make target, and first integrity-checked modeled report suitable for inspection
+and later white-paper figures.
+
+**Interpretation:** A report intended for publication support must identify an
+immutable implementation commit, emit exactly one deterministic bundle, expose
+its evidence class in machine-readable metadata, and verify every public
+artifact. Generated historical output remains local modeled evidence; it does
+not become validated merely because the software and checksums pass.
+
+**Decision status:** Confirmed Task 5 implementation complete under local
+review. The expected RED test failed because `tools/replay.py` was absent. The
+CLI test, all 25 V2-focused tests, and all 104 repository tests pass under
+bundled Python 3.12. All five preserved-source hashes pass. The first report,
+run `1ab32d9f4ea27624`, was generated from implementation commit
+`e803cd144d785c13d07f9d96670a5c52e796314f`; all six public-artifact hashes
+verify.
+
+**Rationale:** The CLI fixes the first reduction profile to
+`weighted-diagonal-v0-modeled`, loads the versioned canonical scenario, runs
+all three comparison modes over one stream, and delegates atomic publication
+to the tested bundle writer. The Make target requires explicit output and
+implementation-version values. The report records eight modeled baseline
+permits, eight denials in each KIL mode, and seven unreachable descendants in
+each KIL mode after the phase-1 denial.
+
+**Affected artifacts:**
+
+- `tools/replay.py`
+- `tests/test_replay_cli.py`
+- `Makefile`
+- `README.md`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- Local generated bundle
+  `artifacts/generated/v2-historical-replay/1ab32d9f4ea27624`
+
+**Unresolved questions:** Whole-V2 diff review and integration remain pending.
+The generated bundle is intentionally ignored by Git and is not a signed
+attestation. The modeled profile still requires local-cluster calibration, and
+concrete KTP signature verification remains a later gate. The all-deny first
+profile is a testable counterfactual, not evidence of historical prevention.
+
+**Next gate:** Perform whole-V2 review against the approved plan and evidence
+contract, rerun final verification from the clean feature branch, then present
+the integration options without merging or pushing automatically.
+
+This checkpoint validates deterministic CLI and bundle behavior only. It does
+not validate historical prevention, modeled parameter accuracy, cryptographic
+enforcement, cluster behavior, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
