@@ -727,4 +727,67 @@ publication metadata for the final PDF.
 **Next gate:** Produce the detailed test-first implementation plan for the V1
 deterministic decision kernel and V2 historical replay.
 
+### T-015 — 2026-08-29 — V1 and V2 implementation plans completed
+
+**Input:** The founder directed the project to advance to the next gate after
+canonical correction propagation.
+
+**Decision:** The approved validation design has been decomposed into two
+independently executable, test-first implementation plans: V1 deterministic
+kernel and V2 historical replay. No enforcement behavior has been implemented
+or labeled validated at this gate.
+
+**V1 plan decisions:**
+
+- Use the bundled Python 3.12 runtime and parameterize the Makefile so the
+  current host's Python 3.9 cannot silently execute a Python 3.11+ project.
+- Separate evidence typing, deterministic `Decimal` arithmetic, immutable
+  domain records, decision evaluation, and canonical serialization.
+- Consume authentication as an algorithm-neutral state property; concrete
+  signature encoding remains gated on KTP compatibility review.
+- Implement both signed-state-only and signed-plus-local-reduction modes.
+- Make failure disposition explicit: fail closed by default, fail constrained
+  only when configured, and never let stale evidence mask a veto or envelope
+  violation.
+- Test identity, authority-class, envelope, veto, authenticity, validity,
+  history, passive decay, coupling, monotonic reduction, and the prohibition on
+  action self-authorization.
+
+**V2 plan decisions:**
+
+- Normalize one versioned, source-cited event stream and evaluate it with the
+  credential-policy control and both KIL modes.
+- Represent observed summaries, control assumptions, synthetic composite state,
+  and local evidence as separately labeled evidence values with rationales.
+- Cover eight stable incident cut points while preserving dependency edges.
+- Compute independent decisions and mode-specific reachability so downstream
+  effects are not double counted.
+- Emit a deterministic run bundle containing manifest, scenario, states,
+  decisions, metrics, summary, and SHA-256 integrity data.
+- Keep every historical counterfactual output labeled modeled, even when the
+  replay implementation itself is locally reproduced.
+
+**Self-review findings resolved:**
+
+- immutable-veto precedence over stale local evidence;
+- missing fail-constrained behavior;
+- incomplete independent-gate and coupling coverage;
+- unlabeled credential-policy and composite-state assumptions;
+- missing downstream reachability accounting;
+- incomplete run-bundle contents; and
+- Python runtime mismatch on the current host.
+
+**Affected artifacts:**
+
+- `docs/superpowers/plans/2026-08-29-v1-deterministic-kernel.md`
+- `docs/superpowers/plans/2026-08-29-v2-historical-replay.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Execution mode for V1; concrete KTP-compatible signed
+state encoding; review of phase-level source-location labels during V2 fixture
+construction; and the live cluster substrate after V1 and V2 pass.
+
+**Next gate:** Execute V1 using the approved test-first plan. V2 begins only
+after the V1 exit criteria pass and its decision contract is stable.
+
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
