@@ -1,8 +1,7 @@
 """Kinetic Infrastructure Layer reference implementation.
 
-The bootstrap deliberately exposes no enforcement behavior. Trust and replay
-interfaces will be added only from approved specifications and failing tests.
+V1 implements deterministic decision behavior. Concrete cryptographic
+verification and live infrastructure adapters remain outside this gate.
 """
 
-__version__ = "0.0.0"
-
+__version__ = "0.1.0-dev1"

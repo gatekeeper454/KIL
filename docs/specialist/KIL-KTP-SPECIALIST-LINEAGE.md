@@ -791,3 +791,752 @@ construction; and the live cluster substrate after V1 and V2 pass.
 after the V1 exit criteria pass and its decision contract is stable.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-016 — 2026-08-29 — V1 Task 0 runtime parameterization completed
+
+**Input:** The V1 implementation gate required pinning the supported local
+Python runtime through the Makefile, validating with bundled Python 3.12, and
+recording the progress checkpoint.
+
+**Interpretation:** This is a build-configuration and evidence-ledger change;
+it does not alter KIL decision behavior. The bundled runtime reports Python
+3.12.13, above the required Python 3.11 floor.
+
+**Decision:** Confirmed Task 0 implementation complete: Make targets now use
+the overridable `PYTHON` variable, validation passed with 11 existing tests,
+and spec and quality review remain pending.
+
+**Rationale:** Parameterizing the interpreter prevents the host Python 3.9
+from silently executing a Python 3.11+ project while preserving the existing
+test, project-metadata, and git-diff checks.
+
+**Affected artifacts:**
+
+- `Makefile`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** None for Task 0; spec and quality review of the
+runtime change remain outstanding.
+
+**Next gate:** Complete independent spec and quality review, then proceed to
+V1 Task 1 evidence-contract implementation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-017 — 2026-08-29 — Python floor enforcement review fix
+
+**Input:** Quality review found that `PYTHON ?= python3` still allowed plain
+`make validate` to run silently under the host Python 3.9.6.
+
+**Interpretation:** Runtime parameterization needs an executable floor check;
+otherwise the supported bundled interpreter is only opt-in and unsupported
+hosts can run the suite.
+
+**Decision:** Confirmed the Makefile now provides a `check-python` target that
+rejects versions below Python 3.11 with a clear message, and `test` depends on
+that target so both `make test` and `make validate` enforce the floor.
+
+**Rationale:** The gate fails before test discovery on unsupported hosts while
+retaining the overridable `PYTHON` variable for the bundled Python 3.12 path.
+
+**Affected artifacts:**
+
+- `Makefile`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Quality re-review remains pending; no Task 0
+behavioral questions remain after the explicit floor check.
+
+**Next gate:** Re-run quality review, then proceed to V1 Task 1 evidence-
+contract implementation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-018 — 2026-08-29 — V1 evidence classification contract implemented
+
+**Input:** V1 Task 1 required an explicit, immutable evidence contract that
+distinguishes observed facts, modeled assumptions, and locally reproduced
+validation results before later kernel and replay work can consume them.
+
+**Interpretation:** Evidence class is provenance metadata, not a trust score or
+authorization grant. Each class therefore requires its own explicit support:
+observed values cite a source, modeled values state a rationale, and validated
+values identify the reproducing run.
+
+**Decision:** Confirmed implementation of the algorithm-neutral
+`EvidenceClass` and generic frozen, slotted `LabeledValue` contract. Invalid
+construction is rejected when the evidence class lacks its required metadata.
+The four focused contract tests pass, and the complete validation suite passes
+15 tests. Independent spec and quality reviews remain pending.
+
+**Rationale:** Encoding evidentiary boundaries in immutable domain values keeps
+later calculations and reports from silently promoting synthetic context or
+historical counterfactuals into observed or validated claims.
+
+**Affected artifacts:**
+
+- `src/kil/evidence.py`
+- `tests/test_evidence.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The requested direct focused-test invocation does not
+set the repository's `PYTHONPATH=src`, so it cannot import the local `kil`
+package in an uninstalled checkout. The same focused suite passes 4 tests with
+the repository import path used by the Makefile. Spec and quality review remain
+outstanding; no KTP-compatible signature encoding is decided by this task.
+
+**Next gate:** Complete independent spec and quality review of Task 1, then
+proceed to V1 Task 2 deterministic trust-decay arithmetic.
+
+This checkpoint is software-development evidence only. It does not validate
+cryptographic enforcement, historical prevention claims, or live KIL behavior.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-019 — 2026-08-29 — Evidence invariant quality-review hardening
+
+**Input:** Independent quality review found that runtime callers could bypass
+the Task 1 contract by supplying a raw string or arbitrary object as the
+evidence class, or by supplying whitespace-only or non-string required
+metadata.
+
+**Interpretation:** Python annotations do not enforce runtime boundaries. A
+provenance contract must reject untyped class values rather than normalize
+them, and required metadata must be a string containing non-whitespace text.
+
+**Decision:** Confirmed implementation of strict runtime checks for an actual
+`EvidenceClass` instance and class-specific nonblank string metadata. New
+regression tests first reproduced eight bypass failures, then passed after the
+fix. The focused suite now passes 6 tests and the full suite passes 17 tests.
+Spec review is approved; quality re-review remains pending.
+
+**Rationale:** Invalid provenance labels must fail at construction so later KIL
+components cannot mistake malformed or unclassified inputs for observed,
+modeled, or validated evidence.
+
+**Affected artifacts:**
+
+- `src/kil/evidence.py`
+- `tests/test_evidence.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent quality re-review remains outstanding.
+This change does not select a cryptographic representation or alter KTP
+protocol semantics.
+
+**Next gate:** Obtain quality re-review approval for Task 1, then proceed to V1
+Task 2 deterministic trust-decay arithmetic.
+
+This is software-development evidence only, not validated cryptographic,
+historical, cluster, or live enforcement behavior.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-020 — 2026-08-29 — V1 deterministic trust-decay arithmetic implemented
+
+**Input:** V1 Task 2 required a dependency-free, deterministic `Decimal`
+implementation of weighted diagonal distance, logistic squashing, passive
+decay, superlinear divergence loss, and reducing-only local charge adjustment.
+
+**Interpretation:** These functions are arithmetic primitives for the V1
+reference kernel. They encode the approved trust-decay model mechanics but do
+not independently establish a KTP authority grant, incident-prevention claim,
+cryptographic authenticity result, or live enforcement outcome.
+
+**Decision status:** Proposed implementation complete; independent spec and
+quality review are pending. The focused test-first run first failed with the
+expected missing-module error, then passed six specified behavior tests. The
+full repository validation passed 23 tests with no failures.
+
+**Rationale:** Fixed-precision local `Decimal` contexts, sorted feature-key
+iteration, explicit input domains, and reducing-only clamping make the
+arithmetic reproducible and prevent local evidence from increasing the
+decayed composite charge. The superlinear loss remains zero inside its normal
+band and rises cubically in the specified reference case.
+
+**Affected artifacts:**
+
+- `src/kil/decay.py`
+- `tests/test_decay.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent spec and quality review remain pending.
+Task 2 does not calibrate feature means, scales, weights, loss rates, or decay
+rates from local-cluster telemetry; those values remain future experimental
+inputs governed by the evidence contract.
+
+**Next gate:** Complete independent spec and quality review for Task 2, then
+proceed to V1 Task 3 immutable domain records only if both reviews approve.
+
+This checkpoint is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-021 — 2026-08-29 — Decay exponent aligned with domain contract
+
+**Input:** Independent spec review found that `superlinear_loss` declared its
+exponent as `Decimal`, while the approved V1 plan and downstream
+`ReductionProfile` contract require an integer exponent greater than one.
+
+**Interpretation:** The exponent representation is part of the stable V1
+decision contract, not a calibration preference. Permitting decimal or other
+non-integer values would create an avoidable mismatch between the arithmetic
+primitive and the immutable domain record that will supply it.
+
+**Decision status:** Confirmed correction implemented; spec re-review and
+quality review remain pending. A regression test first demonstrated that a
+`Decimal("3")` exponent was silently accepted, then passed after the function
+was narrowed to an integer-only API with runtime validation. The focused suite
+passes seven tests and the full repository validation passes 24 tests.
+
+**Rationale:** Requiring a true integer greater than one keeps the arithmetic
+API aligned with the approved downstream profile and prevents callers from
+silently introducing fractional-power semantics that V1 does not specify.
+
+**Affected artifacts:**
+
+- `src/kil/decay.py`
+- `tests/test_decay.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent spec re-review and quality review remain
+pending. Calibration of the integer exponent and other profile values remains
+future experimental work subject to the evidence contract.
+
+**Next gate:** Obtain spec re-review and quality approval for Task 2 before
+proceeding to V1 Task 3 immutable domain records.
+
+This correction is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-022 — 2026-08-29 — Decay arithmetic made context independent
+
+**Input:** Independent quality review found two Task 2 determinism gaps: public
+arithmetic inherited parts of the caller's decimal context, and non-`Decimal`
+or non-finite operands could be accepted or escape as `decimal`/type
+exceptions rather than deterministic `ValueError` results.
+
+**Interpretation:** A deterministic reference kernel must own its complete
+numeric execution context and validate every operand before comparisons or
+arithmetic. This applies equally to scalar parameters, mapped feature values,
+and the reducing-only local charge operation.
+
+**Decision status:** Confirmed quality findings fixed; quality re-review
+remains pending and spec review is approved. Test-first regressions reproduced
+four caller-context-dependent outputs plus seven failures and six errors from
+invalid operand handling. The corrected focused suite passes ten tests, and
+the full repository validation passes 27 tests.
+
+**Rationale:** Every public arithmetic function now executes inside a local
+copy of one fixed 28-digit, half-even decimal context with explicit exponent
+bounds and traps. All accepted numeric operands must be finite `Decimal`
+instances before domain validation or arithmetic, preventing NaN, infinity,
+float, string, and other invalid values from changing behavior according to
+ambient caller state.
+
+**Affected artifacts:**
+
+- `src/kil/decay.py`
+- `tests/test_decay.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent quality re-review remains pending.
+Telemetry-driven calibration of decay and loss parameters remains future
+experimental work governed by the evidence contract.
+
+**Next gate:** Obtain quality re-review approval for Task 2 before proceeding
+to V1 Task 3 immutable domain records.
+
+This correction is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-023 — 2026-08-29 — Exact reducing-only charge clamp enforced
+
+**Input:** Final Task 2 quality review supplied a precision-boundary case where
+fixed-context subtraction rounded the local effective charge above the exact
+input charge despite positive loss, violating the reducing-only invariant.
+
+**Interpretation:** Context independence alone does not guarantee monotonic
+reduction at a precision boundary. The invariant is defined against the exact
+incoming decayed charge, so the final result must be bounded by that original
+value in addition to the configured maximum and zero floor.
+
+**Decision status:** Confirmed finding fixed; quality re-review remains
+pending and spec review is approved. The exact reviewer regression first
+failed with a result of `1.000000000000000000000000000` for an incoming charge
+of `0.99999999999999999999999999996`, then passed after the final clamp was
+strengthened. The focused suite passes 11 tests and the full repository suite
+passes 28 tests.
+
+**Rationale:** Clamping the rounded subtraction result against the original
+finite `Decimal` charge makes the reducing-only guarantee explicit even when
+28-digit half-even rounding crosses above the exact operand.
+
+**Affected artifacts:**
+
+- `src/kil/decay.py`
+- `tests/test_decay.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent quality re-review remains pending.
+Calibration and live enforcement behavior remain outside this software
+arithmetic checkpoint.
+
+**Next gate:** Obtain quality re-review approval for Task 2 before proceeding
+to V1 Task 3 immutable domain records.
+
+This correction is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-024 — 2026-08-29 — Immutable V1 decision-domain records implemented
+
+**Input:** The approved V1 deterministic-kernel plan called for immutable,
+slotted domain records representing action requests, signed composite KTP
+enforcement state, optional local reducing evidence, reduction profiles, and
+decision outputs. The protocol boundary continues to treat composite-state
+authenticity as an algorithm-neutral Boolean input; concrete signature encoding
+is outside V1.
+
+**Interpretation:** The domain layer must reject runtime type bypasses and
+non-finite authority values before the decision engine performs any arithmetic
+or gate evaluation. It must preserve the reducing-only architecture without
+embedding later decision-engine policy into record construction.
+
+**Decision status:** Confirmed V1 Task 3 implementation complete; independent
+specification and quality reviews remain pending. Test-first execution recorded
+the expected missing-module failure. The implemented suite now passes 11
+focused domain tests and all 39 repository tests under bundled Python 3.12;
+preserved-source checksums and `git diff --check` also pass.
+
+**Rationale:** Frozen, slotted dataclasses provide a small immutable boundary.
+Exact integer and Boolean checks prevent Python's Boolean-as-integer behavior
+from bypassing field contracts; finite `Decimal` checks prevent NaN and
+infinity from entering authority calculations. Stable string enums preserve
+the public decision vocabulary. The records validate construction invariants
+but intentionally do not encode cryptographic formats or pre-decide engine
+outcomes.
+
+**Affected artifacts:**
+
+- `src/kil/domain.py`
+- `tests/test_domain.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent spec and quality review are pending.
+Concrete KTP signature encoding and authenticated composite-state transport
+remain a later compatibility gate, not part of this software-domain checkpoint.
+
+**Next gate:** Obtain Task 3 specification compliance and quality approval
+before implementing the deterministic decision engine in V1 Task 4.
+
+This checkpoint is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-025 — 2026-08-29 — Decision-record authority and reason invariants hardened
+
+**Input:** Independent Task 3 quality review identified that a caller could
+construct a decision record whose decayed or locally effective charge exceeded
+its upstream value, or pair outcomes with contradictory or missing reason
+codes.
+
+**Interpretation:** A reducing-only KIL decision record must make the authority
+chain structurally explicit: effective charge cannot exceed decayed charge,
+and decayed charge cannot exceed the signed composite-state charge. Outcome and
+reason fields are one decision assertion and therefore cannot contradict each
+other. Planned stale-local handling still requires `INDETERMINATE` to accept a
+relevant non-permitted reason without imposing additional policy here.
+
+**Decision status:** Confirmed quality findings fixed; specification review is
+approved and quality re-review remains pending. Test-first regressions exposed
+two increasing-authority paths and five inconsistent outcome/reason paths. The
+corrected suite passes 14 focused domain tests and all 42 repository tests under
+bundled Python 3.12; preserved-source checksums and `git diff --check` pass.
+
+**Rationale:** `DecisionRecord` now enforces
+`0 <= effective_charge <= decayed_charge <= signed_charge`. A permit has exactly
+the permitted reason; non-permit outcomes cannot claim permission; deny and
+constrain outcomes require an actionable reason. `INDETERMINATE` remains able
+to carry `LOCAL_EVIDENCE_STALE`, preserving the approved Task 4 contract.
+
+**Affected artifacts:**
+
+- `src/kil/domain.py`
+- `tests/test_domain.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent quality re-review remains pending.
+Concrete KTP signature encoding and live enforcement remain outside this V1
+domain-model checkpoint.
+
+**Next gate:** Obtain Task 3 quality approval before implementing the
+deterministic decision engine in V1 Task 4.
+
+This correction is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-026 — 2026-08-29 — Deterministic V1 decision engine implemented
+
+**Input:** The approved V1 plan called for a deterministic engine that evaluates
+an action against a signed, short-lived composite KTP enforcement state, applies
+independent binding, veto, environmental-envelope, authenticity, validity,
+charge, and history gates, and optionally consumes a strictly reducing local
+overlay. Missing or stale local evidence must fail closed unless constrained
+failure is explicitly selected.
+
+**Interpretation:** Authority exists before the current action and cannot be
+created or refreshed by it. The slow-loop signed charge is passively decayed at
+the action timestamp. The fast loop may only subtract divergence and coupled
+loss; signed-state-only mode does not consume local evidence. An immutable veto
+or any other decisive reason yields denial even when local-evidence failure was
+configured to constrain.
+
+**Decision status:** Confirmed Task 4 implementation ready for independent
+specification and quality review. The expected missing-module RED was recorded.
+A second test-first runtime-contract checkpoint exposed two failures and three
+errors before deterministic input validation was added. Fourteen focused engine
+tests and all 56 repository tests now pass under bundled Python 3.12; preserved
+source checksums and `git diff --check` also pass.
+
+**Rationale:** The engine preserves the reducing-only authority chain
+`effective_charge <= decayed_charge <= signed_charge`, treats expiration as
+inclusive at `timestamp >= expires_at`, distinguishes explicit constrained
+degradation from the default closed disposition, and emits exactly `PERMITTED`
+only when no actionable reason exists. Runtime enum and record inputs are
+validated before evaluation, while missing local components follow the explicit
+stale-evidence path rather than creating authority.
+
+**Affected artifacts:**
+
+- `src/kil/engine.py`
+- `tests/test_engine.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent Task 4 specification and quality reviews
+remain pending. Concrete cryptographic signature encoding, historical incident
+replay, cluster enforcement, and telemetry-calibrated thresholds remain outside
+this software decision-engine checkpoint.
+
+**Next gate:** Obtain independent Task 4 specification compliance and code
+quality approval before beginning V1 Task 5 canonical decision serialization
+and invariant sweeps.
+
+This checkpoint is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or live
+KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-027 — 2026-08-29 — Unrepresentable engine inputs fail closed
+
+**Input:** Independent Task 4 quality review found that unbounded Python integer
+timestamps could reach elapsed-time conversion and that an accepted finite but
+extreme decay rate could raise a trapped `Decimal` arithmetic exception out of
+the decision boundary instead of producing an enforcement decision.
+
+**Interpretation:** KIL decision inputs require an explicit transport-safe time
+representation, and a numeric failure inside authority reduction cannot become
+an implicit fail-open or an unclassified engine crash. This is a domain and
+decision-boundary correction, not parameter calibration or cryptographic
+validation.
+
+**Decision status:** Confirmed quality fix implemented; specification review is
+approved and quality re-review remains pending. Test-first regressions exposed
+seven timestamp/enum failures and two escaping Decimal overflow errors. The
+corrected domain-and-engine suite passes 32 tests, and all 60 repository tests
+pass under bundled Python 3.12; preserved-source checksums and
+`git diff --check` also pass.
+
+**Rationale:** Action and composite-state timestamps are now restricted to
+signed 64-bit seconds, including exact boundary acceptance and Boolean
+rejection. Only the `DivisionByZero`, `InvalidOperation`, and `Overflow`
+conditions trapped by the deterministic Decimal kernel are translated into an
+`ARITHMETIC_FAILURE` denial. The fallback record sets decayed and effective
+charge to zero, preserving the reducing-only authority invariant. Existing
+veto and gate reasons remain ordered before the arithmetic reason and still
+force denial.
+
+**Affected artifacts:**
+
+- `src/kil/domain.py`
+- `src/kil/engine.py`
+- `tests/test_domain.py`
+- `tests/test_engine.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent quality re-review remains pending.
+Concrete signed-state encoding, live transport integration, historical replay,
+and telemetry-calibrated parameter bounds remain later validation gates.
+
+**Next gate:** Obtain Task 4 quality approval before beginning V1 Task 5
+canonical serialization and invariant sweeps.
+
+This correction is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-028 — 2026-08-29 — Canonical V1 decision serialization implemented
+
+**Input:** The approved V1 plan called for deterministic canonical JSON and a
+SHA-256 digest for KIL decision artifacts, invariant sweeps proving that the
+fast local loop cannot increase signed-state authority, and a development
+version marking completion of the deterministic software kernel.
+
+**Interpretation:** Canonicalization is a software evidence and interoperability
+boundary, not cryptographic verification. Dataclass records, enum values,
+finite decimal values, and ordered sequences require one stable representation.
+Ambiguous non-string dictionary keys, unordered sets, binary values, floats,
+non-finite decimals, and other unsupported runtime objects must be rejected
+rather than silently coerced. The local overlay remains strictly reducing over
+the signed-state result throughout the sampled divergence domain.
+
+**Decision status:** Confirmed Task 5 implementation ready for independent
+specification and quality review. Test-first execution recorded the expected
+missing-module RED and a separate package-version RED. The focused V1 suite
+passes 59 tests and full repository validation passes 69 tests under bundled
+Python 3.12; preserved-source checksums and `git diff --check` pass.
+
+**Rationale:** Canonical JSON now recursively normalizes dataclass records,
+enums, finite `Decimal` values, dictionaries with string-only keys, lists, and
+tuples before stable JSON encoding. The digest is SHA-256 over the UTF-8
+canonical representation. Tests cover dictionary insertion-order stability,
+decision-record serialization, nested sequences, caller Decimal-context
+independence, unsupported and non-finite inputs, and reducing-only authority
+invariants across divergence sweeps. Package version `0.1.0-dev1` identifies
+this development gate without implying production or cryptographic readiness.
+
+**Affected artifacts:**
+
+- `src/kil/canonical.py`
+- `src/kil/__init__.py`
+- `tests/test_kernel_invariants.py`
+- `tests/test_package.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent Task 5 specification and quality reviews
+remain pending. Concrete KTP signature encoding and verification, live
+infrastructure adapters, historical replay, cluster enforcement, and
+telemetry-calibrated thresholds remain outside this deterministic V1 software
+gate.
+
+**Next gate:** Obtain independent Task 5 specification compliance and code
+quality approval, then perform the whole-V1 completion review.
+
+This checkpoint is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-029 — 2026-08-29 — Canonical encoding hardened at the trust boundary
+
+**Input:** Independent Task 5 quality review identified value-collision,
+Unicode, and resource-bounding weaknesses in the initial canonicalizer. Decimal
+formatting preserved insignificant zeros, collided with ordinary JSON strings,
+and could expand extreme exponents. Lone surrogates could reach UTF-8 digest
+encoding, while cycles or deeply nested and oversized structures could escape
+as runtime or resource failures.
+
+**Interpretation:** A canonical decision encoding is part of the deterministic
+trust boundary. Equal finite decimal values require one typed representation,
+distinct from user strings and mappings. All text must be valid Unicode scalar
+data before hashing, and every recursive input must terminate within explicit,
+auditable depth, item, and output bounds. These are serialization invariants,
+not a concrete KTP signature format.
+
+**Decision status:** Confirmed quality fixes implemented; Task 5 specification
+review is approved and quality re-review remains pending. The quality tests
+first failed on the absent limit constants and then exposed nine behavioral
+failures plus one raw recursion error. The corrected focused V1 suite passes 66
+tests and full repository validation passes 76 tests under bundled Python 3.12;
+preserved-source checksums and `git diff --check` pass.
+
+**Rationale:** Finite decimals now use a reserved, typed coefficient/exponent
+encoding derived directly from `Decimal.as_tuple()`. Trailing coefficient zeros
+are removed while adjusting the exponent, both signs of zero collapse to one
+value, and large positive exponents remain compact. The reserved type-tag key
+cannot be supplied by an ordinary mapping. Strings and keys are UTF-8 validated
+before JSON or digest encoding. Dataclasses are traversed field by field rather
+than through an unbounded deep copy, with active-path cycle detection and fixed
+depth, item-count, integer-size, and UTF-8 output limits. SHA-256 remains over
+the resulting UTF-8 canonical JSON.
+
+**Affected artifacts:**
+
+- `src/kil/canonical.py`
+- `tests/test_kernel_invariants.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent quality re-review and the whole-V1 review
+remain pending. Standardizing the reserved decimal representation inside a
+future KTP wire schema, concrete signature verification, live adapters,
+historical replay, and calibrated operational limits remain later gates.
+
+**Next gate:** Obtain Task 5 quality approval, then perform the whole-V1
+completion review before any merge or historical replay claim.
+
+This checkpoint is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-030 — 2026-08-29 — Passive decay clamped to signed authority
+
+**Input:** Whole-V1 review identified a cross-module precision defect using an
+exact signed charge of `0.99999999999999999999999999996` with zero decay rate
+and zero elapsed time. Fixed-context multiplication returned
+`1.000000000000000000000000000`, after which the decision engine correctly
+rejected the record because decayed authority exceeded signed authority.
+
+**Interpretation:** The decision-record invariant was functioning correctly;
+the defect originated in passive decay, where fixed-precision rounding could
+increase the exact incoming charge. Passive decay must therefore bound its
+computed value by the original signed charge after fixed-context arithmetic.
+
+**Decision status:** Confirmed fix implemented; whole-V1 re-review remains
+pending. Test-first regressions reproduced one focused decay failure and one
+engine-level record-construction error. After the minimal arithmetic fix, the
+combined decay and engine suites pass 29 tests and full repository validation
+passes 78 tests.
+
+**Rationale:** The fixed context still governs exponential decay computation,
+but the returned value is clamped outside that arithmetic context against the
+exact original charge and zero. This preserves nonnegative behavior, caller-
+context independence, and the authority ordering `effective <= decayed <=
+signed` without weakening the decision-record validation boundary.
+
+**Affected artifacts:**
+
+- `src/kil/decay.py`
+- `tests/test_decay.py`
+- `tests/test_engine.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent whole-V1 re-review of the Task 2 and
+Task 4 gates remains pending. Concrete KTP signature verification, calibrated
+telemetry, historical replay, and live enforcement remain later gates.
+
+**Next gate:** Obtain whole-V1 re-review approval for the corrected passive-
+decay and engine authority chain before merge or V2 historical replay work.
+
+This correction is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-031 — 2026-08-29 — V1 pull-request publication selected; authentication pending
+
+**Input:** The user selected integration option 2: push
+`feature/v1-deterministic-kernel` and create a pull request against `main`, then
+asked to retry after the first GitHub authentication check failed.
+
+**Interpretation:** V1 is approved for publication as a reviewable feature
+branch, while merge remains a later, explicit decision. The implementation
+worktree must remain available for pull-request feedback.
+
+**Decision status:** Confirmed publication path; externally blocked before
+push. The local branch remains complete and clean, but GitHub CLI reports the
+saved token for `gatekeeper454` is invalid. A replacement device-authentication
+flow was initiated and is waiting for the user to sign in to GitHub and approve
+the one-time device authorization. No branch push or pull request has yet been
+created in this checkpoint.
+
+**Rationale:** Publishing through a pull request preserves the isolated V1
+commit history, exposes the deterministic-kernel evidence for review, and keeps
+merge authority separate from implementation completion. Authentication cannot
+be supplied or inferred by the implementation process.
+
+**Affected artifacts:**
+
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- Local branch `feature/v1-deterministic-kernel`
+- Planned remote pull request targeting `main`
+
+**Unresolved questions:** Completion of GitHub device authorization, successful
+remote push, and creation/readback of the pull request remain pending. Concrete
+KTP signature verification, calibrated telemetry, historical replay, and live
+enforcement remain outside V1.
+
+**Next gate:** After the user completes GitHub sign-in and device authorization,
+verify the authenticated account, commit this publication checkpoint, push the
+feature branch, create the pull request, and read back its URL and state.
+
+This checkpoint records repository-publication status only. It does not add or
+validate historical counterfactual, cryptographic, cluster, or live-enforcement
+evidence.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-032 — 2026-08-29 — V1 pull request published for review
+
+**Input:** GitHub device authorization completed for `gatekeeper454` after the
+user selected pull-request integration and asked to retry authentication.
+
+**Interpretation:** The approved V1 deterministic-kernel branch can now enter
+remote peer review without merging into `main`. The isolated implementation
+worktree remains the active location for any pull-request feedback.
+
+**Decision status:** Confirmed publication completed. Branch
+`feature/v1-deterministic-kernel` was pushed to `origin`, and GitHub pull request
+[#1](https://github.com/gatekeeper454/KIL/pull/1) was created against `main`.
+Merge has not been authorized or performed.
+
+**Rationale:** A pull request exposes the complete V1 implementation, tests,
+review corrections, evidence boundaries, and specialist lineage as one
+auditable change set while preserving a separate merge gate.
+
+**Affected artifacts:**
+
+- Remote branch `origin/feature/v1-deterministic-kernel`
+- GitHub pull request [gatekeeper454/KIL#1](https://github.com/gatekeeper454/KIL/pull/1)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Pull-request review and merge disposition remain
+pending. Concrete KTP signature verification, calibrated telemetry, historical
+replay, cluster integration, and live enforcement remain later validation
+gates.
+
+**Next gate:** Review pull request #1 and either address requested changes or
+explicitly authorize merge. Preserve the feature worktree until that gate is
+resolved.
+
+This publication establishes a reviewable software-development artifact only.
+It does not validate historical counterfactuals, cryptographic enforcement,
+cluster behavior, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
