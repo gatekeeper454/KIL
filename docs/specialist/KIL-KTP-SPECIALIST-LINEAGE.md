@@ -1825,3 +1825,57 @@ only. It does not validate historical prevention, raw telemetry, cryptographic
 enforcement, cluster behavior, or live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-039 — 2026-08-29 — Canonical eight-phase incident scenario normalized
+
+**Input:** V2 Task 4 required the Hugging Face July 2026 incident to become a
+canonical eight-phase replay scenario aligned with the paper's phase map and
+the approved rule that disclosed incident facts may be combined with clearly
+labeled synthetic KTP context signals.
+
+**Interpretation:** The event summaries and source-section anchors represent
+observed public disclosure. Credential-policy results, composite KTP
+enforcement state (`Q_i,c`), local divergence and coupling values, and every
+derived decision are counterfactual inputs or outputs and must remain modeled.
+Section labels are audit locators, not representations of raw telemetry.
+
+**Decision status:** Confirmed Task 4 implementation complete under local
+review. The expected RED run failed while the canonical scenario file was
+absent. Four focused scenario tests now pass, full repository validation passes
+103 tests under bundled Python 3.12, the scenario parses as JSON, all five
+preserved-source hashes pass, and `git diff --check` passes. A replay smoke
+check produces eight modeled baseline permits; both KIL modes deny phase 1 and
+mark its seven causal descendants unreachable while still computing and
+retaining their modeled decisions.
+
+**Rationale:** Stable event IDs, authority classes, dependencies, paper-aligned
+summaries, and primary-source anchors prevent narrative drift. Exact decimal
+strings and uniform modeled rationales make the first counterfactual profile
+reproducible without implying that Hugging Face disclosed KTP state or complete
+policy-engine records. The scenario README makes the evidence boundary and the
+reserved meaning of “validated” explicit.
+
+**Affected artifacts:**
+
+- `scenarios/hugging-face-july-2026/scenario-v1.json`
+- `scenarios/hugging-face-july-2026/README.md`
+- `tests/test_hugging_face_scenario.py`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The eight modeled numerical profiles still require
+calibration against approved local-cluster telemetry. Public source-section
+anchors may need more granular immutable locators if the upstream disclosure
+changes. V2 still needs its supported CLI, first integrity-checked bundle, and
+whole-phase review. Concrete KTP signatures remain outside this gate.
+
+**Next gate:** Implement the reproducible replay CLI and documented Make target,
+then emit and inspect the first modeled integrity-checked report bundle before
+whole-V2 review.
+
+This checkpoint validates scenario structure, provenance separation, and
+deterministic replay behavior only. It does not validate historical prevention,
+the modeled signal values, cryptographic enforcement, cluster behavior, or live
+KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
