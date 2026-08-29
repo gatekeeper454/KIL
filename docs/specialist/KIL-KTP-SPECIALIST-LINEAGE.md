@@ -1501,3 +1501,42 @@ validate historical counterfactual, cryptographic, cluster, or live-enforcement
 evidence.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-032 — 2026-08-29 — V1 pull request published for review
+
+**Input:** GitHub device authorization completed for `gatekeeper454` after the
+user selected pull-request integration and asked to retry authentication.
+
+**Interpretation:** The approved V1 deterministic-kernel branch can now enter
+remote peer review without merging into `main`. The isolated implementation
+worktree remains the active location for any pull-request feedback.
+
+**Decision status:** Confirmed publication completed. Branch
+`feature/v1-deterministic-kernel` was pushed to `origin`, and GitHub pull request
+[#1](https://github.com/gatekeeper454/KIL/pull/1) was created against `main`.
+Merge has not been authorized or performed.
+
+**Rationale:** A pull request exposes the complete V1 implementation, tests,
+review corrections, evidence boundaries, and specialist lineage as one
+auditable change set while preserving a separate merge gate.
+
+**Affected artifacts:**
+
+- Remote branch `origin/feature/v1-deterministic-kernel`
+- GitHub pull request [gatekeeper454/KIL#1](https://github.com/gatekeeper454/KIL/pull/1)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Pull-request review and merge disposition remain
+pending. Concrete KTP signature verification, calibrated telemetry, historical
+replay, cluster integration, and live enforcement remain later validation
+gates.
+
+**Next gate:** Review pull request #1 and either address requested changes or
+explicitly authorize merge. Preserve the feature worktree until that gate is
+resolved.
+
+This publication establishes a reviewable software-development artifact only.
+It does not validate historical counterfactuals, cryptographic enforcement,
+cluster behavior, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
