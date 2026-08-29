@@ -12,10 +12,16 @@ an expected test-first state, not a validated KIL outcome.
 |---|---|---|---|---|---|
 | 0 — runtime pin | n/a: build configuration | Python 3.12.13; 11 tests passed | approved | approved | completed |
 | 1 — evidence contract | expected RED: initial import failure; review regressions then exposed 8 runtime type/blank-metadata bypass failures | focused suite with repository import path: 6 tests passed, 0 failed | approved | approved | completed |
-| 2 — decay arithmetic | expected RED: missing-module exit 1; exponent mismatch 1 failure; context/operand regressions 7 failures and 6 errors; precision-boundary clamp 1 failure; whole-V1 passive-decay regression 1 failure | prior gate GREEN: focused 11/full 28; whole-V1 fix GREEN: combined decay+engine 29 and full 78 tests passed, 0 failed; checksums and `git diff --check` passed | approved previously; unchanged | approved previously; whole-review fix implemented, re-review pending | whole-review re-review pending |
+| 2 — decay arithmetic | expected RED: missing-module exit 1; exponent mismatch 1 failure; context/operand regressions 7 failures and 6 errors; precision-boundary clamp 1 failure; whole-V1 passive-decay regression 1 failure | prior gate GREEN: focused 11/full 28; whole-V1 fix GREEN: combined decay+engine 29 and full 78 tests passed, 0 failed; checksums and `git diff --check` passed | approved previously; unchanged | approved previously; whole-review fix implemented and re-review approved | completed |
 | 3 — domain records | expected RED: missing `kil.domain` module, exit 1; quality regressions exposed 2 increasing-authority and 5 outcome/reason consistency failures | bundled Python 3.12; corrected focused suite 14 tests and full validation 42 tests passed, 0 failed; source checksums and `git diff --check` passed | approved | approved | completed |
-| 4 — decision engine | expected RED: missing `kil.engine` module, exit 1; runtime contract regressions exposed 2 failures and 3 errors; quality regressions exposed 7 timestamp/enum failures and 2 escaped Decimal errors; whole-V1 high-precision record regression raised 1 error | prior gate GREEN: domain+engine 32/full 60; whole-V1 fix GREEN: combined decay+engine 29 and full 78 tests passed, 0 failed; checksums and `git diff --check` passed | approved previously; unchanged | approved previously; cross-module fix implemented, whole-review re-review pending | whole-review re-review pending |
+| 4 — decision engine | expected RED: missing `kil.engine` module, exit 1; runtime contract regressions exposed 2 failures and 3 errors; quality regressions exposed 7 timestamp/enum failures and 2 escaped Decimal errors; whole-V1 high-precision record regression raised 1 error | prior gate GREEN: domain+engine 32/full 60; whole-V1 fix GREEN: combined decay+engine 29 and full 78 tests passed, 0 failed; checksums and `git diff --check` passed | approved previously; unchanged | approved previously; cross-module fix implemented and whole-review re-review approved | completed |
 | 5 — canonicalization and invariants | expected RED: missing `kil.canonical` module, exit 1; package-version expectation failed against `0.0.0`, 1 failure; quality regression RED first exposed missing limit constants, then 9 behavioral failures and 1 recursion error | bundled Python 3.12; corrected focused V1 suite 66 tests and full validation 76 tests passed, 0 failed; source checksums and `git diff --check` passed | approved | approved | completed |
+
+## Whole-V1 review result
+
+**APPROVED** — 78 tests passed with 0 failures; preserved-source checksums and
+`git diff --check` passed. The Task 2 and Task 4 precision-boundary correction
+was independently re-reviewed and approved.
 
 ## Evidence boundary
 
