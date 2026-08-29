@@ -1358,3 +1358,57 @@ historical counterfactuals, cryptographic enforcement, cluster behavior, or
 live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-029 — 2026-08-29 — Canonical encoding hardened at the trust boundary
+
+**Input:** Independent Task 5 quality review identified value-collision,
+Unicode, and resource-bounding weaknesses in the initial canonicalizer. Decimal
+formatting preserved insignificant zeros, collided with ordinary JSON strings,
+and could expand extreme exponents. Lone surrogates could reach UTF-8 digest
+encoding, while cycles or deeply nested and oversized structures could escape
+as runtime or resource failures.
+
+**Interpretation:** A canonical decision encoding is part of the deterministic
+trust boundary. Equal finite decimal values require one typed representation,
+distinct from user strings and mappings. All text must be valid Unicode scalar
+data before hashing, and every recursive input must terminate within explicit,
+auditable depth, item, and output bounds. These are serialization invariants,
+not a concrete KTP signature format.
+
+**Decision status:** Confirmed quality fixes implemented; Task 5 specification
+review is approved and quality re-review remains pending. The quality tests
+first failed on the absent limit constants and then exposed nine behavioral
+failures plus one raw recursion error. The corrected focused V1 suite passes 66
+tests and full repository validation passes 76 tests under bundled Python 3.12;
+preserved-source checksums and `git diff --check` pass.
+
+**Rationale:** Finite decimals now use a reserved, typed coefficient/exponent
+encoding derived directly from `Decimal.as_tuple()`. Trailing coefficient zeros
+are removed while adjusting the exponent, both signs of zero collapse to one
+value, and large positive exponents remain compact. The reserved type-tag key
+cannot be supplied by an ordinary mapping. Strings and keys are UTF-8 validated
+before JSON or digest encoding. Dataclasses are traversed field by field rather
+than through an unbounded deep copy, with active-path cycle detection and fixed
+depth, item-count, integer-size, and UTF-8 output limits. SHA-256 remains over
+the resulting UTF-8 canonical JSON.
+
+**Affected artifacts:**
+
+- `src/kil/canonical.py`
+- `tests/test_kernel_invariants.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent quality re-review and the whole-V1 review
+remain pending. Standardizing the reserved decimal representation inside a
+future KTP wire schema, concrete signature verification, live adapters,
+historical replay, and calibrated operational limits remain later gates.
+
+**Next gate:** Obtain Task 5 quality approval, then perform the whole-V1
+completion review before any merge or historical replay claim.
+
+This checkpoint is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

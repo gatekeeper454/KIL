@@ -1,7 +1,13 @@
 from decimal import Decimal, getcontext, localcontext
 import unittest
 
-from kil.canonical import canonical_digest, canonical_json
+from kil.canonical import (
+    MAX_DEPTH,
+    MAX_ITEMS,
+    MAX_OUTPUT_BYTES,
+    canonical_digest,
+    canonical_json,
+)
 from kil.domain import (
     ActionRequest,
     CompositeState,
@@ -56,17 +62,33 @@ class KernelInvariantTest(unittest.TestCase):
         )
         self.assertEqual(
             canonical_json(record),
-            '{"decayed_charge":"79.5","effective_charge":"79.5",'
+            '{"decayed_charge":{"$kil.decimal":["795",-1]},'
+            '"effective_charge":{"$kil.decimal":["795",-1]},'
             '"mode":"signed_state_only","outcome":"permit",'
             '"reasons":["permitted"],"request_id":"r",'
-            '"signed_charge":"80.0","state_id":"q"}',
+            '"signed_charge":{"$kil.decimal":["8",1]},"state_id":"q"}',
         )
 
     def test_nested_lists_and_tuples_are_normalized_recursively(self):
         self.assertEqual(
             canonical_json({"values": (Decimal("1.00"), [ReasonCode.VETO])}),
-            '{"values":["1.00",["immutable_veto"]]}',
+            '{"values":[{"$kil.decimal":["1",0]},["immutable_veto"]]}',
         )
+
+    def test_decimal_encoding_is_typed_and_normalizes_equivalent_values(self):
+        self.assertEqual(canonical_json(Decimal("80")), canonical_json(Decimal("80.0")))
+        self.assertEqual(
+            canonical_json(Decimal("79.5")), canonical_json(Decimal("79.50"))
+        )
+        self.assertEqual(canonical_json(Decimal("0")), canonical_json(Decimal("-0")))
+        self.assertNotEqual(canonical_json(Decimal("1")), canonical_json("1"))
+        with self.assertRaisesRegex(ValueError, "reserved canonical type tag"):
+            canonical_json({"$kil.decimal": ["1", 0]})
+
+    def test_large_decimal_exponent_remains_compact(self):
+        encoded = canonical_json(Decimal("1E+100000"))
+        self.assertLess(len(encoded), 80)
+        self.assertIn("100000", encoded)
 
     def test_non_string_dictionary_keys_are_rejected(self):
         for value in ({1: "one"}, {True: "true"}, {Decimal("1"): "decimal"}):
@@ -97,6 +119,33 @@ class KernelInvariantTest(unittest.TestCase):
             high_precision = canonical_json(value)
         self.assertEqual(low_precision, high_precision)
         self.assertEqual(getcontext().prec, original_precision)
+
+    def test_lone_surrogates_in_strings_and_keys_are_rejected(self):
+        for value in ({"value": "\ud800"}, {"\udfff": "value"}):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "Unicode scalar"):
+                    canonical_json(value)
+
+    def test_cycles_are_rejected_explicitly(self):
+        value = []
+        value.append(value)
+        with self.assertRaisesRegex(ValueError, "cycle"):
+            canonical_json(value)
+
+    def test_depth_limit_is_enforced(self):
+        value = "leaf"
+        for _ in range(MAX_DEPTH + 1):
+            value = [value]
+        with self.assertRaisesRegex(ValueError, "depth limit"):
+            canonical_json(value)
+
+    def test_item_limit_is_enforced(self):
+        with self.assertRaisesRegex(ValueError, "item limit"):
+            canonical_json(list(range(MAX_ITEMS)))
+
+    def test_output_limit_is_enforced(self):
+        with self.assertRaisesRegex(ValueError, "output size limit"):
+            canonical_json("x" * MAX_OUTPUT_BYTES)
 
     def test_local_mode_never_exceeds_signed_mode(self):
         signed_state = CompositeState(
