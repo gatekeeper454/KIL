@@ -1778,3 +1778,50 @@ validate historical prevention, raw telemetry, cryptographic enforcement,
 cluster behavior, or live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-038 — 2026-08-29 — Deterministic modeled replay bundles implemented
+
+**Input:** V2 Task 3 required reproducible run directories containing the
+scenario, modeled states and decisions, metrics, human-readable summary,
+manifest, and integrity hashes.
+
+**Interpretation:** Bundle identity must derive from the complete canonical
+scenario and replay report plus explicit implementation and profile identities.
+Publication must be atomic, aligned to one scenario, and structurally unable to
+claim that a historical counterfactual is validated.
+
+**Decision status:** Confirmed Task 3 implementation complete under local
+review. The expected RED run failed because `kil.run_bundle` did not exist. The
+corrected focused suite passes five tests and full repository validation passes
+99 tests; all five preserved-source hashes and `git diff --check` pass.
+
+**Rationale:** The writer rejects mismatched scenario/report identities,
+ambiguous metadata, non-modeled reports, and reordered decisions. It derives a
+stable run ID from canonical inputs, constructs all public artifacts before an
+atomic directory rename, and emits SHA-256 entries for every public artifact.
+Independent output roots produce byte-identical files. The manifest and metrics
+carry modeled evidence, and the summary states explicitly that the historical
+decisions are modeled, not validated.
+
+**Affected artifacts:**
+
+- `src/kil/run_bundle.py`
+- `tests/test_run_bundle.py`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Whole-V2 review remains pending. The current 16-hex
+run directory name is a deterministic local artifact identifier, not a
+cryptographic signature or global uniqueness guarantee. Concrete signing,
+external attestations, retention policy, and cluster artifact collection remain
+later gates.
+
+**Next gate:** Populate and source-check the canonical eight-phase Hugging Face
+scenario, preserving observed summaries separately from all synthetic KTP and
+credential-policy values.
+
+This checkpoint validates deterministic bundle generation and integrity hashes
+only. It does not validate historical prevention, raw telemetry, cryptographic
+enforcement, cluster behavior, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
