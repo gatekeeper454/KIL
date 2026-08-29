@@ -853,3 +853,45 @@ behavioral questions remain after the explicit floor check.
 contract implementation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-018 — 2026-08-29 — V1 evidence classification contract implemented
+
+**Input:** V1 Task 1 required an explicit, immutable evidence contract that
+distinguishes observed facts, modeled assumptions, and locally reproduced
+validation results before later kernel and replay work can consume them.
+
+**Interpretation:** Evidence class is provenance metadata, not a trust score or
+authorization grant. Each class therefore requires its own explicit support:
+observed values cite a source, modeled values state a rationale, and validated
+values identify the reproducing run.
+
+**Decision:** Confirmed implementation of the algorithm-neutral
+`EvidenceClass` and generic frozen, slotted `LabeledValue` contract. Invalid
+construction is rejected when the evidence class lacks its required metadata.
+The four focused contract tests pass, and the complete validation suite passes
+15 tests. Independent spec and quality reviews remain pending.
+
+**Rationale:** Encoding evidentiary boundaries in immutable domain values keeps
+later calculations and reports from silently promoting synthetic context or
+historical counterfactuals into observed or validated claims.
+
+**Affected artifacts:**
+
+- `src/kil/evidence.py`
+- `tests/test_evidence.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The requested direct focused-test invocation does not
+set the repository's `PYTHONPATH=src`, so it cannot import the local `kil`
+package in an uninstalled checkout. The same focused suite passes 4 tests with
+the repository import path used by the Makefile. Spec and quality review remain
+outstanding; no KTP-compatible signature encoding is decided by this task.
+
+**Next gate:** Complete independent spec and quality review of Task 1, then
+proceed to V1 Task 2 deterministic trust-decay arithmetic.
+
+This checkpoint is software-development evidence only. It does not validate
+cryptographic enforcement, historical prevention claims, or live KIL behavior.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

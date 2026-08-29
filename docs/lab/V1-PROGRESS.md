@@ -11,7 +11,7 @@ an expected test-first state, not a validated KIL outcome.
 | Task | RED observed | GREEN observed | Spec review | Quality review | Status |
 |---|---|---|---|---|---|
 | 0 — runtime pin | n/a: build configuration | Python 3.12.13; 11 tests passed | approved | approved | completed |
-| 1 — evidence contract | pending | pending | pending | pending | queued |
+| 1 — evidence contract | expected RED: focused test exited 1; import failed before implementation (`kil.evidence` unavailable; direct invocation also lacked the Makefile's `PYTHONPATH=src`) | focused suite with repository import path: 4 tests passed, 0 failed | pending | pending | implemented; reviews pending |
 | 2 — decay arithmetic | pending | pending | pending | pending | queued |
 | 3 — domain records | pending | pending | pending | pending | queued |
 | 4 — decision engine | pending | pending | pending | pending | queued |
