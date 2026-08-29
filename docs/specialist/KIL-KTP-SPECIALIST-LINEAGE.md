@@ -578,4 +578,44 @@ status of the local reducing-only overlay.
 validation design before the specification and test-first implementation plan
 are written.
 
+### T-012 — 2026-08-29 — Deterministic-first validation design approved
+
+**Input:** The founder selected option 1: deterministic replay first, followed
+by the live local-cluster rail.
+
+**Decision:** Confirmed validation architecture and sequencing. A formal design
+specification has been created for founder review.
+
+**Interpretation:**
+
+- The pure decision kernel, evidence model, normalized historical scenario, and
+  replay run bundle stabilize before any Kubernetes adapter is implemented.
+- The control, signed-state-only mode, and signed-plus-local-reduction mode are
+  evaluated over identical normalized actions.
+- The local overlay remains experimental and reducing-only; testing it does not
+  grant it final normative KTP status.
+- The live rail reuses the replay schemas and decision contract and begins only
+  after deterministic and historical-replay acceptance gates pass.
+- The lab specification defines falsifiable gates, safety cases, metrics,
+  artifact integrity, and the rule for promoting a paper claim to `validated`.
+
+**Rationale:** This order isolates model and provenance errors before introducing
+cluster variability and makes the later visual demo an execution of an already
+reviewable contract.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-08-29-kil-lab-validation-design.md`
+- the future deterministic-rail implementation plan
+- future code, schemas, tests, scenario fixtures, run bundles, paper results,
+  and live-cluster design
+
+**Unresolved questions:** Founder review of the specification; concrete signed
+state encoding and signature profile after KTP compatibility review; exact
+reference parameters; live adapter and cluster substrate; and final normative
+status of the local reducing-only overlay.
+
+**Next gate:** Founder reviews the lab-validation design specification. After
+approval, produce the test-first deterministic-rail implementation plan.
+
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
