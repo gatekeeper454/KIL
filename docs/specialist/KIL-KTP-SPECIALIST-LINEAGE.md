@@ -1680,3 +1680,54 @@ validate historical prevention, concrete KTP cryptography, cluster behavior, or
 live KIL enforcement.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-036 — 2026-08-29 — V2 scenario schema and strict loader implemented
+
+**Input:** V2 Task 1 required a versioned scenario schema and loader that keeps
+source-cited incident facts distinct from synthetic KTP state, local evidence,
+and credential-policy assumptions.
+
+**Interpretation:** “Strict” requires more than unknown-field rejection. JSON
+booleans, integers, decimal strings, identifiers, URIs, dependency order, and
+UTF-8 text must retain exact types and representations; permissive conversions
+could silently turn malformed evidence into executable modeled state.
+
+**Decision status:** Confirmed Task 1 implementation complete under local
+review. The initial focused run failed because `kil.scenario` did not exist. A
+second test-first boundary check demonstrated that lone UTF-16 surrogates could
+enter the loader before UTF-8 validation was added. The corrected focused suite
+passes 10 tests and full repository validation passes 89 tests under bundled
+Python 3.12. The schema parses as JSON, all five preserved-source hashes pass,
+and `git diff --check` passes.
+
+**Rationale:** The loader now mirrors the versioned schema without coercing
+strings, booleans, integers, or decimal fields. It rejects unknown fields at
+every level, empty scenarios, duplicate event IDs, forward dependencies,
+invalid primary-source URIs, and text that cannot enter canonical UTF-8.
+Observed summaries receive source references; control, composite-state, and
+local-evidence values receive explicit modeled rationales through the V1
+`LabeledValue` contract.
+
+**Affected artifacts:**
+
+- `schemas/scenario-v1.schema.json`
+- `src/kil/scenario.py`
+- `tests/fixtures/scenario-minimal-v1.json`
+- `tests/test_scenario.py`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent whole-V2 review remains pending. The
+generic scenario schema does not itself supply historical truth; individual
+event summaries and source labels must still be verified when the eight-phase
+scenario is populated. Concrete KTP signature encoding remains outside V2.
+
+**Next gate:** Implement Task 2 so the modeled credential-policy baseline and
+both KIL modes consume the same immutable event stream, preserve unreachable
+descendant decisions, and cannot label replay output validated.
+
+This checkpoint validates deterministic loader behavior only. It does not
+validate the historical counterfactual, raw KTP telemetry, cryptographic
+enforcement, cluster behavior, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

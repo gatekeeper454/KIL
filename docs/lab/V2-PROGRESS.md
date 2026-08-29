@@ -12,8 +12,8 @@ counterfactual decisions remain **modeled**, never validated.
 
 | Task | RED observed | GREEN observed | Review | Status |
 |---|---|---|---|---|
-| 0 — V2 gate and runtime baseline | n/a | primary checkout: 79 tests passed; five source hashes passed | pending | in progress |
-| 1 — scenario schema and loader | pending | pending | pending | queued |
+| 0 — V2 gate and runtime baseline | n/a | primary checkout: 79 tests passed; five source hashes passed | complete | completed |
+| 1 — scenario schema and loader | expected RED: missing `kil.scenario`; UTF-8 boundary regression then failed once | focused 10 tests; full 89 tests; five source hashes and schema JSON parse passed | plan and self-review approved | completed |
 | 2 — common-stream paired replay | pending | pending | pending | queued |
 | 3 — deterministic run bundles | pending | pending | pending | queued |
 | 4 — eight-phase Hugging Face scenario | pending | pending | pending | queued |
