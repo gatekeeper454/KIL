@@ -1632,3 +1632,51 @@ This checkpoint validates publication and repository CI only. It does not add
 historical counterfactual, cryptographic, cluster, or live-enforcement evidence.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-035 — 2026-08-29 — V1 closed and V2 historical replay opened
+
+**Input:** The user reported pull request #2 complete and directed execution to
+the next gate.
+
+**Interpretation:** The next approved gate is V2 historical replay: normalize
+the source-cited Hugging Face sequence and execute one common event stream under
+the modeled credential-policy baseline and both V1 KIL enforcement modes. This
+does not promote counterfactual output to validated evidence.
+
+**Decision status:** Confirmed transition. Pull request #2 was merged by
+`gatekeeper454` at `261474c`; local `main` was fast-forwarded and passed 79
+tests from the primary checkout while both managed worktrees were still
+present. All five preserved-source hashes and `git diff --check` passed. The two
+clean, fully merged V1 worktrees and their local branches were then removed.
+V2 is open on isolated branch `feature/v2-historical-replay` from `261474c`.
+
+**Rationale:** Verifying before cleanup proves the citation-scanner correction
+against the exact environment that caused the post-merge failure. V2 begins
+only after V1 kernel semantics and repository validation are closed. Plan review
+also makes three implementation constraints explicit: no permissive JSON type
+coercion, modeled provenance must be structural, and replay bundle failures and
+resource limits must be deterministic.
+
+**Affected artifacts:**
+
+- Local and remote `main` at merge commit `261474c`
+- Removed local worktrees `v1-deterministic-kernel` and `citation-scan-fix`
+- New worktree and branch `feature/v2-historical-replay`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- `docs/superpowers/plans/2026-08-29-v2-historical-replay.md`
+
+**Unresolved questions:** V2 scenario-loader conformance, paired replay,
+deterministic bundles, eight-phase incident normalization, CLI execution, and
+whole-V2 review remain pending. The public incident source does not disclose raw
+KTP telemetry or policy-engine traces, so replay outputs must remain modeled.
+
+**Next gate:** Implement Task 1 with test-first schema and loader validation,
+including exact JSON runtime types, unknown-field rejection, dependency order,
+and observed-versus-modeled provenance invariants.
+
+This transition validates V1 software and repository behavior only. It does not
+validate historical prevention, concrete KTP cryptography, cluster behavior, or
+live KIL enforcement.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
