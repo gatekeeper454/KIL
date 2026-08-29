@@ -46,6 +46,23 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(record.outcome, DecisionOutcome.PERMIT)
         self.assertEqual(record.reasons, (ReasonCode.PERMITTED,))
 
+    def test_high_precision_signed_charge_produces_valid_monotonic_record(self):
+        exact_charge = Decimal("0.99999999999999999999999999996")
+        composite = state(
+            charge=exact_charge,
+            threshold=Decimal("0.5"),
+            decay_rate=Decimal("0"),
+            maximum_charge=Decimal("1"),
+        )
+
+        record = decide(REQUEST, composite, EnforcementMode.SIGNED_STATE_ONLY)
+        repeated = decide(REQUEST, composite, EnforcementMode.SIGNED_STATE_ONLY)
+
+        self.assertEqual(record, repeated)
+        self.assertEqual(record.outcome, DecisionOutcome.PERMIT)
+        self.assertLessEqual(record.effective_charge, record.decayed_charge)
+        self.assertLessEqual(record.decayed_charge, record.signed_charge)
+
     def test_veto_cannot_be_overridden_by_high_charge(self):
         record = decide(
             REQUEST, state(veto_clear=False), EnforcementMode.SIGNED_STATE_ONLY

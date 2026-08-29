@@ -1412,3 +1412,49 @@ historical counterfactuals, cryptographic enforcement, cluster behavior, or
 live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-030 — 2026-08-29 — Passive decay clamped to signed authority
+
+**Input:** Whole-V1 review identified a cross-module precision defect using an
+exact signed charge of `0.99999999999999999999999999996` with zero decay rate
+and zero elapsed time. Fixed-context multiplication returned
+`1.000000000000000000000000000`, after which the decision engine correctly
+rejected the record because decayed authority exceeded signed authority.
+
+**Interpretation:** The decision-record invariant was functioning correctly;
+the defect originated in passive decay, where fixed-precision rounding could
+increase the exact incoming charge. Passive decay must therefore bound its
+computed value by the original signed charge after fixed-context arithmetic.
+
+**Decision status:** Confirmed fix implemented; whole-V1 re-review remains
+pending. Test-first regressions reproduced one focused decay failure and one
+engine-level record-construction error. After the minimal arithmetic fix, the
+combined decay and engine suites pass 29 tests and full repository validation
+passes 78 tests.
+
+**Rationale:** The fixed context still governs exponential decay computation,
+but the returned value is clamped outside that arithmetic context against the
+exact original charge and zero. This preserves nonnegative behavior, caller-
+context independence, and the authority ordering `effective <= decayed <=
+signed` without weakening the decision-record validation boundary.
+
+**Affected artifacts:**
+
+- `src/kil/decay.py`
+- `tests/test_decay.py`
+- `tests/test_engine.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent whole-V1 re-review of the Task 2 and
+Task 4 gates remains pending. Concrete KTP signature verification, calibrated
+telemetry, historical replay, and live enforcement remain later gates.
+
+**Next gate:** Obtain whole-V1 re-review approval for the corrected passive-
+decay and engine authority chain before merge or V2 historical replay work.
+
+This correction is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

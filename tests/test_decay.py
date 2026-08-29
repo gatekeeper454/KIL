@@ -140,6 +140,18 @@ class TrustDecayArithmeticTest(unittest.TestCase):
         self.assertGreaterEqual(decayed, Decimal("0"))
         self.assertLess(decayed, Decimal("80"))
 
+    def test_passive_decay_never_rounds_above_exact_signed_charge(self):
+        exact_charge = Decimal("0.99999999999999999999999999996")
+
+        decayed = passive_decay(
+            charge=exact_charge,
+            decay_rate=Decimal("0"),
+            elapsed=Decimal("0"),
+        )
+
+        self.assertEqual(decayed, exact_charge)
+        self.assertLessEqual(decayed, exact_charge)
+
     def test_superlinear_loss_is_zero_in_band_and_cubic_outside(self):
         threshold = Decimal("0.25")
         loss_rate = Decimal("25")

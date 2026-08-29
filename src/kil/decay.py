@@ -77,16 +77,18 @@ def passive_decay(
 ) -> Decimal:
     """Apply exponential passive decay to a nonnegative charge."""
     with localcontext(_KIL_DECIMAL_CONTEXT):
-        charge = _require_finite_decimal("charge", charge)
+        exact_charge = _require_finite_decimal("charge", charge)
         decay_rate = _require_finite_decimal("decay_rate", decay_rate)
         elapsed = _require_finite_decimal("elapsed", elapsed)
-        if charge < ZERO:
+        if exact_charge < ZERO:
             raise ValueError("charge must be nonnegative")
         if decay_rate < ZERO:
             raise ValueError("decay_rate must be nonnegative")
         if elapsed < ZERO:
             raise ValueError("elapsed must be nonnegative")
-        return charge * (-decay_rate * elapsed).exp()
+        computed = exact_charge * (-decay_rate * elapsed).exp()
+
+    return min(exact_charge, max(ZERO, computed))
 
 
 def superlinear_loss(
