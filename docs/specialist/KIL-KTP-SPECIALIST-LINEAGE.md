@@ -1934,3 +1934,56 @@ not validate historical prevention, modeled parameter accuracy, cryptographic
 enforcement, cluster behavior, or live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-041 — 2026-08-29 — Whole-V2 review passed with evidence-language fixes
+
+**Input:** The completed V2 branch required a whole-diff review against the
+approved historical-replay plan, evidence contract, reproducibility claims, and
+integration boundary.
+
+**Interpretation:** Passing incremental tests is insufficient for release
+review. The complete branch diff must also pass whitespace checks; “validated”
+must retain the founder-approved local-cluster meaning; source locators must not
+be described as working URL anchors unless verified; and the exact persisted
+report must reproduce byte-for-byte from its recorded implementation commit.
+
+**Decision status:** Confirmed whole-V2 implementation ready for integration
+selection after review fixes. The review found and corrected four committed
+Markdown hard-break spaces, narrowed the README definition of validated to an
+approved local-cluster validation protocol, and renamed incident source
+anchors as section-level labels. The first report was regenerated in an
+independent temporary root with the same run ID and byte-identical files; all
+six public-artifact hashes verified. Full clean-branch verification is the
+remaining procedural check before integration options are presented.
+
+**Rationale:** The V2 exit criteria are satisfied: eight primary-source-labeled
+cut points, structurally modeled synthetic values, one common event stream,
+modeled-only historical decisions, deterministic bundle identity and contents,
+an executable CLI, and integrity verification. The branch does not silently
+promote software correctness into historical or live-cluster validation.
+
+**Affected artifacts:**
+
+- `README.md`
+- `scenarios/hugging-face-july-2026/README.md`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- Reviewed branch `feature/v2-historical-replay`
+- Reproduced local run `1ab32d9f4ea27624`
+
+**Unresolved questions:** The first approved profile denies every action at the
+signed-state gate, so it does not yet provide a case where signed state permits
+and fresh local evidence reduces authority. That two-timescale differentiation
+should be a separately declared modeled calibration scenario or a later local
+cluster experiment. The report is not signed, the source labels are not
+immutable upstream anchors, concrete KTP signature verification is pending, and
+no historical-prevention or live-enforcement claim is validated.
+
+**Next gate:** Run final verification from the committed feature branch, then
+choose local merge, push-and-PR, branch preservation, or explicit discard.
+
+This review approves V2 software and evidence-contract behavior for integration
+selection only. It does not validate modeled parameter accuracy, historical
+prevention, cryptographic enforcement, cluster behavior, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

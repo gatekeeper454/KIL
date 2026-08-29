@@ -1,9 +1,12 @@
 # V2 historical-replay live progress
 
-**Branch:** `feature/v2-historical-replay`  
-**Started:** 2026-08-29  
-**Base:** `main` at `261474c`  
-**Runtime:** bundled Python 3.12  
+**Branch:** `feature/v2-historical-replay`
+
+**Started:** 2026-08-29
+
+**Base:** `main` at `261474c`
+
+**Runtime:** bundled Python 3.12
 **Baseline:** 79 tests passed from the primary checkout with managed worktrees present
 
 This ledger is updated at every RED, GREEN, and review checkpoint. A passing
@@ -58,5 +61,26 @@ tests and the complete 103-test suite. The replay smoke check shows eight
 modeled baseline permits, a phase-1 KIL denial in both KIL modes, and all seven
 dependent KIL paths marked unreachable while retaining their computed modeled
 decisions.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Whole-V2 review
+
+The complete `main...feature/v2-historical-replay` diff was checked against all
+five implementation tasks and the V2 exit criteria. Review corrected four
+committed Markdown hard-break spaces that caused a branch-wide
+`git diff --check` failure, narrowed the README definition of **validated** to
+the approved local-cluster protocol, and renamed source “anchors” as
+section-level labels because they are audit locators rather than guaranteed URL
+fragments.
+
+The exact first report was independently regenerated from the same scenario,
+profile, and implementation commit into a separate temporary root. Its run ID
+and all seven files were byte-identical, and all six public-artifact hashes
+verified. The approved first profile denies at the signed-state gate in both KIL
+modes; it therefore demonstrates deterministic paired execution and causal
+cutoff, but it does not yet demonstrate an action permitted by signed state and
+then reduced by local evidence. That is a declared follow-on calibration case,
+not a claim made by V2.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

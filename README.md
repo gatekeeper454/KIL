@@ -28,7 +28,8 @@ Every replay input and published result will carry one of three labels:
 
 - `observed`: directly supported by a named primary source;
 - `modeled`: an explicit counterfactual assumption or synthetic signal; or
-- `validated`: reproduced by the local reference implementation.
+- `validated`: reproduced by the local-cluster reference implementation under
+  an approved validation protocol.
 
 Modeled output must never be presented as an observed fact. A local experiment
 must never be presented as proof that a counterfactual would have changed the

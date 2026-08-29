@@ -19,7 +19,7 @@ and encoded as schema `kil.scenario.v1` with scenario ID
 
 ## Evidence boundary
 
-Each event summary is labeled **observed** and carries a section-level anchor to
+Each event summary is labeled **observed** and carries a section-level label for
 the primary disclosure. Those labels are human-auditable source locators, not
 claims that Hugging Face published raw event telemetry.
 
