@@ -11,7 +11,7 @@ an expected test-first state, not a validated KIL outcome.
 | Task | RED observed | GREEN observed | Spec review | Quality review | Status |
 |---|---|---|---|---|---|
 | 0 — runtime pin | n/a: build configuration | Python 3.12.13; 11 tests passed | approved | approved | completed |
-| 1 — evidence contract | expected RED: initial import failure; review regressions then exposed 8 runtime type/blank-metadata bypass failures | focused suite with repository import path: 6 tests passed, 0 failed | approved | findings fixed; re-review pending | implemented; quality re-review pending |
+| 1 — evidence contract | expected RED: initial import failure; review regressions then exposed 8 runtime type/blank-metadata bypass failures | focused suite with repository import path: 6 tests passed, 0 failed | approved | approved | completed |
 | 2 — decay arithmetic | pending | pending | pending | pending | queued |
 | 3 — domain records | pending | pending | pending | pending | queued |
 | 4 — decision engine | pending | pending | pending | pending | queued |
