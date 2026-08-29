@@ -1200,3 +1200,56 @@ historical counterfactuals, cryptographic enforcement, cluster behavior, or
 live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-026 — 2026-08-29 — Deterministic V1 decision engine implemented
+
+**Input:** The approved V1 plan called for a deterministic engine that evaluates
+an action against a signed, short-lived composite KTP enforcement state, applies
+independent binding, veto, environmental-envelope, authenticity, validity,
+charge, and history gates, and optionally consumes a strictly reducing local
+overlay. Missing or stale local evidence must fail closed unless constrained
+failure is explicitly selected.
+
+**Interpretation:** Authority exists before the current action and cannot be
+created or refreshed by it. The slow-loop signed charge is passively decayed at
+the action timestamp. The fast loop may only subtract divergence and coupled
+loss; signed-state-only mode does not consume local evidence. An immutable veto
+or any other decisive reason yields denial even when local-evidence failure was
+configured to constrain.
+
+**Decision status:** Confirmed Task 4 implementation ready for independent
+specification and quality review. The expected missing-module RED was recorded.
+A second test-first runtime-contract checkpoint exposed two failures and three
+errors before deterministic input validation was added. Fourteen focused engine
+tests and all 56 repository tests now pass under bundled Python 3.12; preserved
+source checksums and `git diff --check` also pass.
+
+**Rationale:** The engine preserves the reducing-only authority chain
+`effective_charge <= decayed_charge <= signed_charge`, treats expiration as
+inclusive at `timestamp >= expires_at`, distinguishes explicit constrained
+degradation from the default closed disposition, and emits exactly `PERMITTED`
+only when no actionable reason exists. Runtime enum and record inputs are
+validated before evaluation, while missing local components follow the explicit
+stale-evidence path rather than creating authority.
+
+**Affected artifacts:**
+
+- `src/kil/engine.py`
+- `tests/test_engine.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent Task 4 specification and quality reviews
+remain pending. Concrete cryptographic signature encoding, historical incident
+replay, cluster enforcement, and telemetry-calibrated thresholds remain outside
+this software decision-engine checkpoint.
+
+**Next gate:** Obtain independent Task 4 specification compliance and code
+quality approval before beginning V1 Task 5 canonical decision serialization
+and invariant sweeps.
+
+This checkpoint is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or live
+KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
