@@ -1,5 +1,8 @@
 # Technical paper
 
+The main manuscript begins in
+[`kinetic-infrastructure.md`](kinetic-infrastructure.md).
+
 The paper will connect the historical incident, KTP v2.0.0 semantics, the KIL
 extension boundary, formal model, replay method, local validation, limitations,
 and falsifiable claims. Narrative and generated figures must derive from the

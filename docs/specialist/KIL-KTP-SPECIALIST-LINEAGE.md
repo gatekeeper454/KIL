@@ -229,4 +229,42 @@ draft until the local-overlay and failure semantics are approved.
 the signed state using newer local evidence, or must wait for a newly signed KTP
 state for every change.
 
+### T-005 — 2026-08-29 — Main-paper opening thesis added
+
+**Input:** The founder supplied the opening statement for the main paper on
+Kinetic Infrastructure.
+
+**Interpretation:** The paper will begin by framing cybersecurity as moving from
+ambient risk and ambient threat toward continuous ambient breach, requiring a
+corresponding move from detect-and-prevent operations to ambient enforcement.
+Kinetic infrastructure is presented as the mechanism for enforcing immutable
+constraints at adversarial AI speed rather than as a reactive security overlay.
+
+**Decision:** Confirmed editorial direction. The supplied statement is now the
+introduction of the main manuscript, with only spacing, HTML-entity, punctuation,
+and minor grammatical normalization.
+
+**Evidence status:** This is the paper's thesis and motivation, not a validated
+result. Claims about the insufficiency of current controls, ambient breach,
+autonomy, speed, and threat neutralization require sources, definitions, and
+careful qualification during manuscript development.
+
+**Rationale:** The introduction communicates the project's public purpose before
+the paper enters KTP semantics, the extension boundary, formal model, replay,
+local validation, limitations, and falsifiable claims.
+
+**Affected artifacts:**
+
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/paper/README.md`
+
+**Unresolved questions:** The final paper title, citations supporting the
+opening claims, operational definitions for `ambient breach` and `ambient
+enforcement`, and whether “independent of human intervention” needs a safety
+qualification in the opening remain subject to editorial review.
+
+**Next gate:** Return to Architecture Gate 1 and decide whether local
+enforcement points may apply an immediate reducing-only constraint between
+signed KTP state refreshes.
+
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
