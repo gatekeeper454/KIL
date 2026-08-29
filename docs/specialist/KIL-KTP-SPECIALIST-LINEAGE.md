@@ -1253,3 +1253,54 @@ historical counterfactuals, cryptographic enforcement, cluster behavior, or live
 KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-027 — 2026-08-29 — Unrepresentable engine inputs fail closed
+
+**Input:** Independent Task 4 quality review found that unbounded Python integer
+timestamps could reach elapsed-time conversion and that an accepted finite but
+extreme decay rate could raise a trapped `Decimal` arithmetic exception out of
+the decision boundary instead of producing an enforcement decision.
+
+**Interpretation:** KIL decision inputs require an explicit transport-safe time
+representation, and a numeric failure inside authority reduction cannot become
+an implicit fail-open or an unclassified engine crash. This is a domain and
+decision-boundary correction, not parameter calibration or cryptographic
+validation.
+
+**Decision status:** Confirmed quality fix implemented; specification review is
+approved and quality re-review remains pending. Test-first regressions exposed
+seven timestamp/enum failures and two escaping Decimal overflow errors. The
+corrected domain-and-engine suite passes 32 tests, and all 60 repository tests
+pass under bundled Python 3.12; preserved-source checksums and
+`git diff --check` also pass.
+
+**Rationale:** Action and composite-state timestamps are now restricted to
+signed 64-bit seconds, including exact boundary acceptance and Boolean
+rejection. Only the `DivisionByZero`, `InvalidOperation`, and `Overflow`
+conditions trapped by the deterministic Decimal kernel are translated into an
+`ARITHMETIC_FAILURE` denial. The fallback record sets decayed and effective
+charge to zero, preserving the reducing-only authority invariant. Existing
+veto and gate reasons remain ordered before the arithmetic reason and still
+force denial.
+
+**Affected artifacts:**
+
+- `src/kil/domain.py`
+- `src/kil/engine.py`
+- `tests/test_domain.py`
+- `tests/test_engine.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent quality re-review remains pending.
+Concrete signed-state encoding, live transport integration, historical replay,
+and telemetry-calibrated parameter bounds remain later validation gates.
+
+**Next gate:** Obtain Task 4 quality approval before beginning V1 Task 5
+canonical serialization and invariant sweeps.
+
+This correction is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

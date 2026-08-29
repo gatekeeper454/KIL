@@ -242,6 +242,29 @@ class EngineTest(unittest.TestCase):
                 self.assertEqual(record.outcome, DecisionOutcome.DENY)
                 self.assertIn(ReasonCode.LOCAL_EVIDENCE_STALE, record.reasons)
 
+    def test_unrepresentable_decay_fails_closed(self):
+        record = decide(
+            REQUEST,
+            state(decay_rate=Decimal("1E+999999")),
+            EnforcementMode.SIGNED_STATE_ONLY,
+        )
+
+        self.assertEqual(record.outcome, DecisionOutcome.DENY)
+        self.assertIn(ReasonCode.ARITHMETIC_FAILURE, record.reasons)
+        self.assertEqual(record.decayed_charge, Decimal("0"))
+        self.assertEqual(record.effective_charge, Decimal("0"))
+
+    def test_veto_reason_precedes_arithmetic_failure(self):
+        record = decide(
+            REQUEST,
+            state(veto_clear=False, decay_rate=Decimal("1E+999999")),
+            EnforcementMode.SIGNED_STATE_ONLY,
+        )
+
+        self.assertEqual(record.outcome, DecisionOutcome.DENY)
+        self.assertEqual(record.reasons[0], ReasonCode.VETO)
+        self.assertIn(ReasonCode.ARITHMETIC_FAILURE, record.reasons)
+
 
 if __name__ == "__main__":
     unittest.main()

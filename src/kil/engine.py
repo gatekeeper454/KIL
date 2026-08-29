@@ -1,6 +1,6 @@
 """Deterministic decision engine for the KIL reference kernel."""
 
-from decimal import Decimal
+from decimal import Decimal, DivisionByZero, InvalidOperation, Overflow
 
 from .decay import local_effective_charge, passive_decay, superlinear_loss
 from .domain import (
@@ -57,30 +57,35 @@ def decide(
     if request.timestamp_s >= state.expires_at_s:
         reasons.append(ReasonCode.STATE_EXPIRED)
 
-    elapsed = Decimal(max(0, request.timestamp_s - state.issued_at_s))
-    decayed = passive_decay(state.charge, state.decay_rate, elapsed)
-    effective = decayed
+    try:
+        elapsed = Decimal(max(0, request.timestamp_s - state.issued_at_s))
+        decayed = passive_decay(state.charge, state.decay_rate, elapsed)
+        effective = decayed
 
-    if mode is EnforcementMode.SIGNED_PLUS_LOCAL_REDUCE:
-        if (
-            local_evidence is None
-            or reduction_profile is None
-            or not local_evidence.fresh
-        ):
-            reasons.append(ReasonCode.LOCAL_EVIDENCE_STALE)
-        else:
-            loss = superlinear_loss(
-                local_evidence.divergence,
-                reduction_profile.divergence_threshold,
-                reduction_profile.loss_rate,
-                reduction_profile.exponent,
-            )
-            effective = local_effective_charge(
-                decayed,
-                loss,
-                local_evidence.coupled_loss,
-                state.maximum_charge,
-            )
+        if mode is EnforcementMode.SIGNED_PLUS_LOCAL_REDUCE:
+            if (
+                local_evidence is None
+                or reduction_profile is None
+                or not local_evidence.fresh
+            ):
+                reasons.append(ReasonCode.LOCAL_EVIDENCE_STALE)
+            else:
+                loss = superlinear_loss(
+                    local_evidence.divergence,
+                    reduction_profile.divergence_threshold,
+                    reduction_profile.loss_rate,
+                    reduction_profile.exponent,
+                )
+                effective = local_effective_charge(
+                    decayed,
+                    loss,
+                    local_evidence.coupled_loss,
+                    state.maximum_charge,
+                )
+    except (DivisionByZero, InvalidOperation, Overflow):
+        decayed = Decimal("0")
+        effective = Decimal("0")
+        reasons.append(ReasonCode.ARITHMETIC_FAILURE)
 
     if effective < state.threshold:
         reasons.append(ReasonCode.INSUFFICIENT_CHARGE)

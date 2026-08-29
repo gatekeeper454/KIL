@@ -99,6 +99,7 @@ class DomainTest(unittest.TestCase):
                 "STATE_UNAUTHENTIC": "state_unauthentic",
                 "STATE_NOT_YET_VALID": "state_not_yet_valid",
                 "STATE_EXPIRED": "state_expired",
+                "ARITHMETIC_FAILURE": "arithmetic_failure",
                 "LOCAL_EVIDENCE_STALE": "local_evidence_stale",
                 "INSUFFICIENT_CHARGE": "insufficient_charge",
                 "INSUFFICIENT_HISTORY": "insufficient_history",
@@ -154,6 +155,55 @@ class DomainTest(unittest.TestCase):
             with self.subTest(field=field, value=arguments):
                 with self.assertRaisesRegex(ValueError, field):
                     ActionRequest(*arguments)
+
+    def test_action_request_rejects_unrepresentable_timestamp_immediately(self):
+        huge_timestamp = 1 << 1_000_000
+
+        with self.assertRaisesRegex(ValueError, "timestamp_s"):
+            ActionRequest("r-1", "worker", "admin", huge_timestamp)
+
+    def test_signed_64_bit_timestamp_boundaries_are_enforced(self):
+        minimum = -(2**63)
+        maximum = 2**63 - 1
+
+        for timestamp in (minimum, maximum):
+            with self.subTest(record="request", timestamp=timestamp):
+                self.assertEqual(
+                    ActionRequest("r-1", "worker", "admin", timestamp).timestamp_s,
+                    timestamp,
+                )
+
+        valid_states = (
+            {
+                "issued_at_s": minimum,
+                "not_before_s": minimum + 1,
+                "expires_at_s": minimum + 2,
+            },
+            {
+                "issued_at_s": maximum - 2,
+                "not_before_s": maximum - 1,
+                "expires_at_s": maximum,
+            },
+        )
+        for changes in valid_states:
+            with self.subTest(record="state", changes=changes):
+                self.assertIsInstance(state(**changes), CompositeState)
+
+        invalid_cases = (
+            ("request", minimum - 1),
+            ("request", maximum + 1),
+            ("issued_at_s", minimum - 1),
+            ("not_before_s", minimum - 1),
+            ("expires_at_s", maximum + 1),
+        )
+        for field, timestamp in invalid_cases:
+            with self.subTest(field=field, timestamp=timestamp):
+                message = "timestamp_s" if field == "request" else field
+                with self.assertRaisesRegex(ValueError, message):
+                    if field == "request":
+                        ActionRequest("r-1", "worker", "admin", timestamp)
+                    else:
+                        state(**{field: timestamp})
 
     def test_composite_state_rejects_type_bypasses(self):
         cases = (

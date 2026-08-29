@@ -7,6 +7,8 @@ from enum import Enum
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
+MIN_TIMESTAMP_S = -(2**63)
+MAX_TIMESTAMP_S = 2**63 - 1
 
 
 class EnforcementMode(str, Enum):
@@ -35,6 +37,7 @@ class ReasonCode(str, Enum):
     STATE_UNAUTHENTIC = "state_unauthentic"
     STATE_NOT_YET_VALID = "state_not_yet_valid"
     STATE_EXPIRED = "state_expired"
+    ARITHMETIC_FAILURE = "arithmetic_failure"
     LOCAL_EVIDENCE_STALE = "local_evidence_stale"
     INSUFFICIENT_CHARGE = "insufficient_charge"
     INSUFFICIENT_HISTORY = "insufficient_history"
@@ -48,6 +51,12 @@ def _require_identifier(name: str, value: object) -> None:
 def _require_integer(name: str, value: object) -> None:
     if type(value) is not int:
         raise ValueError(f"{name} must be an integer")
+
+
+def _require_timestamp(name: str, value: object) -> None:
+    _require_integer(name, value)
+    if not MIN_TIMESTAMP_S <= value <= MAX_TIMESTAMP_S:
+        raise ValueError(f"{name} must be a signed 64-bit integer")
 
 
 def _require_boolean(name: str, value: object) -> None:
@@ -72,7 +81,7 @@ class ActionRequest:
         _require_identifier("request_id", self.request_id)
         _require_identifier("identity", self.identity)
         _require_identifier("authority_class", self.authority_class)
-        _require_integer("timestamp_s", self.timestamp_s)
+        _require_timestamp("timestamp_s", self.timestamp_s)
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,7 +107,7 @@ class CompositeState:
         _require_identifier("identity", self.identity)
         _require_identifier("authority_class", self.authority_class)
         for name in ("issued_at_s", "not_before_s", "expires_at_s"):
-            _require_integer(name, getattr(self, name))
+            _require_timestamp(name, getattr(self, name))
         for name in ("history_count", "minimum_history"):
             _require_integer(name, getattr(self, name))
         for name in ("authentic", "veto_clear", "envelope_allows"):
