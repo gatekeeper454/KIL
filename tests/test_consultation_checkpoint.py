@@ -27,6 +27,10 @@ class ConsultationCheckpointTest(unittest.TestCase):
         self.assertTrue(ARCHITECTURE.is_file(), "the architecture visual must be saved")
         text = ARCHITECTURE.read_text(encoding="utf-8")
         self.assertIn("Hybrid two-timescale enforcement", text)
+        self.assertIn("Authoritative signed-state loop", text)
+        self.assertIn("Fast enforcement loop", text)
+        self.assertIn("Execution rails—not timescales", text)
+        self.assertIn("Local reducing-only overlay", text)
         self.assertIn("Q can reduce or withhold authority", text)
         self.assertIn(CITATION_URL, text)
 

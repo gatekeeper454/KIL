@@ -670,4 +670,61 @@ implementation planning.
 pass across all mutable canonical artifacts before the implementation plan is
 written.
 
+### T-014 — 2026-08-29 — Canonical correction propagation completed
+
+**Input:** The founder agreed with the propagation recommendation and directed
+the project to execute it.
+
+**Decision:** Completed across all current mutable canonical paper and
+architecture artifacts. Preserved source drafts remain unchanged.
+
+**Implementation:**
+
+- The official manuscript now unifies the ambient-enforcement thesis, KTP
+  extension boundary, corrected hybrid two-timescale architecture, formal
+  trust-decay profile, Hugging Face incident counterfactual, validation lab,
+  safety constraints, limitations, and authoritative references.
+- Canonical notation uses `Q_i,c` for the signed composite enforcement state and
+  reserves `E(environment)` for the KTP environmental envelope.
+- The first mathematical profile is identified as a weighted diagonal
+  standardized distance, not a full Mahalanobis distance.
+- The manuscript separates observed incident facts, modeled context and
+  counterfactual decisions, and locally validated results.
+- The architecture visual now distinguishes the authoritative signed-state loop
+  from the fast enforcement loop and labels offline replay and live validation
+  as execution rails rather than timescales.
+- The visual exposes the experimental local reducing-only overlay and states
+  that the fast loop cannot replenish authority.
+- Automated semantic-invariant tests now reject reintroduction of the old
+  notation, overstated distance name, old charge label, or rail/timescale
+  conflation in the canonical paper and visual.
+
+**Rationale:** Corrections are now executable repository invariants rather than
+editorial guidance. The main paper, visual, approved validation specification,
+and future generated artifacts share one vocabulary and evidence boundary while
+the provenance record remains intact.
+
+**Affected artifacts:**
+
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/design-drafts/hybrid-two-timescale-architecture.html`
+- `docs/superpowers/plans/2026-08-29-canonical-correction-propagation.md`
+- `tests/test_canonical_semantics.py`
+- `tests/test_consultation_checkpoint.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Preserved artifacts:**
+
+- `docs/drafts/kil-trust-decay-model.md`
+- `docs/drafts/ambient-enforcement-vs-huggingface-incident.md`
+- all checksum-pinned transition and source-material records
+
+**Unresolved questions:** Final signed-state encoding and KTP compatibility
+mapping; reference parameter profile; live cluster substrate and adapter;
+empirical status of the local reducing-only overlay; and author, design, and
+publication metadata for the final PDF.
+
+**Next gate:** Produce the detailed test-first implementation plan for the V1
+deterministic decision kernel and V2 historical replay.
+
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

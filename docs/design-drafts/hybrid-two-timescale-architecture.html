@@ -1,155 +1,211 @@
 <div id="kil-hybrid-architecture">
   <style>
-    #kil-hybrid-architecture { color: var(--foreground); }
-    #kil-hybrid-architecture .kil-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 2rem minmax(0, 1.3fr) 2rem minmax(0, 1fr);
-      gap: 0.75rem;
-      align-items: stretch;
-      margin-top: 1rem;
+    #kil-hybrid-architecture {
+      color: var(--foreground);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-    #kil-hybrid-architecture .kil-stack { display: grid; gap: 0.65rem; align-content: center; }
+    #kil-hybrid-architecture * { box-sizing: border-box; }
+    #kil-hybrid-architecture .kil-subtitle,
+    #kil-hybrid-architecture .kil-muted { color: var(--muted-foreground); }
+    #kil-hybrid-architecture .kil-loop {
+      margin-top: 1rem;
+      padding: 0.9rem;
+      border-radius: 0.85rem;
+      background: color-mix(in srgb, var(--muted) 42%, transparent);
+    }
+    #kil-hybrid-architecture .kil-loop[data-timescale="authoritative"] {
+      border-left: 4px solid var(--viz-series-1);
+    }
+    #kil-hybrid-architecture .kil-loop[data-timescale="fast"] {
+      border-left: 4px solid var(--viz-series-2);
+    }
+    #kil-hybrid-architecture .kil-loop-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.7rem;
+    }
+    #kil-hybrid-architecture .kil-loop-title strong { font-size: 1.05rem; }
+    #kil-hybrid-architecture .kil-flow {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 2rem minmax(0, 1.25fr) 2rem minmax(0, 1fr);
+      gap: 0.6rem;
+      align-items: stretch;
+    }
     #kil-hybrid-architecture .kil-node {
-      padding: 0.8rem;
+      padding: 0.75rem;
       border-radius: 0.65rem;
-      background: color-mix(in srgb, var(--muted) 55%, transparent);
+      background: color-mix(in srgb, var(--background) 76%, transparent);
     }
     #kil-hybrid-architecture .kil-node[data-kind="ktp"] {
-      background: color-mix(in srgb, var(--viz-series-1) 14%, transparent);
+      background: color-mix(in srgb, var(--viz-series-1) 15%, transparent);
     }
     #kil-hybrid-architecture .kil-node[data-kind="kil"] {
-      background: color-mix(in srgb, var(--viz-series-2) 16%, transparent);
+      background: color-mix(in srgb, var(--viz-series-2) 17%, transparent);
     }
     #kil-hybrid-architecture .kil-node[data-kind="record"] {
-      background: color-mix(in srgb, var(--viz-series-3) 15%, transparent);
+      background: color-mix(in srgb, var(--viz-series-3) 16%, transparent);
     }
     #kil-hybrid-architecture .kil-node strong,
     #kil-hybrid-architecture .kil-node span { display: block; }
-    #kil-hybrid-architecture .kil-node span { color: var(--muted-foreground); margin-top: 0.25rem; }
+    #kil-hybrid-architecture .kil-node span {
+      margin-top: 0.22rem;
+      color: var(--muted-foreground);
+    }
     #kil-hybrid-architecture .kil-arrow {
       display: flex;
       align-items: center;
       justify-content: center;
       color: var(--muted-foreground);
-      font-size: 1.5rem;
+      font-size: 1.35rem;
     }
     #kil-hybrid-architecture .kil-engine {
       display: grid;
-      gap: 0.65rem;
-      padding: 0.9rem;
-      border-radius: 0.8rem;
+      gap: 0.55rem;
+      padding: 0.75rem;
+      border-radius: 0.7rem;
       background: color-mix(in srgb, var(--accent) 50%, transparent);
     }
-    #kil-hybrid-architecture .kil-gates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.55rem; }
-    #kil-hybrid-architecture .kil-gate {
-      padding: 0.65rem;
-      border-radius: 0.55rem;
-      background: color-mix(in srgb, var(--background) 72%, transparent);
-      text-align: center;
+    #kil-hybrid-architecture .kil-gates {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.45rem;
     }
-    #kil-hybrid-architecture .kil-gate strong { display: block; }
-    #kil-hybrid-architecture .kil-gate span { display: block; color: var(--muted-foreground); margin-top: 0.2rem; }
+    #kil-hybrid-architecture .kil-gate {
+      padding: 0.55rem;
+      border-radius: 0.5rem;
+      text-align: center;
+      background: color-mix(in srgb, var(--background) 74%, transparent);
+    }
+    #kil-hybrid-architecture .kil-gate strong,
+    #kil-hybrid-architecture .kil-gate span { display: block; }
+    #kil-hybrid-architecture .kil-gate span {
+      margin-top: 0.18rem;
+      color: var(--muted-foreground);
+    }
     #kil-hybrid-architecture .kil-rule {
-      padding: 0.65rem;
+      padding: 0.55rem;
       text-align: center;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      color: var(--foreground);
+    }
+    #kil-hybrid-architecture .kil-rails-label {
+      margin: 1rem 0 0.55rem;
+      font-weight: 700;
     }
     #kil-hybrid-architecture .kil-rails {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0.75rem;
-      margin-top: 0.9rem;
     }
     #kil-hybrid-architecture .kil-rail {
       padding: 0.75rem;
       border-radius: 0.65rem;
-      background: color-mix(in srgb, var(--muted) 40%, transparent);
+      background: color-mix(in srgb, var(--muted) 44%, transparent);
     }
-    #kil-hybrid-architecture .kil-rail strong { display: block; }
-    #kil-hybrid-architecture .kil-rail span { display: block; color: var(--muted-foreground); margin-top: 0.2rem; }
-    #kil-hybrid-architecture .kil-note {
-      margin-top: 0.8rem;
-      padding-left: 0.7rem;
-      border-left: 3px solid var(--viz-series-2);
+    #kil-hybrid-architecture .kil-rail strong,
+    #kil-hybrid-architecture .kil-rail span { display: block; }
+    #kil-hybrid-architecture .kil-rail span {
+      margin-top: 0.2rem;
       color: var(--muted-foreground);
     }
-    @media (max-width: 680px) {
-      #kil-hybrid-architecture .kil-grid { grid-template-columns: 1fr; }
+    #kil-hybrid-architecture .kil-note {
+      margin-top: 0.85rem;
+      padding: 0.7rem 0.8rem;
+      border-left: 3px solid var(--viz-series-2);
+      color: var(--muted-foreground);
+      background: color-mix(in srgb, var(--muted) 26%, transparent);
+    }
+    @media (max-width: 760px) {
+      #kil-hybrid-architecture .kil-flow { grid-template-columns: 1fr; }
       #kil-hybrid-architecture .kil-arrow { transform: rotate(90deg); }
-      #kil-hybrid-architecture .kil-gates { grid-template-columns: 1fr; }
+      #kil-hybrid-architecture .kil-gates { grid-template-columns: 1fr 1fr; }
       #kil-hybrid-architecture .kil-rails { grid-template-columns: 1fr; }
+      #kil-hybrid-architecture .kil-loop-title { display: block; }
     }
   </style>
 
   <h2>Hybrid two-timescale enforcement</h2>
-  <p class="subtitle">One decision engine serves both the historical replay and the live transport adapter.</p>
+  <p class="kil-subtitle">Two temporal control loops feed one deterministic decision contract. Offline replay and live validation exercise that contract as separate rails.</p>
 
-  <div class="kil-grid" role="img" aria-label="Telemetry and action requests flow into the KIL decision engine, pass three reducing gates, and produce an allow or deny decision plus a provenance record.">
-    <div class="kil-stack">
-      <div class="kil-node">
-        <strong>Action request</strong>
-        <span>identity · authority class · target · time</span>
-      </div>
-      <div class="kil-node">
-        <strong>Trajectory evidence</strong>
-        <span>workload history · sequence · origin · scope</span>
-      </div>
-      <div class="kil-node">
-        <strong>Evidence label</strong>
-        <span>observed · modeled · validated</span>
-      </div>
+  <section class="kil-loop" data-timescale="authoritative" aria-labelledby="kil-authoritative-title">
+    <div class="kil-loop-title">
+      <strong id="kil-authoritative-title">1 · Authoritative signed-state loop</strong>
+      <span class="kil-muted">slower · derives · signs · refreshes · expires</span>
     </div>
-
-    <div class="kil-arrow" aria-hidden="true">→</div>
-
-    <div class="kil-engine">
-      <strong>KIL deterministic decision engine</strong>
-      <div class="kil-gates">
-        <div class="kil-gate">
-          <strong>Immutable vetoes</strong>
-          <span>sovereignty + fail-safe constraints</span>
-        </div>
-        <div class="kil-gate" data-kind="ktp">
-          <strong>KTP envelope</strong>
-          <span>A(action) ≤ E(environment)</span>
-        </div>
-        <div class="kil-gate" data-kind="kil">
-          <strong>Ephemeral charge Qᵢ,c</strong>
-          <span>fresh, class-bound trajectory authority</span>
-        </div>
-      </div>
-      <div class="kil-rule">permit = veto_clear ∧ A ≤ E ∧ Qᵢ,c ≥ τc ∧ evidence_fresh</div>
-    </div>
-
-    <div class="kil-arrow" aria-hidden="true">→</div>
-
-    <div class="kil-stack">
+    <div class="kil-flow" role="img" aria-label="KTP-derived evidence enters the authoritative composite-state issuer and produces signed, short-lived Q state bound to identity and authority class.">
       <div class="kil-node" data-kind="ktp">
-        <strong>Allow</strong>
-        <span>short-lived, action-bound execution</span>
+        <strong>KTP-derived inputs</strong>
+        <span>identity · trajectory · standing · environment · constraints · freshness</span>
       </div>
+      <div class="kil-arrow" aria-hidden="true">→</div>
+      <div class="kil-engine">
+        <strong>Composite-state issuer</strong>
+        <span class="kil-muted">compose · decay · bind · sign · version</span>
+        <div class="kil-rule">only this loop may replenish authority</div>
+      </div>
+      <div class="kil-arrow" aria-hidden="true">→</div>
       <div class="kil-node" data-kind="kil">
-        <strong>Deny / constrain</strong>
-        <span>no packet, API call, or admission proceeds</span>
-      </div>
-      <div class="kil-node" data-kind="record">
-        <strong>Decision record</strong>
-        <span>inputs · provenance · reason · counterfactual</span>
+        <strong>Signed Qᵢ,c</strong>
+        <span>short-lived · identity-bound · class-bound · envelope-bound</span>
       </div>
     </div>
-  </div>
+  </section>
 
+  <section class="kil-loop" data-timescale="fast" aria-labelledby="kil-fast-title">
+    <div class="kil-loop-title">
+      <strong id="kil-fast-title">2 · Fast enforcement loop</strong>
+      <span class="kil-muted">per action · verify · reduce · decide · record</span>
+    </div>
+    <div class="kil-flow" role="img" aria-label="An action request, signed composite state, and local evidence enter the fast decision engine, which applies veto, environment, freshness, charge, and optional local reduction gates before emitting an outcome and record.">
+      <div class="kil-node">
+        <strong>Action + current state</strong>
+        <span>request · Signed Qᵢ,c · local evidence · evidence label</span>
+      </div>
+      <div class="kil-arrow" aria-hidden="true">→</div>
+      <div class="kil-engine">
+        <strong>KIL deterministic decision engine</strong>
+        <div class="kil-gates">
+          <div class="kil-gate">
+            <strong>Veto</strong>
+            <span>immutable</span>
+          </div>
+          <div class="kil-gate">
+            <strong>Envelope</strong>
+            <span>A ≤ E</span>
+          </div>
+          <div class="kil-gate">
+            <strong>State</strong>
+            <span>authentic + fresh</span>
+          </div>
+          <div class="kil-gate" data-kind="kil">
+            <strong>Local reducing-only overlay</strong>
+            <span>optional · never increases Q</span>
+          </div>
+        </div>
+        <div class="kil-rule">permit = veto_clear ∧ A ≤ E ∧ state_valid ∧ Qeffective ≥ τc ∧ history ≥ hc</div>
+      </div>
+      <div class="kil-arrow" aria-hidden="true">→</div>
+      <div class="kil-node" data-kind="record">
+        <strong>Outcome + provenance</strong>
+        <span>permit · constrain · deny · indeterminate · reason codes · record</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="kil-rails-label">Execution rails—not timescales</div>
   <div class="kil-rails">
     <div class="kil-rail">
       <strong>Offline replay rail</strong>
-      <span>Versioned Hugging Face trace + modeled signals → reproducible counterfactual</span>
+      <span>Versioned Hugging Face actions + explicitly modeled KTP context → reproducible counterfactual decisions</span>
     </div>
     <div class="kil-rail">
       <strong>Live validation rail</strong>
-      <span>Local Kubernetes telemetry → real transport allow/deny outcome</span>
+      <span>Local Kubernetes actions + locally observed telemetry → enforceable outcomes bound to run IDs</span>
     </div>
   </div>
 
-  <div class="kil-note">Q can reduce or withhold authority. It can never override a KTP veto or make A ≤ E when KTP says otherwise. KTP foundation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical CITATION.cff</a>.</div>
+  <div class="kil-note">
+    Q can reduce or withhold authority. It can never override a KTP veto, expand the KTP environmental envelope, or replenish authority in the fast loop. Historical facts remain observed, synthetic context remains modeled, and only reproduced local outcomes are validated. KTP foundation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical CITATION.cff</a>.
+  </div>
 </div>
