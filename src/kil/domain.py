@@ -184,7 +184,28 @@ class DecisionRecord:
         ):
             raise ValueError("reasons must be a tuple of ReasonCode values")
 
+        charges = {}
         for name in ("signed_charge", "decayed_charge", "effective_charge"):
             value = _require_finite_decimal(name, getattr(self, name))
             if value < ZERO:
                 raise ValueError(f"{name} must be nonnegative")
+            charges[name] = value
+
+        if charges["decayed_charge"] > charges["signed_charge"]:
+            raise ValueError("decayed_charge cannot exceed signed_charge")
+        if charges["effective_charge"] > charges["decayed_charge"]:
+            raise ValueError("effective_charge cannot exceed decayed_charge")
+
+        if self.outcome is DecisionOutcome.PERMIT:
+            if self.reasons != (ReasonCode.PERMITTED,):
+                raise ValueError(
+                    "PERMIT outcome requires exactly the PERMITTED reason"
+                )
+        elif ReasonCode.PERMITTED in self.reasons:
+            raise ValueError("PERMITTED reason is invalid for a non-PERMIT outcome")
+
+        if self.outcome in (DecisionOutcome.DENY, DecisionOutcome.CONSTRAIN):
+            if not self.reasons:
+                raise ValueError(
+                    f"{self.outcome.name} outcome requires an actionable reason"
+                )

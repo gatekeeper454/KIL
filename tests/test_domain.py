@@ -36,6 +36,20 @@ def state(**changes):
     return replace(value, **changes)
 
 
+def decision_record(**changes):
+    values = {
+        "request_id": "r-1",
+        "state_id": "q-1",
+        "mode": EnforcementMode.SIGNED_STATE_ONLY,
+        "outcome": DecisionOutcome.PERMIT,
+        "reasons": (ReasonCode.PERMITTED,),
+        "signed_charge": Decimal("50"),
+        "decayed_charge": Decimal("49"),
+        "effective_charge": Decimal("49"),
+    }
+    return DecisionRecord(**(values | changes))
+
+
 class DomainTest(unittest.TestCase):
     def test_composite_state_rejects_invalid_validity_window(self):
         invalid_windows = (
@@ -247,6 +261,76 @@ class DomainTest(unittest.TestCase):
                 arguments = valid | changes
                 with self.assertRaisesRegex(ValueError, field):
                     DecisionRecord(**arguments)
+
+    def test_decision_record_rejects_increasing_authority(self):
+        cases = (
+            (
+                {"decayed_charge": Decimal("51"), "effective_charge": Decimal("50")},
+                "decayed_charge",
+            ),
+            ({"effective_charge": Decimal("50")}, "effective_charge"),
+        )
+
+        for changes, field in cases:
+            with self.subTest(changes=changes):
+                with self.assertRaisesRegex(ValueError, field):
+                    decision_record(**changes)
+
+    def test_decision_record_enforces_outcome_reason_consistency(self):
+        invalid_cases = (
+            (
+                {
+                    "outcome": DecisionOutcome.PERMIT,
+                    "reasons": (ReasonCode.PERMITTED, ReasonCode.VETO),
+                },
+                "PERMIT",
+            ),
+            (
+                {"outcome": DecisionOutcome.PERMIT, "reasons": ()},
+                "PERMIT",
+            ),
+            (
+                {
+                    "outcome": DecisionOutcome.DENY,
+                    "reasons": (ReasonCode.PERMITTED,),
+                },
+                "PERMITTED",
+            ),
+            (
+                {"outcome": DecisionOutcome.DENY, "reasons": ()},
+                "DENY",
+            ),
+            (
+                {"outcome": DecisionOutcome.CONSTRAIN, "reasons": ()},
+                "CONSTRAIN",
+            ),
+        )
+
+        for changes, message in invalid_cases:
+            with self.subTest(changes=changes):
+                with self.assertRaisesRegex(ValueError, message):
+                    decision_record(**changes)
+
+    def test_decision_record_accepts_consistent_outcomes_and_reasons(self):
+        valid_cases = (
+            {},
+            {
+                "outcome": DecisionOutcome.DENY,
+                "reasons": (ReasonCode.VETO,),
+            },
+            {
+                "outcome": DecisionOutcome.CONSTRAIN,
+                "reasons": (ReasonCode.LOCAL_EVIDENCE_STALE,),
+            },
+            {
+                "outcome": DecisionOutcome.INDETERMINATE,
+                "reasons": (ReasonCode.LOCAL_EVIDENCE_STALE,),
+            },
+        )
+
+        for changes in valid_cases:
+            with self.subTest(changes=changes):
+                self.assertIsInstance(decision_record(**changes), DecisionRecord)
 
 
 if __name__ == "__main__":

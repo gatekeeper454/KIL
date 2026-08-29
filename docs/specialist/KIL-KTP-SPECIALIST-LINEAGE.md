@@ -1154,3 +1154,49 @@ historical counterfactuals, cryptographic enforcement, cluster behavior, or
 live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-025 — 2026-08-29 — Decision-record authority and reason invariants hardened
+
+**Input:** Independent Task 3 quality review identified that a caller could
+construct a decision record whose decayed or locally effective charge exceeded
+its upstream value, or pair outcomes with contradictory or missing reason
+codes.
+
+**Interpretation:** A reducing-only KIL decision record must make the authority
+chain structurally explicit: effective charge cannot exceed decayed charge,
+and decayed charge cannot exceed the signed composite-state charge. Outcome and
+reason fields are one decision assertion and therefore cannot contradict each
+other. Planned stale-local handling still requires `INDETERMINATE` to accept a
+relevant non-permitted reason without imposing additional policy here.
+
+**Decision status:** Confirmed quality findings fixed; specification review is
+approved and quality re-review remains pending. Test-first regressions exposed
+two increasing-authority paths and five inconsistent outcome/reason paths. The
+corrected suite passes 14 focused domain tests and all 42 repository tests under
+bundled Python 3.12; preserved-source checksums and `git diff --check` pass.
+
+**Rationale:** `DecisionRecord` now enforces
+`0 <= effective_charge <= decayed_charge <= signed_charge`. A permit has exactly
+the permitted reason; non-permit outcomes cannot claim permission; deny and
+constrain outcomes require an actionable reason. `INDETERMINATE` remains able
+to carry `LOCAL_EVIDENCE_STALE`, preserving the approved Task 4 contract.
+
+**Affected artifacts:**
+
+- `src/kil/domain.py`
+- `tests/test_domain.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent quality re-review remains pending.
+Concrete KTP signature encoding and live enforcement remain outside this V1
+domain-model checkpoint.
+
+**Next gate:** Obtain Task 3 quality approval before implementing the
+deterministic decision engine in V1 Task 4.
+
+This correction is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
