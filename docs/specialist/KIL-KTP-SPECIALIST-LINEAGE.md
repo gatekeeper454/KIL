@@ -312,4 +312,96 @@ reducing-only behavior, and final KTP version placement.
 **Next gate:** Decide whether local enforcement points may immediately apply a
 reducing-only constraint between signed KTP state refreshes.
 
+### T-007 — 2026-08-29 — Official KIL white paper initiated
+
+**Input:** The founder directed the project to develop the official KIL white
+paper using the KIL trust-decay model and the ambient-enforcement analysis of
+the Hugging Face incident. The paper must be a handout deliverable, such as a
+PDF, and must be tied directly to the lab/demo as supporting and authoritative
+information. The founder-approved opening statement has already been supplied.
+
+**Decision:** Confirmed deliverable and publication contract.
+
+**Interpretation:**
+
+- The white paper is a primary KIL deliverable, not retrospective marketing
+  material added after the implementation.
+- The canonical manuscript, executable replay, lab scenario, decision records,
+  tables, and figures must derive from the same versioned evidence and result
+  artifacts.
+- Historical incident facts remain `observed`; counterfactual KIL inputs and
+  outcomes remain `modeled`; only locally reproduced lab behavior may be called
+  `validated`.
+- The trust-decay and incident-timeline drafts are source material to be
+  reconciled with KTP v2.0.0, the confirmed KIL extension direction, and primary
+  incident sources before they become authoritative prose.
+- The PDF must remain understandable as a standalone handout while providing
+  precise references back to reproducible lab artifacts.
+
+**Rationale:** A shared evidence chain prevents the paper and demo from drifting
+into separate stories. It makes every quantitative figure, cutoff point, and
+performance statement traceable to a source manifest, model version, or lab
+run, while keeping unexecuted counterfactuals visibly distinct from validation.
+
+**Affected artifacts:**
+
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/drafts/kil-trust-decay-model.md`
+- `docs/drafts/ambient-enforcement-vs-huggingface-incident.md`
+- the future paper design specification, citation database, figure sources,
+  generated PDF, replay reports, and lab run manifests
+
+**Unresolved questions:** Primary audience, target length, handout context,
+technical depth, author attribution, visual identity, publication versioning,
+and the exact mechanism connecting manuscript claims to lab evidence.
+
+**Next gate:** Select the paper's primary audience and target length before
+choosing among executive, dual-layer, and research-paper structures.
+
+### T-008 — 2026-08-29 — Hybrid two-timescale architecture required in paper
+
+**Input:** The founder required the hybrid two-timescale architecture to be
+integrated correctly into the official KIL white paper.
+
+**Decision:** Confirmed publication and architecture-integration requirement.
+
+**Interpretation:**
+
+- The architecture will be part of the paper's central technical argument,
+  rather than a detached illustration or optional appendix.
+- The phrase *two-timescale* refers to two temporal control loops: (1) a slower
+  authoritative loop that derives, signs, expires, and refreshes the composite
+  KTP enforcement state, and (2) a faster data-plane loop that evaluates each
+  requested action at the transport enforcement point.
+- The offline historical replay and the live local-cluster validation are two
+  execution rails that exercise the same decision contract; they are not the
+  two timescales themselves.
+- The paper, architecture figure, implementation interfaces, telemetry, and lab
+  measurements must use the same terms and expose both loops distinctly.
+- Whether the fast loop may impose a new local reducing-only constraint between
+  signed refreshes remains an unresolved normative choice. The paper must not
+  silently assume that authority until it is approved.
+
+**Rationale:** Separating temporal loops from experimental rails prevents an
+architectural category error. It also makes the lab capable of measuring state
+freshness and refresh behavior separately from per-action enforcement latency,
+while preserving the requirement that KIL cannot expand KTP authority.
+
+**Affected artifacts:**
+
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/design-drafts/hybrid-two-timescale-architecture.html`
+- the future white-paper design specification and PDF figure set
+- the future signed-state issuer, enforcement adapter, replay engine, telemetry
+  schema, and lab result manifests
+
+**Unresolved questions:** The permitted scope of fast-loop reducing-only local
+constraints; refresh cadence and TTL by authority class; stale-state behavior;
+paper audience and length; and the exact measurements shown in the figure and
+demo.
+
+**Next gate:** Decide whether the fast enforcement loop may immediately reduce
+or withhold authority between signed composite-state refreshes, without ever
+increasing authority or overriding a KTP veto.
+
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
