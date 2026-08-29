@@ -1987,3 +1987,57 @@ selection only. It does not validate modeled parameter accuracy, historical
 prevention, cryptographic enforcement, cluster behavior, or live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-042 — 2026-08-29 — V2 merged, synchronized, and locally closed
+
+**Input:** The founder selected push-and-pull-request integration, then reported
+that GitHub pull request #3 was merged.
+
+**Interpretation:** Merge completion must be verified from GitHub, local `main`
+must be synchronized to the exact merge commit, the merged checkout and
+persistent modeled bundle must be reverified, and the owned feature worktree
+may be removed only after it is clean and fully merged. PR merge does not change
+the evidence class of any historical output.
+
+**Decision status:** Confirmed [pull request #3](https://github.com/gatekeeper454/KIL/pull/3)
+merged eight V2 commits into `main` as `ddad70c0b6e4ec91acecca1c2076c1248f50cfaf`
+after two successful checks. Local `main` fast-forwarded to that commit. The
+merged checkout passes all 104 tests under bundled Python 3.12 and all five
+preserved-source hashes; all six public-artifact hashes for modeled run
+`1ab32d9f4ea27624` also verify. The clean managed V2 worktree was removed and
+its local feature branch deleted. GitHub retained its default PR title and no
+description because the founder merged before the proposed metadata edit.
+
+**Rationale:** Verification on the actual merge commit establishes that V2
+behavior survived integration. Cleaning only the owned, merged worktree closes
+the local feature lifecycle while preserving the remote record, commit history,
+merged source, and persistent ignored run bundle. The obsolete post-merge PR
+metadata edit was not attempted.
+
+**Affected artifacts:**
+
+- V2 merge commit `ddad70c0b6e4ec91acecca1c2076c1248f50cfaf`
+  in local and remote `main` history
+- [GitHub pull request #3](https://github.com/gatekeeper454/KIL/pull/3)
+- Removed local worktree `.worktrees/v2-historical-replay`
+- Deleted local branch `feature/v2-historical-replay`
+- Persistent modeled run
+  `artifacts/generated/v2-historical-replay/1ab32d9f4ea27624`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Gate V3 has an approved design specification but no
+implementation plan. The live cluster substrate, concrete signed composite KTP
+state representation and verification boundary, repeat-count protocol, failure
+and safety cases, and a trajectory that specifically differentiates
+signed-state-only from local reduction must be resolved before implementation.
+No V2 result is validated by this merge.
+
+**Next gate:** Prepare and review the test-first Gate V3 live local-validation
+implementation plan, beginning with environment preflight and a controlled
+two-timescale case before cluster enforcement claims are allowed.
+
+This transition validates merged V2 software and artifact integrity only. It
+does not validate modeled parameter accuracy, historical prevention, concrete
+KTP cryptography, cluster behavior, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
