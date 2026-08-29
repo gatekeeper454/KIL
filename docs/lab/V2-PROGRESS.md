@@ -14,7 +14,7 @@ counterfactual decisions remain **modeled**, never validated.
 |---|---|---|---|---|
 | 0 — V2 gate and runtime baseline | n/a | primary checkout: 79 tests passed; five source hashes passed | complete | completed |
 | 1 — scenario schema and loader | expected RED: missing `kil.scenario`; UTF-8 boundary regression then failed once | focused 10 tests; full 89 tests; five source hashes and schema JSON parse passed | plan and self-review approved | completed |
-| 2 — common-stream paired replay | pending | pending | pending | queued |
+| 2 — common-stream paired replay | expected RED: `ModuleNotFoundError: kil.replay`, exit 1 | focused 5 tests; full 94 tests; five source hashes passed | plan and self-review approved | completed |
 | 3 — deterministic run bundles | pending | pending | pending | queued |
 | 4 — eight-phase Hugging Face scenario | pending | pending | pending | queued |
 | 5 — replay CLI and modeled report | pending | pending | pending | queued |

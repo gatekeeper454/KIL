@@ -1731,3 +1731,50 @@ validate the historical counterfactual, raw KTP telemetry, cryptographic
 enforcement, cluster behavior, or live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-037 — 2026-08-29 — Common-stream paired replay implemented
+
+**Input:** V2 Task 2 required the modeled credential-policy baseline,
+signed-state-only KIL, and signed-plus-local-reduction KIL to evaluate one
+common scenario stream while preserving causal reachability.
+
+**Interpretation:** A counterfactual action can still be computed after an
+earlier KIL denial, but it must be marked unreachable under that mode rather
+than silently removed. Historical outputs and their individual decisions must
+also be structurally fixed to modeled evidence so callers cannot relabel them
+validated.
+
+**Decision status:** Confirmed Task 2 implementation complete under local
+review. The expected RED run failed because `kil.replay` did not exist. The
+corrected focused suite passes five tests and full repository validation passes
+94 tests; all five preserved-source hashes and `git diff --check` pass.
+
+**Rationale:** The replay engine evaluates every event once per mode, records
+the credential-policy permit independently from reachability, and maintains
+separate success sets for the baseline and both KIL modes. Descendant
+reachability therefore reflects each mode’s causal path without hiding the
+decision that would have been produced. `PairedDecision` and `ReplayReport`
+accept only `EvidenceClass.MODELED`, and replay rejects mislabeled inputs and
+runtime type bypasses.
+
+**Affected artifacts:**
+
+- `src/kil/replay.py`
+- `tests/test_replay.py`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Whole-V2 review remains pending. Event-level
+credential and policy results are modeled assumptions until source-specific
+scenario data is populated. Replay does not verify concrete KTP signatures or
+claim that historical infrastructure actually emitted these decisions.
+
+**Next gate:** Implement deterministic run bundles whose identity and checksums
+derive from the scenario, modeled report, implementation version, and profile,
+and whose manifest can never claim validated evidence.
+
+This checkpoint validates paired replay software behavior only. It does not
+validate historical prevention, raw telemetry, cryptographic enforcement,
+cluster behavior, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
