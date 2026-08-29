@@ -1540,3 +1540,53 @@ It does not validate historical counterfactuals, cryptographic enforcement,
 cluster behavior, or live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-033 — 2026-08-29 — V1 merge confirmed; merged-tree citation scan corrected
+
+**Input:** The user advanced to the next gate after pull request #1 was
+published. GitHub reported that `gatekeeper454` had merged the pull request into
+`main` and that both CI bootstrap checks completed successfully.
+
+**Interpretation:** Remote merge completion moved V1 from publication review to
+post-merge verification. Validation must run from the actual primary checkout,
+where managed implementation worktrees exist beneath `.worktrees/`, rather
+than relying only on the isolated feature-worktree environment.
+
+**Decision status:** Merge confirmed at `ee2f5b8`; local `main` was
+fast-forwarded to that commit. Post-merge validation reproduced one failure in
+the citation-policy test because its recursive filesystem scan entered the
+managed `.worktrees/` tree and treated byte-preserved draft copies as new KIL
+documents. A test-first correction on branch `fix/citation-scan-worktrees`
+first failed when the scanner classified the worktree path as a target, then
+passed after the scanner excluded `.git` and `.worktrees` repository-internal
+paths. The focused citation suite passes three tests and the full isolated suite
+passes 79 tests; all five preserved-source checksums and `git diff --check`
+pass. Follow-up remote review remains pending.
+
+**Rationale:** The citation rule applies to KIL-authored documents in the
+checkout, not duplicate checkouts and Git metadata stored inside it. Restricting
+only these repository-internal path components preserves coverage of ordinary
+authored Markdown while making validation independent of whether managed
+worktrees are present.
+
+**Affected artifacts:**
+
+- `tests/test_document_citation.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- Local branch and worktree `fix/citation-scan-worktrees`
+- Local `main` synchronized to merge commit `ee2f5b8`
+
+**Unresolved questions:** The correction still requires commit, remote push,
+follow-up pull-request CI, merge, and validation from the primary checkout.
+Cleanup of the two managed implementation worktrees and their local branches is
+deferred until the correction is merged and verified.
+
+**Next gate:** Publish the narrowly scoped citation-scan correction for review,
+verify its CI, merge only after explicit or external approval, re-run validation
+from synchronized `main`, and then perform provenance-safe worktree cleanup.
+
+This checkpoint validates repository test-boundary behavior only. It does not
+add historical counterfactual, cryptographic, cluster, or live-enforcement
+evidence.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
