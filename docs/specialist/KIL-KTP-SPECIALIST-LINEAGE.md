@@ -1632,3 +1632,358 @@ This checkpoint validates publication and repository CI only. It does not add
 historical counterfactual, cryptographic, cluster, or live-enforcement evidence.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-035 — 2026-08-29 — V1 closed and V2 historical replay opened
+
+**Input:** The user reported pull request #2 complete and directed execution to
+the next gate.
+
+**Interpretation:** The next approved gate is V2 historical replay: normalize
+the source-cited Hugging Face sequence and execute one common event stream under
+the modeled credential-policy baseline and both V1 KIL enforcement modes. This
+does not promote counterfactual output to validated evidence.
+
+**Decision status:** Confirmed transition. Pull request #2 was merged by
+`gatekeeper454` at `261474c`; local `main` was fast-forwarded and passed 79
+tests from the primary checkout while both managed worktrees were still
+present. All five preserved-source hashes and `git diff --check` passed. The two
+clean, fully merged V1 worktrees and their local branches were then removed.
+V2 is open on isolated branch `feature/v2-historical-replay` from `261474c`.
+
+**Rationale:** Verifying before cleanup proves the citation-scanner correction
+against the exact environment that caused the post-merge failure. V2 begins
+only after V1 kernel semantics and repository validation are closed. Plan review
+also makes three implementation constraints explicit: no permissive JSON type
+coercion, modeled provenance must be structural, and replay bundle failures and
+resource limits must be deterministic.
+
+**Affected artifacts:**
+
+- Local and remote `main` at merge commit `261474c`
+- Removed local worktrees `v1-deterministic-kernel` and `citation-scan-fix`
+- New worktree and branch `feature/v2-historical-replay`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- `docs/superpowers/plans/2026-08-29-v2-historical-replay.md`
+
+**Unresolved questions:** V2 scenario-loader conformance, paired replay,
+deterministic bundles, eight-phase incident normalization, CLI execution, and
+whole-V2 review remain pending. The public incident source does not disclose raw
+KTP telemetry or policy-engine traces, so replay outputs must remain modeled.
+
+**Next gate:** Implement Task 1 with test-first schema and loader validation,
+including exact JSON runtime types, unknown-field rejection, dependency order,
+and observed-versus-modeled provenance invariants.
+
+This transition validates V1 software and repository behavior only. It does not
+validate historical prevention, concrete KTP cryptography, cluster behavior, or
+live KIL enforcement.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-036 — 2026-08-29 — V2 scenario schema and strict loader implemented
+
+**Input:** V2 Task 1 required a versioned scenario schema and loader that keeps
+source-cited incident facts distinct from synthetic KTP state, local evidence,
+and credential-policy assumptions.
+
+**Interpretation:** “Strict” requires more than unknown-field rejection. JSON
+booleans, integers, decimal strings, identifiers, URIs, dependency order, and
+UTF-8 text must retain exact types and representations; permissive conversions
+could silently turn malformed evidence into executable modeled state.
+
+**Decision status:** Confirmed Task 1 implementation complete under local
+review. The initial focused run failed because `kil.scenario` did not exist. A
+second test-first boundary check demonstrated that lone UTF-16 surrogates could
+enter the loader before UTF-8 validation was added. The corrected focused suite
+passes 10 tests and full repository validation passes 89 tests under bundled
+Python 3.12. The schema parses as JSON, all five preserved-source hashes pass,
+and `git diff --check` passes.
+
+**Rationale:** The loader now mirrors the versioned schema without coercing
+strings, booleans, integers, or decimal fields. It rejects unknown fields at
+every level, empty scenarios, duplicate event IDs, forward dependencies,
+invalid primary-source URIs, and text that cannot enter canonical UTF-8.
+Observed summaries receive source references; control, composite-state, and
+local-evidence values receive explicit modeled rationales through the V1
+`LabeledValue` contract.
+
+**Affected artifacts:**
+
+- `schemas/scenario-v1.schema.json`
+- `src/kil/scenario.py`
+- `tests/fixtures/scenario-minimal-v1.json`
+- `tests/test_scenario.py`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent whole-V2 review remains pending. The
+generic scenario schema does not itself supply historical truth; individual
+event summaries and source labels must still be verified when the eight-phase
+scenario is populated. Concrete KTP signature encoding remains outside V2.
+
+**Next gate:** Implement Task 2 so the modeled credential-policy baseline and
+both KIL modes consume the same immutable event stream, preserve unreachable
+descendant decisions, and cannot label replay output validated.
+
+This checkpoint validates deterministic loader behavior only. It does not
+validate the historical counterfactual, raw KTP telemetry, cryptographic
+enforcement, cluster behavior, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-037 — 2026-08-29 — Common-stream paired replay implemented
+
+**Input:** V2 Task 2 required the modeled credential-policy baseline,
+signed-state-only KIL, and signed-plus-local-reduction KIL to evaluate one
+common scenario stream while preserving causal reachability.
+
+**Interpretation:** A counterfactual action can still be computed after an
+earlier KIL denial, but it must be marked unreachable under that mode rather
+than silently removed. Historical outputs and their individual decisions must
+also be structurally fixed to modeled evidence so callers cannot relabel them
+validated.
+
+**Decision status:** Confirmed Task 2 implementation complete under local
+review. The expected RED run failed because `kil.replay` did not exist. The
+corrected focused suite passes five tests and full repository validation passes
+94 tests; all five preserved-source hashes and `git diff --check` pass.
+
+**Rationale:** The replay engine evaluates every event once per mode, records
+the credential-policy permit independently from reachability, and maintains
+separate success sets for the baseline and both KIL modes. Descendant
+reachability therefore reflects each mode’s causal path without hiding the
+decision that would have been produced. `PairedDecision` and `ReplayReport`
+accept only `EvidenceClass.MODELED`, and replay rejects mislabeled inputs and
+runtime type bypasses.
+
+**Affected artifacts:**
+
+- `src/kil/replay.py`
+- `tests/test_replay.py`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Whole-V2 review remains pending. Event-level
+credential and policy results are modeled assumptions until source-specific
+scenario data is populated. Replay does not verify concrete KTP signatures or
+claim that historical infrastructure actually emitted these decisions.
+
+**Next gate:** Implement deterministic run bundles whose identity and checksums
+derive from the scenario, modeled report, implementation version, and profile,
+and whose manifest can never claim validated evidence.
+
+This checkpoint validates paired replay software behavior only. It does not
+validate historical prevention, raw telemetry, cryptographic enforcement,
+cluster behavior, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-038 — 2026-08-29 — Deterministic modeled replay bundles implemented
+
+**Input:** V2 Task 3 required reproducible run directories containing the
+scenario, modeled states and decisions, metrics, human-readable summary,
+manifest, and integrity hashes.
+
+**Interpretation:** Bundle identity must derive from the complete canonical
+scenario and replay report plus explicit implementation and profile identities.
+Publication must be atomic, aligned to one scenario, and structurally unable to
+claim that a historical counterfactual is validated.
+
+**Decision status:** Confirmed Task 3 implementation complete under local
+review. The expected RED run failed because `kil.run_bundle` did not exist. The
+corrected focused suite passes five tests and full repository validation passes
+99 tests; all five preserved-source hashes and `git diff --check` pass.
+
+**Rationale:** The writer rejects mismatched scenario/report identities,
+ambiguous metadata, non-modeled reports, and reordered decisions. It derives a
+stable run ID from canonical inputs, constructs all public artifacts before an
+atomic directory rename, and emits SHA-256 entries for every public artifact.
+Independent output roots produce byte-identical files. The manifest and metrics
+carry modeled evidence, and the summary states explicitly that the historical
+decisions are modeled, not validated.
+
+**Affected artifacts:**
+
+- `src/kil/run_bundle.py`
+- `tests/test_run_bundle.py`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Whole-V2 review remains pending. The current 16-hex
+run directory name is a deterministic local artifact identifier, not a
+cryptographic signature or global uniqueness guarantee. Concrete signing,
+external attestations, retention policy, and cluster artifact collection remain
+later gates.
+
+**Next gate:** Populate and source-check the canonical eight-phase Hugging Face
+scenario, preserving observed summaries separately from all synthetic KTP and
+credential-policy values.
+
+This checkpoint validates deterministic bundle generation and integrity hashes
+only. It does not validate historical prevention, raw telemetry, cryptographic
+enforcement, cluster behavior, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-039 — 2026-08-29 — Canonical eight-phase incident scenario normalized
+
+**Input:** V2 Task 4 required the Hugging Face July 2026 incident to become a
+canonical eight-phase replay scenario aligned with the paper's phase map and
+the approved rule that disclosed incident facts may be combined with clearly
+labeled synthetic KTP context signals.
+
+**Interpretation:** The event summaries and source-section anchors represent
+observed public disclosure. Credential-policy results, composite KTP
+enforcement state (`Q_i,c`), local divergence and coupling values, and every
+derived decision are counterfactual inputs or outputs and must remain modeled.
+Section labels are audit locators, not representations of raw telemetry.
+
+**Decision status:** Confirmed Task 4 implementation complete under local
+review. The expected RED run failed while the canonical scenario file was
+absent. Four focused scenario tests now pass, full repository validation passes
+103 tests under bundled Python 3.12, the scenario parses as JSON, all five
+preserved-source hashes pass, and `git diff --check` passes. A replay smoke
+check produces eight modeled baseline permits; both KIL modes deny phase 1 and
+mark its seven causal descendants unreachable while still computing and
+retaining their modeled decisions.
+
+**Rationale:** Stable event IDs, authority classes, dependencies, paper-aligned
+summaries, and primary-source anchors prevent narrative drift. Exact decimal
+strings and uniform modeled rationales make the first counterfactual profile
+reproducible without implying that Hugging Face disclosed KTP state or complete
+policy-engine records. The scenario README makes the evidence boundary and the
+reserved meaning of “validated” explicit.
+
+**Affected artifacts:**
+
+- `scenarios/hugging-face-july-2026/scenario-v1.json`
+- `scenarios/hugging-face-july-2026/README.md`
+- `tests/test_hugging_face_scenario.py`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The eight modeled numerical profiles still require
+calibration against approved local-cluster telemetry. Public source-section
+anchors may need more granular immutable locators if the upstream disclosure
+changes. V2 still needs its supported CLI, first integrity-checked bundle, and
+whole-phase review. Concrete KTP signatures remain outside this gate.
+
+**Next gate:** Implement the reproducible replay CLI and documented Make target,
+then emit and inspect the first modeled integrity-checked report bundle before
+whole-V2 review.
+
+This checkpoint validates scenario structure, provenance separation, and
+deterministic replay behavior only. It does not validate historical prevention,
+the modeled signal values, cryptographic enforcement, cluster behavior, or live
+KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-040 — 2026-08-29 — Reproducible V2 CLI and first modeled report completed
+
+**Input:** V2 Task 5 required a supported command-line interface, documented
+Make target, and first integrity-checked modeled report suitable for inspection
+and later white-paper figures.
+
+**Interpretation:** A report intended for publication support must identify an
+immutable implementation commit, emit exactly one deterministic bundle, expose
+its evidence class in machine-readable metadata, and verify every public
+artifact. Generated historical output remains local modeled evidence; it does
+not become validated merely because the software and checksums pass.
+
+**Decision status:** Confirmed Task 5 implementation complete under local
+review. The expected RED test failed because `tools/replay.py` was absent. The
+CLI test, all 25 V2-focused tests, and all 104 repository tests pass under
+bundled Python 3.12. All five preserved-source hashes pass. The first report,
+run `1ab32d9f4ea27624`, was generated from implementation commit
+`e803cd144d785c13d07f9d96670a5c52e796314f`; all six public-artifact hashes
+verify.
+
+**Rationale:** The CLI fixes the first reduction profile to
+`weighted-diagonal-v0-modeled`, loads the versioned canonical scenario, runs
+all three comparison modes over one stream, and delegates atomic publication
+to the tested bundle writer. The Make target requires explicit output and
+implementation-version values. The report records eight modeled baseline
+permits, eight denials in each KIL mode, and seven unreachable descendants in
+each KIL mode after the phase-1 denial.
+
+**Affected artifacts:**
+
+- `tools/replay.py`
+- `tests/test_replay_cli.py`
+- `Makefile`
+- `README.md`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- Local generated bundle
+  `artifacts/generated/v2-historical-replay/1ab32d9f4ea27624`
+
+**Unresolved questions:** Whole-V2 diff review and integration remain pending.
+The generated bundle is intentionally ignored by Git and is not a signed
+attestation. The modeled profile still requires local-cluster calibration, and
+concrete KTP signature verification remains a later gate. The all-deny first
+profile is a testable counterfactual, not evidence of historical prevention.
+
+**Next gate:** Perform whole-V2 review against the approved plan and evidence
+contract, rerun final verification from the clean feature branch, then present
+the integration options without merging or pushing automatically.
+
+This checkpoint validates deterministic CLI and bundle behavior only. It does
+not validate historical prevention, modeled parameter accuracy, cryptographic
+enforcement, cluster behavior, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-041 — 2026-08-29 — Whole-V2 review passed with evidence-language fixes
+
+**Input:** The completed V2 branch required a whole-diff review against the
+approved historical-replay plan, evidence contract, reproducibility claims, and
+integration boundary.
+
+**Interpretation:** Passing incremental tests is insufficient for release
+review. The complete branch diff must also pass whitespace checks; “validated”
+must retain the founder-approved local-cluster meaning; source locators must not
+be described as working URL anchors unless verified; and the exact persisted
+report must reproduce byte-for-byte from its recorded implementation commit.
+
+**Decision status:** Confirmed whole-V2 implementation ready for integration
+selection after review fixes. The review found and corrected four committed
+Markdown hard-break spaces, narrowed the README definition of validated to an
+approved local-cluster validation protocol, and renamed incident source
+anchors as section-level labels. The first report was regenerated in an
+independent temporary root with the same run ID and byte-identical files; all
+six public-artifact hashes verified. Full clean-branch verification is the
+remaining procedural check before integration options are presented.
+
+**Rationale:** The V2 exit criteria are satisfied: eight primary-source-labeled
+cut points, structurally modeled synthetic values, one common event stream,
+modeled-only historical decisions, deterministic bundle identity and contents,
+an executable CLI, and integrity verification. The branch does not silently
+promote software correctness into historical or live-cluster validation.
+
+**Affected artifacts:**
+
+- `README.md`
+- `scenarios/hugging-face-july-2026/README.md`
+- `docs/lab/V2-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- Reviewed branch `feature/v2-historical-replay`
+- Reproduced local run `1ab32d9f4ea27624`
+
+**Unresolved questions:** The first approved profile denies every action at the
+signed-state gate, so it does not yet provide a case where signed state permits
+and fresh local evidence reduces authority. That two-timescale differentiation
+should be a separately declared modeled calibration scenario or a later local
+cluster experiment. The report is not signed, the source labels are not
+immutable upstream anchors, concrete KTP signature verification is pending, and
+no historical-prevention or live-enforcement claim is validated.
+
+**Next gate:** Run final verification from the committed feature branch, then
+choose local merge, push-and-PR, branch preservation, or explicit discard.
+
+This review approves V2 software and evidence-contract behavior for integration
+selection only. It does not validate modeled parameter accuracy, historical
+prevention, cryptographic enforcement, cluster behavior, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
