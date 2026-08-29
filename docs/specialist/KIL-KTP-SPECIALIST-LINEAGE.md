@@ -1019,3 +1019,48 @@ historical counterfactuals, cryptographic enforcement, cluster behavior, or
 live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-022 — 2026-08-29 — Decay arithmetic made context independent
+
+**Input:** Independent quality review found two Task 2 determinism gaps: public
+arithmetic inherited parts of the caller's decimal context, and non-`Decimal`
+or non-finite operands could be accepted or escape as `decimal`/type
+exceptions rather than deterministic `ValueError` results.
+
+**Interpretation:** A deterministic reference kernel must own its complete
+numeric execution context and validate every operand before comparisons or
+arithmetic. This applies equally to scalar parameters, mapped feature values,
+and the reducing-only local charge operation.
+
+**Decision status:** Confirmed quality findings fixed; quality re-review
+remains pending and spec review is approved. Test-first regressions reproduced
+four caller-context-dependent outputs plus seven failures and six errors from
+invalid operand handling. The corrected focused suite passes ten tests, and
+the full repository validation passes 27 tests.
+
+**Rationale:** Every public arithmetic function now executes inside a local
+copy of one fixed 28-digit, half-even decimal context with explicit exponent
+bounds and traps. All accepted numeric operands must be finite `Decimal`
+instances before domain validation or arithmetic, preventing NaN, infinity,
+float, string, and other invalid values from changing behavior according to
+ambient caller state.
+
+**Affected artifacts:**
+
+- `src/kil/decay.py`
+- `tests/test_decay.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent quality re-review remains pending.
+Telemetry-driven calibration of decay and loss parameters remains future
+experimental work governed by the evidence contract.
+
+**Next gate:** Obtain quality re-review approval for Task 2 before proceeding
+to V1 Task 3 immutable domain records.
+
+This correction is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

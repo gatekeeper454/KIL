@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR, localcontext
 import unittest
 
 from kil.decay import (
@@ -11,6 +11,100 @@ from kil.decay import (
 
 
 class TrustDecayArithmeticTest(unittest.TestCase):
+    def test_public_arithmetic_is_independent_of_caller_decimal_context(self):
+        operations = {
+            "weighted_diagonal_distance": lambda: weighted_diagonal_distance(
+                features={"x": Decimal("1.2345678901234567890123456789")},
+                means={"x": Decimal("0")},
+                scales={"x": Decimal("3.3333333333333333333333333333")},
+                weights={"x": Decimal("0.7")},
+            ),
+            "logistic_squash": lambda: logistic_squash(
+                Decimal("0.12345678901234567890123456789"), Decimal("1.7")
+            ),
+            "passive_decay": lambda: passive_decay(
+                Decimal("80.123456789012345678901234567"),
+                Decimal("0.123456789012345678901234567"),
+                Decimal("5.7"),
+            ),
+            "superlinear_loss": lambda: superlinear_loss(
+                Decimal("0.987654321098765432109876543"),
+                Decimal("0.3"),
+                Decimal("25.123456789012345678901234567"),
+                3,
+            ),
+            "local_effective_charge": lambda: local_effective_charge(
+                Decimal("80.123456789012345678901234567"),
+                Decimal("0.111111111111111111111111111"),
+                Decimal("0.222222222222222222222222222"),
+                Decimal("100"),
+            ),
+        }
+
+        for name, operation in operations.items():
+            with self.subTest(operation=name):
+                with localcontext() as caller_context:
+                    caller_context.prec = 9
+                    caller_context.rounding = ROUND_FLOOR
+                    floor_result = operation()
+                with localcontext() as caller_context:
+                    caller_context.prec = 50
+                    caller_context.rounding = ROUND_CEILING
+                    ceiling_result = operation()
+                self.assertEqual(floor_result, ceiling_result)
+
+    def test_public_arithmetic_rejects_non_finite_decimal_operands(self):
+        invalid_calls = {
+            "weighted_diagonal_distance": lambda: weighted_diagonal_distance(
+                features={"x": Decimal("NaN")},
+                means={"x": Decimal("0")},
+                scales={"x": Decimal("1")},
+                weights={"x": Decimal("1")},
+            ),
+            "logistic_squash": lambda: logistic_squash(
+                Decimal("NaN"), Decimal("1")
+            ),
+            "passive_decay": lambda: passive_decay(
+                Decimal("Infinity"), Decimal("0.1"), Decimal("5")
+            ),
+            "superlinear_loss": lambda: superlinear_loss(
+                Decimal("-Infinity"), Decimal("0.25"), Decimal("25"), 3
+            ),
+            "local_effective_charge": lambda: local_effective_charge(
+                Decimal("NaN"), Decimal("1"), Decimal("1"), Decimal("100")
+            ),
+        }
+
+        for name, invalid_call in invalid_calls.items():
+            with self.subTest(operation=name):
+                with self.assertRaises(ValueError):
+                    invalid_call()
+
+    def test_public_arithmetic_rejects_non_decimal_operands(self):
+        invalid_calls = {
+            "weighted_diagonal_distance": lambda: weighted_diagonal_distance(
+                features={"x": "1"},
+                means={"x": Decimal("0")},
+                scales={"x": Decimal("1")},
+                weights={"x": Decimal("1")},
+            ),
+            "logistic_squash": lambda: logistic_squash("0.5", Decimal("1")),
+            "passive_decay": lambda: passive_decay(
+                Decimal("80"), 0.1, Decimal("5")
+            ),
+            "superlinear_loss": lambda: superlinear_loss(
+                Decimal("0.5"), Decimal("0.25"), 25, 3
+            ),
+            "local_effective_charge": lambda: local_effective_charge(
+                Decimal("10"), Decimal("1"), "1", Decimal("100")
+            ),
+        }
+
+        for name, invalid_call in invalid_calls.items():
+            with self.subTest(operation=name):
+                with self.assertRaises(ValueError):
+                    invalid_call()
+
     def test_identical_feature_vectors_have_zero_distance(self):
         distance = weighted_diagonal_distance(
             features={"velocity": Decimal("2"), "volume": Decimal("10")},
