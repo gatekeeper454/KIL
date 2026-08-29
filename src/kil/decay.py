@@ -133,8 +133,11 @@ def local_effective_charge(
             if value < ZERO:
                 raise ValueError(f"{name} must be nonnegative")
 
-        reduced = max(
-            ZERO,
-            values["decayed_charge"] - values["loss"] - values["coupled_loss"],
+        reduced = (
+            values["decayed_charge"] - values["loss"] - values["coupled_loss"]
         )
-        return min(values["maximum"], reduced)
+        return min(
+            values["maximum"],
+            values["decayed_charge"],
+            max(ZERO, reduced),
+        )

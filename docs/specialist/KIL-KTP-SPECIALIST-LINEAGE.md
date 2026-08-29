@@ -1064,3 +1064,45 @@ historical counterfactuals, cryptographic enforcement, cluster behavior, or
 live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-023 — 2026-08-29 — Exact reducing-only charge clamp enforced
+
+**Input:** Final Task 2 quality review supplied a precision-boundary case where
+fixed-context subtraction rounded the local effective charge above the exact
+input charge despite positive loss, violating the reducing-only invariant.
+
+**Interpretation:** Context independence alone does not guarantee monotonic
+reduction at a precision boundary. The invariant is defined against the exact
+incoming decayed charge, so the final result must be bounded by that original
+value in addition to the configured maximum and zero floor.
+
+**Decision status:** Confirmed finding fixed; quality re-review remains
+pending and spec review is approved. The exact reviewer regression first
+failed with a result of `1.000000000000000000000000000` for an incoming charge
+of `0.99999999999999999999999999996`, then passed after the final clamp was
+strengthened. The focused suite passes 11 tests and the full repository suite
+passes 28 tests.
+
+**Rationale:** Clamping the rounded subtraction result against the original
+finite `Decimal` charge makes the reducing-only guarantee explicit even when
+28-digit half-even rounding crosses above the exact operand.
+
+**Affected artifacts:**
+
+- `src/kil/decay.py`
+- `tests/test_decay.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent quality re-review remains pending.
+Calibration and live enforcement behavior remain outside this software
+arithmetic checkpoint.
+
+**Next gate:** Obtain quality re-review approval for Task 2 before proceeding
+to V1 Task 3 immutable domain records.
+
+This correction is software-development evidence only. It does not validate
+historical counterfactuals, cryptographic enforcement, cluster behavior, or
+live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

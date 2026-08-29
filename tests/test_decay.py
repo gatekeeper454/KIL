@@ -184,6 +184,18 @@ class TrustDecayArithmeticTest(unittest.TestCase):
         self.assertEqual(capped, Decimal("100"))
         self.assertLessEqual(capped, Decimal("120"))
 
+    def test_local_effective_charge_does_not_round_above_exact_input(self):
+        exact_decayed_charge = Decimal("0.99999999999999999999999999996")
+
+        result = local_effective_charge(
+            decayed_charge=exact_decayed_charge,
+            loss=Decimal("0.000000000000000000000000000001"),
+            coupled_loss=Decimal("0"),
+            maximum=Decimal("2"),
+        )
+
+        self.assertLessEqual(result, exact_decayed_charge)
+
 
 if __name__ == "__main__":
     unittest.main()
