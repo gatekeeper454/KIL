@@ -1590,3 +1590,45 @@ add historical counterfactual, cryptographic, cluster, or live-enforcement
 evidence.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-034 — 2026-08-29 — Citation-scan correction published and CI-approved
+
+**Input:** The test-first merged-tree correction and lineage checkpoint from
+T-033 were committed on `fix/citation-scan-worktrees` and published for remote
+review.
+
+**Interpretation:** This is a narrowly scoped repository-validation correction,
+separate from the V1 enforcement semantics already merged through pull request
+#1. Passing remote CI is required before requesting a second merge decision.
+
+**Decision status:** Confirmed publication and CI success. Pull request
+[#2](https://github.com/gatekeeper454/KIL/pull/2) is open from
+`fix/citation-scan-worktrees` into `main`, GitHub reports it clean and mergeable,
+and both bootstrap CI checks passed. Merge remains pending explicit or external
+authorization.
+
+**Rationale:** A second pull request keeps the post-merge test-harness correction
+auditable and prevents an unreviewed direct write to remote `main`. The change
+does not modify KIL trust arithmetic, decision semantics, canonical encoding, or
+evidence classification.
+
+**Affected artifacts:**
+
+- GitHub pull request [gatekeeper454/KIL#2](https://github.com/gatekeeper454/KIL/pull/2)
+- Remote branch `origin/fix/citation-scan-worktrees`
+- `tests/test_document_citation.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Merge authorization, post-merge validation from the
+primary checkout, and provenance-safe cleanup of the V1 and citation-fix
+worktrees remain pending.
+
+**Next gate:** Obtain the merge decision for pull request #2. If merged,
+synchronize local `main`, run the full suite with managed worktrees still
+present to prove the original failure is resolved, then clean up merged local
+worktrees and branches.
+
+This checkpoint validates publication and repository CI only. It does not add
+historical counterfactual, cryptographic, cluster, or live-enforcement evidence.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
