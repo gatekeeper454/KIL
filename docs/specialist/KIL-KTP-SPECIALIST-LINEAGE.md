@@ -895,3 +895,43 @@ This checkpoint is software-development evidence only. It does not validate
 cryptographic enforcement, historical prevention claims, or live KIL behavior.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-019 — 2026-08-29 — Evidence invariant quality-review hardening
+
+**Input:** Independent quality review found that runtime callers could bypass
+the Task 1 contract by supplying a raw string or arbitrary object as the
+evidence class, or by supplying whitespace-only or non-string required
+metadata.
+
+**Interpretation:** Python annotations do not enforce runtime boundaries. A
+provenance contract must reject untyped class values rather than normalize
+them, and required metadata must be a string containing non-whitespace text.
+
+**Decision:** Confirmed implementation of strict runtime checks for an actual
+`EvidenceClass` instance and class-specific nonblank string metadata. New
+regression tests first reproduced eight bypass failures, then passed after the
+fix. The focused suite now passes 6 tests and the full suite passes 17 tests.
+Spec review is approved; quality re-review remains pending.
+
+**Rationale:** Invalid provenance labels must fail at construction so later KIL
+components cannot mistake malformed or unclassified inputs for observed,
+modeled, or validated evidence.
+
+**Affected artifacts:**
+
+- `src/kil/evidence.py`
+- `tests/test_evidence.py`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Independent quality re-review remains outstanding.
+This change does not select a cryptographic representation or alter KTP
+protocol semantics.
+
+**Next gate:** Obtain quality re-review approval for Task 1, then proceed to V1
+Task 2 deterministic trust-decay arithmetic.
+
+This is software-development evidence only, not validated cryptographic,
+historical, cluster, or live enforcement behavior.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

@@ -27,9 +27,21 @@ class LabeledValue(Generic[T]):
     run_id: str | None = None
 
     def __post_init__(self) -> None:
-        if self.evidence_class is EvidenceClass.OBSERVED and not self.source_ref:
+        if not isinstance(self.evidence_class, EvidenceClass):
+            raise ValueError("evidence_class must be an EvidenceClass instance")
+        if self.evidence_class is EvidenceClass.OBSERVED and not _is_nonblank_string(
+            self.source_ref
+        ):
             raise ValueError("observed evidence requires source_ref")
-        if self.evidence_class is EvidenceClass.MODELED and not self.rationale:
+        if self.evidence_class is EvidenceClass.MODELED and not _is_nonblank_string(
+            self.rationale
+        ):
             raise ValueError("modeled evidence requires rationale")
-        if self.evidence_class is EvidenceClass.VALIDATED and not self.run_id:
+        if self.evidence_class is EvidenceClass.VALIDATED and not _is_nonblank_string(
+            self.run_id
+        ):
             raise ValueError("validated evidence requires run_id")
+
+
+def _is_nonblank_string(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
