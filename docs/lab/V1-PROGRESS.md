@@ -10,7 +10,7 @@ an expected test-first state, not a validated KIL outcome.
 
 | Task | RED observed | GREEN observed | Spec review | Quality review | Status |
 |---|---|---|---|---|---|
-| 0 — runtime pin | n/a: build configuration | Python 3.12.13; 11 tests passed | pending | pending | implementation complete; review pending |
+| 0 — runtime pin | n/a: build configuration | Python 3.12.13; 11 tests passed | pending | Python-floor issue fixed; re-review pending | implementation complete; review pending |
 | 1 — evidence contract | pending | pending | pending | pending | queued |
 | 2 — decay arithmetic | pending | pending | pending | pending | queued |
 | 3 — domain records | pending | pending | pending | pending | queued |

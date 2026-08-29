@@ -823,3 +823,33 @@ runtime change remain outstanding.
 V1 Task 1 evidence-contract implementation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-017 — 2026-08-29 — Python floor enforcement review fix
+
+**Input:** Quality review found that `PYTHON ?= python3` still allowed plain
+`make validate` to run silently under the host Python 3.9.6.
+
+**Interpretation:** Runtime parameterization needs an executable floor check;
+otherwise the supported bundled interpreter is only opt-in and unsupported
+hosts can run the suite.
+
+**Decision:** Confirmed the Makefile now provides a `check-python` target that
+rejects versions below Python 3.11 with a clear message, and `test` depends on
+that target so both `make test` and `make validate` enforce the floor.
+
+**Rationale:** The gate fails before test discovery on unsupported hosts while
+retaining the overridable `PYTHON` variable for the bundled Python 3.12 path.
+
+**Affected artifacts:**
+
+- `Makefile`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Quality re-review remains pending; no Task 0
+behavioral questions remain after the explicit floor check.
+
+**Next gate:** Re-run quality review, then proceed to V1 Task 1 evidence-
+contract implementation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
