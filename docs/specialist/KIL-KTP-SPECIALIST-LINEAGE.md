@@ -791,3 +791,35 @@ construction; and the live cluster substrate after V1 and V2 pass.
 after the V1 exit criteria pass and its decision contract is stable.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-016 — 2026-08-29 — V1 Task 0 runtime parameterization completed
+
+**Input:** The V1 implementation gate required pinning the supported local
+Python runtime through the Makefile, validating with bundled Python 3.12, and
+recording the progress checkpoint.
+
+**Interpretation:** This is a build-configuration and evidence-ledger change;
+it does not alter KIL decision behavior. The bundled runtime reports Python
+3.12.13, above the required Python 3.11 floor.
+
+**Decision:** Confirmed Task 0 implementation complete: Make targets now use
+the overridable `PYTHON` variable, validation passed with 11 existing tests,
+and spec and quality review remain pending.
+
+**Rationale:** Parameterizing the interpreter prevents the host Python 3.9
+from silently executing a Python 3.11+ project while preserving the existing
+test, project-metadata, and git-diff checks.
+
+**Affected artifacts:**
+
+- `Makefile`
+- `docs/lab/V1-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** None for Task 0; spec and quality review of the
+runtime change remain outstanding.
+
+**Next gate:** Complete independent spec and quality review, then proceed to
+V1 Task 1 evidence-contract implementation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
