@@ -447,4 +447,63 @@ the exact paragraph-, event-, and figure-level citation mapping.
 **Next gate:** Resolve the fast-loop reducing-only authority question, then
 select the paper's primary audience and target length.
 
+### T-010 — 2026-08-29 — Trust model and incident analysis to become one asset
+
+**Input:** The founder directed that the complete scope of the local trust-decay
+model and the supporting ambient-enforcement analysis of the Hugging Face
+incident be incorporated into the official paper as one unified asset.
+
+**Decision:** Confirmed consolidation requirement. Manuscript structure and
+normalization rules remain proposed pending founder approval.
+
+**Interpretation:**
+
+- The trust-decay draft will supply the mechanism: definitions, trajectory
+  divergence, passive decay, asymmetric replenishment and loss,
+  authority-class isolation and coupling, thresholds, cold start, declared
+  trajectory changes, and known calibration gaps.
+- The incident-analysis draft will supply a phase-by-phase worked application of
+  that mechanism, followed by the executable replay and local validation design.
+- The hybrid two-timescale architecture will connect the theory and example:
+  signed composite-state issuance and refresh in the slower loop, per-action
+  transport enforcement in the faster loop, and the offline and live rails as
+  two executions of the same decision contract.
+- The documents will not be concatenated verbatim. Duplicate introductions,
+  incompatible notation, unsupported certainty, and repeated conclusions will
+  be reconciled into one argument.
+- The trust quantity currently named `E_i,c` in the source draft must be mapped
+  to the confirmed `Q_i,c` KIL extension vocabulary, with `E(environment)`
+  reserved for the KTP environmental envelope to avoid symbol collision.
+- The current diagonal weighted standardized-distance formula must not be called
+  a full Mahalanobis distance unless covariance is actually represented.
+- Incident parameters and counterfactual outcomes are `modeled`; observed event
+  facts are cited to the Hugging Face disclosure; only reproduced local lab
+  outcomes may be `validated`.
+- Strong statements such as “would block” or “credentials are irrelevant” must
+  be expressed as conditional model outcomes with explicit sensor, placement,
+  freshness, and enforcement assumptions until validated.
+
+**Rationale:** A unified paper can serve simultaneously as the conceptual
+argument, protocol-extension rationale, mathematical specification, public case
+study, and lab companion only if its notation, evidence classes, and execution
+contract are consistent end to end.
+
+**Affected artifacts:**
+
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/drafts/kil-trust-decay-model.md` (preserved source input)
+- `docs/drafts/ambient-enforcement-vs-huggingface-incident.md` (preserved source
+  input)
+- `docs/design-drafts/hybrid-two-timescale-architecture.html`
+- the future paper design specification, claim-evidence matrix, figures, PDF,
+  replay reports, and lab manifests
+
+**Unresolved questions:** Founder approval of the unified paper structure;
+fast-loop reducing-only authority; mathematical profile for the first reference
+implementation; final paper length and primary audience; and which incident
+phases can be faithfully reproduced in the local lab.
+
+**Next gate:** Approve or revise the proposed dual-layer unified-paper structure
+before manuscript consolidation begins.
+
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
