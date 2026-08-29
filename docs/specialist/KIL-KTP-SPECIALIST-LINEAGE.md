@@ -506,4 +506,76 @@ phases can be faithfully reproduced in the local lab.
 **Next gate:** Approve or revise the proposed dual-layer unified-paper structure
 before manuscript consolidation begins.
 
+### T-011 — 2026-08-29 — Lab and demo validation phase initiated
+
+**Input:** The founder directed the project to begin the validation phase with
+the KIL lab/demo.
+
+**Decision:** Confirmed transition into lab-validation design. This entry does
+not claim that any KIL behavior has yet been validated.
+
+**Interpretation:**
+
+- The unified paper structure is sufficiently accepted to proceed with its
+  evidence-producing lab workstream.
+- Validation will be artifact-driven: each run must bind the scenario version,
+  input provenance, model and parameter version, signed-state profile,
+  enforcement mode, decision records, environment manifest, and measured
+  outcomes.
+- The first phase should be deterministic and offline so arithmetic,
+  provenance, evidence labels, cutoff claims, and decision reproducibility can
+  be tested before a cluster adds timing and platform variability.
+- The live phase should then run paired benign and adversarial trajectories in a
+  local Kubernetes environment and compare a defined credential/policy
+  baseline with the KIL decision contract.
+- The fast-loop reducing-only question should be represented as two explicit
+  experimental modes: signed-state consumption only, and signed state plus a
+  bounded local reducing-only overlay. Experimental comparison does not itself
+  approve the overlay as a normative KTP extension behavior.
+- A claim may enter the paper as `validated` only when it is reproduced by the
+  implementation and its run bundle passes integrity and provenance checks.
+- The current host has a suitable bundled Python 3.12 runtime, but no `docker`,
+  `kind`, `kubectl`, or `helm` executable was discovered. Live-cluster setup is
+  therefore a prerequisite decision; it must not block deterministic replay
+  validation.
+
+**Proposed validation sequence:**
+
+1. Specify falsifiable claims, controls, evidence schema, and run-bundle format.
+2. Implement the pure deterministic decision kernel with unit and property
+   tests, using test-first development.
+3. Normalize a source-cited subset of the Hugging Face trace and label all
+   synthetic KTP context inputs as `modeled`.
+4. Execute paired baseline and KIL replays and generate machine-readable
+   decision records plus a paper-ready report.
+5. Provision the selected local cluster substrate and reproduce representative
+   benign and adversarial trajectories against the same decision interface.
+6. Test stale state, missing evidence, false-positive controls, declared
+   trajectory changes, signature failure, replay attempts, and reducing-only
+   invariants.
+7. Promote only reproducible local outcomes to `validated` and bind the paper's
+   tables and figures to immutable run identifiers.
+
+**Rationale:** Leading with the deterministic rail creates a falsifiable and
+reviewable model before platform details can obscure errors. A later live rail
+then validates enforcement behavior and latency without conflating a local
+experiment with proof of the historical counterfactual.
+
+**Affected artifacts:**
+
+- the future lab-validation design specification and implementation plan
+- `src/kil/`, `schemas/`, `scenarios/hugging-face-july-2026/`, and `tests/`
+- `adapters/kubernetes/` and `deploy/kind/` or the selected replacement
+- `docs/paper/kinetic-infrastructure.md`
+- future replay reports, lab run bundles, figures, and claim-evidence matrix
+
+**Unresolved questions:** Approval of the phased validation sequence; selection
+and installation of a local container and Kubernetes substrate; exact baseline
+control; first incident cut points; model profile and parameters; and normative
+status of the local reducing-only overlay.
+
+**Next gate:** Approve the deterministic-first, paired-replay-then-live-cluster
+validation design before the specification and test-first implementation plan
+are written.
+
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
