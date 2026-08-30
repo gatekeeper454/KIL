@@ -2234,3 +2234,52 @@ cluster, adapter, signature profile, modeled inputs, historical prevention, or
 live KIL behavior.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-047 — 2026-08-29 — V3A implementation plan fixed for inline execution
+
+**Input:** The founder authorized implementation without another design prompt
+after approving the Envoy topology and requiring a documented graphical
+diagram.
+
+**Interpretation:** The multi-subsystem V3 design is split at a falsifiable
+boundary. V3A implements the signed-state and authorization core plus a visible
+process-contract demonstration. V3B introduces Envoy and Kind only after the
+cryptographic, binding, fixed-mode, no-forward, and evidence-join contracts pass
+without cluster variables.
+
+**Decision status:** Confirmed V3A plan for inline execution. It will implement
+the strict `kil.q-state.v0` payload, Ed25519 compact JWS, maximum ten-second
+lifetime, exact subject/audience/class/action binding, revocation, three fixed
+tracks, downgrade-header resistance, harmless target markers, proof joins, and
+a modeled visible bundle. V3A output cannot use the project evidence label
+`validated`; V3B remains the first live-cluster validation gate.
+
+**Rationale:** Separating cryptographic and adapter contracts from cluster
+orchestration makes failures attributable and keeps the first software increment
+small enough for strict red-green testing. The reference gateway can prove the
+join logic and target-marker semantics without pretending to prove Envoy
+behavior.
+
+**Affected artifacts:**
+
+- `docs/superpowers/plans/2026-08-29-v3a-signed-state-authorization-core.md`
+- Planned `schemas/q-state-v0.schema.json`
+- Planned `src/kil/q_state.py`
+- Planned `src/kil/live_authz.py`
+- Planned `src/kil/reference_gateway.py`
+- Planned `tools/v3a_demo.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** V3B still must resolve the installed Docker client,
+Kind and kubectl installation, Envoy and application image digests, exact HTTP
+header mapping, NetworkPolicy behavior under Kind, and cluster-level latency.
+
+**Next gate:** Commit the V3A plan, create an ignored isolated worktree, verify
+the 104-test baseline, then execute Task 1 with a witnessed failing test before
+production code is added.
+
+This plan authorizes process-level implementation only. It does not validate
+Envoy, Kubernetes, modeled parameters, historical prevention, or live KIL
+behavior.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
