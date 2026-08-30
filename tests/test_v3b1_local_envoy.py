@@ -4368,6 +4368,76 @@ class TeardownContinuationTest(unittest.TestCase):
                 )
                 self.assertLess(durable_index, terminal_index)
 
+    def test_failed_post_write_envoy_freeze_quarantines_before_terminal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(directory)
+            key = ("credential_policy_baseline", "envoy_access")
+            _, epoch = controller._freeze_epoch(value)
+            active = controller._freeze_raw_paths(value, epoch)[key]
+            expected_bytes = controller.payloads[key]
+            actual_write = local_envoy_module._write_file
+            actual_journal = local_envoy_module.journal_event
+            injected = {"failed": False}
+            terminal_active_states = []
+
+            def fail_after_envoy_write(path, payload, mode=0o600):
+                actual_write(path, payload, mode)
+                if Path(path) == active and not injected["failed"]:
+                    injected["failed"] = True
+                    raise OSError("injected Envoy post-write failure")
+
+            def observe_terminal(path, event, details):
+                if (
+                    event == "source_collection_terminal"
+                    and details["record"]["track"] == key[0]
+                    and details["record"]["source"] == key[1]
+                ):
+                    terminal_active_states.append(
+                        active.is_symlink() or active.exists()
+                    )
+                return actual_journal(path, event, details)
+
+            with (
+                mock.patch(
+                    "tools.v3b1_local_envoy._write_file",
+                    side_effect=fail_after_envoy_write,
+                ),
+                mock.patch(
+                    "tools.v3b1_local_envoy.journal_event",
+                    side_effect=observe_terminal,
+                ),
+            ):
+                freeze = controller._freeze_before_service_teardown(
+                    state,
+                    value,
+                    attempted_complete=True,
+                    transient_objects=[],
+                )
+
+            status = next(
+                item
+                for item in freeze.statuses
+                if (item.track, item.source) == key
+            )
+            quarantines = list(
+                active.parent.glob(f".{active.name}.unattested.*")
+            )
+            self.assertTrue(injected["failed"])
+            self.assertEqual(status.status, "copy_error")
+            self.assertEqual(status.error_class, "command_failed")
+            self.assertEqual(terminal_active_states, [False])
+            self.assertFalse(active.is_symlink())
+            self.assertFalse(active.exists())
+            self.assertEqual(len(quarantines), 1)
+            self.assertEqual(quarantines[0].read_bytes(), expected_bytes)
+            self.assertEqual(controller.running, set())
+
+            recovered = controller._freeze_sources(
+                state, value, attempted_complete=True
+            )
+            self.assertFalse(recovered.complete)
+            self.assertFalse(active.exists())
+
     def test_completed_freeze_recovery_reattests_private_bytes(self):
         with tempfile.TemporaryDirectory() as directory:
             controller, state, value = self.make_freeze_controller(directory)

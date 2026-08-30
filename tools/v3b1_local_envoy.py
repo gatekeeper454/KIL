@@ -5524,6 +5524,8 @@ class LocalEnvoyController:
                 _write_file(path, source_bytes, 0o400)
                 copied_bytes = path.read_bytes()
             except (ControllerError, OSError, UnicodeError):
+                if path.is_symlink() or path.exists():
+                    self._quarantine_unattested_frozen_path(path)
                 return SourceCollectionStatus(
                     **identity,
                     status="copy_error",

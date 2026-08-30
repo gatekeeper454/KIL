@@ -3973,3 +3973,41 @@ KIL, authorization, Envoy, and target semantics remain unchanged.
 integration and the committed zero-request live smoke.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-080 — 2026-08-30 — Failed Envoy freezes now quarantine durable bytes before terminal status
+
+**Input:** Close the final Task 3 asymmetry by handling an Envoy-log error that
+occurs after the atomic writer has persisted bytes but before the preterminal
+byte binding is recorded.
+
+**Interpretation:** Envoy logs and service ledgers share the same frozen-source
+invariant. If either path fails after creating an unattested active file or
+symbolic link, that object must move into the collision-safe quarantine and the
+directory entry must be fsynced before a `copy_error` terminal can persist.
+
+**Decision status:** Confirmed harness-only correction complete, pending
+independent re-review. The Envoy post-write exception path now detects any
+active regular file or symlink and invokes the same contained, no-follow,
+collision-safe quarantine used for failed ledger copies. Recovery observes no
+unattested active path, preserves the original bytes privately, and completes
+the remaining freeze and teardown safely.
+
+**Rationale:** Ledger collection already quarantined a partial or durably
+written destination in its exception path, but Envoy collection returned a
+terminal error directly. That left terminal state inconsistent with the active
+filesystem and caused later recovery attestation to fail.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker or Colima operation was performed.
+Installed-runtime behavior remains gated on the reviewed zero-request smoke;
+KIL, authorization, Envoy, and target semantics remain unchanged.
+
+**Next gate:** Independent Task 3 final re-review, then complete harness
+integration and the committed zero-request live smoke.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
