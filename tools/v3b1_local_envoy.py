@@ -33,6 +33,19 @@ try:
 except ModuleNotFoundError:  # Direct execution places ``tools`` on sys.path.
     from bootstrap_v3b_tools import verify_content_lock
 
+try:
+    from tools.v3b1_harness_contract import (
+        ContractError as HarnessContractError,
+        RequestFailureProvenance,
+        normalize_transport_exception,
+    )
+except ModuleNotFoundError:  # Direct execution places ``tools`` on sys.path.
+    from v3b1_harness_contract import (  # type: ignore[no-redef]
+        ContractError as HarnessContractError,
+        RequestFailureProvenance,
+        normalize_transport_exception,
+    )
+
 
 ROOT = Path(__file__).resolve().parents[1]
 ACTIVE_STATE_PATH = ROOT / ".tools/state/v3b1-active.json"
@@ -56,6 +69,7 @@ _ANY_DIGEST_REF = re.compile(
     r"@sha256:(?P<digest>[a-f0-9]{64})$"
 )
 _TRACKS = tuple(LiveTrack)
+_TRACK_PORTS = dict(zip(_TRACKS, (18080, 18081, 18082), strict=True))
 _BUILD_CONTEXT_FILES = (
     "README.md",
     "pyproject.toml",
@@ -77,6 +91,9 @@ RETRY_CONTROL_HEADERS = {
     "x-envoy-hedge-on-per-try-timeout": "false",
     "x-envoy-max-retries": "0",
 }
+_READINESS_DEADLINE_NS = 30_000_000_000
+_READINESS_CONNECT_TIMEOUT_S = 1.0
+_READINESS_ROUND_DELAY_S = 0.25
 ADVERSARIAL_HEADERS = {
     "x-kil-decision-digest": "f" * 64,
     "x-kil-issuer": "https://attacker.invalid",
@@ -296,6 +313,107 @@ def _journal_binding(value: Mapping[str, object]) -> str:
     return _digest_bytes(canonical_json(unsigned).encode("utf-8"))
 
 
+def _validate_lifecycle_event_details(
+    event_name: str,
+    details: Mapping[str, object],
+    requests: Mapping[str, object] | None = None,
+) -> None:
+    if event_name == "readiness_connect_complete":
+        expected = {
+            "round",
+            "host",
+            "tracks",
+            "ports",
+            "ready_monotonic_ns",
+        }
+        if set(details) != expected:
+            raise ControllerError("readiness event fields are not closed")
+        if (
+            type(details["round"]) is not int
+            or details["round"] < 1
+            or details["host"] != "127.0.0.1"
+            or details["tracks"] != [track.value for track in _TRACKS]
+            or details["ports"] != list(_TRACK_PORTS.values())
+            or type(details["ready_monotonic_ns"]) is not int
+            or details["ready_monotonic_ns"] < 0
+        ):
+            raise ControllerError("readiness completion event is invalid")
+        return
+    if event_name == "readiness_connect_failed":
+        expected = {
+            "track",
+            "host",
+            "port",
+            "round",
+            "connect_monotonic_ns",
+            "failure_monotonic_ns",
+            "exception_class",
+            "errno",
+            "errno_name",
+            "request_bytes_may_have_been_sent",
+        }
+        if set(details) != expected:
+            raise ControllerError("readiness event fields are not closed")
+        try:
+            track = LiveTrack(details["track"])
+        except (TypeError, ValueError) as error:
+            raise ControllerError("readiness failure track is invalid") from error
+        if (
+            details["host"] != "127.0.0.1"
+            or details["port"] != _TRACK_PORTS[track]
+            or type(details["round"]) is not int
+            or details["round"] < 1
+            or details["request_bytes_may_have_been_sent"] is not False
+        ):
+            raise ControllerError("readiness failure event is invalid")
+        try:
+            RequestFailureProvenance(
+                stage="request_send",
+                exception_class=details["exception_class"],  # type: ignore[arg-type]
+                errno=details["errno"],  # type: ignore[arg-type]
+                errno_name=details["errno_name"],  # type: ignore[arg-type]
+                connect_monotonic_ns=details["connect_monotonic_ns"],  # type: ignore[arg-type]
+                send_monotonic_ns=details["connect_monotonic_ns"],  # type: ignore[arg-type]
+                failure_monotonic_ns=details["failure_monotonic_ns"],  # type: ignore[arg-type]
+                request_bytes_may_have_been_sent=False,
+                attempt_count=1,
+                retry_performed=False,
+            )
+        except HarnessContractError as error:
+            raise ControllerError("readiness failure event is invalid") from error
+        return
+    if event_name == "request_send_failed":
+        minimal = {"track", "record_sha256"}
+        transport = minimal | {"intent_id", "provenance"}
+        detail_fields = set(details)
+        if detail_fields != minimal and detail_fields != transport:
+            raise ControllerError("request failure event fields are not closed")
+        try:
+            track = LiveTrack(details["track"])
+        except (TypeError, ValueError) as error:
+            raise ControllerError("request failure event track is invalid") from error
+        if details["record_sha256"] is not None:
+            raise ControllerError("failed request event cannot bind a record")
+        if detail_fields == transport:
+            intent_id = _require_sha256(
+                "request failure intent_id", details["intent_id"]
+            )
+            try:
+                RequestFailureProvenance.from_mapping(details["provenance"])
+            except HarnessContractError as error:
+                raise ControllerError("request failure provenance is invalid") from error
+            if requests is not None:
+                request = requests.get(track.value)
+                if (
+                    type(request) is not dict
+                    or request.get("status") != "failed"
+                    or request.get("intent_id") != intent_id
+                ):
+                    raise ControllerError(
+                        "request failure provenance does not bind its durable intent"
+                    )
+
+
 def create_lifecycle_journal(
     journal_path: Path,
     *,
@@ -394,6 +512,9 @@ def load_lifecycle_journal(journal_path: Path) -> dict[str, object]:
             raise ControllerError("lifecycle event fields are invalid")
         if event["sequence"] != index or type(event["event"]) is not str or type(event["details"]) is not dict:
             raise ControllerError("lifecycle event ordering is invalid")
+        _validate_lifecycle_event_details(
+            event["event"], event["details"], requests
+        )
     return value
 
 
@@ -411,6 +532,9 @@ def journal_event(
         raise ControllerError("lifecycle event name is invalid")
     if type(details) is not dict:
         raise ControllerError("lifecycle event details must be an object")
+    requests = value["requests"]
+    assert isinstance(requests, dict)
+    _validate_lifecycle_event_details(event, details, requests)
     events = value["events"]
     assert isinstance(events, list)
     events.append({"sequence": len(events) + 1, "event": event, "details": dict(details)})
@@ -448,7 +572,12 @@ def _bind_journal_manifest(
 
 
 def _complete_request_attempt(
-    journal_path: Path, track: LiveTrack, *, success: bool, record_sha256: str | None
+    journal_path: Path,
+    track: LiveTrack,
+    *,
+    success: bool,
+    record_sha256: str | None,
+    failure_provenance: RequestFailureProvenance | None = None,
 ) -> dict[str, object]:
     value = load_lifecycle_journal(journal_path)
     requests = value["requests"]
@@ -459,18 +588,31 @@ def _complete_request_attempt(
         raise ControllerError("request completion lacks a durable intent")
     if success is not (record_sha256 is not None):
         raise ControllerError("request success/record SHA nullability mismatch")
+    if success and failure_provenance is not None:
+        raise ControllerError("successful request cannot carry failure provenance")
+    if failure_provenance is not None and not isinstance(
+        failure_provenance, RequestFailureProvenance
+    ):
+        raise ControllerError("request failure provenance is invalid")
     if record_sha256 is not None:
         _require_sha256("request record_sha256", record_sha256)
     request["status"] = "completed" if success else "failed"
     events = value["events"]
     assert isinstance(events, list)
     event = "request_send_complete" if success else "request_send_failed"
+    details: dict[str, object] = {
+        "track": track.value,
+        "record_sha256": record_sha256,
+    }
+    if failure_provenance is not None:
+        details.update(
+            {
+                "intent_id": request["intent_id"],
+                "provenance": failure_provenance.to_mapping(),
+            }
+        )
     events.append(
-        {
-            "sequence": len(events) + 1,
-            "event": event,
-            "details": {"track": track.value, "record_sha256": record_sha256},
-        }
+        {"sequence": len(events) + 1, "event": event, "details": details}
     )
     value["phase"] = event
     return _persist_journal(journal_path, value)
@@ -3354,6 +3496,9 @@ class LocalEnvoyController:
         home: Path | None = None,
         port_probe: Callable[[int], bool] = _default_port_probe,
         tool_verifier: Callable[[], object] | None = None,
+        connection_factory: Callable[..., object] | None = None,
+        monotonic_ns: Callable[[], int] | None = None,
+        sleeper: Callable[[float], None] | None = None,
     ) -> None:
         self.root = root.resolve()
         self.runner = runner or SubprocessCommandRunner()
@@ -3376,6 +3521,13 @@ class LocalEnvoyController:
         )
         self.port_probe = port_probe
         self.tool_verifier = tool_verifier or self._verify_tool_lock
+        self.connection_factory = (
+            http.client.HTTPConnection
+            if connection_factory is None
+            else connection_factory
+        )
+        self.monotonic_ns = time.monotonic_ns if monotonic_ns is None else monotonic_ns
+        self.sleeper = time.sleep if sleeper is None else sleeper
         self.command_env = {
             "HOME": str(self.home),
             "LANG": "C",
@@ -4685,6 +4837,199 @@ class LocalEnvoyController:
         )
         return output
 
+    def _monotonic_now(self) -> int:
+        value = self.monotonic_ns()
+        if type(value) is not int or value < 0:
+            raise ControllerError("monotonic clock returned an invalid value")
+        return value
+
+    @staticmethod
+    def _close_connections(connections: Sequence[object]) -> None:
+        for connection in connections:
+            try:
+                connection.close()  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+    def _readiness_failure_event(
+        self,
+        *,
+        track: LiveTrack,
+        port: int,
+        round_number: int,
+        connect_ns: int,
+        failure_ns: int,
+        error: BaseException,
+    ) -> None:
+        try:
+            exception_class, error_number, error_name = normalize_transport_exception(
+                error
+            )
+        except HarnessContractError as contract_error:
+            raise ControllerError("readiness transport failure is not closed") from contract_error
+        journal_event(
+            self.journal_path,
+            "readiness_connect_failed",
+            {
+                "track": track.value,
+                "host": "127.0.0.1",
+                "port": port,
+                "round": round_number,
+                "connect_monotonic_ns": connect_ns,
+                "failure_monotonic_ns": failure_ns,
+                "exception_class": exception_class,
+                "errno": error_number,
+                "errno_name": error_name,
+                "request_bytes_may_have_been_sent": False,
+            },
+        )
+
+    def _connect_ready_gateways(
+        self,
+    ) -> tuple[dict[LiveTrack, object], dict[LiveTrack, int]]:
+        start_ns = self._monotonic_now()
+        deadline_ns = start_ns + _READINESS_DEADLINE_NS
+        round_number = 0
+        while True:
+            round_number += 1
+            connections: dict[LiveTrack, object] = {}
+            connect_times: dict[LiveTrack, int] = {}
+            failure: tuple[LiveTrack, int, int, int, BaseException] | None = None
+            for track, port in zip(_TRACKS, self.profile.gateway_ports, strict=True):
+                connect_ns = self._monotonic_now()
+                remaining_ns = deadline_ns - connect_ns
+                if remaining_ns <= 0:
+                    failure = (
+                        track,
+                        port,
+                        connect_ns,
+                        connect_ns,
+                        TimeoutError("gateway readiness deadline expired"),
+                    )
+                    break
+                timeout_s = min(
+                    _READINESS_CONNECT_TIMEOUT_S,
+                    remaining_ns / 1_000_000_000,
+                )
+                connection: object | None = None
+                try:
+                    connection = self.connection_factory(
+                        "127.0.0.1", port, timeout=timeout_s
+                    )
+                    connections[track] = connection
+                    connection.connect()  # type: ignore[attr-defined]
+                    connected_ns = self._monotonic_now()
+                    if connected_ns >= deadline_ns:
+                        failure = (
+                            track,
+                            port,
+                            connect_ns,
+                            connected_ns,
+                            TimeoutError("gateway readiness deadline expired"),
+                        )
+                        break
+                    connect_times[track] = connected_ns
+                except (OSError, http.client.HTTPException) as error:
+                    failure = (
+                        track,
+                        port,
+                        connect_ns,
+                        self._monotonic_now(),
+                        error,
+                    )
+                    break
+                except Exception:
+                    self._close_connections(tuple(connections.values()))
+                    raise
+            if failure is None:
+                ready_ns = self._monotonic_now()
+                try:
+                    journal_event(
+                        self.journal_path,
+                        "readiness_connect_complete",
+                        {
+                            "round": round_number,
+                            "host": "127.0.0.1",
+                            "tracks": [track.value for track in _TRACKS],
+                            "ports": list(self.profile.gateway_ports),
+                            "ready_monotonic_ns": ready_ns,
+                        },
+                    )
+                except Exception:
+                    self._close_connections(tuple(connections.values()))
+                    raise
+                return connections, connect_times
+
+            self._close_connections(tuple(connections.values()))
+            track, port, connect_ns, failure_ns, error = failure
+            self._readiness_failure_event(
+                track=track,
+                port=port,
+                round_number=round_number,
+                connect_ns=connect_ns,
+                failure_ns=failure_ns,
+                error=error,
+            )
+            if failure_ns >= deadline_ns:
+                raise ControllerError("gateway TCP readiness deadline expired") from None
+            sleep_s = min(
+                _READINESS_ROUND_DELAY_S,
+                (deadline_ns - failure_ns) / 1_000_000_000,
+            )
+            if sleep_s <= 0:
+                raise ControllerError("gateway TCP readiness deadline expired")
+            self.sleeper(sleep_s)
+
+    def _request_failure_provenance(
+        self,
+        *,
+        stage: str,
+        error: BaseException,
+        connect_ns: int,
+        send_ns: int,
+    ) -> RequestFailureProvenance:
+        try:
+            exception_class, error_number, error_name = normalize_transport_exception(
+                error
+            )
+            return RequestFailureProvenance(
+                stage=stage,
+                exception_class=exception_class,
+                errno=error_number,
+                errno_name=error_name,
+                connect_monotonic_ns=connect_ns,
+                send_monotonic_ns=send_ns,
+                failure_monotonic_ns=self._monotonic_now(),
+                request_bytes_may_have_been_sent=True,
+                attempt_count=1,
+                retry_performed=False,
+            )
+        except HarnessContractError as contract_error:
+            raise ControllerError("request failure provenance is not closed") from contract_error
+
+    def _record_transport_failure(
+        self,
+        *,
+        track: LiveTrack,
+        stage: str,
+        error: BaseException,
+        connect_ns: int,
+        send_ns: int,
+    ) -> None:
+        provenance = self._request_failure_provenance(
+            stage=stage,
+            error=error,
+            connect_ns=connect_ns,
+            send_ns=send_ns,
+        )
+        _complete_request_attempt(
+            self.journal_path,
+            track,
+            success=False,
+            record_sha256=None,
+            failure_provenance=provenance,
+        )
+
     def run(self) -> Path:
         state, manifest = self._load_and_reverify()
         runtime_root = _runtime_root(self.root, manifest)
@@ -4694,102 +5039,157 @@ class LocalEnvoyController:
         journal = load_lifecycle_journal(self.journal_path)
         if journal["manifest_sha256"] != _digest_file(Path(str(state["manifest_path"]))):
             raise ControllerError("request lifecycle journal does not bind active manifest")
-        private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
-        records: list[dict[str, object]] = []
-        comparison = {
-            "method": "POST",
-            "path": "/consequential/admin",
-            "authorization_sha256": _digest_bytes(AUTHORIZATION.encode("utf-8")),
-            "adversarial_headers": dict(ADVERSARIAL_HEADERS),
-            "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
-        }
-        comparison_sha = comparison_facts_sha256(comparison)
-        for track, port in zip(_TRACKS, self.profile.gateway_ports, strict=True):
-            issued = int(time.time())
-            q_state = None
-            if track is LiveTrack.SIGNED_STATE_ONLY:
-                q_state = issue_q_state(_claims("kil-v3-signed", issued), private_key)
-            elif track is LiveTrack.SIGNED_PLUS_LOCAL_REDUCE:
-                q_state = issue_q_state(_claims("kil-v3-local", issued), private_key)
-            headers = {
-                "authorization": AUTHORIZATION,
-                "x-request-id": str(manifest["request_id"]),
-                "x-kil-run-id": str(manifest["run_id"]),
-                **ADVERSARIAL_HEADERS,
-                **RETRY_CONTROL_HEADERS,
+        if any(
+            request["status"] != "not_attempted"
+            for request in journal["requests"].values()
+        ):
+            raise ControllerError("central request was already attempted; replay is forbidden")
+        connections, connect_times = self._connect_ready_gateways()
+        try:
+            private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+            records: list[dict[str, object]] = []
+            comparison = {
+                "method": "POST",
+                "path": "/consequential/admin",
+                "authorization_sha256": _digest_bytes(AUTHORIZATION.encode("utf-8")),
+                "adversarial_headers": dict(ADVERSARIAL_HEADERS),
+                "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
             }
-            if q_state is not None:
-                headers["x-kil-q-state"] = q_state
-            if q_state is not None and int(time.time()) >= issued + 10:
-                raise ControllerError("signed-state request validity expired before send")
-            claim_request_attempt(self.journal_path, track)
-            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-            send_ns = time.monotonic_ns()
-            try:
-                connection.request("POST", "/consequential/admin", body=b"", headers=headers)
-                response = connection.getresponse()
-                response.read(4096)
-            except OSError as error:
-                _complete_request_attempt(
-                    self.journal_path, track, success=False, record_sha256=None
-                )
-                raise ControllerError("central request failed without retry") from error
-            finally:
-                connection.close()
-            receive_ns = time.monotonic_ns()
-            if q_state is not None and int(time.time()) >= issued + 10:
-                _complete_request_attempt(
-                    self.journal_path, track, success=False, record_sha256=None
-                )
-                raise ControllerError("signed-state request missed its 10-second validity window")
-            client_digest = response.getheader("x-kil-decision-digest")
-            if response.status in {200, 403}:
-                client_digest = _exact_digest("client response decision digest", client_digest)
-            elif response.status >= 500:
-                if client_digest is not None:
+            comparison_sha = comparison_facts_sha256(comparison)
+            for track, port in zip(_TRACKS, self.profile.gateway_ports, strict=True):
+                issued = int(time.time())
+                q_state = None
+                if track is LiveTrack.SIGNED_STATE_ONLY:
+                    q_state = issue_q_state(_claims("kil-v3-signed", issued), private_key)
+                elif track is LiveTrack.SIGNED_PLUS_LOCAL_REDUCE:
+                    q_state = issue_q_state(_claims("kil-v3-local", issued), private_key)
+                headers = {
+                    "authorization": AUTHORIZATION,
+                    "x-request-id": str(manifest["request_id"]),
+                    "x-kil-run-id": str(manifest["run_id"]),
+                    **ADVERSARIAL_HEADERS,
+                    **RETRY_CONTROL_HEADERS,
+                }
+                if q_state is not None:
+                    headers["x-kil-q-state"] = q_state
+                if q_state is not None and int(time.time()) >= issued + 10:
+                    raise ControllerError("signed-state request validity expired before send")
+                claim_request_attempt(self.journal_path, track)
+                connection = connections[track]
+                send_ns = self._monotonic_now()
+                try:
+                    connection.request(  # type: ignore[attr-defined]
+                        "POST", "/consequential/admin", body=b"", headers=headers
+                    )
+                except (OSError, http.client.HTTPException) as error:
+                    self._record_transport_failure(
+                        track=track,
+                        stage="request_send",
+                        error=error,
+                        connect_ns=connect_times[track],
+                        send_ns=send_ns,
+                    )
+                    raise ControllerError(
+                        "central request failed during request_send without retry"
+                    ) from None
+                try:
+                    response = connection.getresponse()  # type: ignore[attr-defined]
+                except (OSError, http.client.HTTPException) as error:
+                    self._record_transport_failure(
+                        track=track,
+                        stage="response_headers",
+                        error=error,
+                        connect_ns=connect_times[track],
+                        send_ns=send_ns,
+                    )
+                    raise ControllerError(
+                        "central request failed during response_headers without retry"
+                    ) from None
+                try:
+                    response.read(4096)
+                except (OSError, http.client.HTTPException) as error:
+                    self._record_transport_failure(
+                        track=track,
+                        stage="response_body",
+                        error=error,
+                        connect_ns=connect_times[track],
+                        send_ns=send_ns,
+                    )
+                    raise ControllerError(
+                        "central request failed during response_body without retry"
+                    ) from None
+                receive_ns = self._monotonic_now()
+                if q_state is not None and int(time.time()) >= issued + 10:
                     _complete_request_attempt(
                         self.journal_path,
                         track,
                         success=False,
                         record_sha256=None,
                     )
-                    raise ControllerError("authz 5xx exposed a forbidden client digest")
-            else:
+                    raise ControllerError(
+                        "signed-state request missed its 10-second validity window"
+                    )
+                client_digest = response.getheader("x-kil-decision-digest")
+                if response.status in {200, 403}:
+                    client_digest = _exact_digest(
+                        "client response decision digest", client_digest
+                    )
+                elif response.status >= 500:
+                    if client_digest is not None:
+                        _complete_request_attempt(
+                            self.journal_path,
+                            track,
+                            success=False,
+                            record_sha256=None,
+                        )
+                        raise ControllerError(
+                            "authz 5xx exposed a forbidden client digest"
+                        )
+                else:
+                    _complete_request_attempt(
+                        self.journal_path,
+                        track,
+                        success=False,
+                        record_sha256=None,
+                    )
+                    raise ControllerError(
+                        "client received an unapproved response status"
+                    )
+                record = {
+                    "schema_version": "kil.v3b1-request.v1",
+                    "run_id": manifest["run_id"],
+                    "request_id": manifest["request_id"],
+                    "track": track.value,
+                    "method": "POST",
+                    "path": "/consequential/admin",
+                    "attempt_count": 1,
+                    "retry_observed": False,
+                    "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
+                    "authorization_sha256": comparison["authorization_sha256"],
+                    "q_state_present": q_state is not None,
+                    "q_state_sha256": (
+                        None
+                        if q_state is None
+                        else _digest_bytes(q_state.encode("utf-8"))
+                    ),
+                    "adversarial_headers": dict(ADVERSARIAL_HEADERS),
+                    "comparison_facts_sha256": comparison_sha,
+                    "send_monotonic_ns": send_ns,
+                    "receive_monotonic_ns": receive_ns,
+                    "client_response_status": response.status,
+                    "client_decision_digest": client_digest,
+                }
+                _request_closed(record)
+                records.append(record)
+                _write_file(request_path, _jsonl_payload(records), 0o444)
                 _complete_request_attempt(
-                    self.journal_path, track, success=False, record_sha256=None
+                    self.journal_path,
+                    track,
+                    success=True,
+                    record_sha256=_digest_bytes(_canonical_bytes(record)),
                 )
-                raise ControllerError("client received an unapproved response status")
-            record = {
-                "schema_version": "kil.v3b1-request.v1",
-                "run_id": manifest["run_id"],
-                "request_id": manifest["request_id"],
-                "track": track.value,
-                "method": "POST",
-                "path": "/consequential/admin",
-                "attempt_count": 1,
-                "retry_observed": False,
-                "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
-                "authorization_sha256": comparison["authorization_sha256"],
-                "q_state_present": q_state is not None,
-                "q_state_sha256": (
-                    None if q_state is None else _digest_bytes(q_state.encode("utf-8"))
-                ),
-                "adversarial_headers": dict(ADVERSARIAL_HEADERS),
-                "comparison_facts_sha256": comparison_sha,
-                "send_monotonic_ns": send_ns,
-                "receive_monotonic_ns": receive_ns,
-                "client_response_status": response.status,
-                "client_decision_digest": client_digest,
-            }
-            _request_closed(record)
-            records.append(record)
-            _write_file(request_path, _jsonl_payload(records), 0o444)
-            _complete_request_attempt(
-                self.journal_path,
-                track,
-                success=True,
-                record_sha256=_digest_bytes(_canonical_bytes(record)),
-            )
+        finally:
+            self._close_connections(tuple(connections.values()))
         return self.collect()
 
     def _assert_only_recorded_managed(

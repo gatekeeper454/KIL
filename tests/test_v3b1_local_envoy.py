@@ -28,6 +28,7 @@ from tools.v3b1_local_envoy import (
     _complete_request_attempt,
     _bind_journal_manifest,
     _prepare_failure_provisional,
+    _runtime_root,
     ACTIVE_STATE_PATH,
     authoritative_bundle_attestation,
     CommandResult,
@@ -1725,6 +1726,601 @@ class JoinContractTest(unittest.TestCase):
         decisions[0]["untrusted_header_names"] = ["x-kil-mode"]
         with self.assertRaisesRegex(ControllerError, "header boundary"):
             join_evidence(value, requests, decisions, envoy, targets)
+
+
+class _RunClock:
+    def __init__(self) -> None:
+        self.now_ns = 1_000_000_000
+        self.sleeps: list[float] = []
+
+    def monotonic_ns(self) -> int:
+        value = self.now_ns
+        self.now_ns += 1
+        return value
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now_ns += int(seconds * 1_000_000_000)
+
+    def advance(self, nanoseconds: int) -> None:
+        self.now_ns += nanoseconds
+
+
+class _RunResponse:
+    def __init__(self, connection, behavior) -> None:
+        self.connection = connection
+        self.behavior = behavior
+        self.status = behavior["status"]
+
+    def read(self, size: int) -> bytes:
+        self.connection.events.append(("read", self.connection.port, size))
+        error = self.behavior.get("body_error")
+        if error is not None:
+            raise error
+        return b""
+
+    def getheader(self, name: str):
+        if name.lower() == "x-kil-decision-digest":
+            return self.behavior["digest"]
+        return None
+
+
+class _RunConnection:
+    def __init__(
+        self,
+        *,
+        host,
+        port,
+        timeout,
+        behavior,
+        events,
+        journal_path,
+        request_path,
+        clock,
+    ) -> None:
+        self.host = host
+        self.port = port
+        self.timeout = timeout
+        self.behavior = behavior
+        self.events = events
+        self.journal_path = journal_path
+        self.request_path = request_path
+        self.clock = clock
+        self.connected = False
+        self.closed = False
+        self.request_count = 0
+
+    def _request_states(self):
+        return {
+            key: value["status"]
+            for key, value in load_lifecycle_journal(self.journal_path)[
+                "requests"
+            ].items()
+        }
+
+    def connect(self) -> None:
+        self.events.append(
+            (
+                "connect",
+                self.port,
+                self.timeout,
+                self._request_states(),
+                self.request_path.exists(),
+            )
+        )
+        self.clock.advance(int(self.behavior.get("connect_advance_ns", 0)))
+        error = self.behavior.get("connect_error")
+        if error is not None:
+            raise error
+        self.connected = True
+
+    def request(self, method, path, *, body, headers) -> None:
+        if not self.connected:
+            raise AssertionError("request occurred before explicit TCP readiness")
+        self.request_count += 1
+        self.events.append(
+            (
+                "request",
+                self.port,
+                method,
+                path,
+                dict(headers),
+                self._request_states(),
+            )
+        )
+        error = self.behavior.get("request_error")
+        if error is not None:
+            raise error
+
+    def getresponse(self):
+        self.events.append(("response_headers", self.port))
+        error = self.behavior.get("headers_error")
+        if error is not None:
+            raise error
+        return _RunResponse(self, self.behavior)
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        self.events.append(("close", self.port))
+        error = self.behavior.get("close_error")
+        if error is not None:
+            raise error
+
+
+class _RunConnectionFactory:
+    RESPONSE = {
+        18080: (200, "1" * 64),
+        18081: (200, "2" * 64),
+        18082: (403, "3" * 64),
+    }
+
+    def __init__(self, behaviors, *, events, journal_path, request_path, clock):
+        self.behaviors = list(behaviors)
+        self.events = events
+        self.journal_path = journal_path
+        self.request_path = request_path
+        self.clock = clock
+        self.connections = []
+
+    def __call__(self, host, port, *, timeout):
+        if not self.behaviors:
+            raise AssertionError("unexpected HTTP connection construction")
+        behavior = dict(self.behaviors.pop(0))
+        status, digest = self.RESPONSE[port]
+        behavior.setdefault("status", status)
+        behavior.setdefault("digest", digest)
+        self.events.append(("factory", host, port, timeout))
+        connection = _RunConnection(
+            host=host,
+            port=port,
+            timeout=timeout,
+            behavior=behavior,
+            events=self.events,
+            journal_path=self.journal_path,
+            request_path=self.request_path,
+            clock=self.clock,
+        )
+        self.connections.append(connection)
+        return connection
+
+
+class GatewayReadinessTest(unittest.TestCase):
+    def make_controller(self, directory, behaviors):
+        root = Path(directory) / "repo"
+        profile_path = root / "deploy/kind/v3b-profile.json"
+        profile_path.parent.mkdir(parents=True)
+        profile_path.write_bytes((ROOT / "deploy/kind/v3b-profile.json").read_bytes())
+        events = []
+        clock = _RunClock()
+
+        class RunOnlyController(LocalEnvoyController):
+            def _load_and_reverify(self):
+                return self.bound_state, self.bound_manifest
+
+            def collect(self):
+                self.run_events.append(("collect",))
+                return self.root / "collected"
+
+        controller = RunOnlyController(
+            root,
+            FakeRunner(),
+            home=Path(directory) / "home",
+            port_probe=lambda port: False,
+            tool_verifier=lambda: TOOL_IDENTITIES,
+        )
+        controller._prepare_private_roots()
+        value = manifest(docker_host=controller.docker_host)
+        private_manifest = controller.manifest_root / f"{value['run_id']}.json"
+        private_manifest.parent.mkdir(parents=True, exist_ok=True)
+        private_manifest.write_text(canonical_json(value) + "\n")
+        create_lifecycle_journal(
+            controller.journal_path,
+            private_root=controller.private_root,
+            repository_root=root,
+            docker_host=controller.docker_host,
+            source_commit="d" * 40,
+            execution_nonce=HEX_A,
+            global_context="personal",
+        )
+        _bind_journal_manifest(controller.journal_path, private_manifest, value)
+        controller.bound_state = {"manifest_path": str(private_manifest)}
+        controller.bound_manifest = value
+        controller.run_events = events
+        request_path = _runtime_root(root, value) / "requests.jsonl"
+        factory = _RunConnectionFactory(
+            behaviors,
+            events=events,
+            journal_path=controller.journal_path,
+            request_path=request_path,
+            clock=clock,
+        )
+        # These assignments let the behavioral tests reach the missing feature
+        # before the constructor-injection test turns GREEN.
+        controller.connection_factory = factory
+        controller.monotonic_ns = clock.monotonic_ns
+        controller.sleeper = clock.sleep
+        return controller, factory, clock, request_path, events
+
+    def run_with_fake_http(self, controller):
+        with mock.patch(
+            "tools.v3b1_local_envoy.http.client.HTTPConnection",
+            controller.connection_factory,
+        ):
+            return controller.run()
+
+    def test_connection_factory_clock_and_sleeper_are_injected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            profile = root / "deploy/kind/v3b-profile.json"
+            profile.parent.mkdir(parents=True)
+            profile.write_bytes((ROOT / "deploy/kind/v3b-profile.json").read_bytes())
+            factory = object()
+            monotonic_ns = object()
+            sleeper = object()
+
+            controller = LocalEnvoyController(
+                root,
+                FakeRunner(),
+                home=Path(directory) / "home",
+                port_probe=lambda port: False,
+                tool_verifier=lambda: TOOL_IDENTITIES,
+                connection_factory=factory,
+                monotonic_ns=monotonic_ns,
+                sleeper=sleeper,
+            )
+
+            self.assertIs(controller.connection_factory, factory)
+            self.assertIs(controller.monotonic_ns, monotonic_ns)
+            self.assertIs(controller.sleeper, sleeper)
+
+    def test_all_gateway_connections_complete_before_any_request_intent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, _, events = self.make_controller(
+                directory, [{}, {}, {}]
+            )
+
+            self.run_with_fake_http(controller)
+
+            connect_events = [event for event in events if event[0] == "connect"]
+            self.assertEqual([event[1] for event in connect_events], [18080, 18081, 18082])
+            self.assertTrue(all(event[2] <= 1.0 for event in connect_events))
+            self.assertTrue(
+                all(set(event[3].values()) == {"not_attempted"} for event in connect_events)
+            )
+            self.assertTrue(all(event[4] is False for event in connect_events))
+            first_request = next(index for index, event in enumerate(events) if event[0] == "request")
+            last_connect = max(index for index, event in enumerate(events) if event[0] == "connect")
+            self.assertLess(last_connect, first_request)
+            self.assertTrue(all(connection.closed for connection in factory.connections))
+
+    def test_readiness_sends_no_http_bytes_and_requests_once_per_track(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, request_path, events = self.make_controller(
+                directory, [{}, {}, {}]
+            )
+
+            self.run_with_fake_http(controller)
+
+            request_events = [event for event in events if event[0] == "request"]
+            self.assertEqual([event[1] for event in request_events], [18080, 18081, 18082])
+            self.assertTrue(all(connection.request_count == 1 for connection in factory.connections))
+            self.assertTrue(request_path.is_file())
+            self.assertEqual(len(request_path.read_text().splitlines()), 3)
+
+    def test_failed_readiness_round_closes_every_socket_and_retries_full_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            secret = "private socket /Users/lab/.colima/secret.sock"
+            controller, factory, clock, _, events = self.make_controller(
+                directory,
+                [
+                    {},
+                    {"connect_error": ConnectionRefusedError(errno.ECONNREFUSED, secret)},
+                    {},
+                    {},
+                    {},
+                ],
+            )
+
+            self.run_with_fake_http(controller)
+
+            self.assertEqual(
+                [event[2] for event in events if event[0] == "factory"],
+                [18080, 18081, 18080, 18081, 18082],
+            )
+            self.assertTrue(factory.connections[0].closed)
+            self.assertTrue(factory.connections[1].closed)
+            self.assertEqual(clock.sleeps, [0.25])
+            journal = load_lifecycle_journal(controller.journal_path)
+            failures = [
+                event for event in journal["events"]
+                if event["event"] == "readiness_connect_failed"
+            ]
+            self.assertEqual(len(failures), 1)
+            self.assertEqual(failures[0]["details"]["track"], "signed_state_only")
+            self.assertNotIn(secret, controller.journal_path.read_text())
+
+    def test_readiness_exhaustion_keeps_all_tracks_unattempted_and_no_request_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            secret = "private readiness timeout"
+            controller, factory, _, request_path, events = self.make_controller(
+                directory,
+                [
+                    {
+                        "connect_error": TimeoutError(errno.ETIMEDOUT, secret),
+                        "connect_advance_ns": 30_000_000_000,
+                        "close_error": OSError(errno.EIO, "private close"),
+                    }
+                ],
+            )
+
+            with self.assertRaisesRegex(ControllerError, "readiness"):
+                self.run_with_fake_http(controller)
+
+            journal = load_lifecycle_journal(controller.journal_path)
+            self.assertEqual(
+                {value["status"] for value in journal["requests"].values()},
+                {"not_attempted"},
+            )
+            self.assertFalse(request_path.exists())
+            self.assertFalse(any(event[0] == "request" for event in events))
+            self.assertTrue(factory.connections[0].closed)
+            raw = controller.journal_path.read_text()
+            self.assertNotIn(secret, raw)
+            self.assertNotIn("private close", raw)
+
+    def test_complete_set_must_finish_within_the_single_readiness_deadline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, request_path, events = self.make_controller(
+                directory,
+                [{}, {}, {"connect_advance_ns": 30_000_000_000}],
+            )
+
+            with self.assertRaisesRegex(ControllerError, "readiness"):
+                self.run_with_fake_http(controller)
+
+            journal = load_lifecycle_journal(controller.journal_path)
+            self.assertEqual(
+                {value["status"] for value in journal["requests"].values()},
+                {"not_attempted"},
+            )
+            self.assertFalse(request_path.exists())
+            self.assertFalse(any(event[0] == "request" for event in events))
+            self.assertTrue(all(connection.closed for connection in factory.connections))
+
+    def test_claim_persistence_failure_occurs_after_readiness_and_sends_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, request_path, events = self.make_controller(
+                directory, [{}, {}, {}]
+            )
+
+            with mock.patch(
+                "tools.v3b1_local_envoy.claim_request_attempt",
+                side_effect=ControllerError("injected persistence failure"),
+            ):
+                with self.assertRaisesRegex(ControllerError, "persistence failure"):
+                    self.run_with_fake_http(controller)
+
+            self.assertEqual(
+                [event[1] for event in events if event[0] == "connect"],
+                [18080, 18081, 18082],
+            )
+            self.assertFalse(any(event[0] == "request" for event in events))
+            self.assertFalse(request_path.exists())
+            self.assertTrue(all(connection.closed for connection in factory.connections))
+
+    def test_readiness_journal_persistence_failure_closes_the_ready_set(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, request_path, events = self.make_controller(
+                directory, [{}, {}, {}]
+            )
+            real_journal_event = journal_event
+
+            def fail_readiness_event(path, event, details):
+                if event == "readiness_connect_complete":
+                    raise ControllerError("injected readiness journal failure")
+                return real_journal_event(path, event, details)
+
+            with mock.patch(
+                "tools.v3b1_local_envoy.journal_event",
+                side_effect=fail_readiness_event,
+            ):
+                with self.assertRaisesRegex(ControllerError, "journal failure"):
+                    self.run_with_fake_http(controller)
+
+            self.assertFalse(any(event[0] == "request" for event in events))
+            self.assertFalse(request_path.exists())
+            self.assertTrue(all(connection.closed for connection in factory.connections))
+
+    def assert_transport_stage(self, stage, behavior, expected_class, expected_errno):
+        with tempfile.TemporaryDirectory() as directory:
+            behaviors = [{}, {}, {}]
+            behaviors[0] = {
+                **behavior,
+                "close_error": OSError(errno.EIO, "private close detail"),
+            }
+            controller, factory, _, request_path, events = self.make_controller(
+                directory, behaviors
+            )
+
+            with self.assertRaisesRegex(ControllerError, stage):
+                self.run_with_fake_http(controller)
+
+            journal = load_lifecycle_journal(controller.journal_path)
+            baseline = journal["requests"]["credential_policy_baseline"]
+            self.assertEqual(baseline["status"], "failed")
+            self.assertTrue(recovery_plan(journal)["request_replay_forbidden"])
+            failures = [
+                event for event in journal["events"]
+                if event["event"] == "request_send_failed"
+            ]
+            self.assertEqual(len(failures), 1)
+            details = failures[0]["details"]
+            self.assertEqual(
+                set(details),
+                {"track", "intent_id", "record_sha256", "provenance"},
+            )
+            self.assertEqual(details["intent_id"], baseline["intent_id"])
+            self.assertIsNone(details["record_sha256"])
+            provenance = RequestFailureProvenance.from_mapping(details["provenance"])
+            self.assertEqual(provenance.stage, stage)
+            self.assertEqual(provenance.exception_class, expected_class)
+            self.assertEqual(provenance.errno, expected_errno)
+            self.assertTrue(provenance.request_bytes_may_have_been_sent)
+            self.assertEqual(provenance.attempt_count, 1)
+            self.assertFalse(provenance.retry_performed)
+            self.assertFalse(request_path.exists())
+            self.assertEqual(sum(connection.request_count for connection in factory.connections), 1)
+            self.assertTrue(all(connection.closed for connection in factory.connections))
+            serialized_details = canonical_json(details)
+            self.assertNotIn("private", serialized_details)
+            self.assertNotIn("token", serialized_details)
+            self.assertFalse(any(event[0] == "collect" for event in events))
+
+    def test_request_send_failure_has_closed_sanitized_provenance(self):
+        self.assert_transport_stage(
+            "request_send",
+            {"request_error": BrokenPipeError(errno.EPIPE, "private request token")},
+            "BrokenPipeError",
+            errno.EPIPE,
+        )
+
+    def test_response_header_failure_has_closed_sanitized_provenance(self):
+        self.assert_transport_stage(
+            "response_headers",
+            {"headers_error": http.client.RemoteDisconnected("private response")},
+            "ConnectionResetError",
+            None,
+        )
+
+    def test_response_body_failure_has_closed_sanitized_provenance(self):
+        self.assert_transport_stage(
+            "response_body",
+            {"body_error": http.client.IncompleteRead(b"private body", 100)},
+            "ConnectionError",
+            None,
+        )
+
+    def test_failed_request_replay_is_rejected_before_reconnect(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, _, _ = self.make_controller(
+                directory,
+                [
+                    {"request_error": BrokenPipeError(errno.EPIPE, "private")},
+                    {},
+                    {},
+                ],
+            )
+            with self.assertRaises(ControllerError):
+                self.run_with_fake_http(controller)
+
+            events = []
+            clock = _RunClock()
+            request_path = _runtime_root(root=controller.root, manifest=controller.bound_manifest) / "requests.jsonl"
+            second_factory = _RunConnectionFactory(
+                [{}, {}, {}],
+                events=events,
+                journal_path=controller.journal_path,
+                request_path=request_path,
+                clock=clock,
+            )
+            controller.connection_factory = second_factory
+            controller.monotonic_ns = clock.monotonic_ns
+            controller.sleeper = clock.sleep
+
+            with self.assertRaisesRegex(ControllerError, "attempted|replay|ambiguous"):
+                self.run_with_fake_http(controller)
+
+            self.assertEqual(second_factory.connections, [])
+
+    def test_signed_state_is_issued_only_after_complete_readiness(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, _, events = self.make_controller(
+                directory, [{}, {}, {}]
+            )
+
+            def signer(claims, private_key):
+                events.append(("sign", claims.issuer))
+                return "signed-state"
+
+            with mock.patch("tools.v3b1_local_envoy.issue_q_state", side_effect=signer):
+                self.run_with_fake_http(controller)
+
+            last_connect = max(index for index, event in enumerate(events) if event[0] == "connect")
+            sign_positions = [index for index, event in enumerate(events) if event[0] == "sign"]
+            self.assertEqual(len(sign_positions), 2)
+            self.assertTrue(all(last_connect < index for index in sign_positions))
+            signed_requests = [
+                event for event in events
+                if event[0] == "request" and event[1] in {18081, 18082}
+            ]
+            self.assertTrue(
+                all("x-kil-q-state" in event[4] for event in signed_requests)
+            )
+
+    def test_crash_after_readiness_before_intent_requires_fresh_readiness(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, first_factory, _, _, events = self.make_controller(
+                directory, [{}, {}, {}]
+            )
+            with mock.patch(
+                "tools.v3b1_local_envoy.claim_request_attempt",
+                side_effect=ControllerError("injected pre-intent crash"),
+            ):
+                with self.assertRaisesRegex(ControllerError, "pre-intent crash"):
+                    self.run_with_fake_http(controller)
+            self.assertTrue(all(connection.closed for connection in first_factory.connections))
+
+            second_events = []
+            second_clock = _RunClock()
+            request_path = first_factory.request_path
+            second_factory = _RunConnectionFactory(
+                [{}, {}, {}],
+                events=second_events,
+                journal_path=controller.journal_path,
+                request_path=request_path,
+                clock=second_clock,
+            )
+            controller.connection_factory = second_factory
+            controller.monotonic_ns = second_clock.monotonic_ns
+            controller.sleeper = second_clock.sleep
+            with mock.patch(
+                "tools.v3b1_local_envoy.claim_request_attempt",
+                side_effect=ControllerError("second pre-intent crash"),
+            ):
+                with self.assertRaisesRegex(ControllerError, "second pre-intent crash"):
+                    self.run_with_fake_http(controller)
+
+            self.assertEqual(
+                [event[1] for event in second_events if event[0] == "connect"],
+                [18080, 18081, 18082],
+            )
+            journal = load_lifecycle_journal(controller.journal_path)
+            self.assertEqual(
+                {value["status"] for value in journal["requests"].values()},
+                {"not_attempted"},
+            )
+
+    def test_readiness_journal_event_schema_rejects_extra_secret_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, _, _ = self.make_controller(
+                directory, [{}, {}, {}]
+            )
+
+            with self.assertRaisesRegex(ControllerError, "readiness.*closed"):
+                journal_event(
+                    controller.journal_path,
+                    "readiness_connect_complete",
+                    {
+                        "round": 1,
+                        "host": "127.0.0.1",
+                        "tracks": [track.value for track in LiveTrack],
+                        "ports": [18080, 18081, 18082],
+                        "ready_monotonic_ns": 1,
+                        "raw_message": "Bearer should-never-be-journaled",
+                    },
+                )
 
 
 class JournalRecoveryTest(unittest.TestCase):
