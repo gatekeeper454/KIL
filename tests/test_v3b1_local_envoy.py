@@ -757,7 +757,11 @@ class BuildRunner(FakeRunner):
         return CommandResult(1, "", "unexpected command")
 
 
-def manifest(*, docker_host="unix:///Users/lab/.colima/kil-v3-lab/docker.sock"):
+def manifest(
+    *,
+    docker_host="unix:///Users/lab/.colima/kil-v3-lab/docker.sock",
+    execution_nonce="0" * 64,
+):
     return create_run_manifest(
         PROFILE,
         profile_sha256=sha256(
@@ -768,6 +772,7 @@ def manifest(*, docker_host="unix:///Users/lab/.colima/kil-v3-lab/docker.sock"):
         kil_image_id=KIL_IMAGE_ID,
         kil_archive_sha256=HEX_A,
         docker_host=docker_host,
+        execution_nonce=execution_nonce,
     )
 
 
@@ -3661,8 +3666,609 @@ class JournalRecoveryTest(unittest.TestCase):
 
 
 class TeardownContinuationTest(unittest.TestCase):
+    def make_freeze_controller(self, directory, *, injections=None, no_run=False):
+        root = Path(directory) / "repo"
+        profile_path = root / "deploy/kind/v3b-profile.json"
+        profile_path.parent.mkdir(parents=True)
+        profile_path.write_bytes(
+            (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+        )
+        value = manifest()
+        _, requests, decisions, envoy, targets = JoinContractTest().all_records()
+        payloads = {}
+        for track in LiveTrack:
+            payloads[(track.value, "authz_decisions")] = (
+                canonical_json(
+                    next(item for item in decisions if item["track"] == track.value)
+                )
+                + "\n"
+            ).encode("utf-8")
+            payloads[(track.value, "envoy_access")] = (
+                canonical_json(
+                    next(item for item in envoy if item["track"] == track.value)
+                )
+                + "\n"
+            ).encode("utf-8")
+            payloads[(track.value, "target_markers")] = b"".join(
+                (canonical_json(item) + "\n").encode("utf-8")
+                for item in targets
+                if item["track"] == track.value
+            )
+        if no_run:
+            payloads = {key: b"" for key in payloads}
+
+        class FreezeController(LocalEnvoyController):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.commands = []
+                self.command_states = []
+                self.payloads = dict(payloads)
+                self.injections = dict(injections or {})
+                self.bound_state = None
+                self.running = set()
+                self.alive = set()
+
+            def _inspect_container(
+                self,
+                identifier,
+                manifest_value,
+                role,
+                track,
+                *,
+                require_running=True,
+            ):
+                if identifier not in self.alive:
+                    raise ControllerError("injected source container is absent")
+                return next(
+                    item
+                    for item in self.bound_state["objects"]
+                    if item["id"] == identifier
+                )
+
+            def _execute(self, argv, *, timeout_s, docker=False):
+                command = list(argv)
+                self.commands.append(command)
+                self.command_states.append(set(self.running))
+                objects = {item["id"]: item for item in self.bound_state["objects"]}
+                if "stop" in command:
+                    self.running.discard(command[-1])
+                    return CommandResult(0, command[-1] + "\n", "")
+                if "logs" in command:
+                    item = objects[command[-1]]
+                    key = (item["track"], "envoy_access")
+                    if self.injections.get(key) == "command_failed":
+                        raise ControllerError("injected Envoy log failure")
+                    payload = self.payloads[key]
+                    if self.injections.get(key) == "malformed":
+                        payload = b"not-json\n"
+                    if self.injections.get(key) == "duplicate":
+                        payload += payload
+                    return CommandResult(0, payload.decode("utf-8"), "")
+                if "exec" in command:
+                    identifier = command[command.index("exec") + 1]
+                    item = objects[identifier]
+                    source = (
+                        "authz_decisions"
+                        if item["role"] == "authz"
+                        else "target_markers"
+                    )
+                    key = (item["track"], source)
+                    if self.injections.get(key) == "probe_failed":
+                        raise ControllerError("injected probe failure")
+                    if self.injections.get(key) == "missing":
+                        observation = {
+                            "exists": False,
+                            "regular_file": False,
+                            "byte_count": None,
+                            "sha256": None,
+                        }
+                    else:
+                        payload = self.payloads[key]
+                        if self.injections.get(key) == "malformed":
+                            payload = b"not-json\n"
+                        if self.injections.get(key) == "duplicate":
+                            payload += payload
+                        observation = {
+                            "exists": True,
+                            "regular_file": True,
+                            "byte_count": len(payload),
+                            "sha256": sha256(payload).hexdigest(),
+                        }
+                    return CommandResult(0, canonical_json(observation) + "\n", "")
+                if "cp" in command:
+                    source_spec = command[-2]
+                    identifier = source_spec.split(":", 1)[0]
+                    item = objects[identifier]
+                    source = (
+                        "authz_decisions"
+                        if item["role"] == "authz"
+                        else "target_markers"
+                    )
+                    key = (item["track"], source)
+                    if self.injections.get(key) == "copy_error":
+                        raise ControllerError("injected copy failure")
+                    payload = self.payloads[key]
+                    if self.injections.get(key) == "malformed":
+                        payload = b"not-json\n"
+                    if self.injections.get(key) == "duplicate":
+                        payload += payload
+                    if self.injections.get(key) == "digest_mismatch":
+                        payload = payload[:-1] + b"x" if payload else b"x"
+                    if self.injections.get(key) == "size_mismatch":
+                        payload += b"x"
+                    Path(command[-1]).write_bytes(payload)
+                    return CommandResult(0, "", "")
+                if "inspect" in command and "{{.State.Running}}" in command:
+                    return CommandResult(
+                        0, "true\n" if command[-1] in self.running else "false\n", ""
+                    )
+                raise AssertionError(f"unexpected freeze command: {command}")
+
+        controller = FreezeController(
+            root,
+            FakeRunner(),
+            home=Path(directory) / "home",
+            port_probe=lambda port: False,
+            tool_verifier=lambda: TOOL_IDENTITIES,
+        )
+        controller._prepare_private_roots()
+        private_manifest = controller.private_root / "manifests/run.json"
+        private_manifest.parent.mkdir(parents=True, exist_ok=True)
+        private_manifest.write_text(canonical_json(value) + "\n")
+        create_lifecycle_journal(
+            controller.journal_path,
+            private_root=controller.private_root,
+            repository_root=root,
+            docker_host=controller.docker_host,
+            source_commit="d" * 40,
+            execution_nonce="0" * 64,
+            global_context="personal",
+        )
+        _bind_journal_manifest(controller.journal_path, private_manifest, value)
+        if not no_run:
+            readiness_nonce = _record_test_readiness(controller.journal_path)
+            for track, record in zip(LiveTrack, requests, strict=True):
+                claim_request_attempt(
+                    controller.journal_path,
+                    track,
+                    readiness_nonce=readiness_nonce,
+                )
+                _complete_request_attempt(
+                    controller.journal_path,
+                    track,
+                    success=True,
+                    record_sha256=sha256(
+                        (canonical_json(record) + "\n").encode("utf-8")
+                    ).hexdigest(),
+                )
+            request_path = _runtime_root(root, value) / "requests.jsonl"
+            request_path.parent.mkdir(parents=True, exist_ok=True)
+            request_path.write_bytes(
+                b"".join(
+                    (canonical_json(record) + "\n").encode("utf-8")
+                    for record in requests
+                )
+            )
+        persist_active_state(controller.state_path, private_manifest, value)
+        controller.bound_state = load_bound_active_state(controller.state_path)
+        controller.running = {
+            item["id"] for item in controller.bound_state["objects"]
+        }
+        controller.alive = set(controller.running)
+        return controller, controller.bound_state, value
+
+    def test_freeze_persists_nonce_bound_epoch_and_all_nine_terminal_legs(self):
+        injections = {
+            ("credential_policy_baseline", "authz_decisions"): "missing",
+            ("signed_state_only", "target_markers"): "copy_error",
+            ("signed_plus_local_reduce", "envoy_access"): "malformed",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(
+                directory, injections=injections
+            )
+
+            result = controller._freeze_sources(
+                state, value, attempted_complete=True
+            )
+
+            self.assertFalse(result.complete)
+            self.assertEqual(len(result.statuses), 9)
+            self.assertEqual(
+                {status.status for status in result.statuses},
+                {"copied", "missing", "copy_error", "malformed"},
+            )
+            missing_status = next(
+                status for status in result.statuses if status.status == "missing"
+            )
+            self.assertFalse(
+                result.raw_paths[(missing_status.track, missing_status.source)].exists()
+            )
+            journal = load_lifecycle_journal(controller.journal_path)
+            intents = [
+                event
+                for event in journal["events"]
+                if event["event"] == "source_collection_intent"
+            ]
+            terminals = [
+                event
+                for event in journal["events"]
+                if event["event"] == "source_collection_terminal"
+            ]
+            self.assertEqual(len(intents), 9)
+            self.assertEqual(len(terminals), 9)
+            started = next(
+                event
+                for event in journal["events"]
+                if event["event"] == "evidence_freeze_started"
+            )
+            completed = next(
+                event
+                for event in journal["events"]
+                if event["event"] == "evidence_freeze_complete"
+            )
+            expected_epoch = sha256(
+                canonical_json(
+                    {
+                        "execution_nonce": "0" * 64,
+                        "purpose": "v3b1-evidence-freeze-v1",
+                        "run_id": value["run_id"],
+                    }
+                ).encode("utf-8")
+            ).hexdigest()
+            self.assertEqual(started["details"]["collection_epoch"], expected_epoch)
+            self.assertEqual(completed["details"]["collection_epoch"], expected_epoch)
+            self.assertLess(intents[-1]["sequence"], terminals[0]["sequence"])
+
+    def test_freeze_uses_exact_closed_probe_and_accepts_observed_zero_byte_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(
+                directory, no_run=True
+            )
+
+            result = controller._freeze_sources(
+                state, value, attempted_complete=False
+            )
+
+            empty_target = next(
+                status
+                for status in result.statuses
+                if status.track == "signed_plus_local_reduce"
+                and status.source == "target_markers"
+            )
+            self.assertEqual(empty_target.status, "copied")
+            self.assertEqual(empty_target.source_byte_count, 0)
+            self.assertEqual(empty_target.copied_byte_count, 0)
+            self.assertEqual(empty_target.source_sha256, sha256(b"").hexdigest())
+            probes = [command for command in controller.commands if "exec" in command]
+            self.assertEqual(len(probes), 6)
+            self.assertEqual(
+                {command[-1] for command in probes},
+                {"/evidence/decisions.jsonl", "/evidence/targets.jsonl"},
+            )
+            self.assertTrue(
+                all("/usr/local/bin/python" in command and "-c" in command for command in probes)
+            )
+            self.assertTrue(all("sh" not in command and "bash" not in command for command in probes))
+
+    def test_freeze_preserves_malformed_bytes_and_hash_binds_copy_mismatches(self):
+        injections = {
+            ("credential_policy_baseline", "authz_decisions"): "malformed",
+            ("signed_state_only", "authz_decisions"): "digest_mismatch",
+            ("signed_plus_local_reduce", "authz_decisions"): "size_mismatch",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(
+                directory, injections=injections
+            )
+
+            result = controller._freeze_sources(
+                state, value, attempted_complete=True
+            )
+
+            by_track = {
+                status.track: status
+                for status in result.statuses
+                if status.source == "authz_decisions"
+            }
+            self.assertEqual(by_track["credential_policy_baseline"].status, "malformed")
+            self.assertEqual(by_track["signed_state_only"].error_class, "digest_mismatch")
+            self.assertEqual(
+                by_track["signed_plus_local_reduce"].error_class, "size_mismatch"
+            )
+            malformed_path = result.raw_paths[
+                ("credential_policy_baseline", "authz_decisions")
+            ]
+            self.assertEqual(malformed_path.read_bytes(), b"not-json\n")
+            self.assertEqual(
+                sha256(malformed_path.read_bytes()).hexdigest(),
+                by_track["credential_policy_baseline"].copied_sha256,
+            )
+
+    def test_probe_result_is_closed_canonical_and_rejects_nonregular_sources(self):
+        empty_sha = sha256(b"").hexdigest()
+        valid = {
+            "exists": True,
+            "regular_file": True,
+            "byte_count": 0,
+            "sha256": empty_sha,
+        }
+
+        self.assertEqual(
+            LocalEnvoyController._parse_probe_observation(
+                canonical_json(valid) + "\n"
+            ),
+            (True, 0, empty_sha),
+        )
+        for payload in (
+            json.dumps(valid) + "\n",
+            canonical_json({**valid, "extra": 1}) + "\n",
+            canonical_json(
+                {
+                    "exists": True,
+                    "regular_file": False,
+                    "byte_count": None,
+                    "sha256": None,
+                }
+            )
+            + "\n",
+        ):
+            with self.subTest(payload=payload):
+                with self.assertRaises(ControllerError):
+                    LocalEnvoyController._parse_probe_observation(payload)
+
+    def test_invalid_cardinality_is_malformed_and_never_builds_joins(self):
+        key = ("credential_policy_baseline", "authz_decisions")
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(
+                directory, injections={key: "duplicate"}
+            )
+
+            freeze = controller._freeze_sources(
+                state, value, attempted_complete=True
+            )
+            status = next(
+                item
+                for item in freeze.statuses
+                if (item.track, item.source) == key
+            )
+            output, attestations, completed, rejection = (
+                controller._prepare_teardown_evidence(
+                    value,
+                    state["objects"],
+                    freeze,
+                )
+            )
+
+            self.assertEqual(status.status, "malformed")
+            self.assertEqual(status.error_class, "invalid_cardinality")
+            self.assertFalse(completed)
+            self.assertEqual(attestations, [])
+            self.assertIsNone(rejection)
+            self.assertEqual((output / "joins.jsonl").read_bytes(), b"")
+
+    def test_completed_freeze_recovery_reattests_private_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(directory)
+            freeze = controller._freeze_sources(
+                state, value, attempted_complete=True
+            )
+            path = freeze.raw_paths[
+                ("credential_policy_baseline", "authz_decisions")
+            ]
+            path.chmod(0o600)
+            path.write_bytes(b"changed\n")
+
+            with self.assertRaisesRegex(ControllerError, "changed"):
+                controller._freeze_sources(
+                    {**state, "objects": []},
+                    value,
+                    attempted_complete=True,
+                )
+
+    def test_freeze_recovery_skips_terminal_legs_and_never_recopies_after_complete(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(directory)
+            first = controller._freeze_sources(
+                state, value, attempted_complete=True
+            )
+            first_command_count = len(controller.commands)
+
+            second = controller._freeze_sources(
+                {**state, "objects": []}, value, attempted_complete=True
+            )
+
+            self.assertTrue(first.complete)
+            self.assertTrue(second.complete)
+            self.assertEqual(len(controller.commands), first_command_count)
+            self.assertEqual(first.statuses, second.statuses)
+
+    def test_incomplete_freeze_retries_only_unfinished_leg_while_source_is_alive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(directory)
+            original_event = journal_event
+            calls = {"terminals": 0}
+
+            def crash_after_first_terminal(path, event, details):
+                updated = original_event(path, event, details)
+                if event == "source_collection_terminal":
+                    calls["terminals"] += 1
+                    if calls["terminals"] == 1:
+                        raise RuntimeError("injected crash")
+                return updated
+
+            with mock.patch(
+                "tools.v3b1_local_envoy.journal_event",
+                side_effect=crash_after_first_terminal,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "injected crash"):
+                    controller._freeze_sources(
+                        state, value, attempted_complete=True
+                    )
+            before = len(controller.commands)
+
+            recovered = controller._freeze_sources(
+                state, value, attempted_complete=True
+            )
+
+            self.assertTrue(recovered.complete)
+            self.assertEqual(len(controller.commands) - before, 14)
+            journal = load_lifecycle_journal(controller.journal_path)
+            terminals = [
+                event
+                for event in journal["events"]
+                if event["event"] == "source_collection_terminal"
+            ]
+            self.assertEqual(len(terminals), 9)
+
+    def test_incomplete_recovery_records_dead_source_without_recopying_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(directory)
+            original_event = journal_event
+            calls = {"terminals": 0}
+
+            def crash_after_first_terminal(path, event, details):
+                updated = original_event(path, event, details)
+                if event == "source_collection_terminal":
+                    calls["terminals"] += 1
+                    if calls["terminals"] == 1:
+                        raise RuntimeError("injected crash")
+                return updated
+
+            with mock.patch(
+                "tools.v3b1_local_envoy.journal_event",
+                side_effect=crash_after_first_terminal,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "injected crash"):
+                    controller._freeze_sources(
+                        state, value, attempted_complete=True
+                    )
+            dead = next(
+                item
+                for item in state["objects"]
+                if item["role"] == "target"
+                and item["track"] == "signed_state_only"
+            )
+            controller.alive.remove(dead["id"])
+            current_state = {
+                **state,
+                "objects": [
+                    item for item in state["objects"] if item["id"] != dead["id"]
+                ],
+            }
+            before = len(controller.commands)
+
+            recovered = controller._freeze_sources(
+                current_state, value, attempted_complete=True
+            )
+
+            status = next(
+                item
+                for item in recovered.statuses
+                if item.container_id == dead["id"]
+                and item.source == "target_markers"
+            )
+            self.assertFalse(recovered.complete)
+            self.assertEqual(status.status, "copy_error")
+            self.assertEqual(status.error_class, "command_failed")
+            issued = controller.commands[before:]
+            self.assertFalse(
+                any(
+                    dead["id"] in command
+                    and ("exec" in command or "cp" in command or "logs" in command)
+                    for command in issued
+                )
+            )
+
+    def test_teardown_freeze_stops_all_envoys_before_capture_and_services_after_durable_freeze(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(
+                directory, no_run=True
+            )
+
+            result = controller._freeze_before_service_teardown(
+                state,
+                value,
+                attempted_complete=False,
+                transient_objects=[],
+            )
+
+            self.assertFalse(result.complete)
+            objects = state["objects"]
+            envoy_ids = {
+                item["id"] for item in objects if item["role"] == "envoy"
+            }
+            service_ids = {
+                item["id"]
+                for item in objects
+                if item["role"] in {"authz", "target"}
+            }
+            stops = [command for command in controller.commands if "stop" in command]
+            self.assertEqual({command[-1] for command in stops[:3]}, envoy_ids)
+            log_indexes = [
+                index
+                for index, command in enumerate(controller.commands)
+                if "logs" in command
+            ]
+            probe_indexes = [
+                index
+                for index, command in enumerate(controller.commands)
+                if "exec" in command
+            ]
+            self.assertEqual(len(log_indexes), 3)
+            self.assertLess(max(log_indexes), min(probe_indexes))
+            for command, running in zip(
+                controller.commands, controller.command_states, strict=True
+            ):
+                if "logs" in command or "exec" in command or "cp" in command:
+                    self.assertTrue(envoy_ids.isdisjoint(running))
+                    self.assertTrue(service_ids.issubset(running))
+            journal = load_lifecycle_journal(controller.journal_path)
+            freeze_complete = next(
+                event["sequence"]
+                for event in journal["events"]
+                if event["event"] == "evidence_freeze_complete"
+            )
+            service_stop_intents = [
+                event["sequence"]
+                for event in journal["events"]
+                if event["event"] == "container_stop_intent"
+                and event["details"].get("role") in {"authz", "target"}
+            ]
+            self.assertEqual(len(service_stop_intents), 6)
+            self.assertLess(freeze_complete, min(service_stop_intents))
+
+    def test_zero_request_freeze_builds_incomplete_nonpromotable_bundle_without_joins(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(
+                directory, no_run=True
+            )
+            freeze = controller._freeze_sources(
+                state, value, attempted_complete=False
+            )
+
+            output, attestations, completed, rejection = (
+                controller._prepare_teardown_evidence(
+                    value,
+                    state["objects"],
+                    freeze,
+                )
+            )
+
+            self.assertIsNotNone(output)
+            self.assertEqual(attestations, [])
+            self.assertFalse(completed)
+            self.assertIsNone(rejection)
+            self.assertEqual((output / "joins.jsonl").read_bytes(), b"")
+            self.assertIn("non-promotable", (output / "summary.md").read_text())
+
     def test_evidence_rejection_never_blocks_exact_owned_profile_deletion(self):
-        for failure in ("missing_file", "malformed_json", "wrong_outcome"):
+        for failure in (
+            "missing_file",
+            "malformed_json",
+            "wrong_outcome",
+            "no_run",
+        ):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory) / "repo"
                 profile_path = root / "deploy/kind/v3b-profile.json"
@@ -3738,31 +4344,6 @@ class TeardownContinuationTest(unittest.TestCase):
                     def _request_records(self, manifest_value):
                         return list(self.request_records)
 
-                    def _copy_sources(self, state, manifest_value, name, *, allow_incomplete=False):
-                        if self.injected_failure == "missing_file":
-                            raise ControllerError("injected missing evidence file")
-                        if self.injected_failure == "malformed_json":
-                            raise ControllerError("injected malformed evidence JSON")
-                        value, requests, decisions, envoy, targets = (
-                            JoinContractTest().all_records()
-                        )
-                        decisions[0]["outcome"] = "deny"
-                        decisions[0]["http_status"] = 403
-                        raw = {
-                            track: (
-                                canonical_json(
-                                    next(
-                                        item
-                                        for item in decisions
-                                        if item["track"] == track.value
-                                    )
-                                )
-                                + "\n"
-                            ).encode("utf-8")
-                            for track in LiveTrack
-                        }
-                        return raw, envoy, targets
-
                 controller = InjectedDownController(
                     root,
                     FakeRunner(),
@@ -3771,7 +4352,10 @@ class TeardownContinuationTest(unittest.TestCase):
                     tool_verifier=lambda: TOOL_IDENTITIES,
                 )
                 controller._prepare_private_roots()
-                value = manifest(docker_host=controller.docker_host)
+                value = manifest(
+                    docker_host=controller.docker_host,
+                    execution_nonce=HEX_A,
+                )
                 private_manifest = controller.private_root / "manifests/run.json"
                 private_manifest.parent.mkdir(parents=True, exist_ok=True)
                 private_manifest.write_text(canonical_json(value) + "\n")
@@ -3811,21 +4395,22 @@ class TeardownContinuationTest(unittest.TestCase):
                 controller.bound_manifest = value
                 _, requests, _, _, _ = JoinContractTest().all_records()
                 controller.request_records = requests
-                readiness_nonce = _record_test_readiness(controller.journal_path)
-                for track, record in zip(LiveTrack, requests, strict=True):
-                    claim_request_attempt(
-                        controller.journal_path,
-                        track,
-                        readiness_nonce=readiness_nonce,
-                    )
-                    _complete_request_attempt(
-                        controller.journal_path,
-                        track,
-                        success=True,
-                        record_sha256=sha256(
-                            (canonical_json(record) + "\n").encode("utf-8")
-                        ).hexdigest(),
-                    )
+                if failure != "no_run":
+                    readiness_nonce = _record_test_readiness(controller.journal_path)
+                    for track, record in zip(LiveTrack, requests, strict=True):
+                        claim_request_attempt(
+                            controller.journal_path,
+                            track,
+                            readiness_nonce=readiness_nonce,
+                        )
+                        _complete_request_attempt(
+                            controller.journal_path,
+                            track,
+                            success=True,
+                            record_sha256=sha256(
+                                (canonical_json(record) + "\n").encode("utf-8")
+                            ).hexdigest(),
+                        )
 
                 published = controller.down()
 
@@ -3838,6 +4423,8 @@ class TeardownContinuationTest(unittest.TestCase):
                 )
                 self.assertFalse(public_manifest["run_complete"])
                 self.assertIn("failure", public_manifest["bundle_class"])
+                if failure == "no_run":
+                    self.assertEqual((published / "joins.jsonl").read_bytes(), b"")
 
     def test_post_delete_recovery_reconstructs_pending_failure_replacement(self):
         with tempfile.TemporaryDirectory() as directory:

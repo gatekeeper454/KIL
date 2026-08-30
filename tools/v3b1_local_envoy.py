@@ -38,12 +38,14 @@ try:
     from tools.v3b1_harness_contract import (
         ContractError as HarnessContractError,
         RequestFailureProvenance,
+        SourceCollectionStatus,
         normalize_transport_exception,
     )
 except ModuleNotFoundError:  # Direct execution places ``tools`` on sys.path.
     from v3b1_harness_contract import (  # type: ignore[no-redef]
         ContractError as HarnessContractError,
         RequestFailureProvenance,
+        SourceCollectionStatus,
         normalize_transport_exception,
     )
 
@@ -128,6 +130,35 @@ _EVIDENCE_FILES = (
     "manifest.json",
     "summary.md",
 )
+_FREEZE_SOURCES = ("envoy_access", "authz_decisions", "target_markers")
+_LEDGER_PATH = {
+    "authz_decisions": "/evidence/decisions.jsonl",
+    "target_markers": "/evidence/targets.jsonl",
+}
+_SOURCE_ROLE = {
+    "envoy_access": "envoy",
+    "authz_decisions": "authz",
+    "target_markers": "target",
+}
+_ENVOY_LOG_NAME = "envoy.stdout.jsonl"
+_LEDGER_PROBE = (
+    "import hashlib,json,os,stat,sys;"
+    "p=sys.argv[1];"
+    "r={'exists':False,'regular_file':False,'byte_count':None,'sha256':None};"
+    "\ntry:s=os.lstat(p)\n"
+    "except FileNotFoundError:pass\n"
+    "else:\n"
+    " r['exists']=True;r['regular_file']=stat.S_ISREG(s.st_mode)\n"
+    " if r['regular_file']:\n"
+    "  h=hashlib.sha256();n=0\n"
+    "  with open(p,'rb') as f:\n"
+    "   while True:\n"
+    "    b=f.read(1048576)\n"
+    "    if not b:break\n"
+    "    n+=len(b);h.update(b)\n"
+    "  r['byte_count']=n;r['sha256']=h.hexdigest()\n"
+    "print(json.dumps(r,sort_keys=True,separators=(',',':')))"
+)
 
 
 class ControllerError(RuntimeError):
@@ -191,6 +222,14 @@ class SubprocessCommandRunner:
 class MaterializedInputs:
     runtime_root: Path
     requests: Mapping[LiveTrack, dict[str, object]]
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceFreezeResult:
+    collection_epoch: str
+    statuses: tuple[SourceCollectionStatus, ...]
+    raw_paths: Mapping[tuple[str, str], Path]
+    complete: bool
 
 
 def _digest_bytes(payload: bytes) -> str:
@@ -321,6 +360,71 @@ def _validate_lifecycle_event_details(
     details: Mapping[str, object],
     requests: Mapping[str, object] | None = None,
 ) -> None:
+    if event_name == "evidence_freeze_started":
+        if set(details) != {"collection_epoch", "execution_nonce", "run_id"}:
+            raise ControllerError("evidence freeze start fields are not closed")
+        _require_sha256("collection_epoch", details["collection_epoch"])
+        _require_sha256("freeze execution_nonce", details["execution_nonce"])
+        if (
+            type(details["run_id"]) is not str
+            or re.fullmatch(r"v3b1-[a-f0-9]{64}", details["run_id"]) is None
+        ):
+            raise ControllerError("evidence freeze run ID is invalid")
+        return
+    if event_name == "source_collection_intent":
+        expected = {
+            "collection_epoch",
+            "track",
+            "source",
+            "container_id",
+            "container_name",
+        }
+        if set(details) != expected:
+            raise ControllerError("source collection intent fields are not closed")
+        _require_sha256("collection_epoch", details["collection_epoch"])
+        try:
+            SourceCollectionStatus.from_mapping(
+                {
+                    "track": details["track"],
+                    "source": details["source"],
+                    "status": "missing",
+                    "container_id": details["container_id"],
+                    "container_name": details["container_name"],
+                    "source_byte_count": None,
+                    "source_sha256": None,
+                    "copied_byte_count": None,
+                    "copied_sha256": None,
+                    "error_class": "source_missing",
+                }
+            )
+        except HarnessContractError as error:
+            raise ControllerError("source collection intent identity is invalid") from error
+        return
+    if event_name == "source_collection_terminal":
+        if set(details) != {"collection_epoch", "record"}:
+            raise ControllerError("source collection terminal fields are not closed")
+        _require_sha256("collection_epoch", details["collection_epoch"])
+        try:
+            SourceCollectionStatus.from_mapping(details["record"])
+        except HarnessContractError as error:
+            raise ControllerError("source collection terminal record is invalid") from error
+        return
+    if event_name == "evidence_freeze_complete":
+        expected = {
+            "collection_epoch",
+            "terminal_count",
+            "records_sha256",
+            "promotable",
+        }
+        if set(details) != expected:
+            raise ControllerError("evidence freeze completion fields are not closed")
+        _require_sha256("collection_epoch", details["collection_epoch"])
+        _require_sha256("freeze records_sha256", details["records_sha256"])
+        if details["terminal_count"] != 9 or type(details["terminal_count"]) is not int:
+            raise ControllerError("evidence freeze terminal count is invalid")
+        if type(details["promotable"]) is not bool:
+            raise ControllerError("evidence freeze promotability is invalid")
+        return
     if event_name == "readiness_session_started":
         if set(details) != {"readiness_nonce"}:
             raise ControllerError("readiness session event fields are not closed")
@@ -498,12 +602,79 @@ def _validate_lifecycle_history(
         track.value: {"status": "not_attempted", "intent_id": None}
         for track in _TRACKS
     }
+    freeze_epoch: str | None = None
+    freeze_intents: dict[tuple[str, str], Mapping[str, object]] = {}
+    freeze_terminals: dict[tuple[str, str], SourceCollectionStatus] = {}
+    freeze_completed = False
     for event in events:
         event_name = event["event"]
         details = event["details"]
         assert isinstance(event_name, str)
         assert isinstance(details, Mapping)
-        if event_name == "readiness_session_started":
+        if event_name == "evidence_freeze_started":
+            if freeze_epoch is not None:
+                raise ControllerError("evidence freeze epoch may start only once")
+            freeze_epoch = str(details["collection_epoch"])
+        elif event_name == "source_collection_intent":
+            if freeze_epoch is None or details["collection_epoch"] != freeze_epoch:
+                raise ControllerError("source collection intent lacks its freeze epoch")
+            if freeze_completed:
+                raise ControllerError("source collection intent follows freeze completion")
+            key = (str(details["track"]), str(details["source"]))
+            if key in freeze_intents:
+                raise ControllerError("source collection intent is duplicated")
+            freeze_intents[key] = details
+        elif event_name == "source_collection_terminal":
+            if freeze_epoch is None or details["collection_epoch"] != freeze_epoch:
+                raise ControllerError("source terminal lacks its freeze epoch")
+            if freeze_completed:
+                raise ControllerError("source terminal follows freeze completion")
+            try:
+                record = SourceCollectionStatus.from_mapping(details["record"])
+            except HarnessContractError as error:
+                raise ControllerError("source terminal record is invalid") from error
+            key = (record.track, record.source)
+            intent = freeze_intents.get(key)
+            if intent is None or key in freeze_terminals:
+                raise ControllerError("source terminal lacks one durable intent")
+            if (
+                intent["container_id"] != record.container_id
+                or intent["container_name"] != record.container_name
+            ):
+                raise ControllerError("source terminal identity diverges from its intent")
+            freeze_terminals[key] = record
+        elif event_name == "evidence_freeze_complete":
+            expected_keys = {
+                (track.value, source)
+                for track in _TRACKS
+                for source in _FREEZE_SOURCES
+            }
+            if (
+                freeze_epoch is None
+                or details["collection_epoch"] != freeze_epoch
+                or set(freeze_intents) != expected_keys
+                or set(freeze_terminals) != expected_keys
+                or freeze_completed
+            ):
+                raise ControllerError("evidence freeze completion is not terminal")
+            ordered_records = [
+                freeze_terminals[(track.value, source)].to_mapping()
+                for track in _TRACKS
+                for source in _FREEZE_SOURCES
+            ]
+            if details["records_sha256"] != _digest_bytes(
+                canonical_json(ordered_records).encode("utf-8")
+            ):
+                raise ControllerError("evidence freeze terminal binding is invalid")
+            promotable = all(
+                status.status == "copied" for status in freeze_terminals.values()
+            ) and all(
+                request["status"] == "completed" for request in replayed.values()
+            )
+            if details["promotable"] is not promotable:
+                raise ControllerError("evidence freeze promotability is inconsistent")
+            freeze_completed = True
+        elif event_name == "readiness_session_started":
             if lifecycle_readiness_poisoned:
                 raise ControllerError(
                     "lifecycle readiness is poisoned; teardown or manual recovery is required"
@@ -669,6 +840,22 @@ def load_lifecycle_journal(journal_path: Path) -> dict[str, object]:
         _validate_lifecycle_event_details(
             event["event"], event["details"], requests
         )
+    freeze_start = next(
+        (event for event in events if event["event"] == "evidence_freeze_started"),
+        None,
+    )
+    if freeze_start is not None:
+        details = freeze_start["details"]
+        if details["execution_nonce"] != value["execution_nonce"]:
+            raise ControllerError("evidence freeze nonce does not bind the lifecycle")
+        if manifest_path is None:
+            raise ControllerError("evidence freeze lacks a bound private manifest")
+        bound_value = _load_json_bytes(
+            Path(str(manifest_path)).read_bytes(), "freeze-bound private manifest"
+        )
+        _validate_manifest(bound_value)
+        if details["run_id"] != bound_value["run_id"]:
+            raise ControllerError("evidence freeze run ID does not bind the manifest")
     _validate_lifecycle_history(events, requests)
     return value
 
@@ -3684,6 +3871,7 @@ class LocalEnvoyController:
         self.readiness_poison_path = self.private_root / "readiness-poison.json"
         self.manifest_root = self.private_root / "manifests"
         self.provisional_root = self.private_root / "provisional"
+        self.source_freeze_root = self.private_root / "source-freezes"
         self.completed_root = self.private_root / "completed"
         self.publication_staging_root = self.private_root / "publication-staging"
         self.state_path = self.root / ".tools/state/v3b1-active.json"
@@ -3894,6 +4082,7 @@ class LocalEnvoyController:
         os.chmod(self.private_root, 0o700)
         self._ensure_private_child(self.manifest_root, "private manifest root")
         self._ensure_private_child(self.provisional_root, "private provisional root")
+        self._ensure_private_child(self.source_freeze_root, "private source freeze root")
         self._ensure_private_child(self.completed_root, "private completed root")
         self._ensure_private_child(
             self.publication_staging_root, "private publication staging root"
@@ -3923,6 +4112,11 @@ class LocalEnvoyController:
     def _private_completed_root(self) -> Path:
         return self._ensure_private_child(
             self.completed_root, "private completed root"
+        )
+
+    def _private_source_freeze_root(self) -> Path:
+        return self._ensure_private_child(
+            self.source_freeze_root, "private source freeze root"
         )
 
     def _private_publication_root(self) -> Path:
@@ -4975,6 +5169,576 @@ class LocalEnvoyController:
         )
         return records
 
+    @staticmethod
+    def _freeze_epoch(manifest: Mapping[str, object]) -> tuple[str, str]:
+        identity = manifest.get("content_identity")
+        if type(identity) is not dict:
+            raise ControllerError("freeze manifest identity is unavailable")
+        execution_nonce = identity.get("execution_nonce")
+        _require_sha256("freeze execution_nonce", execution_nonce)
+        epoch = _digest_bytes(
+            canonical_json(
+                {
+                    "execution_nonce": execution_nonce,
+                    "purpose": "v3b1-evidence-freeze-v1",
+                    "run_id": manifest["run_id"],
+                }
+            ).encode("utf-8")
+        )
+        return execution_nonce, epoch  # type: ignore[return-value]
+
+    def _freeze_raw_paths(
+        self, manifest: Mapping[str, object], collection_epoch: str
+    ) -> dict[tuple[str, str], Path]:
+        _require_sha256("collection_epoch", collection_epoch)
+        freeze_parent = self._private_source_freeze_root()
+        run_root = freeze_parent / str(manifest["run_id"])
+        epoch_root = run_root / collection_epoch
+        for path, label in (
+            (run_root, "source freeze run root"),
+            (epoch_root, "source freeze epoch root"),
+        ):
+            _require_contained(path, freeze_parent, label)
+            if path.is_symlink():
+                raise ControllerError(f"{label} cannot be a symbolic link")
+            path.mkdir(parents=False, exist_ok=True)
+            if not path.is_dir() or path.is_symlink():
+                raise ControllerError(f"{label} is unsafe")
+            os.chmod(path, 0o700)
+        paths: dict[tuple[str, str], Path] = {}
+        for track in _TRACKS:
+            track_root = epoch_root / track.value
+            _require_contained(track_root, epoch_root, "source freeze track root")
+            if track_root.is_symlink():
+                raise ControllerError("source freeze track root cannot be a symbolic link")
+            track_root.mkdir(parents=False, exist_ok=True)
+            os.chmod(track_root, 0o700)
+            paths[(track.value, "envoy_access")] = track_root / _ENVOY_LOG_NAME
+            paths[(track.value, "authz_decisions")] = track_root / "decisions.jsonl"
+            paths[(track.value, "target_markers")] = track_root / "targets.jsonl"
+        return paths
+
+    @staticmethod
+    def _parse_probe_observation(payload: str) -> tuple[bool, int | None, str | None]:
+        encoded = payload.encode("utf-8")
+        observation = _load_json_bytes(encoded, "ledger probe")
+        if encoded != _canonical_bytes(observation) or set(observation) != {
+            "exists",
+            "regular_file",
+            "byte_count",
+            "sha256",
+        }:
+            raise ControllerError("ledger probe result is not closed canonical JSON")
+        exists = observation["exists"]
+        regular = observation["regular_file"]
+        count = observation["byte_count"]
+        digest = observation["sha256"]
+        if type(exists) is not bool or type(regular) is not bool:
+            raise ControllerError("ledger probe booleans are invalid")
+        if not exists:
+            if regular or count is not None or digest is not None:
+                raise ControllerError("missing ledger probe shape is invalid")
+            return False, None, None
+        if not regular:
+            if count is not None or digest is not None:
+                raise ControllerError("non-regular ledger probe shape is invalid")
+            raise ControllerError("ledger source is not a regular file")
+        if type(count) is not int or count < 0:
+            raise ControllerError("ledger probe byte count is invalid")
+        _require_sha256("ledger probe sha256", digest)
+        return True, count, digest  # type: ignore[return-value]
+
+    @staticmethod
+    def _source_malformed_class(
+        payload: bytes,
+        *,
+        track: LiveTrack,
+        source: str,
+        attempted_complete: bool,
+    ) -> str | None:
+        validator = {
+            "authz_decisions": _decision_closed,
+            "target_markers": _target_closed,
+            "envoy_access": _envoy_closed,
+        }[source]
+        try:
+            records = _parse_jsonl_bytes(
+                payload,
+                f"frozen {source} {track.value}",
+                validator,
+                allow_empty=True,
+            )
+        except ControllerError:
+            return "invalid_json"
+        if any(record["track"] != track.value for record in records):
+            return "invalid_cardinality"
+        if attempted_complete:
+            expected = (
+                0
+                if source == "target_markers"
+                and track is LiveTrack.SIGNED_PLUS_LOCAL_REDUCE
+                else 1
+            )
+            if len(records) != expected:
+                return "invalid_cardinality"
+        elif len(records) > 1:
+            return "invalid_cardinality"
+        return None
+
+    @staticmethod
+    def _reattest_frozen_status(
+        status: SourceCollectionStatus, path: Path
+    ) -> None:
+        if path.is_symlink():
+            raise ControllerError("frozen source path cannot be a symbolic link")
+        if status.copied_byte_count is None:
+            if path.exists():
+                raise ControllerError("uncopied source has unexpected frozen bytes")
+            return
+        if path.is_symlink() or not path.is_file():
+            raise ControllerError("frozen source bytes are missing or unsafe")
+        payload = path.read_bytes()
+        if (
+            len(payload) != status.copied_byte_count
+            or _digest_bytes(payload) != status.copied_sha256
+        ):
+            raise ControllerError("frozen source bytes changed after collection")
+
+    def _collect_freeze_leg(
+        self,
+        *,
+        manifest: dict[str, object],
+        item: Mapping[str, object],
+        track: LiveTrack,
+        source: str,
+        path: Path,
+        attempted_complete: bool,
+    ) -> SourceCollectionStatus:
+        identity = {
+            "track": track.value,
+            "source": source,
+            "container_id": item["id"],
+            "container_name": item["name"],
+        }
+        if path.is_symlink():
+            raise ControllerError("unfinished source path cannot be a symbolic link")
+        if path.exists():
+            if not path.is_file():
+                raise ControllerError("unfinished source path is unsafe")
+            path.unlink()
+        try:
+            current = self._inspect_container(
+                str(item["id"]),
+                manifest,
+                str(item["role"]),
+                track.value,
+                require_running=source != "envoy_access",
+            )
+            if current != item:
+                raise ControllerError("source container identity changed before freeze")
+        except (ControllerError, OSError, UnicodeError):
+            return SourceCollectionStatus(
+                **identity,
+                status="copy_error",
+                source_byte_count=None,
+                source_sha256=None,
+                copied_byte_count=None,
+                copied_sha256=None,
+                error_class="command_failed",
+            )
+        if source == "envoy_access":
+            try:
+                logs = self._execute(
+                    self.docker_command("logs", str(item["id"])),
+                    timeout_s=60,
+                    docker=True,
+                )
+                source_bytes = logs.stdout.encode("utf-8")
+                source_count = len(source_bytes)
+                source_sha = _digest_bytes(source_bytes)
+                _write_file(path, source_bytes, 0o400)
+                copied_bytes = path.read_bytes()
+            except (ControllerError, OSError, UnicodeError):
+                return SourceCollectionStatus(
+                    **identity,
+                    status="copy_error",
+                    source_byte_count=None,
+                    source_sha256=None,
+                    copied_byte_count=None,
+                    copied_sha256=None,
+                    error_class="command_failed",
+                )
+        else:
+            source_path = _LEDGER_PATH[source]
+            try:
+                probe = self._execute(
+                    self.docker_command(
+                        "exec",
+                        str(item["id"]),
+                        "/usr/local/bin/python",
+                        "-c",
+                        _LEDGER_PROBE,
+                        source_path,
+                    ),
+                    timeout_s=60,
+                    docker=True,
+                )
+                present, source_count, source_sha = self._parse_probe_observation(
+                    probe.stdout
+                )
+            except (ControllerError, OSError, UnicodeError):
+                return SourceCollectionStatus(
+                    **identity,
+                    status="copy_error",
+                    source_byte_count=None,
+                    source_sha256=None,
+                    copied_byte_count=None,
+                    copied_sha256=None,
+                    error_class="command_failed",
+                )
+            if not present:
+                return SourceCollectionStatus(
+                    **identity,
+                    status="missing",
+                    source_byte_count=None,
+                    source_sha256=None,
+                    copied_byte_count=None,
+                    copied_sha256=None,
+                    error_class="source_missing",
+                )
+            try:
+                self._execute(
+                    self.docker_command(
+                        "cp", f"{item['id']}:{source_path}", str(path)
+                    ),
+                    timeout_s=60,
+                    docker=True,
+                )
+                if path.is_symlink() or not path.is_file():
+                    raise ControllerError("Docker copy did not produce a regular file")
+                os.chmod(path, 0o400)
+                copied_bytes = path.read_bytes()
+            except (ControllerError, OSError, UnicodeError):
+                if path.exists() and not path.is_symlink() and path.is_file():
+                    path.unlink()
+                return SourceCollectionStatus(
+                    **identity,
+                    status="copy_error",
+                    source_byte_count=source_count,
+                    source_sha256=source_sha,
+                    copied_byte_count=None,
+                    copied_sha256=None,
+                    error_class="command_failed",
+                )
+        copied_count = len(copied_bytes)
+        copied_sha = _digest_bytes(copied_bytes)
+        if copied_count != source_count:
+            return SourceCollectionStatus(
+                **identity,
+                status="copy_error",
+                source_byte_count=source_count,
+                source_sha256=source_sha,
+                copied_byte_count=copied_count,
+                copied_sha256=copied_sha,
+                error_class="size_mismatch",
+            )
+        if copied_sha != source_sha:
+            return SourceCollectionStatus(
+                **identity,
+                status="copy_error",
+                source_byte_count=source_count,
+                source_sha256=source_sha,
+                copied_byte_count=copied_count,
+                copied_sha256=copied_sha,
+                error_class="digest_mismatch",
+            )
+        malformed = self._source_malformed_class(
+            copied_bytes,
+            track=track,
+            source=source,
+            attempted_complete=attempted_complete,
+        )
+        return SourceCollectionStatus(
+            **identity,
+            status="malformed" if malformed is not None else "copied",
+            source_byte_count=source_count,
+            source_sha256=source_sha,
+            copied_byte_count=copied_count,
+            copied_sha256=copied_sha,
+            error_class=malformed,
+        )
+
+    def _freeze_sources(
+        self,
+        state: Mapping[str, object],
+        manifest: dict[str, object],
+        *,
+        attempted_complete: bool,
+    ) -> EvidenceFreezeResult:
+        if type(attempted_complete) is not bool:
+            raise ControllerError("freeze request completion state is invalid")
+        execution_nonce, collection_epoch = self._freeze_epoch(manifest)
+        paths = self._freeze_raw_paths(manifest, collection_epoch)
+        journal = load_lifecycle_journal(self.journal_path)
+        requests_state = journal["requests"]
+        assert isinstance(requests_state, dict)
+        if attempted_complete is not all(
+            request["status"] == "completed" for request in requests_state.values()
+        ):
+            raise ControllerError("freeze request state does not bind the lifecycle")
+        events = journal["events"]
+        assert isinstance(events, list)
+        started = next(
+            (event for event in events if event["event"] == "evidence_freeze_started"),
+            None,
+        )
+        start_details = {
+            "collection_epoch": collection_epoch,
+            "execution_nonce": execution_nonce,
+            "run_id": manifest["run_id"],
+        }
+        if started is None:
+            journal_event(self.journal_path, "evidence_freeze_started", start_details)
+        elif started["details"] != start_details:
+            raise ControllerError("persisted evidence freeze epoch binding changed")
+        journal = load_lifecycle_journal(self.journal_path)
+        events = journal["events"]
+        assert isinstance(events, list)
+        terminals = {
+            (record.track, record.source): record
+            for record in (
+                SourceCollectionStatus.from_mapping(event["details"]["record"])
+                for event in events
+                if event["event"] == "source_collection_terminal"
+            )
+        }
+        completed_event = next(
+            (event for event in events if event["event"] == "evidence_freeze_complete"),
+            None,
+        )
+        if completed_event is not None:
+            ordered = tuple(
+                terminals[(track.value, source)]
+                for track in _TRACKS
+                for source in _FREEZE_SOURCES
+            )
+            for status in ordered:
+                self._reattest_frozen_status(
+                    status, paths[(status.track, status.source)]
+                )
+            promotable = attempted_complete and all(
+                status.status == "copied" for status in ordered
+            )
+            if completed_event["details"]["promotable"] is not promotable:
+                raise ControllerError("freeze recovery promotability changed")
+            return EvidenceFreezeResult(
+                collection_epoch, ordered, paths, promotable
+            )
+        source_state = (
+            load_bound_active_state(self.state_path)
+            if self.state_path.exists()
+            else state
+        )
+        if source_state.get("manifest") not in (None, manifest):
+            raise ControllerError("freeze source state diverges from the manifest")
+        by_role_track = {
+            (str(item["role"]), str(item["track"])): item
+            for item in source_state["objects"]  # type: ignore[union-attr]
+        }
+        try:
+            expected = [
+                (track, source, by_role_track[(_SOURCE_ROLE[source], track.value)])
+                for track in _TRACKS
+                for source in _FREEZE_SOURCES
+            ]
+        except KeyError as error:
+            raise ControllerError(
+                "unfinished evidence freeze lost an exact source container"
+            ) from error
+        intended = {
+            (event["details"]["track"], event["details"]["source"])
+            for event in events
+            if event["event"] == "source_collection_intent"
+        }
+        for track, source, item in expected:
+            key = (track.value, source)
+            if key not in intended:
+                journal_event(
+                    self.journal_path,
+                    "source_collection_intent",
+                    {
+                        "collection_epoch": collection_epoch,
+                        "track": track.value,
+                        "source": source,
+                        "container_id": item["id"],
+                        "container_name": item["name"],
+                    },
+                )
+        journal = load_lifecycle_journal(self.journal_path)
+        events = journal["events"]
+        assert isinstance(events, list)
+        terminals = {
+            (record.track, record.source): record
+            for record in (
+                SourceCollectionStatus.from_mapping(event["details"]["record"])
+                for event in events
+                if event["event"] == "source_collection_terminal"
+            )
+        }
+        execution_order = [
+            *[(track, "envoy_access", by_role_track[("envoy", track.value)]) for track in _TRACKS],
+            *[
+                (track, source, by_role_track[(_SOURCE_ROLE[source], track.value)])
+                for track in _TRACKS
+                for source in ("authz_decisions", "target_markers")
+            ],
+        ]
+        for track, source, item in execution_order:
+            key = (track.value, source)
+            if key in terminals:
+                self._reattest_frozen_status(terminals[key], paths[key])
+                continue
+            status = self._collect_freeze_leg(
+                manifest=manifest,
+                item=item,
+                track=track,
+                source=source,
+                path=paths[key],
+                attempted_complete=attempted_complete,
+            )
+            journal_event(
+                self.journal_path,
+                "source_collection_terminal",
+                {
+                    "collection_epoch": collection_epoch,
+                    "record": status.to_mapping(),
+                },
+            )
+            terminals[key] = status
+        ordered = tuple(
+            terminals[(track.value, source)]
+            for track in _TRACKS
+            for source in _FREEZE_SOURCES
+        )
+        promotable = attempted_complete and all(
+            status.status == "copied" for status in ordered
+        )
+        journal_event(
+            self.journal_path,
+            "evidence_freeze_complete",
+            {
+                "collection_epoch": collection_epoch,
+                "terminal_count": len(ordered),
+                "records_sha256": _digest_bytes(
+                    canonical_json(
+                        [status.to_mapping() for status in ordered]
+                    ).encode("utf-8")
+                ),
+                "promotable": promotable,
+            },
+        )
+        return EvidenceFreezeResult(collection_epoch, ordered, paths, promotable)
+
+    def _stop_and_attest_container(
+        self,
+        item: Mapping[str, object],
+        manifest: dict[str, object],
+    ) -> None:
+        if item["role"] == "validator":
+            current = self._inspect_validation_container(
+                str(item["id"]), manifest, LiveTrack(str(item["track"]))
+            )
+        else:
+            current = self._inspect_container(
+                str(item["id"]),
+                manifest,
+                str(item["role"]),
+                str(item["track"]),
+                require_running=False,
+            )
+        if current != item:
+            raise ControllerError("container changed before exact stop")
+        running = self._execute(
+            self.docker_command(
+                "inspect", "--format", "{{.State.Running}}", str(item["id"])
+            ),
+            timeout_s=30,
+            docker=True,
+        ).stdout.strip()
+        if running not in {"true", "false"}:
+            raise ControllerError("container running state is invalid")
+        if running == "true":
+            journal_event(
+                self.journal_path,
+                "container_stop_intent",
+                {
+                    "id": item["id"],
+                    "name": item["name"],
+                    "role": item["role"],
+                },
+            )
+            self._execute(
+                self.docker_command("stop", "--timeout", "10", str(item["id"])),
+                timeout_s=30,
+                docker=True,
+            )
+            stopped = self._execute(
+                self.docker_command(
+                    "inspect",
+                    "--format",
+                    "{{.State.Running}}",
+                    str(item["id"]),
+                ),
+                timeout_s=30,
+                docker=True,
+            ).stdout.strip()
+            if stopped != "false":
+                raise ControllerError("recorded container did not stop")
+            if item["role"] == "validator":
+                after = self._inspect_validation_container(
+                    str(item["id"]), manifest, LiveTrack(str(item["track"]))
+                )
+            else:
+                after = self._inspect_container(
+                    str(item["id"]),
+                    manifest,
+                    str(item["role"]),
+                    str(item["track"]),
+                    require_running=False,
+                )
+            if after != item:
+                raise ControllerError("container changed after exact stop")
+            journal_event(
+                self.journal_path,
+                "container_stop_complete",
+                {"id": item["id"], "name": item["name"]},
+            )
+
+    def _freeze_before_service_teardown(
+        self,
+        state: Mapping[str, object],
+        manifest: dict[str, object],
+        *,
+        attempted_complete: bool,
+        transient_objects: Sequence[Mapping[str, object]],
+    ) -> EvidenceFreezeResult:
+        objects = state["objects"]
+        if type(objects) is not list:
+            raise ControllerError("runtime object state is invalid")
+        for item in objects:
+            if item["role"] == "envoy":
+                self._stop_and_attest_container(item, manifest)
+        freeze = self._freeze_sources(
+            state, manifest, attempted_complete=attempted_complete
+        )
+        for role in ("authz", "target"):
+            for item in objects:
+                if item["role"] == role:
+                    self._stop_and_attest_container(item, manifest)
+        for item in transient_objects:
+            self._stop_and_attest_container(item, manifest)
+        return freeze
+
     def _copy_sources(
         self,
         state: Mapping[str, object],
@@ -5653,61 +6417,56 @@ class LocalEnvoyController:
 
     def _prepare_teardown_evidence(
         self,
-        state: Mapping[str, object],
         manifest: dict[str, object],
-        journal: Mapping[str, object],
         objects: list[dict[str, object]],
+        freeze: EvidenceFreezeResult,
     ) -> tuple[Path | None, list[dict[str, object]], bool, str | None]:
-        """Freeze evidence without allowing evidence rejection to block owned cleanup."""
+        """Build only from the durable pre-teardown source freeze."""
         try:
             provisional_root = self._private_provisional_root()
-            requests_state = journal["requests"]
-            assert isinstance(requests_state, dict)
-            attempted_complete = all(
-                item["status"] == "completed" for item in requests_state.values()
-            )
-            runtime_complete = len(objects) == 9 and len(state["network_objects"]) == 3  # type: ignore[arg-type]
-            prior_events = journal["events"]
-            assert isinstance(prior_events, list)
-            prior_collection_event = next(
-                (
-                    event
-                    for event in reversed(prior_events)
-                    if event["event"] == "evidence_collect_complete"
-                    and event["details"].get("completed") is True
-                ),
-                None,
-            )
-            prior_collection_complete = prior_collection_event is not None
-            prior_source_attestations = next(
-                (
-                    event["details"].get("source_attestations", [])
-                    for event in reversed(prior_events)
-                    if event["event"] == "source_attestations_persisted"
-                    and event["details"].get("source_attestations")
-                ),
-                [],
-            )
-            copied_raw: dict[LiveTrack, bytes] = {}
+            status_by_key = {
+                (status.track, status.source): status for status in freeze.statuses
+            }
+            expected_keys = {
+                (track.value, source)
+                for track in _TRACKS
+                for source in _FREEZE_SOURCES
+            }
+            if set(status_by_key) != expected_keys:
+                raise ControllerError("durable source freeze is not nine closed legs")
+            raw = {
+                key: freeze.raw_paths[key].read_bytes()
+                for key, status in status_by_key.items()
+                if status.copied_byte_count is not None
+            }
+            copied_raw = {
+                track: raw[(track.value, "authz_decisions")]
+                for track in _TRACKS
+                if (track.value, "authz_decisions") in raw
+            }
             copied_envoy: list[dict[str, object]] = []
             copied_targets: list[dict[str, object]] = []
-            if len(objects) == 9:
-                journal_event(
-                    self.journal_path,
-                    "evidence_collect_intent",
-                    {"mode": "stopped_container_byte_recopy"},
-                )
-                copied_raw, copied_envoy, copied_targets = self._copy_sources(
-                    state,
-                    manifest,
-                    f"down-{time.monotonic_ns()}",
-                    allow_incomplete=not attempted_complete,
-                )
-            completed = attempted_complete and (
-                runtime_complete or prior_collection_complete
-            )
-            resumed_after_removal = completed and not runtime_complete
-            if completed and not resumed_after_removal:
+            completed = freeze.complete
+            if completed:
+                if set(copied_raw) != set(_TRACKS):
+                    raise ControllerError("complete freeze lacks decision bytes")
+                for track in _TRACKS:
+                    copied_envoy.extend(
+                        _parse_jsonl_bytes(
+                            raw[(track.value, "envoy_access")],
+                            f"frozen Envoy {track.value}",
+                            _envoy_closed,
+                            allow_empty=False,
+                        )
+                    )
+                    copied_targets.extend(
+                        _parse_jsonl_bytes(
+                            raw[(track.value, "target_markers")],
+                            f"frozen targets {track.value}",
+                            _target_closed,
+                            allow_empty=True,
+                        )
+                    )
                 requests = self._request_records(manifest)
                 decisions: list[dict[str, object]] = []
                 for track in _TRACKS:
@@ -5746,34 +6505,20 @@ class LocalEnvoyController:
                     raise ControllerError("stopped-container Envoy byte comparison failed")
                 if (output / "targets.jsonl").read_bytes() != _jsonl_payload(copied_targets):
                     raise ControllerError("stopped-container target byte comparison failed")
-            elif resumed_after_removal:
-                output = provisional_root / str(manifest["run_id"])
-                if prior_collection_event is None:
-                    raise ControllerError(
-                        "completed recovery lacks durable collection authority"
-                    )
-                prior_authoritative = prior_collection_event["details"].get(
-                    "authoritative_attestation"
-                )
-                if type(prior_authoritative) is not dict:
-                    raise ControllerError(
-                        "completed recovery lacks durable authoritative binding"
-                    )
-                _reattest_authoritative_bundle(output, prior_authoritative)
             else:
                 partial_requests: list[dict[str, object]] | None = None
-                if len(objects) == 9:
-                    request_path = _runtime_root(self.root, manifest) / "requests.jsonl"
-                    partial_requests = (
-                        _parse_jsonl_bytes(
-                            request_path.read_bytes(),
-                            "incomplete central requests",
-                            _request_closed,
-                            allow_empty=True,
-                        )
-                        if request_path.is_file() and not request_path.is_symlink()
-                        else []
+                request_path = _runtime_root(self.root, manifest) / "requests.jsonl"
+                partial_requests = (
+                    _parse_jsonl_bytes(
+                        request_path.read_bytes(),
+                        "incomplete central requests",
+                        _request_closed,
+                        allow_empty=True,
                     )
+                    if request_path.is_file() and not request_path.is_symlink()
+                    else []
+                )
+                if partial_requests:
                     validate_request_journal(
                         partial_requests,
                         load_lifecycle_journal(self.journal_path),
@@ -5783,18 +6528,18 @@ class LocalEnvoyController:
                     provisional_root,
                     manifest,
                     requests=partial_requests,
-                    raw_decisions=copied_raw if len(objects) == 9 else None,
-                    envoy=copied_envoy if len(objects) == 9 else None,
-                    targets=copied_targets if len(objects) == 9 else None,
                 )
-            source_attestations: list[dict[str, object]] = [
-                dict(item) for item in prior_source_attestations
-            ]
-            if len(objects) == 9:
-                source_attestations = []
+            source_attestations: list[dict[str, object]] = []
+            if completed:
                 by_track_role = {
                     (item["track"], item["role"]): item for item in objects
                 }
+                if len(by_track_role) != 9:
+                    bound_state = load_bound_active_state(self.state_path)
+                    by_track_role = {
+                        (item["track"], item["role"]): item
+                        for item in bound_state["objects"]
+                    }
                 for track in _TRACKS:
                     target_records = [
                         item for item in copied_targets if item["track"] == track.value
@@ -6102,61 +6847,21 @@ class LocalEnvoyController:
             for item in objects
             if item["role"] == role
         ]
-        for item in ordered:
-            current = (
-                self._inspect_validation_container(
-                    str(item["id"]), manifest, LiveTrack(str(item["track"]))
-                )
-                if item["role"] == "validator"
-                else self._inspect_container(
-                    str(item["id"]),
-                    manifest,
-                    str(item["role"]),
-                    str(item["track"]),
-                    require_running=False,
-                )
-            )
-            if current != item:
-                raise ControllerError("container changed before exact stop")
-            running = self._execute(
-                self.docker_command(
-                    "inspect", "--format", "{{.State.Running}}", str(item["id"])
-                ),
-                timeout_s=30,
-                docker=True,
-            ).stdout.strip()
-            if running not in {"true", "false"}:
-                raise ControllerError("container running state is invalid")
-            if running == "true":
-                journal_event(
-                    self.journal_path,
-                    "container_stop_intent",
-                    {"id": item["id"], "name": item["name"], "role": item["role"]},
-                )
-                self._execute(
-                    self.docker_command(
-                        "stop", "--timeout", "10", str(item["id"])
-                    ),
-                    timeout_s=30,
-                    docker=True,
-                )
-                stopped = self._execute(
-                    self.docker_command(
-                        "inspect", "--format", "{{.State.Running}}", str(item["id"])
-                    ),
-                    timeout_s=30,
-                    docker=True,
-                ).stdout.strip()
-                if stopped != "false":
-                    raise ControllerError("recorded container did not stop")
-                journal_event(
-                    self.journal_path,
-                    "container_stop_complete",
-                    {"id": item["id"], "name": item["name"]},
-                )
-
+        requests_state = journal["requests"]
+        assert isinstance(requests_state, dict)
+        attempted_complete = all(
+            item["status"] == "completed" for item in requests_state.values()
+        )
+        freeze = self._freeze_before_service_teardown(
+            state,
+            manifest,
+            attempted_complete=attempted_complete,
+            transient_objects=transient_objects,
+        )
         output, source_attestations, completed, evidence_rejection = (
-            self._prepare_teardown_evidence(state, manifest, journal, objects)
+            self._prepare_teardown_evidence(
+                manifest, objects, freeze
+            )
         )
 
         for item in ordered:

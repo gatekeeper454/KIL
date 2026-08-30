@@ -3753,3 +3753,50 @@ with two-stage review, pass the full static suite, then execute the zero-request
 live smoke from a committed source identity.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-075 — 2026-08-30 — V3B-1 teardown now freezes all evidence before service destruction
+
+**Input:** Implement Task 3 of the approved transcript-driven harness plan:
+stop and attest all three Envoys as an ingress barrier, collect nine independent
+source legs while authorization and target services remain alive, persist a
+nonce-bound recoverable freeze, and allow exact cleanup to continue without
+changing KIL, authorization, Envoy, or target semantics.
+
+**Interpretation:** Evidence durability is a host-controller responsibility.
+Each Envoy log and tmpfs ledger must receive its own durable intent and terminal
+`copied`, `missing`, `copy_error`, or `malformed` record. Positive in-container
+size/SHA-256 observation precedes every ledger copy, copied bytes are rehashed,
+malformed bytes remain private and hash-bound, and no incomplete freeze may
+produce joins or a promotable bundle.
+
+**Decision status:** Confirmed Task 3 implementation complete, pending the
+independent harness review and later live smoke gate. The controller now writes
+all nine intents before collection, captures all stopped Envoy logs before any
+ledger probe, persists all terminal records plus a collection-epoch binding,
+and only then stops authorization and target containers. Recovery reattests and
+skips completed legs, retries unfinished legs only against the exact recorded
+live container, and never recopies a completed freeze after sources disappear.
+
+**Rationale:** The earlier post-stop `docker cp` path could destroy tmpfs-backed
+evidence before it was preserved and allowed one source failure to obscure the
+others. The new ordering makes the evidence boundary explicit and durable while
+keeping the enforcement behavior under test frozen. Zero-byte files require a
+positive source observation and matching host copy; missing files remain
+missing; byte mismatches and malformed/cardinality failures are nonpromotable.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker or Colima operation was authorized or
+performed in this task. Exact installed-runtime behavior remains to be proven
+by the separately gated zero-request smoke after the remaining teardown
+inventory task and independent reviews are complete.
+
+**Next gate:** Complete Task 4 inventory-based exact absence, run independent
+specification and quality reviews over the complete harness, then execute the
+committed zero-request lifecycle smoke before any central proof request.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
