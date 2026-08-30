@@ -20,7 +20,11 @@ class V3BProfileTest(unittest.TestCase):
 
         self.assertEqual(profile.kind_version, "0.32.0")
         self.assertEqual(profile.kubernetes_version, "1.36.1")
-        self.assertEqual(profile.envoy_version, "1.39.0")
+        self.assertEqual(profile.envoy_version, "1.39.1")
+        self.assertEqual(
+            profile.envoy_image,
+            "docker.io/envoyproxy/envoy:v1.39.1",
+        )
         self.assertEqual(profile.cluster_name, "kil-v3-lab")
         self.assertEqual(profile.colima_profile, "kil-v3-lab")
         self.assertEqual(profile.evidence_scope, "local_envoy_boundary")

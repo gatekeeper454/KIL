@@ -135,6 +135,15 @@ Content-Length transport metadata are ignored by authorization evaluation. The
 client never supplies trusted local-evidence, track-mode, issuer, or
 verified-subject headers.
 
+Envoy 1.39.1 raw-HTTP `ext_authz` extracts the configured decision-digest
+response header for an authorization HTTP 200 permit and HTTP 403 policy
+denial. It converts an authorization HTTP 5xx response to an internal
+authorization error before response-header and dynamic-metadata extraction, so
+the Envoy JSON access log renders the digest field as `"-"` on that path. The
+error remains joinable by the fixed run manifest, fixed track, request ID, KIL
+decision record, Envoy response/no-upstream fields, and zero target markers;
+the evidence join may not invent or infer a discarded Envoy digest.
+
 ### 4.4 Authorization services
 
 All three services implement the same HTTP adapter contract and emit the same
@@ -184,6 +193,11 @@ A permit is validated only when:
 1. the decision record says `permit`;
 2. Envoy records an upstream response; and
 3. the target ledger contains exactly one matching request ID.
+
+Digest equality is additionally required across the KIL decision, Envoy, and
+target records for permits and policy denials where Envoy preserves the authz
+response metadata. A fail-closed authz 5xx must instead carry the documented
+`"-"` Envoy sentinel and is validated without digest equality on the Envoy leg.
 
 Duplicate target markers, missing decision records, conflicting track IDs, or
 unjoinable evidence invalidate the individual request result. An HTTP status
@@ -292,15 +306,17 @@ The released, mutually supported V3B profile resolved on 2026-08-30 is:
 | Cluster tool | Kind 0.32.0 |
 | Kubernetes node | `kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5` |
 | Kubernetes client | `kubectl` v1.36.3 |
-| Envoy | v1.39.0, image pinned by resolved registry digest before use |
+| Envoy | v1.39.1, image pinned by resolved registry digest before use |
 | NetworkPolicy provider | Calico v3.32.0, reserved for V3B-2 |
 | Application runtime | Python 3.12.13 |
 | Ed25519 library | `cryptography` 50.0.0 |
 
-The tracked source of truth is `deploy/kind/v3b-profile.json`. This is a
-release-availability correction: the planned Kind 0.33.0, Kubernetes 1.37.0
-node image, and Envoy 1.39.1 combination was not available as the resolved
-stable profile. The correction does not change the founder-approved topology,
+The tracked source of truth is `deploy/kind/v3b-profile.json`. Kind 0.33.0 and
+the Kubernetes 1.37.0 node image were not available as the resolved stable
+profile. The initial V3B profile therefore selected the available Envoy 1.39.0
+image; that component was corrected to 1.39.1 on 2026-08-30 after the August 27
+security release became available with two HTTP `ext_authz` fixes. These
+release corrections do not change the founder-approved topology,
 authorization semantics, comparison tracks, or evidence boundary. V3B-1 first
 proves the pinned local Envoy boundary; V3B-2 then reuses the same artifacts in
 the approved Kind/Calico topology.
@@ -384,7 +400,7 @@ artifact hashes, and the approved evidence-language review.
 - [Envoy external authorization filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_authz_filter.html)
 - [Kind 0.32.0 release and Kubernetes 1.36.1 node digest](https://github.com/kubernetes-sigs/kind/releases/tag/v0.32.0)
 - [Kubernetes 1.36.3 release](https://github.com/kubernetes/kubernetes/releases/tag/v1.36.3)
-- [Envoy 1.39.0 release](https://github.com/envoyproxy/envoy/releases/tag/v1.39.0)
+- [Envoy 1.39.1 release notes](https://www.envoyproxy.io/docs/envoy/latest/version_history/v1.39/v1.39.1)
 - [Calico 3.32.0 release](https://github.com/projectcalico/calico/releases/tag/v3.32.0)
 - [Calico Kubernetes compatibility](https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements)
 - [Hugging Face technical incident timeline](https://huggingface.co/blog/agent-intrusion-technical-timeline)

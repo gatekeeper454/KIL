@@ -2842,3 +2842,109 @@ contract, and add the digest-supplied hardened KIL service image without
 starting the container runtime.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-058 — 2026-08-30 — Deterministic Envoy and hardened image contract locked
+
+**Input:** The founder directed execution of V3B-1 Task 5 and asked whether
+multiple agents could accelerate the work.
+
+**Interpretation:** Implement the static Envoy raw-HTTP `ext_authz` and KIL
+service-image contracts test-first, without starting Colima, pulling an image,
+building a container, or claiming live enforcement. Parallel work was limited
+to disjoint Envoy, container, and read-only contract-audit streams; the streams
+were then cross-reviewed and integrated in the shared Task 5 gate.
+
+**Decision status:** Confirmed implemented and statically verified. The Envoy
+renderer emits a fresh canonical bootstrap with one port-8080 listener, an
+`ext_authz` filter immediately before the router, a 250 ms authorization
+timeout, fail-closed `ServiceUnavailable` behavior, no authorization retries,
+no route-cache clearing, and two fixed `STRICT_DNS` clusters. The track and
+target cluster are process configuration, never request-selected. The
+top-level Envoy 1.39 matcher adds exactly `x-request-id` and `x-kil-q-state` to
+the automatically conveyed raw-HTTP context. Host and Content-Length remain
+transport metadata ignored by KIL evaluation. Authorization and Q-state are
+removed before the target; a client track value is overwritten; only the
+decision digest may flow from authz to the target or client.
+
+The JSON stdout access record has a closed seven-field join schema. Envoy
+preserves the exact authz response digest for HTTP 200 permits and HTTP 403
+policy denials. Envoy 1.39.1 converts an authz HTTP 5xx to an authorization
+error before response-header and dynamic-metadata extraction, so the digest
+field is explicitly `"-"` for that path. Such an error must be joined by fixed
+run, fixed track, request ID, the KIL decision record, Envoy no-upstream
+evidence, and zero target markers; the experiment may not infer a digest Envoy
+discarded.
+
+The KIL service image contract now requires both build stages to receive the
+same externally supplied digest-pinned Python base. A Dockerfile-specific
+ignore file excludes the repository by default and admits only the exact
+source, metadata, and dependency-lock inputs, so private and generated
+material is excluded before context transfer. The build backend
+`setuptools==82.0.0` and the arm64 runtime closure
+`cryptography==50.0.0`, `cffi==2.1.1`, and `pycparser==3.0` are exact and
+hash-locked to official PyPI release metadata. Local `.[lab]` installation
+disables dependency resolution and build isolation. Only `/install` crosses
+into the runtime stage, which runs as UID/GID 65532, exposes only 8080, has a
+stdlib health check, and is compatible with a read-only root filesystem when
+the controller supplies the explicit read-only config and writable ledger
+mounts.
+
+The initially recorded Envoy 1.39.0 profile remains visible in earlier lineage
+entries. Task 5 corrects the active profile to Envoy 1.39.1 because the
+2026-08-27 security release superseded it with two additional HTTP
+`ext_authz` fixes. This is a security-profile correction, not a change to the
+approved topology, KTP extension boundary, or evidence classes. The ignored
+local tool lock was rebound to the corrected profile SHA-256
+`8d6da1c20bf0def2ab5495dc5c87586b99d0ef024cd6c42236b2dc8bfd4afe62`;
+all three existing tool bytes, modes, and version outputs re-verified without
+redownloading them.
+
+Thirty-six focused Envoy, container, and profile tests pass. The complete
+repository suite passes 215 tests; the new Python files compile, the local V3B
+tool preflight passes, and `git diff --check` passes. Independent audit and
+both cross-reviews approved the remediated static contract with no remaining
+Task 5 blocker.
+
+**Rationale:** A deterministic configuration is insufficient if its schema is
+deprecated, its evidence fields promise values Envoy cannot preserve, its
+build context exposes unrelated repository content, or its dependencies remain
+mutable. Locking the current Envoy API, honest error-path semantics, the
+pre-transfer context boundary, dependency artifacts, fixed route/track, and
+non-root runtime creates a falsifiable input to the live proof without
+prematurely promoting static checks to runtime validation.
+
+**Affected artifacts:**
+
+- `src/kil/v3b_envoy.py`
+- `tests/test_v3b_envoy.py`
+- `deploy/kind/Dockerfile.v3b`
+- `deploy/kind/Dockerfile.v3b.dockerignore`
+- `deploy/kind/requirements-v3b-build.txt`
+- `deploy/kind/requirements-v3b-runtime.txt`
+- `tests/test_v3b_container_contract.py`
+- `deploy/kind/v3b-profile.json`
+- `src/kil/v3b_preflight.py`
+- `tests/test_v3b_preflight.py`
+- `docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md`
+- `docs/superpowers/plans/2026-08-30-v3b1-toolchain-http-boundary.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- `.tools/locks/v3b-tools.json` (local, ignored, profile binding refreshed)
+
+**Unresolved questions:** The rendered JSON has not been parsed by the exact
+Envoy 1.39.1 executable. The Python base and Envoy image tags still require
+registry-digest resolution. The image has not been built, inspected, or run on
+arm64, so wheel compatibility, layer contents, numeric identity, read-only-root
+operation, and health behavior remain unvalidated. No live permit, policy
+denial, authz-5xx, timeout, retry-header, header-sanitization, upstream-host, or
+target-marker evidence exists yet. Colima, containers, Kind, Calico, and
+NetworkPolicy remain unstarted.
+
+**Next gate:** Execute V3B-1 Task 6. First resolve the Python and Envoy tags to
+registry digests, validate the bootstrap with exact Envoy 1.39.1, build and
+inspect the content-identified KIL image, and run the local three-track boundary
+proof. The run must treat `"-"` as absent, require digest equality only where
+Envoy preserves it, cross-check request-carried run IDs, inject client retry
+controls, and prove exactly one target marker for a permit and zero for every
+denial or error before any V3B-2 Kind claim.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
