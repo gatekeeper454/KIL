@@ -1,4 +1,5 @@
 from dataclasses import FrozenInstanceError
+import errno
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -109,14 +110,14 @@ class HarnessIntegrationContractTest(unittest.TestCase):
         self.assertEqual(
             {case.name for case in fixture.cases if case.provenance == "observed"},
             {
-                "cycle-1-recorded-network",
-                "cycle-2-recorded-network",
-                "cycle-3-missing-decision-ledger",
+                "cycle-3-post-stop-docker-cp-decision-path-absent",
             },
         )
         self.assertEqual(
             {case.name for case in fixture.cases if case.provenance == "reconstructed"},
             {
+                "cycle-1-observed-network-values-reconstructed-inventory",
+                "cycle-2-observed-network-values-reconstructed-inventory",
                 "cycle-3-network-not-found-replacement-inventory",
                 "cycle-3-request-send-socket-failure",
                 "cycle-3-target-copy-error",
@@ -168,6 +169,46 @@ class HarnessIntegrationContractTest(unittest.TestCase):
                 {**record.to_mapping(), "attempt_count": True}
             )
 
+    def test_request_failure_provenance_closes_transport_facts(self):
+        base = {
+            "stage": "request_send",
+            "exception_class": "ConnectionResetError",
+            "errno": errno.ECONNRESET,
+            "errno_name": "ECONNRESET",
+            "connect_monotonic_ns": 10,
+            "send_monotonic_ns": 20,
+            "failure_monotonic_ns": 30,
+            "request_bytes_may_have_been_sent": False,
+            "attempt_count": 1,
+            "retry_performed": False,
+        }
+
+        for stage, may_have_sent in (
+            ("request_send", False),
+            ("response_headers", True),
+            ("response_body", True),
+        ):
+            with self.subTest(stage=stage):
+                parsed = RequestFailureProvenance.from_mapping(
+                    {
+                        **base,
+                        "stage": stage,
+                        "request_bytes_may_have_been_sent": may_have_sent,
+                    }
+                )
+                self.assertEqual(parsed.stage, stage)
+
+        for changed in (
+            {"errno_name": "ECONNREFUSED"},
+            {"connect_monotonic_ns": 21},
+            {"retry_performed": True},
+            {"stage": []},
+            {"exception_class": {}},
+        ):
+            with self.subTest(changed=changed):
+                with self.assertRaises(ContractError):
+                    RequestFailureProvenance.from_mapping({**base, **changed})
+
     def test_source_collection_status_enforces_closed_terminal_shapes(self):
         empty_sha = sha256(b"").hexdigest()
         copied = SourceCollectionStatus.from_mapping(
@@ -177,8 +218,10 @@ class HarnessIntegrationContractTest(unittest.TestCase):
                 "status": "copied",
                 "container_id": HEX_A,
                 "container_name": "kil-v3b1-authz-credential-policy-baseline-a1b2c3d4e5f6",
-                "byte_count": 0,
-                "sha256": empty_sha,
+                "source_byte_count": 0,
+                "source_sha256": empty_sha,
+                "copied_byte_count": 0,
+                "copied_sha256": empty_sha,
                 "error_class": None,
             }
         )
@@ -186,8 +229,10 @@ class HarnessIntegrationContractTest(unittest.TestCase):
             {
                 **copied.to_mapping(),
                 "status": "missing",
-                "byte_count": None,
-                "sha256": None,
+                "source_byte_count": None,
+                "source_sha256": None,
+                "copied_byte_count": None,
+                "copied_sha256": None,
                 "error_class": "source_missing",
             }
         )
@@ -195,15 +240,36 @@ class HarnessIntegrationContractTest(unittest.TestCase):
             {
                 **copied.to_mapping(),
                 "status": "malformed",
-                "byte_count": 3,
-                "sha256": sha256(b"bad").hexdigest(),
+                "source_byte_count": 3,
+                "source_sha256": sha256(b"bad").hexdigest(),
+                "copied_byte_count": 3,
+                "copied_sha256": sha256(b"bad").hexdigest(),
                 "error_class": "invalid_json",
             }
         )
+        command_failed_empty = SourceCollectionStatus.from_mapping(
+            {
+                **missing.to_mapping(),
+                "status": "copy_error",
+                "error_class": "command_failed",
+            }
+        )
+        command_failed_after_observation = SourceCollectionStatus.from_mapping(
+            {
+                **copied.to_mapping(),
+                "status": "copy_error",
+                "copied_byte_count": None,
+                "copied_sha256": None,
+                "error_class": "command_failed",
+            }
+        )
 
-        self.assertEqual(copied.byte_count, 0)
-        self.assertIsNone(missing.sha256)
+        self.assertEqual(copied.source_byte_count, 0)
+        self.assertEqual(copied.copied_sha256, empty_sha)
+        self.assertIsNone(missing.copied_sha256)
         self.assertEqual(malformed.status, "malformed")
+        self.assertIsNone(command_failed_empty.source_sha256)
+        self.assertEqual(command_failed_after_observation.source_sha256, empty_sha)
         with self.assertRaises(ContractError):
             SourceCollectionStatus.from_mapping(
                 {**copied.to_mapping(), "status": "missing"}
@@ -216,6 +282,92 @@ class HarnessIntegrationContractTest(unittest.TestCase):
             SourceCollectionStatus.from_mapping(
                 {**copied.to_mapping(), "container_id": "a" * 12}
             )
+        for changed in (
+            {"track": []},
+            {"source": {}},
+            {"status": []},
+            {"status": "copy_error", "error_class": []},
+        ):
+            with self.subTest(changed=changed):
+                with self.assertRaises(ContractError):
+                    SourceCollectionStatus.from_mapping(
+                        {**copied.to_mapping(), **changed}
+                    )
+        for rejected in (
+            {
+                **copied.to_mapping(),
+                "copied_sha256": sha256(b"other").hexdigest(),
+            },
+            {
+                **malformed.to_mapping(),
+                "copied_sha256": sha256(b"other").hexdigest(),
+            },
+            {
+                **command_failed_empty.to_mapping(),
+                "copied_byte_count": 0,
+                "copied_sha256": empty_sha,
+            },
+            {
+                **command_failed_after_observation.to_mapping(),
+                "copied_byte_count": 0,
+                "copied_sha256": empty_sha,
+            },
+        ):
+            with self.subTest(rejected=rejected):
+                with self.assertRaises(ContractError):
+                    SourceCollectionStatus.from_mapping(rejected)
+
+    def test_source_collection_status_binds_both_mismatch_sides(self):
+        source_sha = sha256(b"source").hexdigest()
+        copied_sha = sha256(b"copied").hexdigest()
+        base = {
+            "track": "credential_policy_baseline",
+            "source": "target_markers",
+            "status": "copy_error",
+            "container_id": HEX_A,
+            "container_name": "kil-v3b1-target-credential-policy-baseline-a1b2c3d4e5f6",
+            "source_byte_count": 6,
+            "source_sha256": source_sha,
+            "copied_byte_count": 6,
+            "copied_sha256": copied_sha,
+            "error_class": "digest_mismatch",
+        }
+
+        digest_mismatch = SourceCollectionStatus.from_mapping(base)
+        size_mismatch = SourceCollectionStatus.from_mapping(
+            {
+                **base,
+                "copied_byte_count": 7,
+                "error_class": "size_mismatch",
+            }
+        )
+
+        self.assertNotEqual(
+            digest_mismatch.source_sha256,
+            digest_mismatch.copied_sha256,
+        )
+        self.assertNotEqual(
+            size_mismatch.source_byte_count,
+            size_mismatch.copied_byte_count,
+        )
+        rejected = (
+            {**base, "copied_sha256": None},
+            {**base, "copied_sha256": source_sha},
+            {
+                **base,
+                "copied_byte_count": 7,
+                "error_class": "digest_mismatch",
+            },
+            {
+                **base,
+                "copied_byte_count": 6,
+                "error_class": "size_mismatch",
+            },
+        )
+        for record in rejected:
+            with self.subTest(record=record):
+                with self.assertRaises(ContractError):
+                    SourceCollectionStatus.from_mapping(record)
 
     def test_inventory_rows_require_full_ids_exact_names_and_uniqueness(self):
         payload = (
@@ -229,16 +381,24 @@ class HarnessIntegrationContractTest(unittest.TestCase):
 
         self.assertIsInstance(inventory, DockerInventory)
         self.assertEqual([entry.object_id for entry in inventory.entries], [HEX_A, HEX_B])
+        self.assertEqual(
+            [entry.name for entry in inventory.entries],
+            ["kil-v3b1-one", "kil-v3b1-two"],
+        )
         self.assertEqual(parse_inventory_rows("", "network").entries, ())
         for rejected in (
             canonical_json({"id": "a" * 12, "name": "kil-v3b1-one"}) + "\n",
             payload + canonical_json({"id": HEX_A, "name": "kil-v3b1-three"}) + "\n",
             payload + canonical_json({"id": HEX_C, "name": "kil-v3b1-two"}) + "\n",
             canonical_json({"extra": 1, "id": HEX_A, "name": "kil-v3b1-one"}) + "\n",
+            canonical_json({"id": HEX_A, "name": "-kil-v3b1-one"}) + "\n",
+            canonical_json({"id": HEX_A, "name": "k" * 129}) + "\n",
         ):
             with self.subTest(rejected=rejected):
                 with self.assertRaises(ContractError):
                     parse_inventory_rows(rejected, "container")
+        with self.assertRaises(ContractError):
+            parse_inventory_rows("", [])
 
     def test_fixture_loader_rejects_duplicate_fields_and_noncanonical_json(self):
         with tempfile.TemporaryDirectory() as directory:

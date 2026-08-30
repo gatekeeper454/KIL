@@ -98,6 +98,24 @@ def _require_sha256(value: object) -> str:
     return value
 
 
+def _validate_byte_observation(
+    byte_count: object,
+    digest: object,
+    label: str,
+) -> bool:
+    present = byte_count is not None or digest is not None
+    if not present:
+        return False
+    if (
+        type(byte_count) is not int
+        or byte_count < 0
+        or byte_count > _MAX_SOURCE_BYTES
+    ):
+        raise ContractError(f"{label} byte count is invalid")
+    _require_sha256(digest)
+    return True
+
+
 def _closed_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, value in pairs:
@@ -175,9 +193,12 @@ class RequestFailureProvenance:
     retry_performed: bool
 
     def __post_init__(self) -> None:
-        if self.stage not in _FAILURE_STAGES:
+        if type(self.stage) is not str or self.stage not in _FAILURE_STAGES:
             raise ContractError("request failure stage is invalid")
-        if self.exception_class not in _EXCEPTION_CLASSES:
+        if (
+            type(self.exception_class) is not str
+            or self.exception_class not in _EXCEPTION_CLASSES
+        ):
             raise ContractError("request failure exception class is not allowlisted")
         if (self.errno is None) != (self.errno_name is None):
             raise ContractError("request failure errno fields are inconsistent")
@@ -250,41 +271,69 @@ class SourceCollectionStatus:
     status: str
     container_id: str
     container_name: str
-    byte_count: int | None
-    sha256: str | None
+    source_byte_count: int | None
+    source_sha256: str | None
+    copied_byte_count: int | None
+    copied_sha256: str | None
     error_class: str | None
 
     def __post_init__(self) -> None:
-        if self.track not in _TRACKS or self.source not in _SOURCES:
+        if (
+            type(self.track) is not str
+            or self.track not in _TRACKS
+            or type(self.source) is not str
+            or self.source not in _SOURCES
+        ):
             raise ContractError("source track or source kind is invalid")
-        if self.status not in _STATUSES:
+        if type(self.status) is not str or self.status not in _STATUSES:
             raise ContractError("source collection status is invalid")
         _require_object_id(self.container_id)
         _require_name(self.container_name, "source container name")
-        has_bytes = self.byte_count is not None or self.sha256 is not None
-        if has_bytes:
-            if (
-                type(self.byte_count) is not int
-                or self.byte_count < 0
-                or self.byte_count > _MAX_SOURCE_BYTES
-            ):
-                raise ContractError("source byte count is invalid")
-            _require_sha256(self.sha256)
+        source_present = _validate_byte_observation(
+            self.source_byte_count,
+            self.source_sha256,
+            "source",
+        )
+        copied_present = _validate_byte_observation(
+            self.copied_byte_count,
+            self.copied_sha256,
+            "copied source",
+        )
+        observations_match = (
+            source_present
+            and copied_present
+            and self.source_byte_count == self.copied_byte_count
+            and self.source_sha256 == self.copied_sha256
+        )
         if self.status == "copied":
-            if not has_bytes or self.error_class is not None:
+            if not observations_match or self.error_class is not None:
                 raise ContractError("copied source status fields are inconsistent")
         elif self.status == "missing":
-            if has_bytes or self.error_class != "source_missing":
+            if source_present or copied_present or self.error_class != "source_missing":
                 raise ContractError("missing source status fields are inconsistent")
         elif self.status == "copy_error":
-            if self.error_class not in {
+            if type(self.error_class) is not str or self.error_class not in {
                 "command_failed",
                 "digest_mismatch",
                 "size_mismatch",
             }:
                 raise ContractError("copy-error source class is invalid")
+            if self.error_class == "command_failed":
+                if copied_present:
+                    raise ContractError("command failure cannot attest a host copy")
+            elif not source_present or not copied_present:
+                raise ContractError("copy mismatch requires both byte observations")
+            elif self.error_class == "digest_mismatch":
+                if (
+                    self.source_byte_count != self.copied_byte_count
+                    or self.source_sha256 == self.copied_sha256
+                ):
+                    raise ContractError("digest-mismatch evidence is inconsistent")
+            elif self.source_byte_count == self.copied_byte_count:
+                raise ContractError("size-mismatch evidence is inconsistent")
         elif (
-            not has_bytes
+            not observations_match
+            or type(self.error_class) is not str
             or self.error_class not in {"invalid_json", "invalid_cardinality"}
         ):
             raise ContractError("malformed source status fields are inconsistent")
@@ -292,12 +341,14 @@ class SourceCollectionStatus:
     @classmethod
     def from_mapping(cls, value: object) -> SourceCollectionStatus:
         fields = {
-            "byte_count",
             "container_id",
             "container_name",
+            "copied_byte_count",
+            "copied_sha256",
             "error_class",
-            "sha256",
             "source",
+            "source_byte_count",
+            "source_sha256",
             "status",
             "track",
         }
@@ -307,12 +358,14 @@ class SourceCollectionStatus:
 
     def to_mapping(self) -> dict[str, object]:
         return {
-            "byte_count": self.byte_count,
             "container_id": self.container_id,
             "container_name": self.container_name,
+            "copied_byte_count": self.copied_byte_count,
+            "copied_sha256": self.copied_sha256,
             "error_class": self.error_class,
-            "sha256": self.sha256,
             "source": self.source,
+            "source_byte_count": self.source_byte_count,
+            "source_sha256": self.source_sha256,
             "status": self.status,
             "track": self.track,
         }
@@ -325,7 +378,7 @@ class DockerInventoryEntry:
     name: str
 
     def __post_init__(self) -> None:
-        if self.kind not in {"container", "network"}:
+        if type(self.kind) is not str or self.kind not in {"container", "network"}:
             raise ContractError("Docker inventory kind is invalid")
         _require_object_id(self.object_id)
         _require_name(self.name)
@@ -350,7 +403,7 @@ class DockerInventory:
     entries: tuple[DockerInventoryEntry, ...]
 
     def __post_init__(self) -> None:
-        if self.kind not in {"container", "network"}:
+        if type(self.kind) is not str or self.kind not in {"container", "network"}:
             raise ContractError("Docker inventory kind is invalid")
         if type(self.entries) is not tuple or any(
             not isinstance(item, DockerInventoryEntry) or item.kind != self.kind
@@ -366,7 +419,7 @@ class DockerInventory:
 
 
 def parse_inventory_rows(payload: str | bytes, kind: str) -> DockerInventory:
-    if kind not in {"container", "network"}:
+    if type(kind) is not str or kind not in {"container", "network"}:
         raise ContractError("Docker inventory kind is invalid")
     if type(payload) is bytes:
         try:
@@ -403,10 +456,15 @@ class TranscriptCase:
     record: RequestFailureProvenance | SourceCollectionStatus | DockerInventory
 
     def __post_init__(self) -> None:
-        if _CASE_NAME.fullmatch(self.name) is None:
+        if type(self.name) is not str or _CASE_NAME.fullmatch(self.name) is None:
             raise ContractError("transcript case name is invalid")
-        if self.provenance not in {"observed", "reconstructed"}:
+        if (
+            type(self.provenance) is not str
+            or self.provenance not in {"observed", "reconstructed"}
+        ):
             raise ContractError("transcript provenance must be observed or reconstructed")
+        if type(self.record_type) is not str:
+            raise ContractError("transcript record type is invalid")
         expected_type = {
             "request_failure": RequestFailureProvenance,
             "source_collection": SourceCollectionStatus,
