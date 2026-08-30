@@ -3432,3 +3432,99 @@ claim if evidence joins, checksums, exact teardown, profile absence, and global
 Docker-context invariants all pass.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-069 — 2026-08-30 — V3B-1 inherited-image-label review found validator recovery gap
+
+**Input:** Independently review the live-discovered Envoy inherited-label fix,
+including Docker image/runtime label merging, KIL-label ownership projection,
+stopped-container recovery, pinned Envoy label fixtures, focused tests, and
+Python compilation, without live operations.
+
+**Interpretation:** Trace every inspection path for a container created from
+the pinned Envoy image, not only the nine persistent runtime containers, and
+reproduce Docker's `Config.Labels` result as the exact immutable image labels
+merged with the controller's four managed labels.
+
+**Decision status:** Review remains unapproved on one recovery blocker. The
+persistent-container inspector correctly compares the complete container label
+map to the exact immutable-image/runtime merge, rejects conflicting values and
+unexpected runtime extras, returns only the four KIL ownership labels, and uses
+the same rule when `require_running=False`. However, the transient Envoy
+validator inspector still compares `Config.Labels` directly to the four KIL
+labels and does not inspect or account for immutable Envoy labels. Replaying
+the pinned fixture `org.opencontainers.image.version=22.04` plus the four
+validator labels is rejected. Consequently, a validator surviving an
+interrupted synchronous validation cannot be reconstructed by `down` for exact
+owned teardown.
+
+**Rationale:** Docker inherits immutable image labels for every container,
+including `docker run --rm` validators. Recovery must apply the same
+image/runtime merge validation before persisting the reduced KIL ownership
+projection. The focused 38-test suite and `py_compile` pass, showing that this
+specific transient recovery path is not covered. No Docker, Colima, image,
+container, network, socket, or external network operation was performed.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py` (reviewed only; no changes)
+- `tests/test_v3b1_local_envoy.py` (reviewed only; no changes)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` (this append-only entry)
+
+**Unresolved questions:** Apply `_validate_container_labels` to transient
+validator inspection using the pinned immutable image's labels, retain only
+the four KIL labels in recovered state, and add an interrupted-validator
+recovery regression. Clarify and enforce whether the entire `kil.v3b1.` image
+label namespace is reserved; the current helper rejects differing collisions
+but permits same-valued or additional inherited KIL-namespace labels.
+
+**Next gate:** Correct and test transient-validator inherited-label recovery,
+resolve the KIL-namespace collision policy, rerun focused tests and compilation,
+and obtain independent static approval before resuming live mutation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-070 — 2026-08-30 — V3B-1 inherited-image-label remediation independently passes
+
+**Input:** Re-review the latest worktree after the T-069 transient-validator
+finding while another specialist's remediation became visible, reproducing the
+pinned Envoy image-label fixture and rerunning focused tests and compilation
+without live operations.
+
+**Interpretation:** Apply Docker's container-label contract uniformly: the
+complete container `Config.Labels` map must equal immutable image labels merged
+with exactly four controller-managed labels; the image may own no label in the
+reserved `kil.v3b1.` namespace; persisted ownership remains only those four
+managed labels; stopped persistent and transient containers use the same rule.
+
+**Decision status:** Confirmed PASS for implementation readiness, superseding
+the T-069 blocker against the newer worktree state. Both persistent-container
+and transient-validator inspectors now read immutable image labels and invoke
+the shared exact-merge validator. The validator rejects all immutable
+`kil.v3b1.` labels and every missing, changed, or extra container label, while
+both inspectors return only the four KIL ownership labels. The persistent path
+applies the rule with `require_running=False`; the transient recovery path has
+no running-state prerequisite and now accepts the pinned stopped-validator
+fixture.
+
+**Rationale:** The pinned fixture uses immutable
+`org.opencontainers.image.version=22.04` merged with the exact validator KIL
+labels and persists only the KIL projection. The focused 39-test suite and
+`py_compile` pass, and diff whitespace validation passes. No Docker, Colima,
+image, container, network, socket, or external network operation was
+performed.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py` (reviewed only; no changes by this specialist)
+- `tests/test_v3b1_local_envoy.py` (reviewed only; no changes by this specialist)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` (this append-only entry)
+
+**Unresolved questions:** Only the separately authorized live runtime gate can
+confirm the pinned Envoy image's observed labels and installed Docker execution
+behavior; no static label-contract blocker remains.
+
+**Next gate:** Proceed through the approved clean preflight and live lifecycle
+only when the foreign-profile ownership prerequisite is satisfied, retaining
+the fail-closed readbacks and exact teardown/evidence gates.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

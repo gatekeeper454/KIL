@@ -1871,6 +1871,258 @@ class RuntimeAttestationTest(unittest.TestCase):
             with self.assertRaisesRegex(ControllerError, message):
                 validate_container_attestation(broken, expected)
 
+    def test_stopped_envoy_accepts_only_exact_image_and_runtime_label_merge(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            profile_path = root / "deploy/kind/v3b-profile.json"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_bytes(
+                (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+            )
+            controller = LocalEnvoyController(
+                root,
+                FakeRunner(),
+                home=Path(directory) / "home",
+                port_probe=lambda port: False,
+                tool_verifier=lambda: TOOL_IDENTITIES,
+            )
+            controller._prepare_private_roots()
+            value = manifest()
+            track = LiveTrack.CREDENTIAL_POLICY_BASELINE
+            track_value = next(
+                item for item in value["tracks"] if item["track"] == track.value
+            )
+            config_path = controller._config_path(value, "envoy", track.value)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text("{}\n")
+            config_path.chmod(0o444)
+            runtime_labels = {
+                "kil.v3b1.managed": "true",
+                "kil.v3b1.run-id": value["run_id"],
+                "kil.v3b1.role": "envoy",
+                "kil.v3b1.track": track.value,
+            }
+            immutable_labels = {"org.opencontainers.image.version": "22.04"}
+
+            def inspections(
+                *,
+                image_labels=immutable_labels,
+                container_labels=None,
+            ):
+                merged = {**image_labels, **runtime_labels}
+                if container_labels is not None:
+                    merged = container_labels
+                container = {
+                    "Id": "9" * 64,
+                    "Name": f"/{track_value['envoy_container']}",
+                    "Image": value["envoy_image_id"],
+                    "Config": {
+                        "Image": value["envoy_image_digest"],
+                        "Labels": merged,
+                        "User": "65532:65532",
+                        "StopTimeout": 10,
+                        "Entrypoint": ["/usr/local/bin/envoy"],
+                        "Cmd": [
+                            "--config-path",
+                            "/etc/envoy/envoy.json",
+                            "--disable-hot-restart",
+                            "--concurrency",
+                            "1",
+                        ],
+                        "Env": ["PATH=/usr/local/bin"],
+                    },
+                    "HostConfig": {
+                        "ReadonlyRootfs": True,
+                        "CapDrop": ["ALL"],
+                        "SecurityOpt": ["no-new-privileges"],
+                        "NanoCpus": 500_000_000,
+                        "Memory": 268_435_456,
+                        "MemorySwap": 268_435_456,
+                        "PidsLimit": 128,
+                        "RestartPolicy": {"Name": "no"},
+                        "LogConfig": {
+                            "Type": "json-file",
+                            "Config": {"max-file": "1", "max-size": "1m"},
+                        },
+                        "Tmpfs": {
+                            "/tmp": "rw,noexec,nosuid,nodev,size=16777216,uid=65532,gid=65532,mode=448"
+                        },
+                        "PortBindings": {
+                            "8080/tcp": [
+                                {
+                                    "HostIp": "127.0.0.1",
+                                    "HostPort": str(track_value["gateway_port"]),
+                                }
+                            ]
+                        },
+                    },
+                    "State": {"Running": False},
+                    "NetworkSettings": {
+                        "Networks": {track_value["network"]: {}}
+                    },
+                    "Mounts": [
+                        {
+                            "Source": str(config_path),
+                            "Destination": "/etc/envoy/envoy.json",
+                            "RW": False,
+                        }
+                    ],
+                }
+                image = {
+                    "Os": "linux",
+                    "Architecture": "arm64",
+                    "Config": {
+                        "Env": ["PATH=/usr/local/bin"],
+                        "Labels": image_labels,
+                    },
+                }
+                return [
+                    CommandResult(0, canonical_json(container) + "\n", ""),
+                    CommandResult(0, canonical_json(image) + "\n", ""),
+                ]
+
+            controller.runner = FakeRunner(inspections())
+            inspected = controller._inspect_container(
+                "9" * 64,
+                value,
+                "envoy",
+                track.value,
+                require_running=False,
+            )
+            self.assertEqual(inspected["labels"], runtime_labels)
+
+            conflict_labels = {
+                **immutable_labels,
+                "kil.v3b1.role": "image-owned-conflict",
+            }
+            controller.runner = FakeRunner(inspections(image_labels=conflict_labels))
+            with self.assertRaisesRegex(ControllerError, "label.*conflict"):
+                controller._inspect_container(
+                    "9" * 64,
+                    value,
+                    "envoy",
+                    track.value,
+                    require_running=False,
+                )
+
+            for reserved_labels in (
+                {
+                    **immutable_labels,
+                    "kil.v3b1.role": "envoy",
+                },
+                {
+                    **immutable_labels,
+                    "kil.v3b1.future-reserved": "image-owned",
+                },
+            ):
+                with self.subTest(reserved_labels=reserved_labels):
+                    controller.runner = FakeRunner(
+                        inspections(image_labels=reserved_labels)
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError, "reserved.*label|label.*namespace"
+                    ):
+                        controller._inspect_container(
+                            "9" * 64,
+                            value,
+                            "envoy",
+                            track.value,
+                            require_running=False,
+                        )
+
+            controller.runner = FakeRunner(
+                inspections(
+                    container_labels={
+                        **immutable_labels,
+                        **runtime_labels,
+                        "unexpected.runtime.label": "forbidden",
+                    }
+                )
+            )
+            with self.assertRaisesRegex(ControllerError, "labels.*exact|label.*extra"):
+                controller._inspect_container(
+                    "9" * 64,
+                    value,
+                    "envoy",
+                    track.value,
+                    require_running=False,
+                )
+
+    def test_stopped_transient_validator_uses_exact_immutable_label_merge(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            profile_path = root / "deploy/kind/v3b-profile.json"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_bytes(
+                (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+            )
+            value = manifest()
+            track = LiveTrack.SIGNED_STATE_ONLY
+            runtime_labels = {
+                "kil.v3b1.managed": "true",
+                "kil.v3b1.run-id": value["run_id"],
+                "kil.v3b1.role": "validator",
+                "kil.v3b1.track": track.value,
+            }
+            immutable_labels = {"org.opencontainers.image.version": "22.04"}
+            name = (
+                f"kil-v3b1-validate-{track.value.replace('_', '-')}-"
+                f"{str(value['content_identity_sha256'])[:12]}"
+            )
+            raw = {
+                "Id": "8" * 64,
+                "Name": f"/{name}",
+                "Image": value["envoy_image_id"],
+                "Config": {
+                    "Image": value["envoy_image_digest"],
+                    "Labels": {**immutable_labels, **runtime_labels},
+                    "User": "65532:65532",
+                    "Entrypoint": ["/usr/local/bin/envoy"],
+                    "Cmd": [
+                        "--mode",
+                        "validate",
+                        "--config-path",
+                        "/etc/envoy/envoy.json",
+                        "--disable-hot-restart",
+                        "--concurrency",
+                        "1",
+                    ],
+                },
+                "HostConfig": {
+                    "ReadonlyRootfs": True,
+                    "CapDrop": ["ALL"],
+                    "SecurityOpt": ["no-new-privileges"],
+                    "NetworkMode": "none",
+                    "PortBindings": {},
+                },
+                "State": {"Running": False},
+            }
+            image = {
+                "Os": "linux",
+                "Architecture": "arm64",
+                "Config": {"Labels": immutable_labels},
+            }
+            controller = LocalEnvoyController(
+                root,
+                FakeRunner(
+                    [
+                        CommandResult(0, canonical_json(raw) + "\n", ""),
+                        CommandResult(0, canonical_json(image) + "\n", ""),
+                    ]
+                ),
+                home=Path(directory) / "home",
+                port_probe=lambda port: False,
+                tool_verifier=lambda: TOOL_IDENTITIES,
+            )
+            controller._prepare_private_roots()
+
+            inspected = controller._inspect_validation_container(
+                "8" * 64, value, track
+            )
+
+            self.assertEqual(inspected["labels"], runtime_labels)
+            self.assertFalse(raw["State"]["Running"])
+
     def test_image_architecture_is_exact_linux_arm64(self):
         validate_image_architecture({"Os": "linux", "Architecture": "arm64"})
         with self.assertRaisesRegex(ControllerError, "architecture"):

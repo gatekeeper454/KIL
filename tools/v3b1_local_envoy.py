@@ -696,6 +696,39 @@ def validate_image_architecture(value: Mapping[str, object]) -> None:
         raise ControllerError("image architecture is not exact linux/arm64")
 
 
+def _validate_container_labels(
+    actual: object,
+    immutable: object,
+    managed: Mapping[str, str],
+) -> None:
+    image_labels = {} if immutable is None else immutable
+    if (
+        type(actual) is not dict
+        or type(image_labels) is not dict
+        or type(managed) is not dict
+        or any(
+            type(key) is not str or type(value) is not str
+            for labels in (actual, image_labels, managed)
+            for key, value in labels.items()
+        )
+    ):
+        raise ControllerError("container labels are not closed string maps")
+    if any(key.startswith("kil.v3b1.") for key in image_labels):
+        raise ControllerError(
+            "immutable image label conflict with reserved kil.v3b1. namespace"
+        )
+    conflicts = {
+        key
+        for key, value in managed.items()
+        if key in image_labels and image_labels[key] != value
+    }
+    if conflicts:
+        raise ControllerError("immutable image label conflicts with managed label")
+    expected = {**image_labels, **managed}
+    if actual != expected:
+        raise ControllerError("container labels are not the exact image/runtime merge")
+
+
 def validate_container_attestation(
     actual: Mapping[str, object], expected: Mapping[str, object]
 ) -> dict[str, object]:
@@ -3854,7 +3887,6 @@ class LocalEnvoyController:
             type(object_id) is not str
             or _HEX.fullmatch(object_id) is None
             or name != f"/{expected_name}"
-            or labels != expected_labels
             or (require_running and state_value.get("Running") is not True)
             or (require_running and role != "envoy" and health != "healthy")
             or (require_running and role == "envoy" and health not in {"healthy", "none"})
@@ -3890,6 +3922,9 @@ class LocalEnvoyController:
                 raise ControllerError("container environment diverges from immutable image")
         except (json.JSONDecodeError, ControllerError, AttributeError) as error:
             raise ControllerError("container image architecture attestation failed") from error
+        _validate_container_labels(
+            labels, image_config.get("Labels"), expected_labels
+        )
         config = self._config_path(manifest, role, track)
         if (
             config.is_symlink()
@@ -3957,7 +3992,7 @@ class LocalEnvoyController:
             "id": object_id,
             "role": role,
             "track": track,
-            "labels": labels,
+            "labels": expected_labels,
             "image_id": image_id,
             "image_reference": image_reference,
             "config_path": str(config),
@@ -4050,7 +4085,6 @@ class LocalEnvoyController:
             or raw.get("Name") != f"/{name}"
             or raw.get("Image") != manifest["envoy_image_id"]
             or config.get("Image") != manifest["envoy_image_digest"]
-            or config.get("Labels") != labels
             or config.get("User") != "65532:65532"
             or config.get("Entrypoint") != ["/usr/local/bin/envoy"]
             or config.get("Cmd") != [
@@ -4064,6 +4098,36 @@ class LocalEnvoyController:
             or (host.get("PortBindings") or {}) != {}
         ):
             raise ControllerError("Envoy validator immutable/sandbox attestation failed")
+        image_inspection = self._execute(
+            self.docker_command(
+                "image", "inspect", "--format", "{{json .}}",
+                str(manifest["envoy_image_id"]),
+            ),
+            timeout_s=60,
+            docker=True,
+        ).stdout
+        try:
+            image_value = json.loads(
+                image_inspection, object_pairs_hook=_closed_object
+            )
+            if type(image_value) is not dict:
+                raise ControllerError("Envoy validator image inspection is invalid")
+            validate_image_architecture(
+                {
+                    "Os": image_value.get("Os"),
+                    "Architecture": image_value.get("Architecture"),
+                }
+            )
+            image_config = image_value.get("Config")
+            if type(image_config) is not dict:
+                raise ControllerError("Envoy validator image config is invalid")
+        except (json.JSONDecodeError, ControllerError) as error:
+            raise ControllerError(
+                "Envoy validator immutable image attestation failed"
+            ) from error
+        _validate_container_labels(
+            config.get("Labels"), image_config.get("Labels"), labels
+        )
         return {
             "id": raw["Id"],
             "name": name,
