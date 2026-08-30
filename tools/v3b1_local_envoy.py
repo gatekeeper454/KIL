@@ -5411,41 +5411,66 @@ class LocalEnvoyController:
     def _attest_frozen_status_bytes(
         self, status: SourceCollectionStatus, path: Path
     ) -> bytes | None:
-        if status.status not in {"copied", "malformed"}:
-            if status.copied_byte_count is None and (
-                path.is_symlink() or path.exists()
-            ):
+        if status.copied_byte_count is None:
+            if path.is_symlink() or path.exists():
                 raise ControllerError("uncopied source has unexpected frozen bytes")
             return None
-        return self._read_attested_frozen_bytes(
+        payload = self._read_attested_frozen_bytes(
             path,
             byte_count=status.copied_byte_count,
             sha256_digest=status.copied_sha256,
         )
+        return payload if status.status in {"copied", "malformed"} else None
 
     def _reattest_frozen_status(
         self, status: SourceCollectionStatus, path: Path
     ) -> None:
         self._attest_frozen_status_bytes(status, path)
 
-    @staticmethod
-    def _quarantine_unattested_frozen_path(path: Path) -> Path | None:
-        if path.is_symlink():
-            return None
-        if not path.exists():
-            return None
-        if not path.is_file():
-            return None
-        quarantine = path.with_name(f".{path.name}.unattested")
-        if quarantine.is_symlink() or quarantine.exists():
-            return None
-        os.rename(path, quarantine)
-        directory_fd = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-        return quarantine
+    def _quarantine_unattested_frozen_path(self, path: Path) -> Path:
+        _require_contained(
+            path.parent,
+            self._private_source_freeze_root(),
+            "unattested frozen source parent",
+        )
+        if not path.is_symlink() and not path.exists():
+            raise ControllerError("unattested frozen source path is absent")
+        name_digest = _digest_bytes(path.name.encode("utf-8"))
+        for counter in range(1_000_000):
+            quarantine = path.with_name(
+                f".{path.name}.unattested.{name_digest}.{counter:06d}"
+            )
+            try:
+                reservation = os.open(
+                    quarantine,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                    0o400,
+                )
+            except FileExistsError:
+                continue
+            except OSError as error:
+                raise ControllerError(
+                    "unattested frozen source quarantine reservation failed"
+                ) from error
+            else:
+                os.close(reservation)
+            try:
+                os.replace(path, quarantine)
+            except OSError as error:
+                raise ControllerError(
+                    "unattested frozen source quarantine move failed"
+                ) from error
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+            if path.is_symlink() or path.exists():
+                raise ControllerError(
+                    "unattested frozen source remained active after quarantine"
+                )
+            return quarantine
+        raise ControllerError("unattested frozen source quarantine namespace exhausted")
 
     def _collect_freeze_leg(
         self,
@@ -5560,7 +5585,8 @@ class LocalEnvoyController:
                 _write_file(path, copied_bytes, 0o400)
                 copied_bytes = path.read_bytes()
             except (ControllerError, OSError, UnicodeError):
-                self._quarantine_unattested_frozen_path(path)
+                if path.is_symlink() or path.exists():
+                    self._quarantine_unattested_frozen_path(path)
                 return SourceCollectionStatus(
                     **identity,
                     status="copy_error",
@@ -5792,30 +5818,7 @@ class LocalEnvoyController:
                 terminals[key] = status
                 continue
             if paths[key].is_symlink() or paths[key].exists():
-                quarantined = self._quarantine_unattested_frozen_path(paths[key])
-                if quarantined is None:
-                    status = SourceCollectionStatus(
-                        track=track.value,
-                        source=source,
-                        container_id=str(item["id"]),
-                        container_name=str(item["name"]),
-                        status="copy_error",
-                        source_byte_count=None,
-                        source_sha256=None,
-                        copied_byte_count=None,
-                        copied_sha256=None,
-                        error_class="command_failed",
-                    )
-                    journal_event(
-                        self.journal_path,
-                        "source_collection_terminal",
-                        {
-                            "collection_epoch": collection_epoch,
-                            "record": status.to_mapping(),
-                        },
-                    )
-                    terminals[key] = status
-                    continue
+                self._quarantine_unattested_frozen_path(paths[key])
             status = self._collect_freeze_leg(
                 manifest=manifest,
                 item=item,

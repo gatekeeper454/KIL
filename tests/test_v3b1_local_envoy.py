@@ -4466,6 +4466,144 @@ class TeardownContinuationTest(unittest.TestCase):
                 )
             )
 
+    def test_completed_mismatch_sources_are_rehash_attested_on_recovery(self):
+        cases = (
+            (
+                ("credential_policy_baseline", "authz_decisions"),
+                "digest_mismatch",
+            ),
+            (("signed_state_only", "target_markers"), "size_mismatch"),
+        )
+        for key, injection in cases:
+            with (
+                self.subTest(injection=injection),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                controller, state, value = self.make_freeze_controller(
+                    directory, injections={key: injection}
+                )
+                freeze = controller._freeze_sources(
+                    state, value, attempted_complete=True
+                )
+                status = next(
+                    item
+                    for item in freeze.statuses
+                    if (item.track, item.source) == key
+                )
+                self.assertEqual(status.status, "copy_error")
+                self.assertEqual(status.error_class, injection)
+                self.assertIsNotNone(status.copied_byte_count)
+                frozen_path = freeze.raw_paths[key]
+                frozen_path.chmod(0o600)
+                frozen_path.write_bytes(b"mutated mismatch bytes\n")
+
+                with self.assertRaisesRegex(ControllerError, "changed"):
+                    controller._freeze_sources(
+                        state, value, attempted_complete=True
+                    )
+
+    def test_repeated_unbound_copies_use_collision_safe_quarantines(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(directory)
+            original_event = journal_event
+
+            def fail_first_byte_binding(path, event, details):
+                if event == "evidence_freeze_leg_bytes_persisted":
+                    raise RuntimeError("injected repeated byte binding failure")
+                return original_event(path, event, details)
+
+            for _ in range(3):
+                with mock.patch(
+                    "tools.v3b1_local_envoy.journal_event",
+                    side_effect=fail_first_byte_binding,
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeError, "repeated byte binding failure"
+                    ):
+                        controller._freeze_sources(
+                            state, value, attempted_complete=True
+                        )
+
+            recovered = controller._freeze_sources(
+                state, value, attempted_complete=True
+            )
+
+            key = ("credential_policy_baseline", "envoy_access")
+            active = recovered.raw_paths[key]
+            quarantines = sorted(
+                active.parent.glob(f".{active.name}.unattested.*")
+            )
+            self.assertTrue(recovered.complete)
+            self.assertEqual(len(quarantines), 3)
+            self.assertTrue(all(path.is_file() for path in quarantines))
+            self.assertTrue(active.is_file())
+            self.assertFalse(active.is_symlink())
+
+    def test_unbound_symlink_is_moved_without_following_before_terminal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(directory)
+            original_event = journal_event
+
+            def fail_first_byte_binding(path, event, details):
+                if event == "evidence_freeze_leg_bytes_persisted":
+                    raise RuntimeError("injected symlink byte binding failure")
+                return original_event(path, event, details)
+
+            with mock.patch(
+                "tools.v3b1_local_envoy.journal_event",
+                side_effect=fail_first_byte_binding,
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError, "symlink byte binding failure"
+                ):
+                    controller._freeze_sources(
+                        state, value, attempted_complete=True
+                    )
+
+            _, epoch = controller._freeze_epoch(value)
+            key = ("credential_policy_baseline", "envoy_access")
+            active = controller._freeze_raw_paths(value, epoch)[key]
+            outside = Path(directory) / "outside-source"
+            outside.write_bytes(b"must not be followed or changed\n")
+            active.unlink()
+            active.symlink_to(outside)
+            terminal_saw_unsafe_active = []
+
+            def observe_terminal(path, event, details):
+                if (
+                    event == "source_collection_terminal"
+                    and details["record"]["track"] == key[0]
+                    and details["record"]["source"] == key[1]
+                ):
+                    terminal_saw_unsafe_active.append(active.is_symlink())
+                return original_event(path, event, details)
+
+            with mock.patch(
+                "tools.v3b1_local_envoy.journal_event",
+                side_effect=observe_terminal,
+            ):
+                recovered = controller._freeze_before_service_teardown(
+                    state,
+                    value,
+                    attempted_complete=True,
+                    transient_objects=[],
+                )
+
+            quarantines = sorted(
+                active.parent.glob(f".{active.name}.unattested.*")
+            )
+            self.assertTrue(recovered.complete)
+            self.assertEqual(terminal_saw_unsafe_active, [False])
+            self.assertTrue(active.is_file())
+            self.assertFalse(active.is_symlink())
+            self.assertEqual(len(quarantines), 1)
+            self.assertTrue(quarantines[0].is_symlink())
+            self.assertEqual(os.readlink(quarantines[0]), str(outside))
+            self.assertEqual(
+                outside.read_bytes(), b"must not be followed or changed\n"
+            )
+            self.assertEqual(controller.running, set())
+
     def test_unbound_preterminal_bytes_are_quarantined_not_deleted_or_claimed(self):
         with tempfile.TemporaryDirectory() as directory:
             controller, state, value = self.make_freeze_controller(directory)
@@ -4489,7 +4627,6 @@ class TeardownContinuationTest(unittest.TestCase):
             key = ("credential_policy_baseline", "envoy_access")
             frozen_path = controller._freeze_raw_paths(value, epoch)[key]
             original_bytes = frozen_path.read_bytes()
-            quarantine = frozen_path.with_name(f".{frozen_path.name}.unattested")
             source = next(
                 item
                 for item in state["objects"]
@@ -4510,7 +4647,11 @@ class TeardownContinuationTest(unittest.TestCase):
             self.assertEqual(status.status, "copy_error")
             self.assertEqual(status.error_class, "command_failed")
             self.assertFalse(frozen_path.exists())
-            self.assertEqual(quarantine.read_bytes(), original_bytes)
+            quarantines = list(
+                frozen_path.parent.glob(f".{frozen_path.name}.unattested.*")
+            )
+            self.assertEqual(len(quarantines), 1)
+            self.assertEqual(quarantines[0].read_bytes(), original_bytes)
 
     def test_teardown_evidence_rejects_frozen_source_replacement_and_symlink(self):
         _, _, _, envoy, _ = JoinContractTest().all_records()

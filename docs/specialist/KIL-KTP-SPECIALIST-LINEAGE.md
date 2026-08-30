@@ -3929,3 +3929,47 @@ KIL, authorization, Envoy, and target semantics remain unchanged.
 integration and the committed zero-request live smoke.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-079 — 2026-08-30 — Frozen-source recovery becomes collision-safe and idempotent
+
+**Input:** Close two Task 3 recovery defects: reattest privately retained copy
+mismatches, and make quarantine safe across repeated crashes, destination
+collisions, and unbound symbolic links.
+
+**Interpretation:** Whether bytes may enter a bundle is distinct from whether
+their terminal integrity must be rechecked. Every terminal with a copied byte
+count and digest, including size and digest mismatches, must be rehashed during
+recovery; mismatch bytes remain private. An unattested active path cannot be
+followed, overwritten, deleted, or terminalized in place. It must first move
+atomically into a contained, collision-safe quarantine and the directory entry
+must be fsynced.
+
+**Decision status:** Confirmed harness-only correction complete, pending
+independent re-review. Mismatch files now traverse the same no-follow,
+single-read integrity attestation as copied and malformed sources, while still
+returning no bytes to evidence construction. Quarantine destinations use a
+deterministic full SHA-256 name component plus a reserved monotonic counter, so
+repeated prebinding crashes preserve every generation without clobbering prior
+files or symlinks. Unbound symlinks are renamed as links without following
+their targets before any terminal is recorded.
+
+**Rationale:** The earlier returnability check skipped integrity verification
+for mismatch statuses. The initial single fixed quarantine name also made the
+second crash cycle persist a terminal while the active unattested path still
+existed. Separating attestation from bundle eligibility and reserving unique
+destinations makes recovery repeatable and fail closed.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker or Colima operation was performed.
+Installed-runtime behavior remains gated on the reviewed zero-request smoke;
+KIL, authorization, Envoy, and target semantics remain unchanged.
+
+**Next gate:** Independent Task 3 recovery re-review, then complete harness
+integration and the committed zero-request live smoke.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
