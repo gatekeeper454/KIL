@@ -1,0 +1,491 @@
+"""Pure closed contracts for sanitized V3B-1 integration transcripts."""
+
+from __future__ import annotations
+
+from base64 import urlsafe_b64decode
+from dataclasses import dataclass
+import errno as errno_module
+import json
+from pathlib import Path
+import re
+from typing import Mapping
+
+
+SCHEMA_VERSION = "kil.v3b1-integration-contract.v1"
+_HEX = re.compile(r"^[a-f0-9]{64}$")
+_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+_CASE_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,95}$")
+_ENVIRONMENT_VALUE = re.compile(r"^[A-Z_][A-Z0-9_]*=.*$")
+_WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/]")
+_PRIVATE_KEY_BLOCK = re.compile(
+    r"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----"
+)
+_MAX_FIXTURE_BYTES = 1_000_000
+_MAX_SOURCE_BYTES = 64 * 1024 * 1024
+_TRACKS = {
+    "credential_policy_baseline",
+    "signed_state_only",
+    "signed_plus_local_reduce",
+}
+_SOURCES = {"authz_decisions", "target_markers", "envoy_access"}
+_STATUSES = {"copied", "missing", "copy_error", "malformed"}
+_EXCEPTION_CLASSES = {
+    "OSError",
+    "TimeoutError",
+    "ConnectionError",
+    "BrokenPipeError",
+    "ConnectionAbortedError",
+    "ConnectionRefusedError",
+    "ConnectionResetError",
+}
+_FAILURE_STAGES = {"request_send", "response_headers", "response_body"}
+_FORBIDDEN_KEYS = {
+    "authorization",
+    "credential",
+    "credentials",
+    "docker_host",
+    "env",
+    "environ",
+    "environment",
+    "exception_message",
+    "jws",
+    "message",
+    "password",
+    "private_key",
+    "private_path",
+    "q_state",
+    "raw_exception_message",
+    "raw_message",
+    "refresh_token",
+    "secret",
+    "signed_state",
+    "socket_path",
+    "stderr",
+    "stdout",
+    "token",
+}
+
+
+class ContractError(ValueError):
+    """Raised when a harness transcript is not closed and public-safe."""
+
+
+def _require_fields(value: object, expected: set[str], label: str) -> dict[str, object]:
+    if type(value) is not dict or set(value) != expected:
+        raise ContractError(f"{label} fields are not closed")
+    return value
+
+
+def _require_object_id(value: object) -> str:
+    if type(value) is not str or _HEX.fullmatch(value) is None:
+        raise ContractError("Docker object ID must be exactly 64 lowercase hex characters")
+    return value
+
+
+def _require_name(value: object, label: str = "Docker object name") -> str:
+    if (
+        type(value) is not str
+        or len(value.encode("utf-8")) > 128
+        or _NAME.fullmatch(value) is None
+    ):
+        raise ContractError(f"{label} is invalid or exceeds its bound")
+    return value
+
+
+def _require_sha256(value: object) -> str:
+    if type(value) is not str or _HEX.fullmatch(value) is None:
+        raise ContractError("source SHA-256 is invalid")
+    return value
+
+
+def _closed_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ContractError(f"duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def _canonical_json(value: object) -> str:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
+def _looks_like_compact_jws(value: str) -> bool:
+    parts = value.split(".")
+    if len(parts) != 3 or any(
+        not part or re.fullmatch(r"[A-Za-z0-9_-]+", part) is None
+        for part in parts
+    ):
+        return False
+    try:
+        header = urlsafe_b64decode(parts[0] + "=" * (-len(parts[0]) % 4))
+        decoded = json.loads(header)
+    except (ValueError, UnicodeError, json.JSONDecodeError):
+        return False
+    return isinstance(decoded, dict) and bool({"alg", "typ"}.intersection(decoded))
+
+
+def _reject_sensitive_material(value: object) -> None:
+    if type(value) is dict:
+        for key, item in value.items():
+            if type(key) is not str:
+                raise ContractError("transcript keys must be strings")
+            normalized = key.lower().replace("-", "_")
+            if normalized in _FORBIDDEN_KEYS:
+                raise ContractError("transcript contains a forbidden sensitive field")
+            _reject_sensitive_material(item)
+        return
+    if type(value) is list:
+        for item in value:
+            _reject_sensitive_material(item)
+        return
+    if type(value) is not str:
+        return
+    if (
+        value.startswith(("/", "~/", "~\\"))
+        or _WINDOWS_ABSOLUTE.match(value) is not None
+    ):
+        raise ContractError("transcript contains an absolute private path")
+    if (
+        _PRIVATE_KEY_BLOCK.search(value) is not None
+        or re.match(r"(?i)^bearer\s+\S+", value) is not None
+        or _looks_like_compact_jws(value)
+        or _ENVIRONMENT_VALUE.fullmatch(value) is not None
+    ):
+        raise ContractError("transcript contains secret or environment material")
+
+
+@dataclass(frozen=True, slots=True)
+class RequestFailureProvenance:
+    stage: str
+    exception_class: str
+    errno: int | None
+    errno_name: str | None
+    connect_monotonic_ns: int
+    send_monotonic_ns: int
+    failure_monotonic_ns: int
+    request_bytes_may_have_been_sent: bool
+    attempt_count: int
+    retry_performed: bool
+
+    def __post_init__(self) -> None:
+        if self.stage not in _FAILURE_STAGES:
+            raise ContractError("request failure stage is invalid")
+        if self.exception_class not in _EXCEPTION_CLASSES:
+            raise ContractError("request failure exception class is not allowlisted")
+        if (self.errno is None) != (self.errno_name is None):
+            raise ContractError("request failure errno fields are inconsistent")
+        if self.errno is not None:
+            if (
+                type(self.errno) is not int
+                or self.errno < 0
+                or type(self.errno_name) is not str
+                or errno_module.errorcode.get(self.errno) != self.errno_name
+            ):
+                raise ContractError("request failure errno is invalid")
+        times = (
+            self.connect_monotonic_ns,
+            self.send_monotonic_ns,
+            self.failure_monotonic_ns,
+        )
+        if (
+            any(type(item) is not int or item < 0 for item in times)
+            or not times[0] <= times[1] <= times[2]
+        ):
+            raise ContractError("request failure monotonic times are invalid")
+        if type(self.request_bytes_may_have_been_sent) is not bool:
+            raise ContractError("request byte ambiguity flag is invalid")
+        if self.stage != "request_send" and not self.request_bytes_may_have_been_sent:
+            raise ContractError("response-stage failure must acknowledge sent request bytes")
+        if (
+            type(self.attempt_count) is not int
+            or self.attempt_count != 1
+            or self.retry_performed is not False
+        ):
+            raise ContractError("request failure must record one attempt and no retry")
+
+    @classmethod
+    def from_mapping(cls, value: object) -> RequestFailureProvenance:
+        fields = {
+            "attempt_count",
+            "connect_monotonic_ns",
+            "errno",
+            "errno_name",
+            "exception_class",
+            "failure_monotonic_ns",
+            "request_bytes_may_have_been_sent",
+            "retry_performed",
+            "send_monotonic_ns",
+            "stage",
+        }
+        record = _require_fields(value, fields, "request failure provenance")
+        _reject_sensitive_material(record)
+        return cls(**record)  # type: ignore[arg-type]
+
+    def to_mapping(self) -> dict[str, object]:
+        return {
+            "attempt_count": self.attempt_count,
+            "connect_monotonic_ns": self.connect_monotonic_ns,
+            "errno": self.errno,
+            "errno_name": self.errno_name,
+            "exception_class": self.exception_class,
+            "failure_monotonic_ns": self.failure_monotonic_ns,
+            "request_bytes_may_have_been_sent": self.request_bytes_may_have_been_sent,
+            "retry_performed": self.retry_performed,
+            "send_monotonic_ns": self.send_monotonic_ns,
+            "stage": self.stage,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class SourceCollectionStatus:
+    track: str
+    source: str
+    status: str
+    container_id: str
+    container_name: str
+    byte_count: int | None
+    sha256: str | None
+    error_class: str | None
+
+    def __post_init__(self) -> None:
+        if self.track not in _TRACKS or self.source not in _SOURCES:
+            raise ContractError("source track or source kind is invalid")
+        if self.status not in _STATUSES:
+            raise ContractError("source collection status is invalid")
+        _require_object_id(self.container_id)
+        _require_name(self.container_name, "source container name")
+        has_bytes = self.byte_count is not None or self.sha256 is not None
+        if has_bytes:
+            if (
+                type(self.byte_count) is not int
+                or self.byte_count < 0
+                or self.byte_count > _MAX_SOURCE_BYTES
+            ):
+                raise ContractError("source byte count is invalid")
+            _require_sha256(self.sha256)
+        if self.status == "copied":
+            if not has_bytes or self.error_class is not None:
+                raise ContractError("copied source status fields are inconsistent")
+        elif self.status == "missing":
+            if has_bytes or self.error_class != "source_missing":
+                raise ContractError("missing source status fields are inconsistent")
+        elif self.status == "copy_error":
+            if self.error_class not in {
+                "command_failed",
+                "digest_mismatch",
+                "size_mismatch",
+            }:
+                raise ContractError("copy-error source class is invalid")
+        elif (
+            not has_bytes
+            or self.error_class not in {"invalid_json", "invalid_cardinality"}
+        ):
+            raise ContractError("malformed source status fields are inconsistent")
+
+    @classmethod
+    def from_mapping(cls, value: object) -> SourceCollectionStatus:
+        fields = {
+            "byte_count",
+            "container_id",
+            "container_name",
+            "error_class",
+            "sha256",
+            "source",
+            "status",
+            "track",
+        }
+        record = _require_fields(value, fields, "source collection status")
+        _reject_sensitive_material(record)
+        return cls(**record)  # type: ignore[arg-type]
+
+    def to_mapping(self) -> dict[str, object]:
+        return {
+            "byte_count": self.byte_count,
+            "container_id": self.container_id,
+            "container_name": self.container_name,
+            "error_class": self.error_class,
+            "sha256": self.sha256,
+            "source": self.source,
+            "status": self.status,
+            "track": self.track,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class DockerInventoryEntry:
+    kind: str
+    object_id: str
+    name: str
+
+    def __post_init__(self) -> None:
+        if self.kind not in {"container", "network"}:
+            raise ContractError("Docker inventory kind is invalid")
+        _require_object_id(self.object_id)
+        _require_name(self.name)
+
+    @classmethod
+    def from_mapping(cls, value: object, kind: str) -> DockerInventoryEntry:
+        record = _require_fields(value, {"id", "name"}, "Docker inventory entry")
+        _reject_sensitive_material(record)
+        return cls(  # type: ignore[arg-type]
+            kind=kind,
+            object_id=record["id"],
+            name=record["name"],
+        )
+
+    def to_mapping(self) -> dict[str, str]:
+        return {"id": self.object_id, "name": self.name}
+
+
+@dataclass(frozen=True, slots=True)
+class DockerInventory:
+    kind: str
+    entries: tuple[DockerInventoryEntry, ...]
+
+    def __post_init__(self) -> None:
+        if self.kind not in {"container", "network"}:
+            raise ContractError("Docker inventory kind is invalid")
+        if type(self.entries) is not tuple or any(
+            not isinstance(item, DockerInventoryEntry) or item.kind != self.kind
+            for item in self.entries
+        ):
+            raise ContractError("Docker inventory entries are invalid")
+        ids = [item.object_id for item in self.entries]
+        names = [item.name for item in self.entries]
+        if len(ids) != len(set(ids)):
+            raise ContractError("Docker inventory contains a duplicate ID")
+        if len(names) != len(set(names)):
+            raise ContractError("Docker inventory contains a duplicate name")
+
+
+def parse_inventory_rows(payload: str | bytes, kind: str) -> DockerInventory:
+    if kind not in {"container", "network"}:
+        raise ContractError("Docker inventory kind is invalid")
+    if type(payload) is bytes:
+        try:
+            text = payload.decode("utf-8")
+        except UnicodeError as error:
+            raise ContractError("Docker inventory is not UTF-8") from error
+    elif type(payload) is str:
+        text = payload
+    else:
+        raise ContractError("Docker inventory payload must be text or bytes")
+    if not text:
+        return DockerInventory(kind, ())
+    if len(text.encode("utf-8")) > _MAX_FIXTURE_BYTES or not text.endswith("\n"):
+        raise ContractError("Docker inventory rows are not bounded canonical JSONL")
+    entries = []
+    for line in text[:-1].split("\n"):
+        if not line:
+            raise ContractError("Docker inventory contains a blank row")
+        try:
+            value = json.loads(line, object_pairs_hook=_closed_object)
+        except (json.JSONDecodeError, ContractError) as error:
+            raise ContractError("Docker inventory row is not closed JSON") from error
+        if line != _canonical_json(value):
+            raise ContractError("Docker inventory row is not canonical JSON")
+        entries.append(DockerInventoryEntry.from_mapping(value, kind))
+    return DockerInventory(kind, tuple(entries))
+
+
+@dataclass(frozen=True, slots=True)
+class TranscriptCase:
+    name: str
+    provenance: str
+    record_type: str
+    record: RequestFailureProvenance | SourceCollectionStatus | DockerInventory
+
+    def __post_init__(self) -> None:
+        if _CASE_NAME.fullmatch(self.name) is None:
+            raise ContractError("transcript case name is invalid")
+        if self.provenance not in {"observed", "reconstructed"}:
+            raise ContractError("transcript provenance must be observed or reconstructed")
+        expected_type = {
+            "request_failure": RequestFailureProvenance,
+            "source_collection": SourceCollectionStatus,
+            "docker_inventory": DockerInventory,
+        }.get(self.record_type)
+        if expected_type is None or not isinstance(self.record, expected_type):
+            raise ContractError("transcript record type does not match its record")
+
+
+@dataclass(frozen=True, slots=True)
+class IntegrationContractFixture:
+    schema_version: str
+    cases: tuple[TranscriptCase, ...]
+
+    def __post_init__(self) -> None:
+        if self.schema_version != SCHEMA_VERSION or type(self.cases) is not tuple:
+            raise ContractError("integration transcript fixture identity is invalid")
+        names = [case.name for case in self.cases]
+        if len(names) != len(set(names)):
+            raise ContractError("integration transcript contains duplicate case names")
+
+
+def _load_case(value: object) -> TranscriptCase:
+    case = _require_fields(
+        value,
+        {"name", "provenance", "record", "record_type"},
+        "transcript case",
+    )
+    name = case["name"]
+    provenance = case["provenance"]
+    record_type = case["record_type"]
+    if (
+        type(name) is not str
+        or type(provenance) is not str
+        or type(record_type) is not str
+    ):
+        raise ContractError("transcript case labels must be strings")
+    if record_type == "request_failure":
+        record: RequestFailureProvenance | SourceCollectionStatus | DockerInventory = (
+            RequestFailureProvenance.from_mapping(case["record"])
+        )
+    elif record_type == "source_collection":
+        record = SourceCollectionStatus.from_mapping(case["record"])
+    elif record_type == "docker_inventory":
+        inventory = _require_fields(case["record"], {"kind", "rows"}, "inventory transcript")
+        kind = inventory["kind"]
+        rows = inventory["rows"]
+        if type(kind) is not str or type(rows) is not list:
+            raise ContractError("inventory transcript fields are invalid")
+        record = DockerInventory(
+            kind,
+            tuple(DockerInventoryEntry.from_mapping(row, kind) for row in rows),
+        )
+    else:
+        raise ContractError("transcript record type is invalid")
+    return TranscriptCase(name, provenance, record_type, record)
+
+
+def load_integration_contract(path: Path) -> IntegrationContractFixture:
+    if not isinstance(path, Path) or path.is_symlink() or not path.is_file():
+        raise ContractError("integration transcript fixture path is unsafe")
+    payload = path.read_bytes()
+    if not payload or len(payload) > _MAX_FIXTURE_BYTES:
+        raise ContractError("integration transcript fixture size is invalid")
+    try:
+        text = payload.decode("utf-8")
+        value = json.loads(text, object_pairs_hook=_closed_object)
+    except UnicodeError as error:
+        raise ContractError("integration transcript fixture is not UTF-8") from error
+    except json.JSONDecodeError as error:
+        raise ContractError("integration transcript fixture is not JSON") from error
+    _reject_sensitive_material(value)
+    if payload != (_canonical_json(value) + "\n").encode("utf-8"):
+        raise ContractError("integration transcript fixture is not canonical JSON")
+    fixture = _require_fields(value, {"cases", "schema_version"}, "integration transcript")
+    cases = fixture["cases"]
+    if type(cases) is not list or len(cases) > 100:
+        raise ContractError("integration transcript cases are invalid")
+    return IntegrationContractFixture(
+        schema_version=fixture["schema_version"],  # type: ignore[arg-type]
+        cases=tuple(_load_case(case) for case in cases),
+    )

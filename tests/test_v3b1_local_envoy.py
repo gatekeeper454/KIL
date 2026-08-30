@@ -1,3 +1,4 @@
+from dataclasses import FrozenInstanceError
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -8,6 +9,14 @@ import unittest
 from kil.canonical import canonical_json
 from kil.live_authz import LiveTrack
 from kil.v3b_preflight import V3BProfile
+from tools.v3b1_harness_contract import (
+    ContractError,
+    DockerInventory,
+    RequestFailureProvenance,
+    SourceCollectionStatus,
+    load_integration_contract,
+    parse_inventory_rows,
+)
 from tools.v3b1_local_envoy import (
     _complete_request_attempt,
     _bind_journal_manifest,
@@ -84,6 +93,209 @@ ENGINE_PROVENANCE = {
     "cgroup_driver": "cgroupfs",
     "cgroup_version": "2",
 }
+
+
+class HarnessIntegrationContractTest(unittest.TestCase):
+    FIXTURE = ROOT / "tests/fixtures/v3b1-integration-contract.json"
+
+    def test_fixture_is_canonical_closed_frozen_and_explicitly_provenanced(self):
+        fixture = load_integration_contract(self.FIXTURE)
+
+        self.assertEqual(fixture.schema_version, "kil.v3b1-integration-contract.v1")
+        self.assertEqual(
+            {case.provenance for case in fixture.cases},
+            {"observed", "reconstructed"},
+        )
+        self.assertEqual(
+            {case.name for case in fixture.cases if case.provenance == "observed"},
+            {
+                "cycle-1-recorded-network",
+                "cycle-2-recorded-network",
+                "cycle-3-missing-decision-ledger",
+            },
+        )
+        self.assertEqual(
+            {case.name for case in fixture.cases if case.provenance == "reconstructed"},
+            {
+                "cycle-3-network-not-found-replacement-inventory",
+                "cycle-3-request-send-socket-failure",
+                "cycle-3-target-copy-error",
+            },
+        )
+        with self.assertRaises(FrozenInstanceError):
+            fixture.cases[0].provenance = "reconstructed"
+
+    def test_request_failure_provenance_is_closed_and_sanitized(self):
+        record = RequestFailureProvenance.from_mapping(
+            {
+                "stage": "response_headers",
+                "exception_class": "ConnectionResetError",
+                "errno": None,
+                "errno_name": None,
+                "connect_monotonic_ns": 10,
+                "send_monotonic_ns": 20,
+                "failure_monotonic_ns": 30,
+                "request_bytes_may_have_been_sent": True,
+                "attempt_count": 1,
+                "retry_performed": False,
+            }
+        )
+
+        self.assertTrue(record.request_bytes_may_have_been_sent)
+        with self.assertRaises(FrozenInstanceError):
+            record.stage = "request_send"
+        with self.assertRaises(ContractError):
+            RequestFailureProvenance.from_mapping(
+                {
+                    **record.to_mapping(),
+                    "raw_exception_message": "connection reset by peer",
+                }
+            )
+        with self.assertRaises(ContractError):
+            RequestFailureProvenance.from_mapping(
+                {**record.to_mapping(), "stage": "connect"}
+            )
+        with self.assertRaises(ContractError):
+            RequestFailureProvenance.from_mapping(
+                {
+                    **record.to_mapping(),
+                    "stage": "response_body",
+                    "request_bytes_may_have_been_sent": False,
+                }
+            )
+        with self.assertRaises(ContractError):
+            RequestFailureProvenance.from_mapping(
+                {**record.to_mapping(), "attempt_count": True}
+            )
+
+    def test_source_collection_status_enforces_closed_terminal_shapes(self):
+        empty_sha = sha256(b"").hexdigest()
+        copied = SourceCollectionStatus.from_mapping(
+            {
+                "track": "credential_policy_baseline",
+                "source": "authz_decisions",
+                "status": "copied",
+                "container_id": HEX_A,
+                "container_name": "kil-v3b1-authz-credential-policy-baseline-a1b2c3d4e5f6",
+                "byte_count": 0,
+                "sha256": empty_sha,
+                "error_class": None,
+            }
+        )
+        missing = SourceCollectionStatus.from_mapping(
+            {
+                **copied.to_mapping(),
+                "status": "missing",
+                "byte_count": None,
+                "sha256": None,
+                "error_class": "source_missing",
+            }
+        )
+        malformed = SourceCollectionStatus.from_mapping(
+            {
+                **copied.to_mapping(),
+                "status": "malformed",
+                "byte_count": 3,
+                "sha256": sha256(b"bad").hexdigest(),
+                "error_class": "invalid_json",
+            }
+        )
+
+        self.assertEqual(copied.byte_count, 0)
+        self.assertIsNone(missing.sha256)
+        self.assertEqual(malformed.status, "malformed")
+        with self.assertRaises(ContractError):
+            SourceCollectionStatus.from_mapping(
+                {**copied.to_mapping(), "status": "missing"}
+            )
+        with self.assertRaises(ContractError):
+            SourceCollectionStatus.from_mapping(
+                {**copied.to_mapping(), "error_message": "permission denied"}
+            )
+        with self.assertRaises(ContractError):
+            SourceCollectionStatus.from_mapping(
+                {**copied.to_mapping(), "container_id": "a" * 12}
+            )
+
+    def test_inventory_rows_require_full_ids_exact_names_and_uniqueness(self):
+        payload = (
+            canonical_json({"id": HEX_A, "name": "kil-v3b1-one"})
+            + "\n"
+            + canonical_json({"id": HEX_B, "name": "kil-v3b1-two"})
+            + "\n"
+        )
+
+        inventory = parse_inventory_rows(payload, "container")
+
+        self.assertIsInstance(inventory, DockerInventory)
+        self.assertEqual([entry.object_id for entry in inventory.entries], [HEX_A, HEX_B])
+        self.assertEqual(parse_inventory_rows("", "network").entries, ())
+        for rejected in (
+            canonical_json({"id": "a" * 12, "name": "kil-v3b1-one"}) + "\n",
+            payload + canonical_json({"id": HEX_A, "name": "kil-v3b1-three"}) + "\n",
+            payload + canonical_json({"id": HEX_C, "name": "kil-v3b1-two"}) + "\n",
+            canonical_json({"extra": 1, "id": HEX_A, "name": "kil-v3b1-one"}) + "\n",
+        ):
+            with self.subTest(rejected=rejected):
+                with self.assertRaises(ContractError):
+                    parse_inventory_rows(rejected, "container")
+
+    def test_fixture_loader_rejects_duplicate_fields_and_noncanonical_json(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fixture.json"
+            path.write_text(
+                '{"cases":[],"schema_version":"kil.v3b1-integration-contract.v1",'
+                '"schema_version":"kil.v3b1-integration-contract.v1"}\n'
+            )
+            with self.assertRaisesRegex(ContractError, "duplicate"):
+                load_integration_contract(path)
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "kil.v3b1-integration-contract.v1",
+                        "cases": [],
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
+            with self.assertRaisesRegex(ContractError, "canonical"):
+                load_integration_contract(path)
+
+    def test_fixture_loader_rejects_secret_or_private_material(self):
+        original = json.loads(self.FIXTURE.read_text())
+        forbidden = (
+            ("raw_exception_message", "connection refused"),
+            ("authorization", "Bearer redacted"),
+            (
+                "signed_state",
+                ".".join(
+                    (
+                        "eyJhbGciOiJFZERTQSJ9",
+                        "eyJzdWIiOiJ3b3JrbG9hZCJ9",
+                        "c2lnbmF0dXJl",
+                    )
+                ),
+            ),
+            ("private_key", "-----BEGIN " + "PRIVATE KEY-----"),
+            ("private_path", "/Users/private/.colima/kil-v3-lab/docker.sock"),
+            ("environment", {"SECRET_VALUE": "redacted"}),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fixture.json"
+            for key, value in forbidden:
+                with self.subTest(key=key):
+                    changed = json.loads(json.dumps(original))
+                    changed["cases"][0]["record"][key] = value
+                    path.write_text(canonical_json(changed) + "\n")
+                    with self.assertRaises(ContractError):
+                        load_integration_contract(path)
+
+            changed = json.loads(json.dumps(original))
+            changed["cases"][0]["name"] = "-----BEGIN " + "RSA PRIVATE KEY-----"
+            path.write_text(canonical_json(changed) + "\n")
+            with self.assertRaisesRegex(ContractError, "secret"):
+                load_integration_contract(path)
 
 
 class FakeRunner:
