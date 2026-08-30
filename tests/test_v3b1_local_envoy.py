@@ -1747,6 +1747,19 @@ class _RunClock:
         self.now_ns += nanoseconds
 
 
+class _FailingRunClock(_RunClock):
+    def __init__(self, fail_call: int) -> None:
+        super().__init__()
+        self.fail_call = fail_call
+        self.calls = 0
+
+    def monotonic_ns(self) -> int:
+        self.calls += 1
+        if self.calls == self.fail_call:
+            raise ControllerError("injected monotonic bookkeeping failure")
+        return super().monotonic_ns()
+
+
 class _RunResponse:
     def __init__(self, connection, behavior) -> None:
         self.connection = connection
@@ -1980,6 +1993,14 @@ class GatewayReadinessTest(unittest.TestCase):
         ):
             return controller.run()
 
+    @staticmethod
+    def install_failing_clock(controller, factory, fail_call):
+        clock = _FailingRunClock(fail_call)
+        factory.clock = clock
+        controller.monotonic_ns = clock.monotonic_ns
+        controller.sleeper = clock.sleep
+        return clock
+
     def install_readiness_poison(
         self,
         controller,
@@ -2143,6 +2164,103 @@ class GatewayReadinessTest(unittest.TestCase):
             raw = controller.journal_path.read_text()
             self.assertNotIn(secret, raw)
             self.assertNotIn("private close", raw)
+
+    def test_clock_failure_after_third_connect_closes_the_complete_set(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, request_path, events = self.make_controller(
+                directory, [{}, {}, {}]
+            )
+            self.install_failing_clock(controller, factory, fail_call=8)
+
+            with self.assertRaisesRegex(
+                ControllerError, "monotonic bookkeeping failure"
+            ):
+                self.run_with_fake_http(controller)
+
+            self.assertEqual(
+                [event[1] for event in events if event[0] == "close"],
+                [18080, 18081, 18082],
+            )
+            self.assertTrue(all(connection.closed for connection in factory.connections))
+            self.assertFalse(request_path.exists())
+            self.assertFalse(any(event[0] == "request" for event in events))
+            self.assertFalse(any(event[0] == "collect" for event in events))
+
+    def test_clock_failure_after_third_connect_poison_blocks_retry_on_ambiguity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, first_factory, _, request_path, events = self.make_controller(
+                directory, [{"close_unconfirmed": True}, {}, {}]
+            )
+            self.install_failing_clock(controller, first_factory, fail_call=8)
+
+            with self.assertRaisesRegex(
+                ControllerError, "monotonic bookkeeping failure"
+            ):
+                self.run_with_fake_http(controller)
+
+            self.assertEqual(
+                [event[1] for event in events if event[0] == "close"],
+                [18080, 18081, 18082],
+            )
+            self.assertFalse(first_factory.connections[0].closed)
+            poison_events = [
+                event
+                for event in load_lifecycle_journal(controller.journal_path)["events"]
+                if event["event"] == "connection_close_failed"
+            ]
+            self.assertEqual(len(poison_events), 1)
+
+            retry_events = []
+            retry_clock = _RunClock()
+            retry_factory = _RunConnectionFactory(
+                [{}, {}, {}],
+                events=retry_events,
+                journal_path=controller.journal_path,
+                request_path=request_path,
+                clock=retry_clock,
+            )
+            controller.connection_factory = retry_factory
+            controller.monotonic_ns = retry_clock.monotonic_ns
+            controller.sleeper = retry_clock.sleep
+
+            with self.assertRaisesRegex(
+                ControllerError, "poison|teardown|manual recovery"
+            ):
+                self.run_with_fake_http(controller)
+
+            self.assertEqual(retry_factory.connections, [])
+            self.assertFalse(any(event[0] == "request" for event in retry_events))
+            self.assertFalse(any(event[0] == "collect" for event in retry_events))
+
+    def test_failure_timestamp_clock_error_closes_every_round_connection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, request_path, events = self.make_controller(
+                directory,
+                [
+                    {},
+                    {
+                        "connect_error": ConnectionRefusedError(
+                            errno.ECONNREFUSED, "private readiness detail"
+                        )
+                    },
+                ],
+            )
+            self.install_failing_clock(controller, factory, fail_call=5)
+
+            with self.assertRaisesRegex(
+                ControllerError, "monotonic bookkeeping failure"
+            ):
+                self.run_with_fake_http(controller)
+
+            self.assertEqual(len(factory.connections), 2)
+            self.assertEqual(
+                [event[1] for event in events if event[0] == "close"],
+                [18080, 18081],
+            )
+            self.assertTrue(all(connection.closed for connection in factory.connections))
+            self.assertFalse(request_path.exists())
+            self.assertFalse(any(event[0] == "request" for event in events))
+            self.assertFalse(any(event[0] == "collect" for event in events))
 
     def test_complete_set_must_finish_within_the_single_readiness_deadline(self):
         with tempfile.TemporaryDirectory() as directory:

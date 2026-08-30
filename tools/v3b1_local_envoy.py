@@ -15,6 +15,7 @@ import secrets
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 from typing import Callable, Mapping, Protocol, Sequence
@@ -5244,30 +5245,46 @@ class LocalEnvoyController:
             round_number += 1
             connections: dict[LiveTrack, object] = {}
             connect_times: dict[LiveTrack, int] = {}
-            failure: tuple[LiveTrack, int, int, int, BaseException] | None = None
-            for track, port in zip(_TRACKS, self.profile.gateway_ports, strict=True):
-                connect_ns = self._monotonic_now()
-                remaining_ns = deadline_ns - connect_ns
-                if remaining_ns <= 0:
-                    failure = (
-                        track,
-                        port,
-                        connect_ns,
-                        connect_ns,
-                        TimeoutError("gateway readiness deadline expired"),
+            ownership_transferred = False
+            close_primary_failure = "request_processing"
+            sleep_s: float | None = None
+            try:
+                failure: tuple[
+                    LiveTrack, int, int, int, BaseException
+                ] | None = None
+                for track, port in zip(
+                    _TRACKS, self.profile.gateway_ports, strict=True
+                ):
+                    connect_ns = self._monotonic_now()
+                    remaining_ns = deadline_ns - connect_ns
+                    if remaining_ns <= 0:
+                        failure = (
+                            track,
+                            port,
+                            connect_ns,
+                            connect_ns,
+                            TimeoutError("gateway readiness deadline expired"),
+                        )
+                        break
+                    timeout_s = min(
+                        _READINESS_CONNECT_TIMEOUT_S,
+                        remaining_ns / 1_000_000_000,
                     )
-                    break
-                timeout_s = min(
-                    _READINESS_CONNECT_TIMEOUT_S,
-                    remaining_ns / 1_000_000_000,
-                )
-                connection: object | None = None
-                try:
-                    connection = self.connection_factory(
-                        "127.0.0.1", port, timeout=timeout_s
-                    )
-                    connections[track] = connection
-                    connection.connect()  # type: ignore[attr-defined]
+                    try:
+                        connection = self.connection_factory(
+                            "127.0.0.1", port, timeout=timeout_s
+                        )
+                        connections[track] = connection
+                        connection.connect()  # type: ignore[attr-defined]
+                    except (OSError, http.client.HTTPException) as error:
+                        failure = (
+                            track,
+                            port,
+                            connect_ns,
+                            self._monotonic_now(),
+                            error,
+                        )
+                        break
                     connected_ns = self._monotonic_now()
                     if connected_ns >= deadline_ns:
                         failure = (
@@ -5279,31 +5296,8 @@ class LocalEnvoyController:
                         )
                         break
                     connect_times[track] = connected_ns
-                except (OSError, http.client.HTTPException) as error:
-                    failure = (
-                        track,
-                        port,
-                        connect_ns,
-                        self._monotonic_now(),
-                        error,
-                    )
-                    break
-                except Exception:
-                    close_failures = self._close_connections(connections)
-                    if close_failures:
-                        self._record_close_failures(
-                            readiness_nonce=readiness_nonce,
-                            stage="readiness_round",
-                            primary_failure="request_processing",
-                            failures=close_failures,
-                        )
-                        raise ControllerError(
-                            "gateway readiness failed and connection closure is ambiguous"
-                        ) from None
-                    raise
-            if failure is None:
-                ready_ns = self._monotonic_now()
-                try:
+                if failure is None:
+                    ready_ns = self._monotonic_now()
                     journal_event(
                         self.journal_path,
                         "readiness_connect_complete",
@@ -5316,24 +5310,11 @@ class LocalEnvoyController:
                             "ready_monotonic_ns": ready_ns,
                         },
                     )
-                except Exception:
-                    close_failures = self._close_connections(connections)
-                    if close_failures:
-                        self._record_close_failures(
-                            readiness_nonce=readiness_nonce,
-                            stage="readiness_round",
-                            primary_failure="request_processing",
-                            failures=close_failures,
-                        )
-                        raise ControllerError(
-                            "gateway readiness journaling failed and connection closure is ambiguous"
-                        ) from None
-                    raise
-                return connections, connect_times
+                    ownership_transferred = True
+                    return connections, connect_times
 
-            track, port, connect_ns, failure_ns, error = failure
-            failure_event_error: Exception | None = None
-            try:
+                close_primary_failure = "readiness_connect_failed"
+                track, port, connect_ns, failure_ns, error = failure
                 self._readiness_failure_event(
                     track=track,
                     port=port,
@@ -5343,34 +5324,37 @@ class LocalEnvoyController:
                     error=error,
                     readiness_nonce=readiness_nonce,
                 )
-            except Exception as event_error:
-                failure_event_error = event_error
-            close_failures = self._close_connections(connections)
-            if close_failures:
-                try:
-                    self._record_close_failures(
-                        readiness_nonce=readiness_nonce,
-                        stage="readiness_round",
-                        primary_failure="readiness_connect_failed",
-                        failures=close_failures,
-                    )
-                except Exception:
-                    if failure_event_error is None:
-                        raise
-                if failure_event_error is None:
+                if failure_ns >= deadline_ns:
                     raise ControllerError(
-                        "gateway readiness failed and connection closure is ambiguous"
+                        "gateway TCP readiness deadline expired"
                     ) from None
-            if failure_event_error is not None:
-                raise failure_event_error
-            if failure_ns >= deadline_ns:
-                raise ControllerError("gateway TCP readiness deadline expired") from None
-            sleep_s = min(
-                _READINESS_ROUND_DELAY_S,
-                (deadline_ns - failure_ns) / 1_000_000_000,
-            )
-            if sleep_s <= 0:
-                raise ControllerError("gateway TCP readiness deadline expired")
+                sleep_s = min(
+                    _READINESS_ROUND_DELAY_S,
+                    (deadline_ns - failure_ns) / 1_000_000_000,
+                )
+                if sleep_s <= 0:
+                    raise ControllerError("gateway TCP readiness deadline expired")
+            finally:
+                if not ownership_transferred:
+                    active_error = sys.exc_info()[1]
+                    close_failures = self._close_connections(connections)
+                    if close_failures:
+                        try:
+                            self._record_close_failures(
+                                readiness_nonce=readiness_nonce,
+                                stage="readiness_round",
+                                primary_failure=close_primary_failure,
+                                failures=close_failures,
+                            )
+                        except Exception:
+                            if active_error is None:
+                                raise
+                        if active_error is None:
+                            raise ControllerError(
+                                "gateway readiness failed and connection closure "
+                                "is ambiguous"
+                            ) from None
+            assert sleep_s is not None
             self.sleeper(sleep_s)
 
     def _request_failure_provenance(
