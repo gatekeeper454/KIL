@@ -4011,3 +4011,51 @@ KIL, authorization, Envoy, and target semantics remain unchanged.
 integration and the committed zero-request live smoke.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-081 — 2026-08-30 — V3B-1 teardown now follows exact durable Docker inventories
+
+**Input:** Harden and prove the local V3B-1 harness without changing durable
+KIL behavior: replace stderr-derived object-existence decisions with exact
+Docker inventories, make interrupted deletion replayable, cover partial-up and
+validator recovery, and leave live Docker and Colima untouched until review.
+
+**Interpretation:** Teardown authority comes only from the dedicated profile's
+durable creation/removal history and a command-local, no-truncation inventory
+of full object IDs paired with fixed KIL names. Error text is not evidence of
+absence. A delete is safe only after an exact intent; each successful delete
+must be followed by an exact survivor inventory, and a network can be removed
+only after its membership is observed empty.
+
+**Decision status:** Confirmed harness-only implementation complete, pending
+independent review. Container and custom-network inventories are parsed as
+bounded canonical JSONL with full 64-hex IDs and exact KIL names. Creation and
+removal transitions are closed and replayed from the private lifecycle
+journal. Pending-plus-absent removal is completed without a second delete;
+absence without intent, ID/name drift, duplicate or shortened identities,
+unexpected objects, and reappearance after completion fail closed without a
+mutation. Interrupted fixed-name validators and partial-up resources are
+recovered only when their durable creation intent and immutable runtime
+attestation agree.
+
+**Rationale:** Docker's human-readable stderr is not a stable state protocol,
+and an ID-only set comparison cannot detect name reuse or identity drift.
+Exact ID/name bijections plus durable transitions make recovery deterministic,
+idempotent, and auditable. Re-inventorying both object kinds after every
+ID-addressed removal prevents subsequent operations from proceeding across an
+unobserved survivor set.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker or Colima operation was performed.
+Installed-runtime formatting and timing remain gated on the reviewed
+zero-request smoke. KIL, signed composite state, authorization, Envoy routing,
+and target semantics are unchanged.
+
+**Next gate:** Independent Task 4 specification and code-quality review, then
+the committed zero-request live smoke before any accepted central proof run.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

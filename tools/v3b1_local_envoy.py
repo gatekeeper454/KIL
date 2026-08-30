@@ -38,16 +38,22 @@ except ModuleNotFoundError:  # Direct execution places ``tools`` on sys.path.
 try:
     from tools.v3b1_harness_contract import (
         ContractError as HarnessContractError,
+        DockerInventory,
+        DockerInventoryEntry,
         RequestFailureProvenance,
         SourceCollectionStatus,
         normalize_transport_exception,
+        parse_inventory_rows,
     )
 except ModuleNotFoundError:  # Direct execution places ``tools`` on sys.path.
     from v3b1_harness_contract import (  # type: ignore[no-redef]
         ContractError as HarnessContractError,
+        DockerInventory,
+        DockerInventoryEntry,
         RequestFailureProvenance,
         SourceCollectionStatus,
         normalize_transport_exception,
+        parse_inventory_rows,
     )
 
 
@@ -376,6 +382,46 @@ def _validate_lifecycle_event_details(
     details: Mapping[str, object],
     requests: Mapping[str, object] | None = None,
 ) -> None:
+    if event_name in {
+        "container_create_intent",
+        "container_create_complete",
+        "network_create_intent",
+        "network_create_complete",
+        "config_validate_intent",
+        "config_validate_complete",
+    }:
+        validator = event_name.startswith("config_validate_")
+        kind = (
+            "container"
+            if validator or event_name.startswith("container_")
+            else "network"
+        )
+        expected = {"name"}
+        if event_name.endswith("_complete") and not validator:
+            expected.add("id")
+        if set(details) != expected:
+            raise ControllerError("Docker creation fields are not closed")
+        try:
+            DockerInventoryEntry(
+                kind,
+                str(details.get("id", "0" * 64)),
+                details["name"],  # type: ignore[arg-type]
+            )
+        except HarnessContractError as error:
+            raise ControllerError("Docker creation identity is invalid") from error
+        return
+    if event_name in {
+        "container_remove_intent",
+        "container_remove_complete",
+        "network_remove_intent",
+        "network_remove_complete",
+    }:
+        kind = "container" if event_name.startswith("container_") else "network"
+        try:
+            DockerInventoryEntry.from_mapping(details, kind)
+        except HarnessContractError as error:
+            raise ControllerError("Docker removal identity is invalid") from error
+        return
     if event_name == "evidence_freeze_started":
         if set(details) != {"collection_epoch", "execution_nonce", "run_id"}:
             raise ControllerError("evidence freeze start fields are not closed")
@@ -643,11 +689,59 @@ def _validate_lifecycle_history(
     freeze_bytes: dict[tuple[str, str], Mapping[str, object]] = {}
     freeze_terminals: dict[tuple[str, str], SourceCollectionStatus] = {}
     freeze_completed = False
+    removals: dict[tuple[str, str, str], str] = {}
+    creations: dict[tuple[str, str], str] = {}
     for event in events:
         event_name = event["event"]
         details = event["details"]
         assert isinstance(event_name, str)
         assert isinstance(details, Mapping)
+        if event_name in {
+            "container_create_intent",
+            "container_create_complete",
+            "network_create_intent",
+            "network_create_complete",
+            "config_validate_intent",
+            "config_validate_complete",
+        }:
+            kind = (
+                "validator"
+                if event_name.startswith("config_validate_")
+                else "container"
+                if event_name.startswith("container_")
+                else "network"
+            )
+            key = (kind, str(details["name"]))
+            if event_name.endswith("_intent"):
+                if key in creations:
+                    raise ControllerError("Docker creation intent is duplicated")
+                creations[key] = "pending"
+            else:
+                if creations.get(key) != "pending":
+                    raise ControllerError(
+                        "Docker creation completion lacks its exact intent"
+                    )
+                creations[key] = "complete"
+            continue
+        if event_name in {
+            "container_remove_intent",
+            "container_remove_complete",
+            "network_remove_intent",
+            "network_remove_complete",
+        }:
+            kind = "container" if event_name.startswith("container_") else "network"
+            key = (kind, str(details["id"]), str(details["name"]))
+            if event_name.endswith("_intent"):
+                if key in removals:
+                    raise ControllerError("Docker removal intent is duplicated")
+                removals[key] = "pending"
+            else:
+                if removals.get(key) != "pending":
+                    raise ControllerError(
+                        "Docker removal completion lacks its exact intent"
+                    )
+                removals[key] = "complete"
+            continue
         if event_name == "evidence_freeze_started":
             if freeze_epoch is not None:
                 raise ControllerError("evidence freeze epoch may start only once")
@@ -797,6 +891,90 @@ def _validate_lifecycle_history(
     if replayed != requests:
         raise ControllerError("request events do not bind lifecycle request state")
     return current_readiness, readiness_complete
+
+
+def _removal_transition(
+    events: Sequence[Mapping[str, object]],
+    kind: str,
+    identity: Mapping[str, object],
+) -> str:
+    """Replay the durable transition for one exact Docker identity."""
+    if kind not in {"container", "network"}:
+        raise ControllerError("Docker removal kind is invalid")
+    try:
+        expected = DockerInventoryEntry.from_mapping(identity, kind)
+    except HarnessContractError as error:
+        raise ControllerError("Docker removal identity is invalid") from error
+    intent_name = f"{kind}_remove_intent"
+    complete_name = f"{kind}_remove_complete"
+    transition = "unstarted"
+    for event in events:
+        if type(event) is not dict or event.get("event") not in {
+            intent_name,
+            complete_name,
+        }:
+            continue
+        details = event.get("details")
+        try:
+            observed = DockerInventoryEntry.from_mapping(details, kind)
+        except HarnessContractError as error:
+            raise ControllerError("Docker removal history is invalid") from error
+        if observed != expected:
+            continue
+        if event["event"] == intent_name:
+            if transition != "unstarted":
+                raise ControllerError("Docker removal intent is duplicated")
+            transition = "pending"
+        else:
+            if transition != "pending":
+                raise ControllerError(
+                    "Docker removal completion lacks its exact intent"
+                )
+            transition = "complete"
+    return transition
+
+
+def _creation_transition(
+    events: Sequence[Mapping[str, object]],
+    kind: str,
+    name: str,
+) -> tuple[str, str | None]:
+    """Replay one fixed-name Docker creation without doing discovery-by-delete."""
+    if kind not in {"container", "network", "validator"}:
+        raise ControllerError("Docker creation kind is invalid")
+    inventory_kind = "container" if kind == "validator" else kind
+    try:
+        DockerInventoryEntry(inventory_kind, "0" * 64, name)
+    except HarnessContractError as error:
+        raise ControllerError("Docker creation name is invalid") from error
+    prefix = "config_validate" if kind == "validator" else f"{kind}_create"
+    transition = "unstarted"
+    object_id: str | None = None
+    for event in events:
+        if type(event) is not dict or event.get("event") not in {
+            f"{prefix}_intent",
+            f"{prefix}_complete",
+        }:
+            continue
+        details = event.get("details")
+        if type(details) is not dict or details.get("name") != name:
+            continue
+        if event["event"].endswith("_intent"):
+            if transition != "unstarted":
+                raise ControllerError("Docker creation intent is duplicated")
+            transition = "pending"
+            continue
+        if transition != "pending":
+            raise ControllerError("Docker creation completion lacks its intent")
+        if kind != "validator":
+            try:
+                object_id = DockerInventoryEntry.from_mapping(
+                    {"id": details.get("id"), "name": name}, inventory_kind
+                ).object_id
+            except HarnessContractError as error:
+                raise ControllerError("Docker creation identity is invalid") from error
+        transition = "complete"
+    return transition, object_id
 
 
 def create_lifecycle_journal(
@@ -4707,6 +4885,7 @@ class LocalEnvoyController:
         track: str,
         *,
         require_complete_membership: bool = True,
+        require_empty_membership: bool = False,
     ) -> dict[str, object]:
         raw_output = self._execute(
             self.docker_command(
@@ -4783,6 +4962,7 @@ class LocalEnvoyController:
             not set(members).issubset(expected_members)
             or len(members) != len(set(members))
             or (require_complete_membership and set(members) != expected_members)
+            or (require_empty_membership and members)
         ):
             raise ControllerError("cross-track or incomplete network membership")
         return {"name": name, "id": object_id, "track": track, "labels": labels}
@@ -4895,29 +5075,76 @@ class LocalEnvoyController:
         ]
         return objects, networks
 
-    def _docker_object_exists(self, kind: str, identifier: str) -> bool:
+    def _docker_inventory(self, kind: str) -> DockerInventory:
+        """Read one no-truncation ID/name inventory; never infer from stderr."""
         if kind == "container":
             command = self.docker_command(
-                "inspect", "--format", "{{.Id}}", identifier
+                "ps",
+                "--all",
+                "--no-trunc",
+                "--format",
+                '{"id":{{json .ID}},"name":{{json .Names}}}',
             )
-            absent_markers = ("no such object", "no such container")
         elif kind == "network":
             command = self.docker_command(
-                "network", "inspect", "--format", "{{.Id}}", identifier
+                "network",
+                "ls",
+                "--no-trunc",
+                "--filter",
+                "type=custom",
+                "--format",
+                '{"id":{{json .ID}},"name":{{json .Name}}}',
             )
-            absent_markers = ("no such network",)
         else:
-            raise ControllerError("Docker recovery object kind is invalid")
-        result = self._execute_optional(command, timeout_s=30, docker=True)
-        if result.returncode == 0:
-            object_id = result.stdout.strip()
-            if _HEX.fullmatch(object_id) is None:
-                raise ControllerError("Docker recovery inspection returned an invalid ID")
-            return True
-        detail = (result.stderr or result.stdout).lower()
-        if any(marker in detail for marker in absent_markers):
-            return False
-        raise ControllerError("Docker recovery inspection failed ambiguously")
+            raise ControllerError("Docker inventory kind is invalid")
+        result = self._execute(command, timeout_s=60, docker=True)
+        try:
+            return parse_inventory_rows(result.stdout, kind)
+        except (
+            HarnessContractError,
+            UnicodeError,
+            ValueError,
+            TypeError,
+            RecursionError,
+        ) as error:
+            raise ControllerError(f"Docker {kind} inventory is invalid") from error
+
+    @staticmethod
+    def _require_exact_inventory(
+        kind: str,
+        actual: Mapping[str, str],
+        expected: Mapping[str, str],
+    ) -> None:
+        """Require the exact full-ID/name bijection for one Docker object kind."""
+        if kind not in {"container", "network"}:
+            raise ControllerError("Docker inventory kind is invalid")
+        try:
+            if type(actual) is not dict or type(expected) is not dict:
+                raise HarnessContractError("Docker inventory mapping is invalid")
+            actual_entries = tuple(
+                DockerInventoryEntry(kind, object_id, name)
+                for object_id, name in actual.items()
+            )
+            expected_entries = tuple(
+                DockerInventoryEntry(kind, object_id, name)
+                for object_id, name in expected.items()
+            )
+            DockerInventory(kind, actual_entries)
+            DockerInventory(kind, expected_entries)
+        except (
+            HarnessContractError,
+            UnicodeError,
+            ValueError,
+            TypeError,
+            RecursionError,
+        ) as error:
+            raise ControllerError(f"Docker {kind} inventory is invalid") from error
+        if actual != expected:
+            raise ControllerError(f"Docker {kind} inventory does not match ownership")
+
+    @staticmethod
+    def _inventory_mapping(inventory: DockerInventory) -> dict[str, str]:
+        return {entry.object_id: entry.name for entry in inventory.entries}
 
     def _load_for_down(
         self,
@@ -4932,7 +5159,8 @@ class LocalEnvoyController:
             _validate_manifest(manifest)
             if _digest_file(manifest_path) != journal["manifest_sha256"]:
                 raise ControllerError("private manifest does not match lifecycle journal")
-        if self.state_path.exists():
+        bound_state_present = self.state_path.exists()
+        if bound_state_present:
             bound = load_bound_active_state(self.state_path)
             if manifest is None or bound["manifest"] != manifest:
                 raise ControllerError("active state and lifecycle manifest diverge")
@@ -4944,15 +5172,94 @@ class LocalEnvoyController:
         else:
             candidate_objects = []
             candidate_networks = []
+        events = journal["events"]
+        assert isinstance(events, list)
+        container_inventory = self._inventory_mapping(
+            self._docker_inventory("container")
+        )
+        network_inventory = self._inventory_mapping(
+            self._docker_inventory("network")
+        )
+        container_by_name = {
+            name: object_id for object_id, name in container_inventory.items()
+        }
+        network_by_name = {
+            name: object_id for object_id, name in network_inventory.items()
+        }
+
+        def resolve_identity(
+            kind: str,
+            item: Mapping[str, object],
+            by_id: Mapping[str, str],
+            by_name: Mapping[str, str],
+        ) -> tuple[str, str] | None:
+            name = str(item["name"])
+            recorded_id = item.get("id")
+            if type(recorded_id) is str:
+                try:
+                    DockerInventoryEntry(kind, recorded_id, name)
+                except HarnessContractError as error:
+                    raise ControllerError(
+                        "recorded Docker recovery identity is invalid"
+                    ) from error
+            elif bound_state_present:
+                raise ControllerError("bound Docker recovery identity lacks its ID")
+            else:
+                creation, created_id = _creation_transition(
+                    events, kind, name
+                )
+                if creation == "unstarted":
+                    if name in by_name:
+                        raise ControllerError(
+                            "unowned Docker object appeared during partial-up recovery"
+                        )
+                    return None
+                if creation == "pending":
+                    recorded_id = by_name.get(name)
+                    if recorded_id is None:
+                        return None
+                else:
+                    recorded_id = created_id
+            assert isinstance(recorded_id, str)
+            identity = {"id": recorded_id, "name": name}
+            transition = _removal_transition(events, kind, identity)
+            actual_name = by_id.get(recorded_id)
+            actual_id = by_name.get(name)
+            if actual_name is not None or actual_id is not None:
+                if actual_name != name or actual_id != recorded_id:
+                    raise ControllerError(
+                        f"recorded {kind} identity changed during recovery"
+                    )
+                if transition == "complete":
+                    raise ControllerError(
+                        f"completed {kind} removal identity reappeared"
+                    )
+                return recorded_id, name
+            if transition == "pending":
+                journal_event(
+                    self.journal_path,
+                    f"{kind}_remove_complete",
+                    identity,
+                )
+                return None
+            if transition == "complete":
+                return None
+            raise ControllerError(
+                f"recorded {kind} disappeared before an exact removal intent"
+            )
+
         objects: list[dict[str, object]] = []
         if manifest is not None:
             for item in candidate_objects:  # type: ignore[union-attr]
-                name = str(item["name"])
-                identifier = str(item.get("id", name))
-                if not self._docker_object_exists("container", identifier):
-                    if identifier != name and self._docker_object_exists("container", name):
-                        raise ControllerError("recorded container ID disappeared but its name was reused")
+                resolved = resolve_identity(
+                    "container",
+                    item,
+                    container_inventory,
+                    container_by_name,
+                )
+                if resolved is None:
                     continue
+                identifier, _ = resolved
                 current = self._inspect_container(
                     identifier,
                     manifest,
@@ -4966,12 +5273,15 @@ class LocalEnvoyController:
         networks: list[dict[str, object]] = []
         if manifest is not None:
             for item in candidate_networks:  # type: ignore[union-attr]
-                name = str(item["name"])
-                identifier = str(item.get("id", name))
-                if not self._docker_object_exists("network", identifier):
-                    if identifier != name and self._docker_object_exists("network", name):
-                        raise ControllerError("recorded network ID disappeared but its name was reused")
+                resolved = resolve_identity(
+                    "network",
+                    item,
+                    network_inventory,
+                    network_by_name,
+                )
+                if resolved is None:
                     continue
+                identifier, _ = resolved
                 current = self._inspect_network(
                     identifier,
                     manifest,
@@ -4988,10 +5298,22 @@ class LocalEnvoyController:
                     f"kil-v3b1-validate-{_track_slug(track)}-"
                     f"{str(manifest['content_identity_sha256'])[:12]}"
                 )
-                if self._docker_object_exists("container", name):
-                    transient_objects.append(
-                        self._inspect_validation_container(name, manifest, track)
+                creation, _ = _creation_transition(events, "validator", name)
+                actual_id = container_by_name.get(name)
+                if actual_id is None:
+                    continue
+                if creation != "pending":
+                    raise ControllerError(
+                        "unexpected validator container prevents recovery"
                     )
+                current = self._inspect_validation_container(
+                    actual_id, manifest, track
+                )
+                identity = {"id": actual_id, "name": name}
+                if _removal_transition(events, "container", identity) == "complete":
+                    raise ControllerError("completed validator removal reappeared")
+                transient_objects.append(current)
+        journal = load_lifecycle_journal(self.journal_path)
         state: dict[str, object] = {
             "objects": objects,
             "transient_objects": transient_objects,
@@ -6598,46 +6920,30 @@ class LocalEnvoyController:
     def _assert_only_recorded_managed(
         self, state: Mapping[str, object], *, expect_present: bool
     ) -> None:
-        containers = self._execute(
-            self.docker_command(
-                "ps",
-                "--all",
-                "--no-trunc",
-                "--format",
-                "{{.ID}}",
-            ),
-            timeout_s=60,
-            docker=True,
-        ).stdout.split()
-        networks = self._execute(
-            self.docker_command(
-                "network",
-                "ls",
-                "--no-trunc",
-                "--filter",
-                "type=custom",
-                "--format",
-                "{{.ID}}",
-            ),
-            timeout_s=60,
-            docker=True,
-        ).stdout.split()
-        expected_containers = {
-            str(item["id"]) for item in state["objects"]  # type: ignore[union-attr]
-        }
-        expected_containers.update(
-            str(item["id"])
-            for item in state.get("transient_objects", [])  # type: ignore[union-attr]
-        )
-        expected_networks = {
-            str(item["id"])
-            for item in state["network_objects"]  # type: ignore[union-attr]
-        }
+        containers = self._inventory_mapping(self._docker_inventory("container"))
+        networks = self._inventory_mapping(self._docker_inventory("network"))
         if expect_present:
-            if set(containers) != expected_containers or set(networks) != expected_networks:
-                raise ControllerError("unrecorded managed Docker objects prevent teardown")
-        elif containers or networks:
-            raise ControllerError("managed Docker objects remain after exact teardown")
+            expected_containers = {
+                str(item["id"]): str(item["name"])
+                for item in state["objects"]  # type: ignore[union-attr]
+            }
+            expected_containers.update(
+                {
+                    str(item["id"]): str(item["name"])
+                    for item in state.get("transient_objects", [])  # type: ignore[union-attr]
+                }
+            )
+            expected_networks = {
+                str(item["id"]): str(item["name"])
+                for item in state["network_objects"]  # type: ignore[union-attr]
+            }
+        else:
+            expected_containers = {}
+            expected_networks = {}
+        self._require_exact_inventory(
+            "container", containers, expected_containers
+        )
+        self._require_exact_inventory("network", networks, expected_networks)
 
     def _prepare_teardown_evidence(
         self,
@@ -7128,6 +7434,8 @@ class LocalEnvoyController:
             )
         )
 
+        remaining_containers = list(ordered)
+        remaining_networks = list(state["network_objects"])
         for item in ordered:
             current = (
                 self._inspect_validation_container(
@@ -7144,22 +7452,47 @@ class LocalEnvoyController:
             )
             if current != item:
                 raise ControllerError("container changed before exact removal")
-            journal_event(
-                self.journal_path,
-                "container_remove_intent",
-                {"id": item["id"], "name": item["name"]},
+            identity = {"id": item["id"], "name": item["name"]}
+            transition = _removal_transition(
+                load_lifecycle_journal(self.journal_path)["events"],  # type: ignore[arg-type]
+                "container",
+                identity,
             )
+            if transition == "complete":
+                raise ControllerError("completed container removal reappeared")
+            if transition == "unstarted":
+                journal_event(
+                    self.journal_path,
+                    "container_remove_intent",
+                    identity,
+                )
             self._execute(
                 self.docker_command("rm", str(item["id"])),
                 timeout_s=30,
                 docker=True,
             )
-            if self._docker_object_exists("container", str(item["id"])):
-                raise ControllerError("recorded container remains after exact removal")
+            remaining_containers.remove(item)
+            self._assert_only_recorded_managed(
+                {
+                    **state,
+                    "objects": [
+                        record
+                        for record in remaining_containers
+                        if record["role"] != "validator"
+                    ],
+                    "transient_objects": [
+                        record
+                        for record in remaining_containers
+                        if record["role"] == "validator"
+                    ],
+                    "network_objects": remaining_networks,
+                },
+                expect_present=True,
+            )
             journal_event(
                 self.journal_path,
                 "container_remove_complete",
-                {"id": item["id"], "name": item["name"]},
+                identity,
             )
         networks = state["network_objects"]
         assert isinstance(networks, list)
@@ -7169,25 +7502,43 @@ class LocalEnvoyController:
                 manifest,
                 str(item["track"]),
                 require_complete_membership=False,
+                require_empty_membership=True,
             )
             if current != item:
                 raise ControllerError("network changed before exact removal")
-            journal_event(
-                self.journal_path,
-                "network_remove_intent",
-                {"id": item["id"], "name": item["name"]},
+            identity = {"id": item["id"], "name": item["name"]}
+            transition = _removal_transition(
+                load_lifecycle_journal(self.journal_path)["events"],  # type: ignore[arg-type]
+                "network",
+                identity,
             )
+            if transition == "complete":
+                raise ControllerError("completed network removal reappeared")
+            if transition == "unstarted":
+                journal_event(
+                    self.journal_path,
+                    "network_remove_intent",
+                    identity,
+                )
             self._execute(
                 self.docker_command("network", "rm", str(item["id"])),
                 timeout_s=30,
                 docker=True,
             )
-            if self._docker_object_exists("network", str(item["id"])):
-                raise ControllerError("recorded network remains after exact removal")
+            remaining_networks.remove(item)
+            self._assert_only_recorded_managed(
+                {
+                    **state,
+                    "objects": [],
+                    "transient_objects": [],
+                    "network_objects": remaining_networks,
+                },
+                expect_present=True,
+            )
             journal_event(
                 self.journal_path,
                 "network_remove_complete",
-                {"id": item["id"], "name": item["name"]},
+                identity,
             )
         empty_state = {
             **state,

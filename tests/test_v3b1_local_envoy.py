@@ -888,6 +888,389 @@ def target_record(run_manifest, track, digest):
 
 
 class ControllerContractTest(unittest.TestCase):
+    def test_docker_inventory_commands_return_closed_full_identity_rows(self):
+        first_name = "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa"
+        network_name = "kil-v3b1-network-credential-policy-baseline-aaaaaaaaaaaa"
+        runner = FakeRunner(
+            [
+                CommandResult(
+                    0,
+                    canonical_json({"id": HEX_A, "name": first_name}) + "\n",
+                    "arbitrary successful diagnostic\n",
+                ),
+                CommandResult(
+                    0,
+                    canonical_json({"id": HEX_B, "name": network_name}) + "\n",
+                    "network not found text is irrelevant on success\n",
+                ),
+            ]
+        )
+        controller = LocalEnvoyController(
+            ROOT,
+            runner,
+            home=Path("/Users/lab"),
+            port_probe=lambda port: False,
+            tool_verifier=lambda: {},
+        )
+
+        containers = controller._docker_inventory("container")
+        networks = controller._docker_inventory("network")
+
+        self.assertEqual(
+            [(item.object_id, item.name) for item in containers.entries],
+            [(HEX_A, first_name)],
+        )
+        self.assertEqual(
+            [(item.object_id, item.name) for item in networks.entries],
+            [(HEX_B, network_name)],
+        )
+        container_command = runner.calls[0][0]
+        network_command = runner.calls[1][0]
+        self.assertEqual(
+            container_command[-5:],
+            [
+                "ps",
+                "--all",
+                "--no-trunc",
+                "--format",
+                '{"id":{{json .ID}},"name":{{json .Names}}}',
+            ],
+        )
+        self.assertEqual(
+            network_command[-7:],
+            [
+                "network",
+                "ls",
+                "--no-trunc",
+                "--filter",
+                "type=custom",
+                "--format",
+                '{"id":{{json .ID}},"name":{{json .Name}}}',
+            ],
+        )
+        self.assertNotIn("inspect", container_command)
+        self.assertNotIn("inspect", network_command)
+
+    def test_docker_inventory_totalizes_parser_recursion_and_rejects_identity_drift(self):
+        controller = LocalEnvoyController(
+            ROOT,
+            FakeRunner([CommandResult(0, "", "")]),
+            home=Path("/Users/lab"),
+            port_probe=lambda port: False,
+            tool_verifier=lambda: {},
+        )
+        with mock.patch.object(
+            local_envoy_module,
+            "parse_inventory_rows",
+            side_effect=RecursionError("nested inventory"),
+        ):
+            with self.assertRaisesRegex(ControllerError, "inventory.*invalid"):
+                controller._docker_inventory("container")
+
+        expected = {HEX_A: "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa"}
+        for actual in (
+            {HEX_B: expected[HEX_A]},
+            {HEX_A: "kil-v3b1-envoy-credential-policy-baseline-aaaaaaaaaaaa"},
+            {HEX_A[:12]: expected[HEX_A]},
+            {**expected, HEX_B: "kil-v3b1-target-credential-policy-baseline-bbbbbbbbbbbb"},
+        ):
+            with self.subTest(actual=actual):
+                with self.assertRaisesRegex(ControllerError, "inventory"):
+                    controller._require_exact_inventory(
+                        "container", actual, expected
+                    )
+
+    def test_survivor_inventory_requires_exact_id_name_pairs_for_both_kinds(self):
+        container = {
+            "id": HEX_A,
+            "name": "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa",
+        }
+        network = {
+            "id": HEX_B,
+            "name": "kil-v3b1-network-credential-policy-baseline-bbbbbbbbbbbb",
+        }
+        state = {
+            "objects": [container],
+            "transient_objects": [],
+            "network_objects": [network],
+        }
+
+        def controller_with(container_record):
+            return LocalEnvoyController(
+                ROOT,
+                FakeRunner(
+                    [
+                        CommandResult(
+                            0, canonical_json(container_record) + "\n", ""
+                        ),
+                        CommandResult(0, canonical_json(network) + "\n", ""),
+                    ]
+                ),
+                home=Path("/Users/lab"),
+                port_probe=lambda port: False,
+                tool_verifier=lambda: {},
+            )
+
+        controller_with(container)._assert_only_recorded_managed(
+            state, expect_present=True
+        )
+        with self.assertRaisesRegex(ControllerError, "inventory.*ownership"):
+            controller_with(
+                {"id": HEX_C, "name": container["name"]}
+            )._assert_only_recorded_managed(state, expect_present=True)
+
+    def test_removal_history_is_closed_exact_and_replayable(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            private = root / ".tools/private"
+            journal_path = private / "lifecycle.json"
+            create_lifecycle_journal(
+                journal_path,
+                private_root=private,
+                repository_root=root,
+                docker_host="unix:///tmp/kil-v3-lab.sock",
+                source_commit="d" * 40,
+                execution_nonce=HEX_A,
+                global_context="personal",
+            )
+            identity = {
+                "id": HEX_B,
+                "name": "kil-v3b1-authz-credential-policy-baseline-bbbbbbbbbbbb",
+            }
+            journal_event(journal_path, "container_remove_intent", identity)
+            pending = load_lifecycle_journal(journal_path)
+            self.assertEqual(
+                local_envoy_module._removal_transition(
+                    pending["events"], "container", identity
+                ),
+                "pending",
+            )
+            journal_event(journal_path, "container_remove_complete", identity)
+            complete = load_lifecycle_journal(journal_path)
+            self.assertEqual(
+                local_envoy_module._removal_transition(
+                    complete["events"], "container", identity
+                ),
+                "complete",
+            )
+
+            for invalid_event, invalid_details in (
+                ("container_remove_intent", {**identity, "extra": True}),
+                ("network_remove_intent", {**identity, "name": identity["name"]}),
+                ("container_remove_complete", {"id": HEX_C, "name": identity["name"]}),
+            ):
+                with self.subTest(event=invalid_event):
+                    with self.assertRaises(ControllerError):
+                        journal_event(journal_path, invalid_event, invalid_details)
+
+            orphan_root = root / "orphan"
+            orphan_private = orphan_root / ".tools/private"
+            orphan_journal = orphan_private / "lifecycle.json"
+            create_lifecycle_journal(
+                orphan_journal,
+                private_root=orphan_private,
+                repository_root=orphan_root,
+                docker_host="unix:///tmp/kil-v3-lab.sock",
+                source_commit="d" * 40,
+                execution_nonce=HEX_C,
+                global_context="personal",
+            )
+            with self.assertRaisesRegex(ControllerError, "creation completion"):
+                journal_event(
+                    orphan_journal,
+                    "container_create_complete",
+                    identity,
+                )
+
+    def test_down_load_completes_pending_absence_but_rejects_unintended_absence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profile_path = root / "deploy/kind/v3b-profile.json"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_bytes(
+                (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+            )
+            controller = LocalEnvoyController(
+                root,
+                FakeRunner(),
+                home=root / "home",
+                port_probe=lambda port: False,
+                tool_verifier=lambda: {},
+            )
+            controller._prepare_private_roots()
+            value = manifest(
+                docker_host=controller.docker_host,
+                execution_nonce=HEX_A,
+            )
+            private_manifest = controller.private_root / "manifests/run.json"
+            private_manifest.parent.mkdir(parents=True, exist_ok=True)
+            private_manifest.write_text(canonical_json(value) + "\n")
+            create_lifecycle_journal(
+                controller.journal_path,
+                private_root=controller.private_root,
+                repository_root=root,
+                docker_host=controller.docker_host,
+                source_commit="d" * 40,
+                execution_nonce=HEX_A,
+                global_context="personal",
+            )
+            _bind_journal_manifest(controller.journal_path, private_manifest, value)
+            persist_active_state(
+                controller.state_path, private_manifest, value
+            )
+            bound = load_bound_active_state(controller.state_path)
+            removed = bound["objects"][0]
+            identity = {"id": removed["id"], "name": removed["name"]}
+
+            def inventory(kind):
+                records = (
+                    [item for item in bound["objects"] if item != removed]
+                    if kind == "container"
+                    else bound["network_objects"]
+                )
+                return parse_inventory_rows(
+                    "".join(
+                        canonical_json({"id": item["id"], "name": item["name"]})
+                        + "\n"
+                        for item in records
+                    ),
+                    kind,
+                )
+
+            def inspect_container(identifier, *_args, **_kwargs):
+                return next(
+                    item for item in bound["objects"] if item["id"] == identifier
+                )
+
+            def inspect_network(identifier, *_args, **_kwargs):
+                return next(
+                    item
+                    for item in bound["network_objects"]
+                    if item["id"] == identifier
+                )
+
+            with mock.patch.object(controller, "_docker_inventory", side_effect=inventory), mock.patch.object(
+                controller, "_inspect_container", side_effect=inspect_container
+            ), mock.patch.object(
+                controller, "_inspect_network", side_effect=inspect_network
+            ):
+                with self.assertRaisesRegex(ControllerError, "removal intent"):
+                    controller._load_for_down()
+
+                journal_event(
+                    controller.journal_path,
+                    "container_remove_intent",
+                    identity,
+                )
+                recovered, _, recovered_journal = controller._load_for_down()
+
+            self.assertEqual(len(recovered["objects"]), 8)
+            self.assertNotIn(identity["id"], {item["id"] for item in recovered["objects"]})
+            self.assertEqual(
+                [
+                    event["event"]
+                    for event in recovered_journal["events"]
+                    if event["event"].startswith("container_remove_")
+                ],
+                ["container_remove_intent", "container_remove_complete"],
+            )
+
+    def test_partial_up_and_validator_recovery_use_durable_fixed_names(self):
+        for case in ("service", "validator"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                profile_path = root / "deploy/kind/v3b-profile.json"
+                profile_path.parent.mkdir(parents=True)
+                profile_path.write_bytes(
+                    (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+                )
+                controller = LocalEnvoyController(
+                    root,
+                    FakeRunner(),
+                    home=root / "home",
+                    port_probe=lambda port: False,
+                    tool_verifier=lambda: {},
+                )
+                controller._prepare_private_roots()
+                value = manifest(
+                    docker_host=controller.docker_host,
+                    execution_nonce=HEX_A,
+                )
+                private_manifest = controller.private_root / "manifests/run.json"
+                private_manifest.write_text(canonical_json(value) + "\n")
+                create_lifecycle_journal(
+                    controller.journal_path,
+                    private_root=controller.private_root,
+                    repository_root=root,
+                    docker_host=controller.docker_host,
+                    source_commit="d" * 40,
+                    execution_nonce=HEX_A,
+                    global_context="personal",
+                )
+                _bind_journal_manifest(
+                    controller.journal_path, private_manifest, value
+                )
+                persist_active_state(
+                    controller.state_path, private_manifest, value
+                )
+                bound = load_bound_active_state(controller.state_path)
+                controller.state_path.unlink()
+                if case == "service":
+                    recovered_object = bound["objects"][0]
+                    event = "container_create_intent"
+                else:
+                    track = LiveTrack.CREDENTIAL_POLICY_BASELINE
+                    name = (
+                        f"kil-v3b1-validate-{track.value.replace('_', '-')}-"
+                        f"{str(value['content_identity_sha256'])[:12]}"
+                    )
+                    recovered_object = {
+                        "id": HEX_B,
+                        "name": name,
+                        "role": "validator",
+                        "track": track.value,
+                    }
+                    event = "config_validate_intent"
+                journal_event(
+                    controller.journal_path,
+                    event,
+                    {"name": recovered_object["name"]},
+                )
+                containers = parse_inventory_rows(
+                    canonical_json(
+                        {
+                            "id": recovered_object["id"],
+                            "name": recovered_object["name"],
+                        }
+                    )
+                    + "\n",
+                    "container",
+                )
+                empty_networks = parse_inventory_rows("", "network")
+
+                def inventory(kind):
+                    return containers if kind == "container" else empty_networks
+
+                with mock.patch.object(
+                    controller, "_docker_inventory", side_effect=inventory
+                ), mock.patch.object(
+                    controller,
+                    "_inspect_container",
+                    return_value=recovered_object,
+                ), mock.patch.object(
+                    controller,
+                    "_inspect_validation_container",
+                    return_value=recovered_object,
+                ):
+                    recovered, _, _ = controller._load_for_down()
+
+                collection = (
+                    recovered["objects"]
+                    if case == "service"
+                    else recovered["transient_objects"]
+                )
+                self.assertEqual(collection, [recovered_object])
+
     def test_cli_exposes_only_the_five_approved_subcommands(self):
         parser = make_parser()
 
@@ -3603,10 +3986,29 @@ class JournalRecoveryTest(unittest.TestCase):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 journal = self.create(root)
+                details = {"injected_failure": True}
+                if phase == "container_remove":
+                    details = {
+                        "id": HEX_A,
+                        "name": "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa",
+                    }
+                elif phase == "network_remove":
+                    details = {
+                        "id": HEX_A,
+                        "name": "kil-v3b1-network-credential-policy-baseline-aaaaaaaaaaaa",
+                    }
+                elif phase == "container_create":
+                    details = {
+                        "name": "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa"
+                    }
+                elif phase == "network_create":
+                    details = {
+                        "name": "kil-v3b1-network-credential-policy-baseline-aaaaaaaaaaaa"
+                    }
                 journal_event(
                     journal,
                     f"{phase}_intent",
-                    {"injected_failure": True},
+                    details,
                 )
                 plan = recovery_plan(load_lifecycle_journal(journal))
                 self.assertEqual(plan["last_event"], f"{phase}_intent")
@@ -5011,6 +5413,7 @@ class TeardownContinuationTest(unittest.TestCase):
                         self.bound_state = None
                         self.bound_manifest = None
                         self.request_records = []
+                        self.removed_ids = set()
 
                     def _execute(self, argv, *, timeout_s, docker=False):
                         self.commands.append(list(argv))
@@ -5034,6 +5437,53 @@ class TeardownContinuationTest(unittest.TestCase):
                             return CommandResult(0, "false\n", "")
                         if "context" in argv and "show" in argv:
                             return CommandResult(0, "personal\n", "")
+                        if len(argv) > 5 and argv[5] == "ps":
+                            records = (
+                                []
+                                if self.bound_state is None
+                                else [
+                                    item
+                                    for item in self.bound_state["objects"]
+                                    if item["id"] not in self.removed_ids
+                                ]
+                            )
+                            return CommandResult(
+                                0,
+                                "".join(
+                                    canonical_json(
+                                        {"id": item["id"], "name": item["name"]}
+                                    )
+                                    + "\n"
+                                    for item in records
+                                ),
+                                "",
+                            )
+                        if len(argv) > 6 and argv[5:7] == ["network", "ls"]:
+                            records = (
+                                []
+                                if self.bound_state is None
+                                else [
+                                    item
+                                    for item in self.bound_state["network_objects"]
+                                    if item["id"] not in self.removed_ids
+                                ]
+                            )
+                            return CommandResult(
+                                0,
+                                "".join(
+                                    canonical_json(
+                                        {"id": item["id"], "name": item["name"]}
+                                    )
+                                    + "\n"
+                                    for item in records
+                                ),
+                                "",
+                            )
+                        if len(argv) > 5 and (
+                            argv[5] == "rm" or argv[5:7] == ["network", "rm"]
+                        ):
+                            self.removed_ids.add(argv[-1])
+                            return CommandResult(0, "", "")
                         return CommandResult(0, "", "")
 
                     def _attest_colima_after_start(self, execution_nonce=None):
@@ -5046,9 +5496,6 @@ class TeardownContinuationTest(unittest.TestCase):
                             load_lifecycle_journal(self.journal_path),
                         )
 
-                    def _assert_only_recorded_managed(self, state, *, expect_present):
-                        return None
-
                     def _inspect_container(self, identifier, manifest_value, role, track, *, require_running=True):
                         return next(
                             item
@@ -5056,15 +5503,20 @@ class TeardownContinuationTest(unittest.TestCase):
                             if item["id"] == identifier
                         )
 
-                    def _inspect_network(self, identifier, manifest_value, track, *, require_complete_membership=True):
+                    def _inspect_network(
+                        self,
+                        identifier,
+                        manifest_value,
+                        track,
+                        *,
+                        require_complete_membership=True,
+                        require_empty_membership=False,
+                    ):
                         return next(
                             item
                             for item in self.bound_state["network_objects"]
                             if item["id"] == identifier
                         )
-
-                    def _docker_object_exists(self, kind, identifier):
-                        return False
 
                     def _request_records(self, manifest_value):
                         return list(self.request_records)
@@ -5142,6 +5594,27 @@ class TeardownContinuationTest(unittest.TestCase):
                 self.assertTrue(controller.deleted)
                 self.assertTrue(
                     any(command[0:2] == ["colima", "delete"] for command in controller.commands)
+                )
+                self.assertEqual(
+                    len(
+                        [
+                            command
+                            for command in controller.commands
+                            if len(command) > 5 and command[5] == "ps"
+                        ]
+                    ),
+                    14,
+                )
+                self.assertEqual(
+                    len(
+                        [
+                            command
+                            for command in controller.commands
+                            if len(command) > 6
+                            and command[5:7] == ["network", "ls"]
+                        ]
+                    ),
+                    14,
                 )
                 public_manifest = json.loads(
                     (published / "manifest.json").read_text()
@@ -5747,6 +6220,23 @@ class RuntimeAttestationTest(unittest.TestCase):
                 value,
                 track.value,
                 require_complete_membership=False,
+            )
+            controller.runner = NetworkRunner(partial)
+            with self.assertRaisesRegex(ControllerError, "membership"):
+                controller._inspect_network(
+                    "a" * 64,
+                    value,
+                    track.value,
+                    require_complete_membership=False,
+                    require_empty_membership=True,
+                )
+            controller.runner = NetworkRunner({**network, "Containers": {}})
+            controller._inspect_network(
+                "a" * 64,
+                value,
+                track.value,
+                require_complete_membership=False,
+                require_empty_membership=True,
             )
 
             malformed = {**network, "Internal": "true"}
