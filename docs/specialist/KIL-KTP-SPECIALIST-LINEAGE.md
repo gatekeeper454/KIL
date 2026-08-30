@@ -4059,3 +4059,55 @@ and target semantics are unchanged.
 the committed zero-request live smoke before any accepted central proof run.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-082 — 2026-08-30 — V3B-1 recovery IDs and validators are now fully explicit
+
+**Input:** Close four independent Task 4 review blockers without changing KIL
+semantics: forbid name-only adoption during partial creation, replace implicit
+validator auto-removal with an explicit lifecycle, defer absent completions
+until both inventories validate together, and totalize the pure inventory
+parser.
+
+**Interpretation:** A fixed KIL name is not ownership proof. Recovery may act
+only after a full object ID is durably paired with its kind and name. The two
+Docker inventories form one validation observation for recovery purposes, so
+no inferred completion may enter the journal until both exact survivor sets
+are accepted. Validators are owned Docker objects and require the same explicit
+identity, inspection, stop, removal-intent, and survivor-inventory discipline
+as service containers.
+
+**Decision status:** Confirmed harness-only corrections complete, pending
+independent re-review. Pending creations no longer adopt a current name; a
+present object without a persisted full ID fails closed untouched. Validators
+now run detached without `--rm`, persist their returned full ID, execute under
+an exact ID-bound validation intent, wait for a zero exit, attest immutable
+configuration and `AutoRemove=false`, and remain available for exact teardown.
+Pending absent removals, including validators, are collected without mutation,
+both captured inventories are validated against exact survivors, and only then
+are completion records appended. Inventory parsing now converts bounded
+encoding, recursion, canonicalization, record, and final-construction failures
+to `ContractError`.
+
+**Rationale:** Name reuse, implicit Docker deletion, and partially committed
+cross-inventory observations each create an unprovable ownership gap. Durable
+full IDs, retained validators, and two-phase recovery preserve the evidence
+needed to distinguish a completed owned mutation from replacement or ambient
+state. Parser totalization keeps malformed engine output inside the closed
+contract boundary.
+
+**Affected artifacts:**
+
+- `tools/v3b1_harness_contract.py`
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker or Colima operation was performed.
+Installed Docker formatting, validator timing, and teardown behavior remain
+gated on the reviewed zero-request smoke. KIL, signed composite state,
+authorization, Envoy routing, and target semantics remain unchanged.
+
+**Next gate:** Independent Task 4 re-review, followed only after acceptance by
+the committed zero-request live smoke and then the single accepted proof run.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

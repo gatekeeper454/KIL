@@ -387,17 +387,16 @@ def _validate_lifecycle_event_details(
         "container_create_complete",
         "network_create_intent",
         "network_create_complete",
-        "config_validate_intent",
-        "config_validate_complete",
+        "validator_create_intent",
+        "validator_create_complete",
     }:
-        validator = event_name.startswith("config_validate_")
         kind = (
             "container"
-            if validator or event_name.startswith("container_")
+            if event_name.startswith(("container_", "validator_"))
             else "network"
         )
         expected = {"name"}
-        if event_name.endswith("_complete") and not validator:
+        if event_name.endswith("_complete"):
             expected.add("id")
         if set(details) != expected:
             raise ControllerError("Docker creation fields are not closed")
@@ -409,6 +408,12 @@ def _validate_lifecycle_event_details(
             )
         except HarnessContractError as error:
             raise ControllerError("Docker creation identity is invalid") from error
+        return
+    if event_name in {"config_validate_intent", "config_validate_complete"}:
+        try:
+            DockerInventoryEntry.from_mapping(details, "container")
+        except HarnessContractError as error:
+            raise ControllerError("validator execution identity is invalid") from error
         return
     if event_name in {
         "container_remove_intent",
@@ -691,6 +696,8 @@ def _validate_lifecycle_history(
     freeze_completed = False
     removals: dict[tuple[str, str, str], str] = {}
     creations: dict[tuple[str, str], str] = {}
+    creation_ids: dict[tuple[str, str], str] = {}
+    validations: dict[tuple[str, str], str] = {}
     for event in events:
         event_name = event["event"]
         details = event["details"]
@@ -701,12 +708,12 @@ def _validate_lifecycle_history(
             "container_create_complete",
             "network_create_intent",
             "network_create_complete",
-            "config_validate_intent",
-            "config_validate_complete",
+            "validator_create_intent",
+            "validator_create_complete",
         }:
             kind = (
                 "validator"
-                if event_name.startswith("config_validate_")
+                if event_name.startswith("validator_")
                 else "container"
                 if event_name.startswith("container_")
                 else "network"
@@ -722,6 +729,28 @@ def _validate_lifecycle_history(
                         "Docker creation completion lacks its exact intent"
                     )
                 creations[key] = "complete"
+                creation_ids[key] = str(details["id"])
+            continue
+        if event_name in {"config_validate_intent", "config_validate_complete"}:
+            key = (str(details["id"]), str(details["name"]))
+            if event_name.endswith("_intent"):
+                creation_key = ("validator", key[1])
+                if (
+                    creations.get(creation_key) != "complete"
+                    or creation_ids.get(creation_key) != key[0]
+                ):
+                    raise ControllerError(
+                        "validator execution lacks its exact created identity"
+                    )
+                if key in validations:
+                    raise ControllerError("validator execution intent is duplicated")
+                validations[key] = "pending"
+            else:
+                if validations.get(key) != "pending":
+                    raise ControllerError(
+                        "validator execution completion lacks its exact intent"
+                    )
+                validations[key] = "complete"
             continue
         if event_name in {
             "container_remove_intent",
@@ -947,7 +976,7 @@ def _creation_transition(
         DockerInventoryEntry(inventory_kind, "0" * 64, name)
     except HarnessContractError as error:
         raise ControllerError("Docker creation name is invalid") from error
-    prefix = "config_validate" if kind == "validator" else f"{kind}_create"
+    prefix = "validator_create" if kind == "validator" else f"{kind}_create"
     transition = "unstarted"
     object_id: str | None = None
     for event in events:
@@ -966,13 +995,12 @@ def _creation_transition(
             continue
         if transition != "pending":
             raise ControllerError("Docker creation completion lacks its intent")
-        if kind != "validator":
-            try:
-                object_id = DockerInventoryEntry.from_mapping(
-                    {"id": details.get("id"), "name": name}, inventory_kind
-                ).object_id
-            except HarnessContractError as error:
-                raise ControllerError("Docker creation identity is invalid") from error
+        try:
+            object_id = DockerInventoryEntry.from_mapping(
+                {"id": details.get("id"), "name": name}, inventory_kind
+            ).object_id
+        except HarnessContractError as error:
+            raise ControllerError("Docker creation identity is invalid") from error
         transition = "complete"
     return transition, object_id
 
@@ -2348,7 +2376,7 @@ def build_runtime_commands(
     *,
     docker_binary: Path,
 ) -> list[list[str]]:
-    """Construct exact validation, network, and nine-container commands."""
+    """Construct exact validator, network, and nine-service commands."""
     _validate_manifest(manifest)
     runtime_root = _runtime_root(root, manifest)
     prefix = _docker_prefix(
@@ -2361,7 +2389,7 @@ def build_runtime_commands(
             [
                 *prefix,
                 "run",
-                "--rm",
+                "-d",
                 "--name",
                 f"kil-v3b1-validate-{_track_slug(track)}-{str(manifest['content_identity_sha256'])[:12]}",
                 *_labels(manifest, "validator", track),
@@ -4992,6 +5020,7 @@ class LocalEnvoyController:
         if (
             type(raw.get("Id")) is not str
             or _HEX.fullmatch(str(raw["Id"])) is None
+            or raw["Id"] != identifier
             or raw.get("Name") != f"/{name}"
             or raw.get("Image") != manifest["envoy_image_id"]
             or config.get("Image") != manifest["envoy_image_digest"]
@@ -5002,6 +5031,7 @@ class LocalEnvoyController:
                 "--disable-hot-restart", "--concurrency", "1",
             ]
             or host.get("ReadonlyRootfs") is not True
+            or host.get("AutoRemove") is not False
             or host.get("CapDrop") != ["ALL"]
             or security != ["no-new-privileges"]
             or host.get("NetworkMode") != "none"
@@ -5074,6 +5104,73 @@ class LocalEnvoyController:
             for item in manifest["networks"]  # type: ignore[union-attr]
         ]
         return objects, networks
+
+    def _run_validator_command(
+        self,
+        command: Sequence[str],
+        manifest: dict[str, object],
+        track: LiveTrack,
+    ) -> dict[str, object]:
+        """Create, wait for, and attest one explicitly retained validator."""
+        expected_name = (
+            f"kil-v3b1-validate-{_track_slug(track)}-"
+            f"{str(manifest['content_identity_sha256'])[:12]}"
+        )
+        parts = list(command)
+        if (
+            "run" not in parts
+            or "-d" not in parts
+            or "--rm" in parts
+            or "--name" not in parts
+            or parts[parts.index("--name") + 1] != expected_name
+            or "kil.v3b1.role=validator" not in parts
+        ):
+            raise ControllerError("validator creation command is not exact")
+        journal_event(
+            self.journal_path,
+            "validator_create_intent",
+            {"name": expected_name},
+        )
+        result = self._execute(parts, timeout_s=300, docker=True)
+        object_id = result.stdout.strip()
+        if _HEX.fullmatch(object_id) is None:
+            raise ControllerError(
+                "validator creation did not return an exact object ID"
+            )
+        identity = {"id": object_id, "name": expected_name}
+        journal_event(
+            self.journal_path,
+            "validator_create_complete",
+            identity,
+        )
+        journal_event(
+            self.journal_path,
+            "config_validate_intent",
+            identity,
+        )
+        waited = self._execute(
+            self.docker_command("wait", object_id),
+            timeout_s=300,
+            docker=True,
+        )
+        if waited.stdout != "0\n":
+            raise ControllerError("Envoy validator did not exit successfully")
+        current = self._inspect_validation_container(
+            object_id, manifest, track
+        )
+        if (
+            current.get("id") != object_id
+            or current.get("name") != expected_name
+            or current.get("role") != "validator"
+            or current.get("track") != track.value
+        ):
+            raise ControllerError("Envoy validator identity changed after execution")
+        journal_event(
+            self.journal_path,
+            "config_validate_complete",
+            identity,
+        )
+        return current
 
     def _docker_inventory(self, kind: str) -> DockerInventory:
         """Read one no-truncation ID/name inventory; never infer from stderr."""
@@ -5186,6 +5283,7 @@ class LocalEnvoyController:
         network_by_name = {
             name: object_id for object_id, name in network_inventory.items()
         }
+        pending_absences: list[tuple[str, dict[str, str]]] = []
 
         def resolve_identity(
             kind: str,
@@ -5193,16 +5291,17 @@ class LocalEnvoyController:
             by_id: Mapping[str, str],
             by_name: Mapping[str, str],
         ) -> tuple[str, str] | None:
+            inventory_kind = "container" if kind == "validator" else kind
             name = str(item["name"])
             recorded_id = item.get("id")
             if type(recorded_id) is str:
                 try:
-                    DockerInventoryEntry(kind, recorded_id, name)
+                    DockerInventoryEntry(inventory_kind, recorded_id, name)
                 except HarnessContractError as error:
                     raise ControllerError(
                         "recorded Docker recovery identity is invalid"
                     ) from error
-            elif bound_state_present:
+            elif bound_state_present and kind != "validator":
                 raise ControllerError("bound Docker recovery identity lacks its ID")
             else:
                 creation, created_id = _creation_transition(
@@ -5215,14 +5314,16 @@ class LocalEnvoyController:
                         )
                     return None
                 if creation == "pending":
-                    recorded_id = by_name.get(name)
-                    if recorded_id is None:
-                        return None
+                    if name in by_name:
+                        raise ControllerError(
+                            "partial-up Docker object lacks a durably anchored full ID"
+                        )
+                    return None
                 else:
                     recorded_id = created_id
             assert isinstance(recorded_id, str)
             identity = {"id": recorded_id, "name": name}
-            transition = _removal_transition(events, kind, identity)
+            transition = _removal_transition(events, inventory_kind, identity)
             actual_name = by_id.get(recorded_id)
             actual_id = by_name.get(name)
             if actual_name is not None or actual_id is not None:
@@ -5236,11 +5337,7 @@ class LocalEnvoyController:
                     )
                 return recorded_id, name
             if transition == "pending":
-                journal_event(
-                    self.journal_path,
-                    f"{kind}_remove_complete",
-                    identity,
-                )
+                pending_absences.append((inventory_kind, identity))
                 return None
             if transition == "complete":
                 return None
@@ -5298,21 +5395,41 @@ class LocalEnvoyController:
                     f"kil-v3b1-validate-{_track_slug(track)}-"
                     f"{str(manifest['content_identity_sha256'])[:12]}"
                 )
-                creation, _ = _creation_transition(events, "validator", name)
-                actual_id = container_by_name.get(name)
-                if actual_id is None:
+                resolved = resolve_identity(
+                    "validator",
+                    {"name": name},
+                    container_inventory,
+                    container_by_name,
+                )
+                if resolved is None:
                     continue
-                if creation != "pending":
-                    raise ControllerError(
-                        "unexpected validator container prevents recovery"
-                    )
+                actual_id, _ = resolved
                 current = self._inspect_validation_container(
                     actual_id, manifest, track
                 )
-                identity = {"id": actual_id, "name": name}
-                if _removal_transition(events, "container", identity) == "complete":
-                    raise ControllerError("completed validator removal reappeared")
                 transient_objects.append(current)
+        self._require_exact_inventory(
+            "container",
+            container_inventory,
+            {
+                str(item["id"]): str(item["name"])
+                for item in [*objects, *transient_objects]
+            },
+        )
+        self._require_exact_inventory(
+            "network",
+            network_inventory,
+            {
+                str(item["id"]): str(item["name"])
+                for item in networks
+            },
+        )
+        for kind, identity in pending_absences:
+            journal_event(
+                self.journal_path,
+                f"{kind}_remove_complete",
+                identity,
+            )
         journal = load_lifecycle_journal(self.journal_path)
         state: dict[str, object] = {
             "objects": objects,
@@ -5483,9 +5600,30 @@ class LocalEnvoyController:
         _bind_journal_manifest(self.journal_path, private_manifest_path, manifest)
         materialize_run_inputs(self.root, manifest)
         created_ids: dict[str, str] = {}
+        validator_objects: list[dict[str, object]] = []
         for command in build_runtime_commands(
             self.root, manifest, docker_binary=self.docker_binary
         ):
+            if "kil.v3b1.role=validator" in command:
+                name = command[command.index("--name") + 1]
+                track = next(
+                    (
+                        candidate
+                        for candidate in _TRACKS
+                        if name
+                        == (
+                            f"kil-v3b1-validate-{_track_slug(candidate)}-"
+                            f"{str(manifest['content_identity_sha256'])[:12]}"
+                        )
+                    ),
+                    None,
+                )
+                if track is None:
+                    raise ControllerError("validator command track is invalid")
+                validator_objects.append(
+                    self._run_validator_command(command, manifest, track)
+                )
+                continue
             if "network" in command and "create" in command:
                 event = "network_create"
                 name = command[-1]
@@ -5495,9 +5633,7 @@ class LocalEnvoyController:
                 name = command[command.index("--name") + 1]
                 details = {"name": name}
             else:
-                event = "config_validate"
-                name = command[command.index("--name") + 1]
-                details = {"name": name}
+                raise ControllerError("runtime creation command is unclassified")
             journal_event(self.journal_path, f"{event}_intent", details)
             result = self._execute(command, timeout_s=300, docker=True)
             completed_details = dict(details)
@@ -5516,6 +5652,14 @@ class LocalEnvoyController:
         }
         if created_ids != attested_ids:
             raise ControllerError("created Docker object IDs diverge from later attestation")
+        self._assert_only_recorded_managed(
+            {
+                "objects": objects,
+                "transient_objects": validator_objects,
+                "network_objects": networks,
+            },
+            expect_present=True,
+        )
         persist_active_state(
             self.state_path,
             private_manifest_path,

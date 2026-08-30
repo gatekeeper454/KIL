@@ -548,6 +548,19 @@ class HarnessIntegrationContractTest(unittest.TestCase):
         with self.assertRaises(ContractError):
             parse_inventory_rows("", [])
 
+    def test_inventory_parser_totalizes_encoding_recursion_and_record_failures(self):
+        name = "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa"
+        valid = canonical_json({"id": HEX_A, "name": name}) + "\n"
+        with self.assertRaises(ContractError):
+            parse_inventory_rows("\ud800\n", "container")
+        for target in ("_canonical_json", "DockerInventoryEntry.from_mapping"):
+            with self.subTest(target=target), mock.patch(
+                f"tools.v3b1_harness_contract.{target}",
+                side_effect=RecursionError("adversarial nesting"),
+            ):
+                with self.assertRaises(ContractError):
+                    parse_inventory_rows(valid, "container")
+
     def test_fixture_loader_rejects_duplicate_fields_and_noncanonical_json(self):
         with tempfile.TemporaryDirectory(dir=self.FIXTURE.parent) as directory:
             path = Path(directory) / "fixture.json"
@@ -1019,6 +1032,83 @@ class ControllerContractTest(unittest.TestCase):
                 {"id": HEX_C, "name": container["name"]}
             )._assert_only_recorded_managed(state, expect_present=True)
 
+    def test_validator_lifecycle_persists_id_waits_and_attests_without_auto_remove(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profile_path = root / "deploy/kind/v3b-profile.json"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_bytes(
+                (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+            )
+            controller = LocalEnvoyController(
+                root,
+                FakeRunner(
+                    [
+                        CommandResult(0, HEX_B + "\n", ""),
+                        CommandResult(0, "0\n", ""),
+                    ]
+                ),
+                home=root / "home",
+                port_probe=lambda port: False,
+                tool_verifier=lambda: {},
+            )
+            controller._prepare_private_roots()
+            value = manifest(docker_host=controller.docker_host)
+            materialize_run_inputs(controller.root, value)
+            commands = build_runtime_commands(
+                controller.root, value, docker_binary=controller.docker_binary
+            )
+            command = next(
+                item
+                for item in commands
+                if "kil.v3b1.role=validator" in item
+            )
+            create_lifecycle_journal(
+                controller.journal_path,
+                private_root=controller.private_root,
+                repository_root=root,
+                docker_host=controller.docker_host,
+                source_commit="d" * 40,
+                execution_nonce=HEX_A,
+                global_context="personal",
+            )
+            track = LiveTrack.CREDENTIAL_POLICY_BASELINE
+            name = command[command.index("--name") + 1]
+            attested = {
+                "id": HEX_B,
+                "name": name,
+                "role": "validator",
+                "track": track.value,
+            }
+            with mock.patch.object(
+                controller,
+                "_inspect_validation_container",
+                return_value=attested,
+            ):
+                result = controller._run_validator_command(
+                    command, value, track
+                )
+
+            self.assertEqual(result, attested)
+            self.assertNotIn("--rm", command)
+            self.assertEqual(controller.runner.calls[1][0][-2:], ["wait", HEX_B])
+            events = load_lifecycle_journal(controller.journal_path)["events"]
+            self.assertEqual(
+                [event["event"] for event in events],
+                [
+                    "validator_create_intent",
+                    "validator_create_complete",
+                    "config_validate_intent",
+                    "config_validate_complete",
+                ],
+            )
+            self.assertTrue(
+                all(
+                    event["details"].get("id") == HEX_B
+                    for event in events[1:]
+                )
+            )
+
     def test_removal_history_is_closed_exact_and_replayable(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
             root = Path(directory)
@@ -1080,6 +1170,25 @@ class ControllerContractTest(unittest.TestCase):
                     orphan_journal,
                     "container_create_complete",
                     identity,
+                )
+            validator_name = (
+                "kil-v3b1-validate-credential-policy-baseline-bbbbbbbbbbbb"
+            )
+            journal_event(
+                orphan_journal,
+                "validator_create_intent",
+                {"name": validator_name},
+            )
+            journal_event(
+                orphan_journal,
+                "validator_create_complete",
+                {"id": HEX_B, "name": validator_name},
+            )
+            with self.assertRaisesRegex(ControllerError, "created identity"):
+                journal_event(
+                    orphan_journal,
+                    "config_validate_intent",
+                    {"id": HEX_C, "name": validator_name},
                 )
 
     def test_down_load_completes_pending_absence_but_rejects_unintended_absence(self):
@@ -1162,6 +1271,48 @@ class ControllerContractTest(unittest.TestCase):
                     "container_remove_intent",
                     identity,
                 )
+                unexpected = {
+                    "id": HEX_C,
+                    "name": "kil-v3b1-validate-signed-state-only-cccccccccccc",
+                }
+
+                def ambiguous_inventory(kind):
+                    if kind == "network":
+                        return inventory(kind)
+                    return parse_inventory_rows(
+                        canonical_json(unexpected) + "\n" + "".join(
+                            canonical_json(
+                                {"id": item["id"], "name": item["name"]}
+                            )
+                            + "\n"
+                            for item in bound["objects"]
+                            if item != removed
+                        ),
+                        kind,
+                    )
+
+                with mock.patch.object(
+                    controller,
+                    "_docker_inventory",
+                    side_effect=ambiguous_inventory,
+                ), mock.patch.object(
+                    controller, "_inspect_container", side_effect=inspect_container
+                ), mock.patch.object(
+                    controller, "_inspect_network", side_effect=inspect_network
+                ):
+                    with self.assertRaises(ControllerError):
+                        controller._load_for_down()
+                self.assertEqual(
+                    [
+                        event["event"]
+                        for event in load_lifecycle_journal(
+                            controller.journal_path
+                        )["events"]
+                        if event["event"].startswith("container_remove_")
+                    ],
+                    ["container_remove_intent"],
+                )
+
                 recovered, _, recovered_journal = controller._load_for_down()
 
             self.assertEqual(len(recovered["objects"]), 8)
@@ -1218,6 +1369,7 @@ class ControllerContractTest(unittest.TestCase):
                 if case == "service":
                     recovered_object = bound["objects"][0]
                     event = "container_create_intent"
+                    complete_event = "container_create_complete"
                 else:
                     track = LiveTrack.CREDENTIAL_POLICY_BASELINE
                     name = (
@@ -1230,7 +1382,8 @@ class ControllerContractTest(unittest.TestCase):
                         "role": "validator",
                         "track": track.value,
                     }
-                    event = "config_validate_intent"
+                    event = "validator_create_intent"
+                    complete_event = "validator_create_complete"
                 journal_event(
                     controller.journal_path,
                     event,
@@ -1262,6 +1415,47 @@ class ControllerContractTest(unittest.TestCase):
                     "_inspect_validation_container",
                     return_value=recovered_object,
                 ):
+                    with self.assertRaisesRegex(
+                        ControllerError, "anchored|creation.*ID|partial-up"
+                    ):
+                        controller._load_for_down()
+
+                journal_event(
+                    controller.journal_path,
+                    complete_event,
+                    {
+                        "id": recovered_object["id"],
+                        "name": recovered_object["name"],
+                    },
+                )
+                replacement = parse_inventory_rows(
+                    canonical_json(
+                        {"id": HEX_C, "name": recovered_object["name"]}
+                    )
+                    + "\n",
+                    "container",
+                )
+                with mock.patch.object(
+                    controller,
+                    "_docker_inventory",
+                    side_effect=lambda kind: (
+                        replacement if kind == "container" else empty_networks
+                    ),
+                ):
+                    with self.assertRaisesRegex(ControllerError, "identity"):
+                        controller._load_for_down()
+
+                with mock.patch.object(
+                    controller, "_docker_inventory", side_effect=inventory
+                ), mock.patch.object(
+                    controller,
+                    "_inspect_container",
+                    return_value=recovered_object,
+                ), mock.patch.object(
+                    controller,
+                    "_inspect_validation_container",
+                    return_value=recovered_object,
+                ):
                     recovered, _, _ = controller._load_for_down()
 
                 collection = (
@@ -1270,6 +1464,33 @@ class ControllerContractTest(unittest.TestCase):
                     else recovered["transient_objects"]
                 )
                 self.assertEqual(collection, [recovered_object])
+                if case == "validator":
+                    identity = {
+                        "id": recovered_object["id"],
+                        "name": recovered_object["name"],
+                    }
+                    journal_event(
+                        controller.journal_path,
+                        "container_remove_intent",
+                        identity,
+                    )
+                    with mock.patch.object(
+                        controller,
+                        "_docker_inventory",
+                        side_effect=lambda kind: (
+                            parse_inventory_rows("", "container")
+                            if kind == "container"
+                            else empty_networks
+                        ),
+                    ):
+                        absent, _, absent_journal = controller._load_for_down()
+                    self.assertEqual(absent["transient_objects"], [])
+                    self.assertEqual(
+                        local_envoy_module._removal_transition(
+                            absent_journal["events"], "container", identity
+                        ),
+                        "complete",
+                    )
 
     def test_cli_exposes_only_the_five_approved_subcommands(self):
         parser = make_parser()
@@ -1718,9 +1939,15 @@ class ControllerContractTest(unittest.TestCase):
             self.assertTrue(all("bridge" in command for command in network_commands))
             run_commands = [command for command in commands if "run" in command]
             detached = [command for command in run_commands if "-d" in command]
-            validators = [command for command in run_commands if "--rm" in command]
-            self.assertEqual(len(detached), 9)
+            validators = [
+                command
+                for command in run_commands
+                if "kil.v3b1.role=validator" in command
+            ]
+            self.assertEqual(len(detached), 12)
             self.assertEqual(len(validators), 3)
+            self.assertFalse(any("--rm" in command for command in run_commands))
+            self.assertTrue(all("-d" in command for command in validators))
             self.assertTrue(
                 all("kil.v3b1.role=validator" in command for command in validators)
             )
@@ -6095,6 +6322,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                 },
                 "HostConfig": {
                     "ReadonlyRootfs": True,
+                    "AutoRemove": False,
                     "CapDrop": ["ALL"],
                     "SecurityOpt": ["no-new-privileges"],
                     "NetworkMode": "none",

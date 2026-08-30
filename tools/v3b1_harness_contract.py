@@ -511,31 +511,46 @@ class DockerInventory:
 def parse_inventory_rows(payload: str | bytes, kind: str) -> DockerInventory:
     if type(kind) is not str or kind not in {"container", "network"}:
         raise ContractError("Docker inventory kind is invalid")
-    if type(payload) is bytes:
-        try:
+    try:
+        if type(payload) is bytes:
             text = payload.decode("utf-8")
-        except UnicodeError as error:
-            raise ContractError("Docker inventory is not UTF-8") from error
-    elif type(payload) is str:
-        text = payload
-    else:
-        raise ContractError("Docker inventory payload must be text or bytes")
-    if not text:
-        return DockerInventory(kind, ())
-    if len(text.encode("utf-8")) > _MAX_FIXTURE_BYTES or not text.endswith("\n"):
-        raise ContractError("Docker inventory rows are not bounded canonical JSONL")
-    entries = []
-    for line in text[:-1].split("\n"):
-        if not line:
-            raise ContractError("Docker inventory contains a blank row")
-        try:
-            value = json.loads(line, object_pairs_hook=_closed_object)
-        except (ValueError, ContractError) as error:
-            raise ContractError("Docker inventory row is not closed JSON") from error
-        if line != _canonical_json(value):
-            raise ContractError("Docker inventory row is not canonical JSON")
-        entries.append(DockerInventoryEntry.from_mapping(value, kind))
-    return DockerInventory(kind, tuple(entries))
+        elif type(payload) is str:
+            text = payload
+        else:
+            raise ContractError("Docker inventory payload must be text or bytes")
+        if not text:
+            return DockerInventory(kind, ())
+        if (
+            len(text.encode("utf-8")) > _MAX_FIXTURE_BYTES
+            or not text.endswith("\n")
+        ):
+            raise ContractError(
+                "Docker inventory rows are not bounded canonical JSONL"
+            )
+        entries = []
+        for line in text[:-1].split("\n"):
+            if not line:
+                raise ContractError("Docker inventory contains a blank row")
+            try:
+                value = json.loads(line, object_pairs_hook=_closed_object)
+            except (ValueError, ContractError) as error:
+                raise ContractError(
+                    "Docker inventory row is not closed JSON"
+                ) from error
+            if line != _canonical_json(value):
+                raise ContractError("Docker inventory row is not canonical JSON")
+            entries.append(DockerInventoryEntry.from_mapping(value, kind))
+        return DockerInventory(kind, tuple(entries))
+    except ContractError:
+        raise
+    except (
+        UnicodeError,
+        ValueError,
+        TypeError,
+        OverflowError,
+        RecursionError,
+    ) as error:
+        raise ContractError("Docker inventory parsing failed closed") from error
 
 
 @dataclass(frozen=True, slots=True)
