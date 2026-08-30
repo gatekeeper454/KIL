@@ -77,6 +77,10 @@ class QStateClaimsTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "negative zero"):
             claims(charge=Decimal("-0"))
+        for enormous in (Decimal("1E+1000000000"), Decimal("1E-1000000000")):
+            with self.subTest(enormous=str(enormous)):
+                with self.assertRaisesRegex(ValueError, "wire length"):
+                    claims(charge=enormous, maximum_charge=enormous)
 
     def test_schema_uses_the_same_canonical_decimal_pattern(self):
         schema = json.loads(
@@ -86,6 +90,7 @@ class QStateClaimsTest(unittest.TestCase):
         expected = r"^(0|[1-9][0-9]*)(\.[0-9]*[1-9])?$"
         for name in ("charge", "threshold", "decay_rate", "maximum_charge"):
             self.assertEqual(schema["properties"][name]["pattern"], expected)
+            self.assertEqual(schema["properties"][name]["maxLength"], 64)
 
     def test_converts_only_claimed_authority_to_v1_state(self):
         state = claims().to_composite_state()

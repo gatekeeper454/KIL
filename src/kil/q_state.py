@@ -21,6 +21,7 @@ from .domain import CompositeState
 
 Q_STATE_SCHEMA_VERSION = "kil.q-state.v0"
 MAX_VALIDITY_SECONDS = 10
+MAX_DECIMAL_WIRE_LENGTH = 64
 _DIGEST_PATTERN = re.compile(r"^sha256:[a-f0-9]{64}$")
 _DECIMAL_PATTERN = re.compile(r"^(0|[1-9][0-9]*)(\.[0-9]*[1-9])?$")
 _DECIMAL_FIELDS = frozenset(
@@ -64,7 +65,26 @@ def _require_decimal(name: str, value: object) -> Decimal:
         raise ValueError(f"{name} cannot be negative zero")
     if value < 0:
         raise ValueError(f"{name} must be nonnegative")
+    if _decimal_wire_length(value) > MAX_DECIMAL_WIRE_LENGTH:
+        raise ValueError(f"{name} exceeds maximum wire length")
     return value
+
+
+def _decimal_wire_length(value: Decimal) -> int:
+    if value.is_zero():
+        return 1
+    _, raw_digits, raw_exponent = value.as_tuple()
+    digits = list(raw_digits)
+    exponent = raw_exponent
+    while len(digits) > 1 and digits[-1] == 0:
+        digits.pop()
+        exponent += 1
+    if exponent >= 0:
+        return len(digits) + exponent
+    split = len(digits) + exponent
+    if split > 0:
+        return len(digits) + 1
+    return 2 - split + len(digits)
 
 
 def _decimal_wire(value: Decimal) -> str:
@@ -180,7 +200,11 @@ class QStateClaims:
         values: dict[str, Any] = dict(payload)
         for name in _DECIMAL_FIELDS:
             raw = values[name]
-            if type(raw) is not str or _DECIMAL_PATTERN.fullmatch(raw) is None:
+            if (
+                type(raw) is not str
+                or len(raw) > MAX_DECIMAL_WIRE_LENGTH
+                or _DECIMAL_PATTERN.fullmatch(raw) is None
+            ):
                 raise ValueError(f"{name} must be canonical fixed-point decimal")
             try:
                 values[name] = Decimal(raw)
