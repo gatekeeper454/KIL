@@ -341,7 +341,7 @@ git commit -m "Expose the fixed KIL ext authz HTTP boundary"
 - Create: `src/kil/target_http.py`
 - Create: `tests/test_target_http.py`
 
-- [ ] **Step 1: Write failing target tests**
+- [x] **Step 1: Write failing target tests**
 
 ```python
 def test_admin_marker_is_appended_before_success_response(self):
@@ -363,13 +363,13 @@ def test_ledger_never_persists_authorization_or_q_state(self):
     self.assertNotIn(b"q-state", encoded)
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```bash
 PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_target_http -v
 ```
 
-- [ ] **Step 3: Implement append-before-response semantics**
+- [x] **Step 3: Implement append-before-response semantics**
 
 Accept only `GET /benign/read` and `POST /consequential/admin`. Require a
 bounded `x-request-id`, `x-kil-track`, and `x-kil-decision-digest`. Append one
@@ -379,7 +379,7 @@ Unknown paths return 404 without a marker; duplicate IDs mark the ledger
 invalid and return 409. No endpoint performs filesystem, credential, cluster,
 or administrative side effects beyond appending to the dedicated ledger file.
 
-- [ ] **Step 4: Verify and commit Task 4**
+- [x] **Step 4: Verify and commit Task 4**
 
 ```bash
 PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_target_http -v

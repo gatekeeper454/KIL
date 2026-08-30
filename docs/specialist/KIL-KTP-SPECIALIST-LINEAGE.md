@@ -2776,3 +2776,69 @@ can prove both successful delivery and the absence of a target marker on
 denial.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-057 — 2026-08-30 — Harmless V3B target ledger process implemented
+
+**Input:** The founder directed execution of V3B-1 Task 4.
+
+**Interpretation:** Implement the target-side half of the later Envoy
+forward-or-withhold proof without introducing any consequential handler. The
+target must fix run and track identity at process construction, treat the
+forwarded request ID, track, and decision digest as bounded join assertions,
+and make a durable invocation marker observable before returning success.
+
+**Decision status:** Confirmed implemented and locally verified at the process
+boundary. Sixteen focused tests and the complete 192-test repository suite
+pass. The application admits only `GET /benign/read` and
+`POST /consequential/admin` as marker-producing routes. Both are no-effect
+representations: their only side effect is appending one canonical target
+record. A successful record contains the fixed run ID, bounded request ID,
+fixed track, exact path, decision digest, and monotonic receive/response-ready
+timestamps. The dedicated JSONL ledger uses owner-only mode, append semantics,
+`fsync`, and an in-process lock; the append completes before HTTP 200 is
+returned.
+
+Unknown or method-mismatched routes return 404 without a marker. Missing,
+duplicate, malformed, or cross-track join headers and body-bearing requests
+return 400 without a marker. Duplicate request IDs return 409, mark the ledger
+invalid, and do not append a second line. Existing canonical ledger records are
+validated and reloaded at startup, so duplicate detection survives a target
+process restart. Ledger or clock failure marks the evidence stream invalid and
+returns generic HTTP 503. Authorization and signed Q-state headers are ignored
+and never enter either in-memory or durable target records. `/healthz` creates
+no target marker.
+
+The stdlib HTTP entry point uses a closed, size-bounded, read-only JSON
+configuration that fixes run ID, `LiveTrack`, container bind
+`0.0.0.0:8080`, and an absolute dedicated ledger path. Tests construct the
+server without activating a socket because the execution sandbox prohibits
+loopback binding; production construction binds and activates by default.
+
+**Rationale:** A target response is not proof of execution. The durable marker
+is the target-side evidence source and must therefore exist before success is
+reported, remain unambiguous across restarts, and contain only the minimum join
+fields. Fixing run and track at startup prevents a forwarded header from
+selecting a comparison mode, while duplicate invalidation prevents two target
+invocations from being misrepresented as one valid permit.
+
+**Affected artifacts:**
+
+- `src/kil/target_http.py`
+- `tests/test_target_http.py`
+- `docs/superpowers/plans/2026-08-30-v3b1-toolchain-http-boundary.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- `src/kil/reference_gateway.py` (unchanged modeled predecessor)
+
+**Unresolved questions:** The target has not yet received a request through
+Envoy, and no live socket, container image, image digest, Envoy access record,
+upstream-host observation, Colima runtime, Kind cluster, or NetworkPolicy
+evidence exists at this gate. A duplicate conflict is observable through the
+409 response and invalid in-memory ledger state; joined runtime collection of
+that failure remains Task 6 work.
+
+**Next gate:** Execute V3B-1 Task 5 test-first: render the deterministic Envoy
+raw-HTTP `ext_authz` configuration, prove the exact header/filter/fail-closed
+contract, and add the digest-supplied hardened KIL service image without
+starting the container runtime.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
