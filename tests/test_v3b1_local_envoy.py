@@ -1766,6 +1766,21 @@ class _RunResponse:
         return None
 
 
+class _RunSocket:
+    def __init__(self, behavior, events, port) -> None:
+        self.behavior = behavior
+        self.events = events
+        self.port = port
+        self.timeouts = []
+
+    def settimeout(self, timeout) -> None:
+        self.events.append(("socket_timeout", self.port, timeout))
+        self.timeouts.append(timeout)
+        error = self.behavior.get("socket_timeout_error")
+        if error is not None:
+            raise error
+
+
 class _RunConnection:
     def __init__(
         self,
@@ -1790,6 +1805,8 @@ class _RunConnection:
         self.connected = False
         self.closed = False
         self.request_count = 0
+        self.sock = None
+        self.socket_object = None
 
     def _request_states(self):
         return {
@@ -1814,6 +1831,13 @@ class _RunConnection:
         if error is not None:
             raise error
         self.connected = True
+        if self.behavior.get("socket_timeout_unsupported"):
+            self.sock = object()
+        else:
+            self.socket_object = _RunSocket(
+                self.behavior, self.events, self.port
+            )
+            self.sock = self.socket_object
 
     def request(self, method, path, *, body, headers) -> None:
         if not self.connected:
@@ -1850,6 +1874,7 @@ class _RunConnection:
         if self.behavior.get("close_unconfirmed"):
             return
         self.closed = True
+        self.sock = None
         if error is not None:
             raise error
 
@@ -1951,7 +1976,7 @@ class GatewayReadinessTest(unittest.TestCase):
     def run_with_fake_http(self, controller):
         with mock.patch(
             "tools.v3b1_local_envoy.http.client.HTTPConnection",
-            controller.connection_factory,
+            side_effect=AssertionError("global HTTPConnection bypassed injection"),
         ):
             return controller.run()
 
@@ -2292,6 +2317,166 @@ class GatewayReadinessTest(unittest.TestCase):
             )
             self.assertFalse(any(event[0] == "collect" for event in events))
 
+    def test_poisoned_run_retry_sends_nothing_and_requires_teardown(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, first_factory, _, request_path, events = self.make_controller(
+                directory,
+                [
+                    {"close_unconfirmed": True},
+                    {
+                        "connect_error": ConnectionRefusedError(
+                            errno.ECONNREFUSED, "private readiness detail"
+                        )
+                    },
+                ],
+            )
+            with self.assertRaisesRegex(ControllerError, "closure"):
+                self.run_with_fake_http(controller)
+            old_socket = first_factory.connections[0]
+            self.assertFalse(old_socket.closed)
+
+            retry_events = []
+            retry_clock = _RunClock()
+            retry_factory = _RunConnectionFactory(
+                [{}, {}, {}],
+                events=retry_events,
+                journal_path=controller.journal_path,
+                request_path=request_path,
+                clock=retry_clock,
+            )
+            controller.connection_factory = retry_factory
+            controller.monotonic_ns = retry_clock.monotonic_ns
+            controller.sleeper = retry_clock.sleep
+
+            with self.assertRaisesRegex(
+                ControllerError, "poison|teardown|manual recovery"
+            ):
+                self.run_with_fake_http(controller)
+
+            self.assertEqual(retry_factory.connections, [])
+            self.assertFalse(any(event[0] == "request" for event in retry_events))
+            self.assertFalse(any(event[0] == "collect" for event in retry_events))
+            self.assertFalse(old_socket.closed)
+
+    def assert_readiness_record_failure_closes_round(self, patcher, message):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, _, events = self.make_controller(
+                directory,
+                [
+                    {},
+                    {
+                        "connect_error": ConnectionRefusedError(
+                            errno.ECONNREFUSED, "private readiness detail"
+                        )
+                    },
+                    {},
+                    {},
+                    {},
+                ],
+            )
+
+            with patcher():
+                with self.assertRaisesRegex(ControllerError, message):
+                    self.run_with_fake_http(controller)
+
+            self.assertEqual(len(factory.connections), 2)
+            self.assertTrue(all(connection.closed for connection in factory.connections))
+            self.assertEqual(
+                len([event for event in events if event[0] == "close"]), 2
+            )
+            self.assertFalse(any(event[0] == "request" for event in events))
+            self.assertFalse(any(event[0] == "collect" for event in events))
+
+    def test_normalization_failure_still_closes_every_round_connection(self):
+        self.assert_readiness_record_failure_closes_round(
+            lambda: mock.patch(
+                "tools.v3b1_local_envoy.normalize_transport_exception",
+                side_effect=ContractError("injected normalization failure"),
+            ),
+            "transport failure is not closed",
+        )
+
+    def test_readiness_journal_failure_still_closes_every_round_connection(self):
+        real_journal_event = journal_event
+
+        def fail_connect_failure(path, event, details):
+            if event == "readiness_connect_failed":
+                raise ControllerError("injected readiness journal failure")
+            return real_journal_event(path, event, details)
+
+        self.assert_readiness_record_failure_closes_round(
+            lambda: mock.patch(
+                "tools.v3b1_local_envoy.journal_event",
+                side_effect=fail_connect_failure,
+            ),
+            "readiness journal failure",
+        )
+
+    def test_retained_sockets_receive_explicit_request_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, _, events = self.make_controller(
+                directory, [{}, {}, {}]
+            )
+
+            self.run_with_fake_http(controller)
+
+            self.assertEqual(
+                [event[1:] for event in events if event[0] == "socket_timeout"],
+                [(18080, 5.0), (18081, 5.0), (18082, 5.0)],
+            )
+            self.assertTrue(
+                all(connection.socket_object.timeouts == [5.0] for connection in factory.connections)
+            )
+
+    def test_near_deadline_sockets_are_reset_to_request_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, _, events = self.make_controller(
+                directory,
+                [{"connect_advance_ns": 29_000_000_000}, {}, {}],
+            )
+
+            self.run_with_fake_http(controller)
+
+            connect_timeouts = [
+                event[3] for event in events if event[0] == "factory"
+            ]
+            self.assertEqual(connect_timeouts[0], 1.0)
+            self.assertTrue(all(0 < timeout < 1.0 for timeout in connect_timeouts[1:]))
+            self.assertTrue(
+                all(connection.socket_object.timeouts == [5.0] for connection in factory.connections)
+            )
+
+    def test_request_timeout_reset_failure_closes_all_before_intent(self):
+        for behavior in (
+            {"socket_timeout_unsupported": True},
+            {"socket_timeout_error": OSError(errno.EIO, "private timeout")},
+        ):
+            with self.subTest(behavior=behavior), tempfile.TemporaryDirectory() as directory:
+                controller, factory, _, request_path, events = self.make_controller(
+                    directory, [behavior, {}, {}]
+                )
+
+                with self.assertRaisesRegex(ControllerError, "request timeout"):
+                    self.run_with_fake_http(controller)
+
+                self.assertEqual(
+                    [event[1] for event in events if event[0] == "socket_timeout"],
+                    (
+                        [18081, 18082]
+                        if behavior.get("socket_timeout_unsupported")
+                        else [18080, 18081, 18082]
+                    ),
+                )
+                self.assertTrue(all(connection.closed for connection in factory.connections))
+                self.assertFalse(any(event[0] == "request" for event in events))
+                self.assertFalse(any(event[0] == "collect" for event in events))
+                self.assertFalse(request_path.exists())
+                journal = load_lifecycle_journal(controller.journal_path)
+                self.assertEqual(
+                    {item["status"] for item in journal["requests"].values()},
+                    {"not_attempted"},
+                )
+
     def assert_transport_stage(self, stage, behavior, expected_class, expected_errno):
         with tempfile.TemporaryDirectory() as directory:
             behaviors = [{}, {}, {}]
@@ -2408,8 +2593,14 @@ class GatewayReadinessTest(unittest.TestCase):
 
             last_connect = max(index for index, event in enumerate(events) if event[0] == "connect")
             sign_positions = [index for index, event in enumerate(events) if event[0] == "sign"]
+            timeout_positions = [
+                index for index, event in enumerate(events)
+                if event[0] == "socket_timeout"
+            ]
             self.assertEqual(len(sign_positions), 2)
+            self.assertEqual(len(timeout_positions), 3)
             self.assertTrue(all(last_connect < index for index in sign_positions))
+            self.assertLess(max(timeout_positions), min(sign_positions))
             signed_requests = [
                 event for event in events
                 if event[0] == "request" and event[1] in {18081, 18082}

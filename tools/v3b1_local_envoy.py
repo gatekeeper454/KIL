@@ -94,6 +94,7 @@ RETRY_CONTROL_HEADERS = {
 _READINESS_DEADLINE_NS = 30_000_000_000
 _READINESS_CONNECT_TIMEOUT_S = 1.0
 _READINESS_ROUND_DELAY_S = 0.25
+REQUEST_TIMEOUT_S = 5.0
 ADVERSARIAL_HEADERS = {
     "x-kil-decision-digest": "f" * 64,
     "x-kil-issuer": "https://attacker.invalid",
@@ -490,6 +491,7 @@ def _validate_lifecycle_history(
     readiness_complete = False
     seen_readiness_nonces: set[str] = set()
     poisoned_readiness_nonces: set[str] = set()
+    lifecycle_readiness_poisoned = False
     replayed: dict[str, dict[str, object]] = {
         track.value: {"status": "not_attempted", "intent_id": None}
         for track in _TRACKS
@@ -500,6 +502,10 @@ def _validate_lifecycle_history(
         assert isinstance(event_name, str)
         assert isinstance(details, Mapping)
         if event_name == "readiness_session_started":
+            if lifecycle_readiness_poisoned:
+                raise ControllerError(
+                    "lifecycle readiness is poisoned; teardown or manual recovery is required"
+                )
             readiness_nonce = str(details["readiness_nonce"])
             if readiness_nonce in seen_readiness_nonces:
                 raise ControllerError("readiness session nonce reuse is forbidden")
@@ -526,6 +532,7 @@ def _validate_lifecycle_history(
                 raise ControllerError("readiness session is permanently poisoned")
             assert current_readiness is not None
             poisoned_readiness_nonces.add(current_readiness)
+            lifecycle_readiness_poisoned = True
             readiness_complete = False
         elif event_name == "request_send_intent":
             if (
@@ -5050,6 +5057,25 @@ class LocalEnvoyController:
             },
         )
 
+    @staticmethod
+    def _reset_request_timeouts(
+        connections: Mapping[LiveTrack, object],
+    ) -> None:
+        reset_failed = False
+        for connection in connections.values():
+            try:
+                socket_object = connection.sock  # type: ignore[attr-defined]
+                settimeout = socket_object.settimeout
+                if not callable(settimeout):
+                    raise TypeError("socket settimeout is not callable")
+                settimeout(REQUEST_TIMEOUT_S)
+            except Exception:
+                reset_failed = True
+        if reset_failed:
+            raise ControllerError(
+                "retained gateway request timeout reset failed"
+            ) from None
+
     def _readiness_failure_event(
         self,
         *,
@@ -5185,26 +5211,37 @@ class LocalEnvoyController:
                 return connections, connect_times
 
             track, port, connect_ns, failure_ns, error = failure
-            self._readiness_failure_event(
-                track=track,
-                port=port,
-                round_number=round_number,
-                connect_ns=connect_ns,
-                failure_ns=failure_ns,
-                error=error,
-                readiness_nonce=readiness_nonce,
-            )
+            failure_event_error: Exception | None = None
+            try:
+                self._readiness_failure_event(
+                    track=track,
+                    port=port,
+                    round_number=round_number,
+                    connect_ns=connect_ns,
+                    failure_ns=failure_ns,
+                    error=error,
+                    readiness_nonce=readiness_nonce,
+                )
+            except Exception as event_error:
+                failure_event_error = event_error
             close_failures = self._close_connections(connections)
             if close_failures:
-                self._record_close_failures(
-                    readiness_nonce=readiness_nonce,
-                    stage="readiness_round",
-                    primary_failure="readiness_connect_failed",
-                    failures=close_failures,
-                )
-                raise ControllerError(
-                    "gateway readiness failed and connection closure is ambiguous"
-                ) from None
+                try:
+                    self._record_close_failures(
+                        readiness_nonce=readiness_nonce,
+                        stage="readiness_round",
+                        primary_failure="readiness_connect_failed",
+                        failures=close_failures,
+                    )
+                except Exception:
+                    if failure_event_error is None:
+                        raise
+                if failure_event_error is None:
+                    raise ControllerError(
+                        "gateway readiness failed and connection closure is ambiguous"
+                    ) from None
+            if failure_event_error is not None:
+                raise failure_event_error
             if failure_ns >= deadline_ns:
                 raise ControllerError("gateway TCP readiness deadline expired") from None
             sleep_s = min(
@@ -5288,6 +5325,7 @@ class LocalEnvoyController:
         connections, connect_times = self._connect_ready_gateways(readiness_nonce)
         primary_failure: str | None = None
         try:
+            self._reset_request_timeouts(connections)
             private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
             records: list[dict[str, object]] = []
             comparison = {
