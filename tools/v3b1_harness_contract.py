@@ -5,9 +5,12 @@ from __future__ import annotations
 from base64 import urlsafe_b64decode
 from dataclasses import dataclass
 import errno as errno_module
+import http.client
 import json
+import os
 from pathlib import Path
 import re
+import stat
 from typing import Mapping
 
 
@@ -20,6 +23,28 @@ _WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/]")
 _PRIVATE_KEY_BLOCK = re.compile(
     r"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----"
 )
+_GITHUB_TOKEN = re.compile(
+    r"(?<![A-Za-z0-9_])(?:ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,})"
+    r"(?![A-Za-z0-9_])"
+)
+_AWS_ACCESS_KEY = re.compile(
+    r"(?<![A-Z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Z0-9])"
+)
+_BEARER_TOKEN = re.compile(r"(?i)(?:^|\s)bearer\s+\S+")
+_COMPACT_JWS_CANDIDATE = re.compile(
+    r"(?<![A-Za-z0-9_-])"
+    r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"
+    r"(?![A-Za-z0-9_-])"
+)
+_TRACK_SLUG = (
+    r"(?:credential-policy-baseline|signed-state-only|signed-plus-local-reduce)"
+)
+_CONTAINER_NAME = re.compile(
+    rf"^kil-v3b1-(?:authz|target|envoy|validate)-{_TRACK_SLUG}-[a-f0-9]{{12}}$"
+)
+_NETWORK_NAME = re.compile(
+    rf"^kil-v3b1-network-{_TRACK_SLUG}-[a-f0-9]{{12}}$"
+)
 _MAX_FIXTURE_BYTES = 1_000_000
 _MAX_SOURCE_BYTES = 64 * 1024 * 1024
 _TRACKS = {
@@ -28,6 +53,11 @@ _TRACKS = {
     "signed_plus_local_reduce",
 }
 _SOURCES = {"authz_decisions", "target_markers", "envoy_access"}
+_SOURCE_ROLES = {
+    "authz_decisions": "authz",
+    "target_markers": "target",
+    "envoy_access": "envoy",
+}
 _STATUSES = {"copied", "missing", "copy_error", "malformed"}
 _EXCEPTION_CLASSES = {
     "OSError",
@@ -92,6 +122,14 @@ def _require_name(value: object, label: str = "Docker object name") -> str:
     return value
 
 
+def _require_inventory_name(value: object, kind: str) -> str:
+    name = _require_name(value)
+    pattern = _CONTAINER_NAME if kind == "container" else _NETWORK_NAME
+    if pattern.fullmatch(name) is None:
+        raise ContractError(f"Docker {kind} name is outside the fixed KIL pattern")
+    return name
+
+
 def _require_sha256(value: object) -> str:
     if type(value) is not str or _HEX.fullmatch(value) is None:
         raise ContractError("source SHA-256 is invalid")
@@ -149,6 +187,13 @@ def _looks_like_compact_jws(value: str) -> bool:
     return isinstance(decoded, dict) and bool({"alg", "typ"}.intersection(decoded))
 
 
+def _contains_compact_jws(value: str) -> bool:
+    return any(
+        _looks_like_compact_jws(match.group(0))
+        for match in _COMPACT_JWS_CANDIDATE.finditer(value)
+    )
+
+
 def _reject_sensitive_material(value: object) -> None:
     if type(value) is dict:
         for key, item in value.items():
@@ -170,13 +215,49 @@ def _reject_sensitive_material(value: object) -> None:
         or _WINDOWS_ABSOLUTE.match(value) is not None
     ):
         raise ContractError("transcript contains an absolute private path")
+    if _ENVIRONMENT_VALUE.fullmatch(value) is not None:
+        raise ContractError("transcript contains environment material")
     if (
         _PRIVATE_KEY_BLOCK.search(value) is not None
-        or re.match(r"(?i)^bearer\s+\S+", value) is not None
-        or _looks_like_compact_jws(value)
-        or _ENVIRONMENT_VALUE.fullmatch(value) is not None
+        or _GITHUB_TOKEN.search(value) is not None
+        or _AWS_ACCESS_KEY.search(value) is not None
+        or _BEARER_TOKEN.search(value) is not None
+        or _contains_compact_jws(value)
     ):
-        raise ContractError("transcript contains secret or environment material")
+        raise ContractError("transcript contains secret or credential material")
+
+
+def normalize_transport_exception(
+    error: BaseException,
+) -> tuple[str, int | None, str | None]:
+    """Map a transport exception to closed provenance without retaining its text."""
+    if isinstance(error, http.client.IncompleteRead):
+        exception_class = "ConnectionError"
+    elif isinstance(error, http.client.RemoteDisconnected):
+        exception_class = "ConnectionResetError"
+    elif isinstance(error, http.client.HTTPException):
+        exception_class = "ConnectionError"
+    elif isinstance(error, BrokenPipeError):
+        exception_class = "BrokenPipeError"
+    elif isinstance(error, ConnectionAbortedError):
+        exception_class = "ConnectionAbortedError"
+    elif isinstance(error, ConnectionRefusedError):
+        exception_class = "ConnectionRefusedError"
+    elif isinstance(error, ConnectionResetError):
+        exception_class = "ConnectionResetError"
+    elif isinstance(error, TimeoutError):
+        exception_class = "TimeoutError"
+    elif isinstance(error, ConnectionError):
+        exception_class = "ConnectionError"
+    elif isinstance(error, OSError):
+        exception_class = "OSError"
+    else:
+        raise ContractError("exception is not an allowlisted transport failure")
+
+    number = error.errno if isinstance(error, OSError) else None
+    if type(number) is not int or number not in errno_module.errorcode:
+        return exception_class, None, None
+    return exception_class, number, errno_module.errorcode[number]
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,6 +370,12 @@ class SourceCollectionStatus:
             raise ContractError("source collection status is invalid")
         _require_object_id(self.container_id)
         _require_name(self.container_name, "source container name")
+        expected_name = re.compile(
+            rf"^kil-v3b1-{_SOURCE_ROLES[self.source]}-"
+            rf"{re.escape(self.track.replace('_', '-'))}-[a-f0-9]{{12}}$"
+        )
+        if expected_name.fullmatch(self.container_name) is None:
+            raise ContractError("source container name does not match its role and track")
         source_present = _validate_byte_observation(
             self.source_byte_count,
             self.source_sha256,
@@ -329,7 +416,10 @@ class SourceCollectionStatus:
                     or self.source_sha256 == self.copied_sha256
                 ):
                     raise ContractError("digest-mismatch evidence is inconsistent")
-            elif self.source_byte_count == self.copied_byte_count:
+            elif (
+                self.source_byte_count == self.copied_byte_count
+                or self.source_sha256 == self.copied_sha256
+            ):
                 raise ContractError("size-mismatch evidence is inconsistent")
         elif (
             not observations_match
@@ -381,7 +471,7 @@ class DockerInventoryEntry:
         if type(self.kind) is not str or self.kind not in {"container", "network"}:
             raise ContractError("Docker inventory kind is invalid")
         _require_object_id(self.object_id)
-        _require_name(self.name)
+        _require_inventory_name(self.name, self.kind)
 
     @classmethod
     def from_mapping(cls, value: object, kind: str) -> DockerInventoryEntry:
@@ -440,7 +530,7 @@ def parse_inventory_rows(payload: str | bytes, kind: str) -> DockerInventory:
             raise ContractError("Docker inventory contains a blank row")
         try:
             value = json.loads(line, object_pairs_hook=_closed_object)
-        except (json.JSONDecodeError, ContractError) as error:
+        except (ValueError, ContractError) as error:
             raise ContractError("Docker inventory row is not closed JSON") from error
         if line != _canonical_json(value):
             raise ContractError("Docker inventory row is not canonical JSON")
@@ -482,6 +572,8 @@ class IntegrationContractFixture:
     def __post_init__(self) -> None:
         if self.schema_version != SCHEMA_VERSION or type(self.cases) is not tuple:
             raise ContractError("integration transcript fixture identity is invalid")
+        if any(not isinstance(case, TranscriptCase) for case in self.cases):
+            raise ContractError("integration transcript fixture cases are invalid")
         names = [case.name for case in self.cases]
         if len(names) != len(set(names)):
             raise ContractError("integration transcript contains duplicate case names")
@@ -523,18 +615,95 @@ def _load_case(value: object) -> TranscriptCase:
     return TranscriptCase(name, provenance, record_type, record)
 
 
-def load_integration_contract(path: Path) -> IntegrationContractFixture:
-    if not isinstance(path, Path) or path.is_symlink() or not path.is_file():
+def _lstat_fixture_path(path: Path) -> os.stat_result:
+    final_info: os.stat_result | None = None
+    try:
+        chain = tuple(reversed(path.parents)) + (path,)
+        for candidate in chain:
+            info = os.lstat(candidate)
+            if stat.S_ISLNK(info.st_mode):
+                raise ContractError("integration transcript fixture has symlink ancestry")
+            if candidate == path:
+                final_info = info
+            elif not stat.S_ISDIR(info.st_mode):
+                raise ContractError("integration transcript fixture ancestry is invalid")
+    except ContractError:
+        raise
+    except OSError as error:
+        raise ContractError("integration transcript fixture path is unavailable") from error
+    if final_info is None or not stat.S_ISREG(final_info.st_mode):
+        raise ContractError("integration transcript fixture is not a regular file")
+    return final_info
+
+
+def _same_file_identity(left: os.stat_result, right: os.stat_result) -> bool:
+    return left.st_dev == right.st_dev and left.st_ino == right.st_ino
+
+
+def _read_bounded_fixture(path: Path) -> bytes:
+    if not isinstance(path, Path) or ".." in path.parts:
         raise ContractError("integration transcript fixture path is unsafe")
-    payload = path.read_bytes()
-    if not payload or len(payload) > _MAX_FIXTURE_BYTES:
-        raise ContractError("integration transcript fixture size is invalid")
+    absolute = path if path.is_absolute() else Path.cwd() / path
+    before = _lstat_fixture_path(absolute)
+    flags = os.O_RDONLY
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(absolute, flags)
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or not _same_file_identity(before, opened)
+        ):
+            raise ContractError("integration transcript fixture identity changed")
+        if opened.st_size <= 0 or opened.st_size > _MAX_FIXTURE_BYTES:
+            raise ContractError("integration transcript fixture size is invalid")
+        chunks: list[bytes] = []
+        remaining = _MAX_FIXTURE_BYTES + 1
+        while remaining:
+            chunk = os.read(descriptor, min(64 * 1024, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        payload = b"".join(chunks)
+        after_read = os.fstat(descriptor)
+    except ContractError:
+        raise
+    except OSError as error:
+        raise ContractError("integration transcript fixture read failed") from error
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+
+    after_path = _lstat_fixture_path(absolute)
+    if (
+        len(payload) > _MAX_FIXTURE_BYTES
+        or len(payload) != opened.st_size
+        or after_read.st_size != opened.st_size
+        or after_path.st_size != opened.st_size
+        or not _same_file_identity(opened, after_read)
+        or not _same_file_identity(opened, after_path)
+    ):
+        raise ContractError("integration transcript fixture identity or size changed")
+    return payload
+
+
+def load_integration_contract(path: Path) -> IntegrationContractFixture:
+    payload = _read_bounded_fixture(path)
     try:
         text = payload.decode("utf-8")
-        value = json.loads(text, object_pairs_hook=_closed_object)
     except UnicodeError as error:
         raise ContractError("integration transcript fixture is not UTF-8") from error
-    except json.JSONDecodeError as error:
+    try:
+        value = json.loads(text, object_pairs_hook=_closed_object)
+    except ContractError:
+        raise
+    except ValueError as error:
         raise ContractError("integration transcript fixture is not JSON") from error
     _reject_sensitive_material(value)
     if payload != (_canonical_json(value) + "\n").encode("utf-8"):

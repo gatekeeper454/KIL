@@ -1,11 +1,14 @@
 from dataclasses import FrozenInstanceError
 import errno
 from hashlib import sha256
+import http.client
 import json
+import os
 from pathlib import Path
 import stat
 import tempfile
 import unittest
+from unittest import mock
 
 from kil.canonical import canonical_json
 from kil.live_authz import LiveTrack
@@ -13,9 +16,12 @@ from kil.v3b_preflight import V3BProfile
 from tools.v3b1_harness_contract import (
     ContractError,
     DockerInventory,
+    IntegrationContractFixture,
     RequestFailureProvenance,
+    SCHEMA_VERSION,
     SourceCollectionStatus,
     load_integration_contract,
+    normalize_transport_exception,
     parse_inventory_rows,
 )
 from tools.v3b1_local_envoy import (
@@ -209,6 +215,44 @@ class HarnessIntegrationContractTest(unittest.TestCase):
                 with self.assertRaises(ContractError):
                     RequestFailureProvenance.from_mapping({**base, **changed})
 
+    def test_transport_exception_normalizer_is_closed_and_message_free(self):
+        cases = (
+            (
+                http.client.RemoteDisconnected("private upstream detail"),
+                ("ConnectionResetError", None, None),
+            ),
+            (
+                http.client.IncompleteRead(b"private partial response", 100),
+                ("ConnectionError", None, None),
+            ),
+            (
+                http.client.BadStatusLine("private malformed status"),
+                ("ConnectionError", None, None),
+            ),
+            (
+                ConnectionRefusedError(errno.ECONNREFUSED, "private socket path"),
+                ("ConnectionRefusedError", errno.ECONNREFUSED, "ECONNREFUSED"),
+            ),
+            (
+                BrokenPipeError(errno.EPIPE, "private request detail"),
+                ("BrokenPipeError", errno.EPIPE, "EPIPE"),
+            ),
+            (
+                TimeoutError(errno.ETIMEDOUT, "private host"),
+                ("TimeoutError", errno.ETIMEDOUT, "ETIMEDOUT"),
+            ),
+            (
+                OSError(errno.EIO, "private device detail"),
+                ("OSError", errno.EIO, "EIO"),
+            ),
+        )
+
+        for error, expected in cases:
+            with self.subTest(error_type=type(error).__name__):
+                self.assertEqual(normalize_transport_exception(error), expected)
+        with self.assertRaises(ContractError):
+            normalize_transport_exception(ValueError("not a transport failure"))
+
     def test_source_collection_status_enforces_closed_terminal_shapes(self):
         empty_sha = sha256(b"").hexdigest()
         copied = SourceCollectionStatus.from_mapping(
@@ -363,45 +407,145 @@ class HarnessIntegrationContractTest(unittest.TestCase):
                 "copied_byte_count": 6,
                 "error_class": "size_mismatch",
             },
+            {
+                **base,
+                "copied_byte_count": 7,
+                "copied_sha256": source_sha,
+                "error_class": "size_mismatch",
+            },
         )
         for record in rejected:
             with self.subTest(record=record):
                 with self.assertRaises(ContractError):
                     SourceCollectionStatus.from_mapping(record)
 
+    def test_source_collection_cross_binds_role_track_and_run_suffix(self):
+        empty_sha = sha256(b"").hexdigest()
+        roles = {
+            "authz_decisions": "authz",
+            "target_markers": "target",
+            "envoy_access": "envoy",
+        }
+        tracks = (
+            "credential_policy_baseline",
+            "signed_state_only",
+            "signed_plus_local_reduce",
+        )
+
+        for source, role in roles.items():
+            for track in tracks:
+                with self.subTest(source=source, track=track):
+                    record = SourceCollectionStatus.from_mapping(
+                        {
+                            "track": track,
+                            "source": source,
+                            "status": "copied",
+                            "container_id": HEX_A,
+                            "container_name": (
+                                f"kil-v3b1-{role}-{track.replace('_', '-')}-"
+                                "a1b2c3d4e5f6"
+                            ),
+                            "source_byte_count": 0,
+                            "source_sha256": empty_sha,
+                            "copied_byte_count": 0,
+                            "copied_sha256": empty_sha,
+                            "error_class": None,
+                        }
+                    )
+                    self.assertEqual(record.source, source)
+
+        base = {
+            "track": "credential_policy_baseline",
+            "source": "authz_decisions",
+            "status": "missing",
+            "container_id": HEX_A,
+            "container_name": (
+                "kil-v3b1-authz-credential-policy-baseline-a1b2c3d4e5f6"
+            ),
+            "source_byte_count": None,
+            "source_sha256": None,
+            "copied_byte_count": None,
+            "copied_sha256": None,
+            "error_class": "source_missing",
+        }
+        for invalid_name in (
+            "kil-v3b1-target-credential-policy-baseline-a1b2c3d4e5f6",
+            "kil-v3b1-authz-signed-state-only-a1b2c3d4e5f6",
+            "kil-v3b1-authz-credential-policy-baseline-a1b2c3d4e5",
+            "kil-v3b1-authz-credential-policy-baseline-A1B2C3D4E5F6",
+        ):
+            with self.subTest(invalid_name=invalid_name):
+                with self.assertRaises(ContractError):
+                    SourceCollectionStatus.from_mapping(
+                        {**base, "container_name": invalid_name}
+                    )
+
     def test_inventory_rows_require_full_ids_exact_names_and_uniqueness(self):
+        first_name = (
+            "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa"
+        )
+        second_name = "kil-v3b1-envoy-signed-state-only-bbbbbbbbbbbb"
+        third_name = (
+            "kil-v3b1-target-signed-plus-local-reduce-cccccccccccc"
+        )
         payload = (
-            canonical_json({"id": HEX_A, "name": "kil-v3b1-one"})
+            canonical_json({"id": HEX_A, "name": first_name})
             + "\n"
-            + canonical_json({"id": HEX_B, "name": "kil-v3b1-two"})
+            + canonical_json({"id": HEX_B, "name": second_name})
             + "\n"
         )
 
         inventory = parse_inventory_rows(payload, "container")
 
         self.assertIsInstance(inventory, DockerInventory)
-        self.assertEqual([entry.object_id for entry in inventory.entries], [HEX_A, HEX_B])
+        self.assertEqual(
+            [entry.object_id for entry in inventory.entries],
+            [HEX_A, HEX_B],
+        )
         self.assertEqual(
             [entry.name for entry in inventory.entries],
-            ["kil-v3b1-one", "kil-v3b1-two"],
+            [first_name, second_name],
         )
+        validator_name = (
+            "kil-v3b1-validate-signed-plus-local-reduce-dddddddddddd"
+        )
+        validator = parse_inventory_rows(
+            canonical_json({"id": HEX_C, "name": validator_name}) + "\n",
+            "container",
+        )
+        self.assertEqual(validator.entries[0].name, validator_name)
+        network_name = (
+            "kil-v3b1-network-credential-policy-baseline-eeeeeeeeeeee"
+        )
+        network = parse_inventory_rows(
+            canonical_json({"id": HEX_C, "name": network_name}) + "\n",
+            "network",
+        )
+        self.assertEqual(network.entries[0].name, network_name)
         self.assertEqual(parse_inventory_rows("", "network").entries, ())
         for rejected in (
-            canonical_json({"id": "a" * 12, "name": "kil-v3b1-one"}) + "\n",
-            payload + canonical_json({"id": HEX_A, "name": "kil-v3b1-three"}) + "\n",
-            payload + canonical_json({"id": HEX_C, "name": "kil-v3b1-two"}) + "\n",
-            canonical_json({"extra": 1, "id": HEX_A, "name": "kil-v3b1-one"}) + "\n",
+            canonical_json({"id": "a" * 12, "name": first_name}) + "\n",
+            payload + canonical_json({"id": HEX_A, "name": third_name}) + "\n",
+            payload + canonical_json({"id": HEX_C, "name": second_name}) + "\n",
+            canonical_json({"extra": 1, "id": HEX_A, "name": first_name}) + "\n",
             canonical_json({"id": HEX_A, "name": "-kil-v3b1-one"}) + "\n",
             canonical_json({"id": HEX_A, "name": "k" * 129}) + "\n",
+            canonical_json({"id": HEX_A, "name": "ordinary-container"}) + "\n",
+            canonical_json({"id": HEX_A, "name": network_name}) + "\n",
         ):
             with self.subTest(rejected=rejected):
                 with self.assertRaises(ContractError):
                     parse_inventory_rows(rejected, "container")
         with self.assertRaises(ContractError):
+            parse_inventory_rows(
+                canonical_json({"id": HEX_A, "name": first_name}) + "\n",
+                "network",
+            )
+        with self.assertRaises(ContractError):
             parse_inventory_rows("", [])
 
     def test_fixture_loader_rejects_duplicate_fields_and_noncanonical_json(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory(dir=self.FIXTURE.parent) as directory:
             path = Path(directory) / "fixture.json"
             path.write_text(
                 '{"cases":[],"schema_version":"kil.v3b1-integration-contract.v1",'
@@ -422,13 +566,39 @@ class HarnessIntegrationContractTest(unittest.TestCase):
             with self.assertRaisesRegex(ContractError, "canonical"):
                 load_integration_contract(path)
 
-    def test_fixture_loader_rejects_secret_or_private_material(self):
+    def test_fixture_loader_rejects_forbidden_sensitive_fields(self):
         original = json.loads(self.FIXTURE.read_text())
         forbidden = (
             ("raw_exception_message", "connection refused"),
-            ("authorization", "Bearer redacted"),
+            ("authorization", "redacted"),
+            ("signed_state", "redacted"),
+            ("private_key", "redacted"),
+            ("private_path", "redacted"),
+            ("environment", {"SECRET_VALUE": "redacted"}),
+        )
+        with tempfile.TemporaryDirectory(dir=self.FIXTURE.parent) as directory:
+            path = Path(directory) / "fixture.json"
+            for key, value in forbidden:
+                with self.subTest(key=key):
+                    changed = json.loads(json.dumps(original))
+                    changed["cases"][0]["record"][key] = value
+                    path.write_text(canonical_json(changed) + "\n")
+                    with self.assertRaisesRegex(
+                        ContractError,
+                        "forbidden sensitive field",
+                    ):
+                        load_integration_contract(path)
+
+    def test_fixture_loader_scans_tokens_in_allowed_string_fields(self):
+        original = json.loads(self.FIXTURE.read_text())
+        token_values = (
+            ("github-classic", "gh" + "p_" + "A" * 36),
+            ("github-fine-grained", "github_" + "pat_" + "A" * 24),
+            ("aws-access-key", "AK" + "IA" + "A" * 16),
+            ("bearer", "Bea" + "rer " + "A" * 32),
+            ("pem", "-----BEGIN " + "PRIVATE KEY-----"),
             (
-                "signed_state",
+                "compact-jws",
                 ".".join(
                     (
                         "eyJhbGciOiJFZERTQSJ9",
@@ -437,20 +607,106 @@ class HarnessIntegrationContractTest(unittest.TestCase):
                     )
                 ),
             ),
-            ("private_key", "-----BEGIN " + "PRIVATE KEY-----"),
-            ("private_path", "/Users/private/.colima/kil-v3-lab/docker.sock"),
-            ("environment", {"SECRET_VALUE": "redacted"}),
         )
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory(dir=self.FIXTURE.parent) as directory:
             path = Path(directory) / "fixture.json"
-            for key, value in forbidden:
-                with self.subTest(key=key):
+            for label, token_value in token_values:
+                with self.subTest(label=label):
                     changed = json.loads(json.dumps(original))
-                    changed["cases"][0]["record"][key] = value
+                    changed["cases"][0]["name"] = token_value
                     path.write_text(canonical_json(changed) + "\n")
-                    with self.assertRaises(ContractError):
+                    with self.assertRaisesRegex(
+                        ContractError,
+                        "secret or credential",
+                    ):
                         load_integration_contract(path)
 
+            changed = json.loads(json.dumps(original))
+            changed["cases"][0]["name"] = "/private/runtime/evidence"
+            path.write_text(canonical_json(changed) + "\n")
+            with self.assertRaisesRegex(ContractError, "absolute private path"):
+                load_integration_contract(path)
+
+            changed = json.loads(json.dumps(original))
+            changed["cases"][0]["name"] = "KIL_PRIVATE=value"
+            path.write_text(canonical_json(changed) + "\n")
+            with self.assertRaisesRegex(ContractError, "environment"):
+                load_integration_contract(path)
+
+    def test_fixture_loader_rejects_symlink_ancestry_and_overlong_integers(self):
+        with tempfile.TemporaryDirectory(dir=self.FIXTURE.parent) as directory:
+            root = Path(directory)
+            real = root / "real"
+            real.mkdir()
+            fixture = real / "fixture.json"
+            fixture.write_bytes(self.FIXTURE.read_bytes())
+            linked = root / "linked"
+            linked.symlink_to(real, target_is_directory=True)
+            with self.assertRaisesRegex(ContractError, "symlink"):
+                load_integration_contract(linked / "fixture.json")
+
+            overlong = root / "overlong.json"
+            overlong.write_text(
+                '{"cases":[],"schema_version":' + "1" * 5000 + "}\n"
+            )
+            with self.assertRaises(ContractError):
+                load_integration_contract(overlong)
+
+        with self.assertRaises(ContractError):
+            parse_inventory_rows(
+                '{"id":' + "1" * 5000 + ',"name":"ordinary"}\n',
+                "container",
+            )
+
+    def test_fixture_tuple_members_are_validated_before_attribute_access(self):
+        with self.assertRaises(ContractError):
+            IntegrationContractFixture(SCHEMA_VERSION, ([],))
+
+    def test_fixture_loader_does_not_use_unbounded_path_read(self):
+        original_read_bytes = Path.read_bytes
+        calls = []
+
+        def track_unbounded_read(path):
+            calls.append(path)
+            return original_read_bytes(path)
+
+        with mock.patch.object(Path, "read_bytes", track_unbounded_read):
+            fixture = load_integration_contract(self.FIXTURE)
+        self.assertEqual(fixture.schema_version, SCHEMA_VERSION)
+        self.assertEqual(calls, [])
+
+    def test_fixture_loader_rejects_open_file_identity_mismatch(self):
+        actual = os.stat(self.FIXTURE, follow_symlinks=False)
+        fields = list(actual)
+        fields[1] += 1
+        mismatched = os.stat_result(fields)
+        with mock.patch("os.fstat", return_value=mismatched):
+            with self.assertRaisesRegex(ContractError, "identity"):
+                load_integration_contract(self.FIXTURE)
+
+    def test_fixture_loader_rejects_post_read_path_size_change(self):
+        original_lstat = os.lstat
+        fixture_calls = 0
+
+        def changed_final_size(candidate):
+            nonlocal fixture_calls
+            info = original_lstat(candidate)
+            if Path(candidate) == self.FIXTURE:
+                fixture_calls += 1
+                if fixture_calls == 2:
+                    fields = list(info)
+                    fields[6] += 1
+                    return os.stat_result(fields)
+            return info
+
+        with mock.patch("os.lstat", side_effect=changed_final_size):
+            with self.assertRaisesRegex(ContractError, "identity or size"):
+                load_integration_contract(self.FIXTURE)
+
+    def test_fixture_loader_rejects_algorithm_prefixed_private_key(self):
+        original = json.loads(self.FIXTURE.read_text())
+        with tempfile.TemporaryDirectory(dir=self.FIXTURE.parent) as directory:
+            path = Path(directory) / "fixture.json"
             changed = json.loads(json.dumps(original))
             changed["cases"][0]["name"] = "-----BEGIN " + "RSA PRIVATE KEY-----"
             path.write_text(canonical_json(changed) + "\n")
