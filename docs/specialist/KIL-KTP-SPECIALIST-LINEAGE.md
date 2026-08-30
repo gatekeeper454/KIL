@@ -2351,3 +2351,52 @@ the frozen adapter contract. Only a passing joined cluster run may introduce
 `validated` for the observed transport result.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-049 — 2026-08-29 — V3A zero-exponent allocation boundary closed
+
+**Input:** Final re-review of the T-048 implementation found that a Decimal zero
+with an extreme negative exponent passed the calculated 64-character wire
+bound but still entered Python fixed-point formatting before trailing-zero
+normalization.
+
+**Interpretation:** The mathematical value and calculated canonical wire value
+were both zero, but the serializer's intermediate representation could still
+allocate memory proportional to the attacker- or issuer-controlled exponent.
+This was an availability defect in the experimental issuer path and meant the
+T-048 evidence run was not yet the final review-complete implementation.
+
+**Decision status:** Confirmed fixed. Any accepted Decimal zero now serializes
+directly to the literal `"0"` before fixed-point formatting. A witnessed failing
+regression uses a guarded formatter to prove that an extreme-exponent zero does
+not reach the expansion operation. The T-048 run `b0cdc26b471c9539` remains
+development history and is superseded by canonical modeled run
+`ca26ff63c09cd78b`.
+
+**Rationale:** A declared maximum wire length must bound intermediate work as
+well as the final string. Short-circuiting the unique canonical zero form
+preserves wire determinism and removes exponent-sized allocation without
+changing charge semantics.
+
+**Affected artifacts:**
+
+- `src/kil/q_state.py`
+- `tests/test_q_state.py`
+- `docs/lab/V3-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Evidence:** Implementation commit
+`4e02ed3727096174456de0b6edcb33403d7870df` passes 126 tests. Canonical modeled
+run `ca26ff63c09cd78b` reproduces `permit / permit / deny`, marker counts
+`1 / 1 / 0`, valid joins, and eight passing checksum verifications. Its scope
+remains `process_contract_only`, not validated cluster behavior.
+
+**Unresolved questions:** The V3B container toolchain, image digests, Envoy
+adapter implementation, Kind network isolation, failure matrix, and cluster
+latency remain unvalidated. KTP 2.1 versus 3.0 placement remains a specialist
+decision.
+
+**Next gate:** Obtain final feature review, integrate V3A, and then execute the
+separately planned V3B Envoy/Kind live-cluster validation without relabeling the
+modeled V3A evidence.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
