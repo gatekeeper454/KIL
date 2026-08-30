@@ -2436,3 +2436,38 @@ review and the separate V3B live-cluster plan remain future gates.
 number and URL, then preserve the feature worktree for review feedback.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-051 — 2026-08-29 — V3A pull request 4 created
+
+**Input:** The founder confirmed the prepared GitHub pull-request submission
+after selecting integration option 2.
+
+**Interpretation:** The confirmed external submission completes branch
+publication while preserving the feature worktree for review feedback. It does
+not authorize merge or advance the evidence class of any V3A result.
+
+**Decision status:** Confirmed pull request created: [gatekeeper454/KIL
+#4](https://github.com/gatekeeper454/KIL/pull/4), titled “Implement V3A
+signed-state authorization core,” from `feature/v3a-signed-state-authz` into
+`main`. The PR description records the canonical modeled run, verification
+count, checksum result, independent review, graphical architecture, and V3A/V3B
+claim boundary.
+
+**Rationale:** The pull-request path provides a durable review surface without
+merging or deleting the isolated implementation branch. The worktree remains
+available for corrections and review responses.
+
+**Affected artifacts:**
+
+- [GitHub pull request #4](https://github.com/gatekeeper454/KIL/pull/4)
+- Remote branch `origin/feature/v3a-signed-state-authz`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Pull-request review and merge remain pending. Gate V3B
+still requires its separate Envoy/Kind implementation and live-cluster
+validation plan.
+
+**Next gate:** Review and merge pull request #4 when accepted, preserve V3A's
+modeled/process-only classification, then begin the approved V3B planning gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
