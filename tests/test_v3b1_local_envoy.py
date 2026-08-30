@@ -4387,6 +4387,199 @@ class TeardownContinuationTest(unittest.TestCase):
                     attempted_complete=True,
                 )
 
+    def test_preterminal_bound_bytes_are_adopted_without_a_live_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(directory)
+            original_event = journal_event
+
+            def fail_first_terminal(path, event, details):
+                if event == "source_collection_terminal":
+                    raise RuntimeError("injected terminal persistence failure")
+                return original_event(path, event, details)
+
+            with mock.patch(
+                "tools.v3b1_local_envoy.journal_event",
+                side_effect=fail_first_terminal,
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError, "terminal persistence failure"
+                ):
+                    controller._freeze_sources(
+                        state, value, attempted_complete=True
+                    )
+
+            journal = load_lifecycle_journal(controller.journal_path)
+            persisted = [
+                event
+                for event in journal["events"]
+                if event["event"] == "evidence_freeze_leg_bytes_persisted"
+            ]
+            self.assertEqual(len(persisted), 1)
+            details = persisted[0]["details"]
+            self.assertEqual(
+                set(details),
+                {
+                    "collection_epoch",
+                    "track",
+                    "source",
+                    "path_relative",
+                    "byte_count",
+                    "sha256",
+                },
+            )
+            key = (details["track"], details["source"])
+            _, epoch = controller._freeze_epoch(value)
+            self.assertEqual(details["collection_epoch"], epoch)
+            self.assertEqual(
+                details["path_relative"],
+                f"{key[0]}/{local_envoy_module._FREEZE_FILE_NAME[key[1]]}",
+            )
+            frozen_path = controller._freeze_raw_paths(value, epoch)[key]
+            original_bytes = frozen_path.read_bytes()
+            self.assertEqual(details["byte_count"], len(original_bytes))
+            self.assertEqual(details["sha256"], sha256(original_bytes).hexdigest())
+            source = next(
+                item
+                for item in state["objects"]
+                if item["track"] == key[0]
+                and item["role"] == local_envoy_module._SOURCE_ROLE[key[1]]
+            )
+            controller.alive.remove(source["id"])
+            before = len(controller.commands)
+
+            recovered = controller._freeze_sources(
+                state, value, attempted_complete=True
+            )
+
+            adopted = next(
+                status
+                for status in recovered.statuses
+                if (status.track, status.source) == key
+            )
+            self.assertTrue(recovered.complete)
+            self.assertEqual(adopted.status, "copied")
+            self.assertEqual(frozen_path.read_bytes(), original_bytes)
+            self.assertFalse(
+                any(
+                    source["id"] in command
+                    for command in controller.commands[before:]
+                )
+            )
+
+    def test_unbound_preterminal_bytes_are_quarantined_not_deleted_or_claimed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(directory)
+            original_event = journal_event
+
+            def fail_first_byte_binding(path, event, details):
+                if event == "evidence_freeze_leg_bytes_persisted":
+                    raise RuntimeError("injected byte binding failure")
+                return original_event(path, event, details)
+
+            with mock.patch(
+                "tools.v3b1_local_envoy.journal_event",
+                side_effect=fail_first_byte_binding,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "byte binding failure"):
+                    controller._freeze_sources(
+                        state, value, attempted_complete=True
+                    )
+
+            _, epoch = controller._freeze_epoch(value)
+            key = ("credential_policy_baseline", "envoy_access")
+            frozen_path = controller._freeze_raw_paths(value, epoch)[key]
+            original_bytes = frozen_path.read_bytes()
+            quarantine = frozen_path.with_name(f".{frozen_path.name}.unattested")
+            source = next(
+                item
+                for item in state["objects"]
+                if item["track"] == key[0] and item["role"] == "envoy"
+            )
+            controller.alive.remove(source["id"])
+
+            recovered = controller._freeze_sources(
+                state, value, attempted_complete=True
+            )
+
+            status = next(
+                item
+                for item in recovered.statuses
+                if (item.track, item.source) == key
+            )
+            self.assertFalse(recovered.complete)
+            self.assertEqual(status.status, "copy_error")
+            self.assertEqual(status.error_class, "command_failed")
+            self.assertFalse(frozen_path.exists())
+            self.assertEqual(quarantine.read_bytes(), original_bytes)
+
+    def test_teardown_evidence_rejects_frozen_source_replacement_and_symlink(self):
+        _, _, _, envoy, _ = JoinContractTest().all_records()
+        replacement_bytes = (
+            canonical_json(
+                next(
+                    item
+                    for item in envoy
+                    if item["track"] == "credential_policy_baseline"
+                )
+            )
+            + "\n"
+        ).encode("utf-8")
+        self.assertEqual(len(replacement_bytes), 323)
+        for attack in ("replacement", "symlink"):
+            with (
+                self.subTest(attack=attack),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                controller, state, value = self.make_freeze_controller(
+                    directory, no_run=True
+                )
+                freeze = controller._freeze_before_service_teardown(
+                    state,
+                    value,
+                    attempted_complete=False,
+                    transient_objects=[],
+                )
+                key = ("credential_policy_baseline", "envoy_access")
+                frozen_path = freeze.raw_paths[key]
+                status = next(
+                    item
+                    for item in freeze.statuses
+                    if (item.track, item.source) == key
+                )
+                self.assertEqual(status.status, "copied")
+                self.assertEqual(status.copied_byte_count, 0)
+                replacement = frozen_path.with_name("replacement.jsonl")
+                replacement.write_bytes(replacement_bytes)
+                if attack == "replacement":
+                    os.replace(replacement, frozen_path)
+                else:
+                    frozen_path.unlink()
+                    frozen_path.symlink_to(replacement)
+
+                output, attestations, completed, rejection = (
+                    controller._prepare_teardown_evidence(
+                        value, state["objects"], freeze
+                    )
+                )
+
+                self.assertIsNone(output)
+                self.assertEqual(attestations, [])
+                self.assertFalse(completed)
+                self.assertIsNotNone(rejection)
+                self.assertEqual(controller.running, set())
+                provisional = (
+                    controller._private_provisional_root() / value["run_id"]
+                )
+                if provisional.exists():
+                    self.assertNotIn(
+                        replacement_bytes,
+                        [
+                            path.read_bytes()
+                            for path in provisional.rglob("*")
+                            if path.is_file() and not path.is_symlink()
+                        ],
+                    )
+
     def test_freeze_recovery_skips_terminal_legs_and_never_recopies_after_complete(self):
         with tempfile.TemporaryDirectory() as directory:
             controller, state, value = self.make_freeze_controller(directory)

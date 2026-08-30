@@ -3885,3 +3885,47 @@ KIL, authorization, Envoy, and target semantics remain unchanged.
 integration and committed zero-request live smoke.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-078 — 2026-08-30 — Frozen evidence bytes gain crash-safe adoption and final reattestation
+
+**Input:** Resolve the Task 3 quality findings around the crash window between
+durable source-file persistence and terminal journaling, and prevent mutated or
+redirected frozen paths from entering teardown evidence.
+
+**Interpretation:** Durable bytes and terminal interpretation are separate
+state transitions. A closed, epoch-bound preterminal event must attest the
+relative path, byte count, and SHA-256 after atomic persistence but before
+parsing. Recovery may adopt only bytes matching that durable event. Unbound
+regular bytes are preserved under a deterministic quarantine name and are
+never silently deleted or claimed.
+
+**Decision status:** Confirmed harness-only correction complete, pending
+independent re-review. Each successfully matched host copy now records
+`evidence_freeze_leg_bytes_persisted` before its terminal status. Recovery
+single-reads and reattests bound bytes, parses them, and can finish the terminal
+record without contacting an unavailable source. Teardown evidence independently
+single-reads every terminal copied or malformed source through a no-follow,
+regular-file, inode-stability, size, and digest check; missing and copy-error
+legs contribute no consumed bytes.
+
+**Rationale:** The former recovery path unlinked any regular file lacking a
+terminal record, even when the copy had already been atomically persisted. It
+also reread frozen paths into a provisional tree without comparing the terminal
+copy observation, allowing post-freeze replacement or symlink redirection to
+alter evidence. The new intermediate binding closes the crash window while the
+final attestation makes publication fail closed and nonpromotable.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker or Colima operation was performed.
+Installed-runtime behavior remains gated on the reviewed zero-request smoke;
+KIL, authorization, Envoy, and target semantics remain unchanged.
+
+**Next gate:** Independent Task 3 quality re-review, then complete harness
+integration and the committed zero-request live smoke.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

@@ -14,6 +14,7 @@ import re
 import secrets
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -141,6 +142,11 @@ _SOURCE_ROLE = {
     "target_markers": "target",
 }
 _ENVOY_LOG_NAME = "envoy.stdout.jsonl"
+_FREEZE_FILE_NAME = {
+    "envoy_access": _ENVOY_LOG_NAME,
+    "authz_decisions": "decisions.jsonl",
+    "target_markers": "targets.jsonl",
+}
 _LEDGER_PROBE = (
     "import hashlib,json,os,stat,sys;"
     "p=sys.argv[1];"
@@ -350,6 +356,16 @@ def comparison_facts_sha256(facts: Mapping[str, object]) -> str:
     return _digest_bytes(canonical_json(dict(facts)).encode("utf-8"))
 
 
+def _freeze_relative_path(track: object, source: object) -> str:
+    try:
+        fixed_track = LiveTrack(track)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as error:
+        raise ControllerError("frozen-byte track is invalid") from error
+    if type(source) is not str or source not in _FREEZE_FILE_NAME:
+        raise ControllerError("frozen-byte source is invalid")
+    return f"{fixed_track.value}/{_FREEZE_FILE_NAME[source]}"
+
+
 def _journal_binding(value: Mapping[str, object]) -> str:
     unsigned = {key: item for key, item in value.items() if key != "binding_sha256"}
     return _digest_bytes(canonical_json(unsigned).encode("utf-8"))
@@ -399,6 +415,26 @@ def _validate_lifecycle_event_details(
             )
         except HarnessContractError as error:
             raise ControllerError("source collection intent identity is invalid") from error
+        return
+    if event_name == "evidence_freeze_leg_bytes_persisted":
+        expected = {
+            "collection_epoch",
+            "track",
+            "source",
+            "path_relative",
+            "byte_count",
+            "sha256",
+        }
+        if set(details) != expected:
+            raise ControllerError("frozen-byte persistence fields are not closed")
+        _require_sha256("collection_epoch", details["collection_epoch"])
+        if details["path_relative"] != _freeze_relative_path(
+            details["track"], details["source"]
+        ):
+            raise ControllerError("frozen-byte relative path is invalid")
+        if type(details["byte_count"]) is not int or details["byte_count"] < 0:
+            raise ControllerError("frozen-byte count is invalid")
+        _require_sha256("frozen-byte sha256", details["sha256"])
         return
     if event_name == "source_collection_terminal":
         if set(details) != {"collection_epoch", "record"}:
@@ -604,6 +640,7 @@ def _validate_lifecycle_history(
     }
     freeze_epoch: str | None = None
     freeze_intents: dict[tuple[str, str], Mapping[str, object]] = {}
+    freeze_bytes: dict[tuple[str, str], Mapping[str, object]] = {}
     freeze_terminals: dict[tuple[str, str], SourceCollectionStatus] = {}
     freeze_completed = False
     for event in events:
@@ -624,6 +661,19 @@ def _validate_lifecycle_history(
             if key in freeze_intents:
                 raise ControllerError("source collection intent is duplicated")
             freeze_intents[key] = details
+        elif event_name == "evidence_freeze_leg_bytes_persisted":
+            if freeze_epoch is None or details["collection_epoch"] != freeze_epoch:
+                raise ControllerError("frozen bytes lack their freeze epoch")
+            if freeze_completed:
+                raise ControllerError("frozen bytes follow freeze completion")
+            key = (str(details["track"]), str(details["source"]))
+            if (
+                key not in freeze_intents
+                or key in freeze_bytes
+                or key in freeze_terminals
+            ):
+                raise ControllerError("frozen bytes lack one unfinished intent")
+            freeze_bytes[key] = details
         elif event_name == "source_collection_terminal":
             if freeze_epoch is None or details["collection_epoch"] != freeze_epoch:
                 raise ControllerError("source terminal lacks its freeze epoch")
@@ -642,6 +692,20 @@ def _validate_lifecycle_history(
                 or intent["container_name"] != record.container_name
             ):
                 raise ControllerError("source terminal identity diverges from its intent")
+            persisted = freeze_bytes.get(key)
+            if record.status in {"copied", "malformed"}:
+                if (
+                    persisted is None
+                    or persisted["byte_count"] != record.copied_byte_count
+                    or persisted["sha256"] != record.copied_sha256
+                ):
+                    raise ControllerError(
+                        "source terminal lacks its persisted-byte binding"
+                    )
+            elif persisted is not None:
+                raise ControllerError(
+                    "noncopied source terminal has a persisted-byte binding"
+                )
             freeze_terminals[key] = record
         elif event_name == "evidence_freeze_complete":
             expected_keys = {
@@ -5297,24 +5361,91 @@ class LocalEnvoyController:
             return "invalid_cardinality"
         return None
 
-    @staticmethod
-    def _reattest_frozen_status(
-        status: SourceCollectionStatus, path: Path
-    ) -> None:
-        if path.is_symlink():
-            raise ControllerError("frozen source path cannot be a symbolic link")
-        if status.copied_byte_count is None:
-            if path.exists():
-                raise ControllerError("uncopied source has unexpected frozen bytes")
-            return
-        if path.is_symlink() or not path.is_file():
-            raise ControllerError("frozen source bytes are missing or unsafe")
-        payload = path.read_bytes()
+    def _read_attested_frozen_bytes(
+        self,
+        path: Path,
+        *,
+        byte_count: object,
+        sha256_digest: object,
+    ) -> bytes:
+        if type(byte_count) is not int or byte_count < 0:
+            raise ControllerError("frozen source byte count is invalid")
+        _require_sha256("frozen source sha256", sha256_digest)
+        _require_contained(
+            path, self._private_source_freeze_root(), "frozen source path"
+        )
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(path, flags)
+        except OSError as error:
+            raise ControllerError("frozen source bytes are missing or unsafe") from error
+        try:
+            opened = os.fstat(descriptor)
+            if not stat.S_ISREG(opened.st_mode):
+                raise ControllerError("frozen source path is not a regular file")
+            chunks: list[bytes] = []
+            while True:
+                chunk = os.read(descriptor, 1024 * 1024)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            finished = os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+        try:
+            current = os.stat(path, follow_symlinks=False)
+        except OSError as error:
+            raise ControllerError("frozen source path changed during attestation") from error
         if (
-            len(payload) != status.copied_byte_count
-            or _digest_bytes(payload) != status.copied_sha256
+            not stat.S_ISREG(current.st_mode)
+            or (opened.st_dev, opened.st_ino) != (finished.st_dev, finished.st_ino)
+            or (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino)
+            or opened.st_size != finished.st_size
         ):
+            raise ControllerError("frozen source path changed during attestation")
+        payload = b"".join(chunks)
+        if len(payload) != byte_count or _digest_bytes(payload) != sha256_digest:
             raise ControllerError("frozen source bytes changed after collection")
+        return payload
+
+    def _attest_frozen_status_bytes(
+        self, status: SourceCollectionStatus, path: Path
+    ) -> bytes | None:
+        if status.status not in {"copied", "malformed"}:
+            if status.copied_byte_count is None and (
+                path.is_symlink() or path.exists()
+            ):
+                raise ControllerError("uncopied source has unexpected frozen bytes")
+            return None
+        return self._read_attested_frozen_bytes(
+            path,
+            byte_count=status.copied_byte_count,
+            sha256_digest=status.copied_sha256,
+        )
+
+    def _reattest_frozen_status(
+        self, status: SourceCollectionStatus, path: Path
+    ) -> None:
+        self._attest_frozen_status_bytes(status, path)
+
+    @staticmethod
+    def _quarantine_unattested_frozen_path(path: Path) -> Path | None:
+        if path.is_symlink():
+            return None
+        if not path.exists():
+            return None
+        if not path.is_file():
+            return None
+        quarantine = path.with_name(f".{path.name}.unattested")
+        if quarantine.is_symlink() or quarantine.exists():
+            return None
+        os.rename(path, quarantine)
+        directory_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+        return quarantine
 
     def _collect_freeze_leg(
         self,
@@ -5324,6 +5455,7 @@ class LocalEnvoyController:
         track: LiveTrack,
         source: str,
         path: Path,
+        collection_epoch: str,
         attempted_complete: bool,
     ) -> SourceCollectionStatus:
         identity = {
@@ -5332,12 +5464,8 @@ class LocalEnvoyController:
             "container_id": item["id"],
             "container_name": item["name"],
         }
-        if path.is_symlink():
-            raise ControllerError("unfinished source path cannot be a symbolic link")
-        if path.exists():
-            if not path.is_file():
-                raise ControllerError("unfinished source path is unsafe")
-            path.unlink()
+        if path.is_symlink() or path.exists():
+            raise ControllerError("unfinished source path requires recovery handling")
         try:
             current = self._inspect_container(
                 str(item["id"]),
@@ -5432,8 +5560,7 @@ class LocalEnvoyController:
                 _write_file(path, copied_bytes, 0o400)
                 copied_bytes = path.read_bytes()
             except (ControllerError, OSError, UnicodeError):
-                if path.exists() and not path.is_symlink() and path.is_file():
-                    path.unlink()
+                self._quarantine_unattested_frozen_path(path)
                 return SourceCollectionStatus(
                     **identity,
                     status="copy_error",
@@ -5465,6 +5592,18 @@ class LocalEnvoyController:
                 copied_sha256=copied_sha,
                 error_class="digest_mismatch",
             )
+        journal_event(
+            self.journal_path,
+            "evidence_freeze_leg_bytes_persisted",
+            {
+                "collection_epoch": collection_epoch,
+                "track": track.value,
+                "source": source,
+                "path_relative": _freeze_relative_path(track.value, source),
+                "byte_count": copied_count,
+                "sha256": copied_sha,
+            },
+        )
         malformed = self._source_malformed_class(
             copied_bytes,
             track=track,
@@ -5598,6 +5737,12 @@ class LocalEnvoyController:
                 if event["event"] == "source_collection_terminal"
             )
         }
+        persisted_bytes = {
+            (str(event["details"]["track"]), str(event["details"]["source"])):
+            event["details"]
+            for event in events
+            if event["event"] == "evidence_freeze_leg_bytes_persisted"
+        }
         execution_order = [
             *[(track, "envoy_access", by_role_track[("envoy", track.value)]) for track in _TRACKS],
             *[
@@ -5611,12 +5756,73 @@ class LocalEnvoyController:
             if key in terminals:
                 self._reattest_frozen_status(terminals[key], paths[key])
                 continue
+            if key in persisted_bytes:
+                persisted = persisted_bytes[key]
+                copied_bytes = self._read_attested_frozen_bytes(
+                    paths[key],
+                    byte_count=persisted["byte_count"],
+                    sha256_digest=persisted["sha256"],
+                )
+                malformed = self._source_malformed_class(
+                    copied_bytes,
+                    track=track,
+                    source=source,
+                    attempted_complete=attempted_complete,
+                )
+                status = SourceCollectionStatus(
+                    track=track.value,
+                    source=source,
+                    container_id=str(item["id"]),
+                    container_name=str(item["name"]),
+                    status="malformed" if malformed is not None else "copied",
+                    source_byte_count=len(copied_bytes),
+                    source_sha256=_digest_bytes(copied_bytes),
+                    copied_byte_count=len(copied_bytes),
+                    copied_sha256=_digest_bytes(copied_bytes),
+                    error_class=malformed,
+                )
+                journal_event(
+                    self.journal_path,
+                    "source_collection_terminal",
+                    {
+                        "collection_epoch": collection_epoch,
+                        "record": status.to_mapping(),
+                    },
+                )
+                terminals[key] = status
+                continue
+            if paths[key].is_symlink() or paths[key].exists():
+                quarantined = self._quarantine_unattested_frozen_path(paths[key])
+                if quarantined is None:
+                    status = SourceCollectionStatus(
+                        track=track.value,
+                        source=source,
+                        container_id=str(item["id"]),
+                        container_name=str(item["name"]),
+                        status="copy_error",
+                        source_byte_count=None,
+                        source_sha256=None,
+                        copied_byte_count=None,
+                        copied_sha256=None,
+                        error_class="command_failed",
+                    )
+                    journal_event(
+                        self.journal_path,
+                        "source_collection_terminal",
+                        {
+                            "collection_epoch": collection_epoch,
+                            "record": status.to_mapping(),
+                        },
+                    )
+                    terminals[key] = status
+                    continue
             status = self._collect_freeze_leg(
                 manifest=manifest,
                 item=item,
                 track=track,
                 source=source,
                 path=paths[key],
+                collection_epoch=collection_epoch,
                 attempted_complete=attempted_complete,
             )
             journal_event(
@@ -6447,11 +6653,13 @@ class LocalEnvoyController:
             }
             if set(status_by_key) != expected_keys:
                 raise ControllerError("durable source freeze is not nine closed legs")
-            raw = {
-                key: freeze.raw_paths[key].read_bytes()
-                for key, status in status_by_key.items()
-                if status.copied_byte_count is not None
-            }
+            raw: dict[tuple[str, str], bytes] = {}
+            for key, status in status_by_key.items():
+                payload = self._attest_frozen_status_bytes(
+                    status, freeze.raw_paths[key]
+                )
+                if payload is not None:
+                    raw[key] = payload
             copied_raw = {
                 track: raw[(track.value, "authz_decisions")]
                 for track in _TRACKS
