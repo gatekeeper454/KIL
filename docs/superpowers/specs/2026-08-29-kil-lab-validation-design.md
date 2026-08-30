@@ -273,11 +273,15 @@ schemas. It contains:
 - an append-only decision collector; and
 - a run controller that captures environment and timing metadata.
 
-The first live adapter should optimize for observability, reproducibility, and
-clear pre-execution denial rather than claiming the deepest possible transport
-placement. Selection among admission, proxy, service-mesh, network, or eBPF
-enforcement is a separate implementation gate because no local container or
-Kubernetes tooling is presently available.
+The founder selected an Envoy HTTP `ext_authz` gateway as the first live
+adapter. It optimizes for observability, reproducibility, and clear
+pre-execution denial rather than claiming the deepest possible transport
+placement. The three comparison modes run as separately configured tracks so a
+client cannot select or downgrade enforcement. Kubernetes admission, network,
+and eBPF enforcement remain later gates. The complete approved topology,
+evidence join, safe workload, signed-state fixture, measurement protocol, and
+graphical diagram are specified in
+[the Gate V3 Envoy design](2026-08-29-v3-envoy-live-validation-design.md).
 
 ## 11. Failure and safety experiments
 
