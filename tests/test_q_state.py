@@ -3,6 +3,7 @@ from decimal import Decimal
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -75,6 +76,12 @@ class QStateClaimsTest(unittest.TestCase):
         self.assertEqual(
             claims(charge=Decimal("0.2500")).to_payload()["charge"], "0.25"
         )
+        self.assertEqual(
+            claims(charge=Decimal("0E-100000")).to_payload()["charge"], "0"
+        )
+        self.assertEqual(
+            claims(charge=Decimal("0E+100000")).to_payload()["charge"], "0"
+        )
         with self.assertRaisesRegex(ValueError, "negative zero"):
             claims(charge=Decimal("-0"))
         for enormous in (Decimal("1E+1000000000"), Decimal("1E-1000000000")):
@@ -91,6 +98,22 @@ class QStateClaimsTest(unittest.TestCase):
         for name in ("charge", "threshold", "decay_rate", "maximum_charge"):
             self.assertEqual(schema["properties"][name]["pattern"], expected)
             self.assertEqual(schema["properties"][name]["maxLength"], 64)
+
+    def test_zero_with_extreme_exponent_bypasses_fixed_point_expansion(self):
+        builtin_format = format
+
+        def guarded_format(value, specification):
+            if (
+                isinstance(value, Decimal)
+                and value.is_zero()
+                and abs(value.as_tuple().exponent) > 64
+            ):
+                raise AssertionError("unsafe zero expansion")
+            return builtin_format(value, specification)
+
+        with patch("kil.q_state.format", side_effect=guarded_format, create=True):
+            payload = claims(charge=Decimal("0E-100000")).to_payload()
+        self.assertEqual(payload["charge"], "0")
 
     def test_converts_only_claimed_authority_to_v1_state(self):
         state = claims().to_composite_state()

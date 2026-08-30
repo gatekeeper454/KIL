@@ -88,6 +88,8 @@ def _decimal_wire_length(value: Decimal) -> int:
 
 
 def _decimal_wire(value: Decimal) -> str:
+    if value.is_zero():
+        return "0"
     wire = format(value, "f")
     if "." in wire:
         wire = wire.rstrip("0").rstrip(".")
