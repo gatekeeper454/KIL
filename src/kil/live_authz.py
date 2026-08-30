@@ -95,7 +95,16 @@ class LiveDecision:
 class AuthorizationAdapter:
     """Evaluate one fixed infrastructure track; request data cannot change mode."""
 
-    __slots__ = ("_keys", "_revoked_state_ids", "track")
+    __slots__ = ("_keys", "_revoked_state_ids", "_track")
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if hasattr(self, name):
+            raise AttributeError("AuthorizationAdapter configuration is immutable")
+        object.__setattr__(self, name, value)
+
+    @property
+    def track(self) -> LiveTrack:
+        return self._track
 
     def __init__(
         self,
@@ -122,7 +131,7 @@ class AuthorizationAdapter:
             raise ValueError("revoked_state_ids must be a frozenset of identifiers")
         if track is not LiveTrack.CREDENTIAL_POLICY_BASELINE and not copied_keys:
             raise ValueError("KIL tracks require at least one verification key")
-        self.track = track
+        self._track = track
         self._keys = MappingProxyType(copied_keys)
         self._revoked_state_ids = revoked_state_ids
 

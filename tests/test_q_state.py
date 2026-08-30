@@ -103,6 +103,13 @@ class QStateSignatureTest(unittest.TestCase):
         with self.assertRaisesRegex(QStateVerificationError, "signature"):
             self.verify(".".join(parts))
 
+    def test_non_ascii_compact_segment_fails_through_verification_error(self):
+        token = issue_q_state(claims(), self.private_key)
+        header, _, signature = token.split(".")
+        malformed = f"{header}.é.{signature}"
+        with self.assertRaisesRegex(QStateVerificationError, "base64url"):
+            self.verify(malformed)
+
     def test_unknown_verification_key_fails_closed(self):
         token = issue_q_state(claims(), self.private_key)
         with self.assertRaisesRegex(QStateVerificationError, "key"):

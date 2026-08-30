@@ -113,6 +113,14 @@ class LiveAuthorizationTest(unittest.TestCase):
         self.assertEqual(decision.outcome, DecisionOutcome.DENY)
         self.assertIn("untrusted_mode_header_ignored", decision.adapter_reasons)
 
+    def test_adapter_track_cannot_be_reassigned_after_construction(self):
+        adapter = AuthorizationAdapter(
+            LiveTrack.SIGNED_PLUS_LOCAL_REDUCE, keys=self.keys
+        )
+        with self.assertRaises(AttributeError):
+            adapter.track = LiveTrack.SIGNED_STATE_ONLY
+        self.assertEqual(adapter.track, LiveTrack.SIGNED_PLUS_LOCAL_REDUCE)
+
     def test_wrong_track_audience_fails_closed(self):
         adapter = AuthorizationAdapter(
             LiveTrack.SIGNED_PLUS_LOCAL_REDUCE, keys=self.keys

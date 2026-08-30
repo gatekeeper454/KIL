@@ -292,7 +292,10 @@ def verify_q_state(
     if len(parts) != 3 or not all(parts):
         raise QStateVerificationError("malformed compact JWS")
     header_part, payload_part, signature_part = parts
-    header = _json_object(_b64decode(header_part), "protected header")
+    header_bytes = _b64decode(header_part)
+    payload_bytes = _b64decode(payload_part)
+    signature = _b64decode(signature_part)
+    header = _json_object(header_bytes, "protected header")
     if set(header) != {"alg", "kid", "typ"}:
         raise QStateVerificationError("invalid protected header")
     if header["alg"] != "EdDSA" or header["typ"] != "KIL-Q+JWT":
@@ -306,11 +309,11 @@ def verify_q_state(
 
     signing_input = f"{header_part}.{payload_part}".encode("ascii")
     try:
-        public_key.verify(_b64decode(signature_part), signing_input)
+        public_key.verify(signature, signing_input)
     except InvalidSignature as error:
         raise QStateVerificationError("signature verification failed") from error
 
-    payload = _json_object(_b64decode(payload_part), "payload")
+    payload = _json_object(payload_bytes, "payload")
     try:
         claims = QStateClaims.from_payload(payload)
     except ValueError as error:
