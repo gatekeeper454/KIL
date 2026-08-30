@@ -3577,3 +3577,78 @@ foreign-profile prerequisite is satisfied, retaining exact runtime membership
 and subset-only teardown recovery checks.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-072 — 2026-08-30 — V3B-1 live attempts paused for integration-contract redesign
+
+**Input:** Complete Task 6 live validation after authorization to pause and
+restore the user's pre-existing `default` Colima profile, while showing visible
+progress and using independent runtime, evidence, and recovery review.
+
+**Interpretation:** Treat installed-runtime behavior as evidence, preserve each
+failed lifecycle privately, never replay the one central request after intent,
+and stop ad-hoc retrying when successive live gates expose a systemic gap
+between unit fixtures and Docker/Colima integration contracts.
+
+**Decision status:** Confirmed NO-GO for a fourth live proof cycle until a
+formal V3B-1 integration-contract phase is implemented and reviewed. Three
+failed runs are preserved under ignored `.tools/v3b1-failed-runs/`. No run is
+accepted, promoted, or labeled validated. The user-authorized `default` Colima
+profile was restored to its original `Running`, containerd, 4 CPU, 4 GiB
+memory, 20 GiB disk, no-Kubernetes state. The dedicated `kil-v3-lab` profile,
+all 27 containers across the three attempts, and all nine networks were removed
+by exact recorded IDs; no Task 6 active lifecycle remains.
+
+The first live attempt exposed immutable Envoy image-label inheritance. The
+test-first correction now requires the exact immutable-image plus KIL runtime
+label map on persistent and transient validators, reserves `kil.v3b1.*`, and
+passed 39 focused and 254 repository tests before commit `5a4ab4c`. The second
+attempt exposed a literal-backslash network template. The correction now uses
+one closed Docker JSON network snapshot, passed 40 focused and 255 repository
+tests, and was committed as `d48ead7`.
+
+The third `up` passed and attested three internal networks, nine hardened
+containers, digest-pinned Python and Envoy images, the locked KIL image, and
+localhost port bindings. Its first and only baseline request then raised an
+undifferentiated `OSError`; the controller persisted failure and did not retry.
+Because the exception handler spans connect, send, response headers, and body
+and stores no stage or errno, the archive cannot establish host-forwarding
+delay, refusal, reset, timeout, or whether request bytes reached Envoy.
+
+During `down`, all nine containers were stopped before evidence copy. Authz and
+target ledgers live on tmpfs, so their precreated files were lost on stop; the
+missing file therefore does not prove that no request reached authz. Collection
+then aborted at the first copy error instead of preserving independent partial
+legs. Exact container removals completed. The first network removal also
+completed operationally, but version-specific Docker not-found prose was
+classified as ambiguous before durable completion. Exact manual cleanup removed
+the two remaining networks and dedicated profile before restoring `default`.
+
+**Rationale:** The failure pattern is systemic integration-contract
+incompleteness, not a single remaining local defect. Another direct patch and
+live cycle would risk consuming an irreversible request before proving host
+reachability and would retain teardown paths that can destroy or reject failure
+evidence. Independent controller, runtime, and code-quality reviews agree on
+the NO-GO.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- ignored visible status board
+  `artifacts/generated/v3b1-task6-live-status.md`
+- three immutable private failed-run directories under
+  `.tools/v3b1-failed-runs/`
+
+**Unresolved questions:** The next design must specify: a bounded TCP-only
+readiness gate that emits no HTTP bytes before request intent; closed sanitized
+request-failure provenance; evidence freeze/copy while authz and target tmpfs
+remain alive; per-leg `copied`/`missing`/`copy_error`/`malformed` status; and
+inventory-based exact absence verification independent of unstable stderr.
+
+**Next gate:** Approve and execute a formal transcript-driven V3B-1
+integration-contract phase. Require a contract-only `up`/`down` smoke cycle
+with zero central requests before authorizing another proof attempt. Preserve
+the rule that any post-intent ambiguity is nonpromotable and never replayed.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
