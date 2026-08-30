@@ -2400,3 +2400,39 @@ separately planned V3B Envoy/Kind live-cluster validation without relabeling the
 modeled V3A evidence.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-050 — 2026-08-29 — V3A feature branch published for pull request
+
+**Input:** After the final V3A review reported no remaining blockers, the
+founder selected integration option 2: push the feature branch and create a
+GitHub pull request.
+
+**Interpretation:** Publication exposes the reviewed implementation for normal
+repository review without merging it into `main`. The generated V3A evidence
+remains modeled and the pull request must retain the V3A/V3B validation
+boundary.
+
+**Decision status:** Confirmed branch publication. Branch
+`feature/v3a-signed-state-authz` is pushed to `origin` at commit `fb84507` plus
+this lineage closeout. Pull-request title and description are prepared in the
+authenticated GitHub interface; final creation is pending the required
+action-time confirmation for external submission.
+
+**Rationale:** A pull request preserves the isolated worktree for review and
+iteration. The proposed description records 126 passing tests, canonical
+modeled run `ca26ff63c09cd78b`, eight verified checksums, the independent review
+result, and the prohibition on treating V3A as Envoy or Kind validation.
+
+**Affected artifacts:**
+
+- Remote branch `origin/feature/v3a-signed-state-authz`
+- Prepared GitHub pull request from the feature branch to `main`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The pull request has not yet been submitted. Merge
+review and the separate V3B live-cluster plan remain future gates.
+
+**Next gate:** Confirm and submit the prepared GitHub pull request, record its
+number and URL, then preserve the feature worktree for review feedback.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
