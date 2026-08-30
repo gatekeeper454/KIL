@@ -2579,3 +2579,62 @@ review gate; V3B Envoy/Kind execution remains the next validation phase after
 integration.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-054 — 2026-08-30 — V3B opened with a closed toolchain and boundary profile
+
+**Input:** The founder directed the project to begin the next phase after V3A
+was merged and the repository was synchronized.
+
+**Interpretation:** The next approved phase is V3B live Envoy/Kind validation.
+Execution is divided into two falsifiable increments: V3B-1 first proves the
+existing V3A authorization contract through a pinned local Envoy HTTP
+`ext_authz` boundary; V3B-2 then reuses those exact artifacts in the approved
+Kind/Calico namespace and NetworkPolicy topology. This sequencing does not
+change the three fixed comparison tracks, signed-state semantics, or evidence
+classes.
+
+**Decision status:** Confirmed phase start and Task 1 implementation on the
+isolated branch `feature/v3b-envoy-kind-live-validation`. The released profile
+is now closed at Kind 0.32.0, the official digest-pinned Kubernetes 1.36.1 node,
+kubectl 1.36.3, Envoy 1.39.0, and Calico 3.32.0. The earlier
+0.33.0/1.37.0/1.39.1 tuple remains visible as the original planning target and
+is not represented as released evidence. Thirteen new fail-closed profile
+tests and the complete 143-test repository suite pass locally. No Envoy
+container, Kind cluster, NetworkPolicy, or live enforcement result exists yet;
+all earlier V3A evidence retains its `modeled` classification.
+
+**Rationale:** Release identities must be real, mutually compatible, and
+content-resolvable before they can enter a validation manifest. A closed,
+immutable profile prevents silent version drift, alternate asset substitution,
+unsafe URL or port changes, mutable node-image use, and accidental operations
+against a default cluster. Envoy's raw HTTP protocol automatically conveys
+method, path, Authorization, Host, and Content-Length; documentation now
+separates those transport facts from KIL's five trusted semantic inputs. Only
+`x-request-id` and `x-kil-q-state` need explicit `allowed_headers` matchers,
+while Host and Content-Length are ignored by authorization evaluation.
+
+**Affected artifacts:**
+
+- `docs/superpowers/plans/2026-08-30-v3b1-toolchain-http-boundary.md`
+- `deploy/kind/v3b-profile.json`
+- `src/kil/v3b_preflight.py`
+- `tests/test_v3b_preflight.py`
+- `docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md`
+- `adapters/envoy/README.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The Docker CLI archive still requires a locally
+observed source hash because its official index publishes no sidecar checksum.
+Kind and kubectl downloads, executable hashes, Envoy and Python image digests,
+the HTTP adapter, harmless target ledger, deterministic Envoy configuration,
+local boundary proof, and full Kind/Calico matrix remain unexecuted. The first
+live run must continue to prove denial with the joined KIL decision, absent
+Envoy upstream, and zero target markers; none may be inferred from Task 1.
+
+**Next gate:** Implement and test the bounded, atomic V3B tool bootstrap without
+network access, then cross the explicit download gate to materialize the
+allowlisted tools under ignored `.tools/` and record their content identities.
+Starting Colima, pulling images, and creating containers remain a later,
+separate runtime-mutation gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

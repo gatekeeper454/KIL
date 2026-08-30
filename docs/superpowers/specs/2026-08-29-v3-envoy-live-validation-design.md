@@ -126,9 +126,14 @@ depends on reparsing and reserializing attacker-controlled JSON.
 Each track has its own Envoy deployment and configuration. The external
 authorization filter is enabled before the router, `failure_mode_allow` is
 `false`, retries are disabled, the authorization timeout is fixed, and route
-cache clearing is not used. Only an allowlisted set of request headers reaches
-the authorization service. The client never supplies trusted local-evidence,
-track-mode, issuer, or verified-subject headers.
+cache clearing is not used. The authorization service consumes only original
+method, original path, `x-request-id`, Authorization, and `x-kil-q-state` as
+trusted semantic inputs. In Envoy raw HTTP mode, method, path, and Authorization
+are conveyed automatically; the explicit `allowed_headers` matcher adds only
+`x-request-id` and `x-kil-q-state`. Automatically present Host and
+Content-Length transport metadata are ignored by authorization evaluation. The
+client never supplies trusted local-evidence, track-mode, issuer, or
+verified-subject headers.
 
 ### 4.4 Authorization services
 
@@ -265,7 +270,7 @@ production-performance benchmark.
 
 ## 10. Environment and version contract
 
-The planned environment is:
+The original planning target was:
 
 | Component | Planned identity |
 |---|---|
@@ -276,6 +281,29 @@ The planned environment is:
 | Envoy | v1.39.1, image pinned by resolved registry digest |
 | Application runtime | Python 3.12.13 |
 | Ed25519 library | `cryptography` 50.0.0 |
+
+The released, mutually supported V3B profile resolved on 2026-08-30 is:
+
+| Component | Resolved V3B identity |
+|---|---|
+| Host | macOS 26.6.1, arm64 |
+| Host runtime | Colima 0.10.3 on Lima 2.2.0, profile `kil-v3-lab` |
+| Docker client | Docker CLI 29.7.2 |
+| Cluster tool | Kind 0.32.0 |
+| Kubernetes node | `kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5` |
+| Kubernetes client | `kubectl` v1.36.3 |
+| Envoy | v1.39.0, image pinned by resolved registry digest before use |
+| NetworkPolicy provider | Calico v3.32.0, reserved for V3B-2 |
+| Application runtime | Python 3.12.13 |
+| Ed25519 library | `cryptography` 50.0.0 |
+
+The tracked source of truth is `deploy/kind/v3b-profile.json`. This is a
+release-availability correction: the planned Kind 0.33.0, Kubernetes 1.37.0
+node image, and Envoy 1.39.1 combination was not available as the resolved
+stable profile. The correction does not change the founder-approved topology,
+authorization semantics, comparison tracks, or evidence boundary. V3B-1 first
+proves the pinned local Envoy boundary; V3B-2 then reuses the same artifacts in
+the approved Kind/Calico topology.
 
 Before cluster creation, preflight records the executable hashes and version
 outputs, resolves every mutable image tag to a digest, and writes the lock into
@@ -354,7 +382,11 @@ artifact hashes, and the approved evidence-language review.
 - [KTP Kinetic Envelope](https://github.com/nmcitra/ktp-rfc/blob/v2.0.0/specifications/kinetic-envelope.md)
 - [KTP deployment profile](https://github.com/nmcitra/ktp-rfc/blob/v2.0.0/specifications/deployment-profile.md)
 - [Envoy external authorization filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_authz_filter.html)
-- [Kind releases](https://github.com/kubernetes-sigs/kind/releases)
+- [Kind 0.32.0 release and Kubernetes 1.36.1 node digest](https://github.com/kubernetes-sigs/kind/releases/tag/v0.32.0)
+- [Kubernetes 1.36.3 release](https://github.com/kubernetes/kubernetes/releases/tag/v1.36.3)
+- [Envoy 1.39.0 release](https://github.com/envoyproxy/envoy/releases/tag/v1.39.0)
+- [Calico 3.32.0 release](https://github.com/projectcalico/calico/releases/tag/v3.32.0)
+- [Calico Kubernetes compatibility](https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements)
 - [Hugging Face technical incident timeline](https://huggingface.co/blog/agent-intrusion-technical-timeline)
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
