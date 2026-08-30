@@ -2,6 +2,7 @@
 """Run the visible V3A process-contract demonstration."""
 
 from argparse import ArgumentParser
+from base64 import urlsafe_b64encode
 from decimal import Decimal
 from hashlib import sha256
 from html import escape
@@ -10,6 +11,7 @@ import shutil
 from tempfile import mkdtemp
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from kil.canonical import canonical_digest, canonical_json
 from kil.domain import ActionRequest, LocalEvidence, ReductionProfile
@@ -55,13 +57,48 @@ def _claims(audience: str) -> QStateClaims:
     )
 
 
-def _execute() -> tuple[tuple[GatewayResult, ...], str]:
+def _b64url(value: bytes) -> str:
+    return urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+def _execute() -> tuple[
+    tuple[GatewayResult, ...],
+    dict[str, object],
+    tuple[dict[str, str], ...],
+]:
     private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
     public_key = private_key.public_key()
-    keys = {key_id(public_key): public_key}
+    public_key_id = key_id(public_key)
+    raw_public_key = public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)
+    public_key_thumbprint = "sha256:" + sha256(raw_public_key).hexdigest()
+    verification_key = {
+        "algorithm": "Ed25519",
+        "assurance": "software_level_1_lab",
+        "jwk": {
+            "crv": "Ed25519",
+            "kid": public_key_id,
+            "kty": "OKP",
+            "x": _b64url(raw_public_key),
+        },
+        "production_key": False,
+        "provenance": "deterministic_repository_fixture_bytes_range_32",
+        "public_key_thumbprint": public_key_thumbprint,
+        "threshold_key": False,
+        "thumbprint_profile": "sha256_raw_ed25519_public_key",
+    }
+    keys = {public_key_id: public_key}
     request = ActionRequest("v3a-request-1", SUBJECT, "admin_action", 105)
     local_evidence = LocalEvidence(Decimal("0.9"), Decimal("0"), True)
     reduction_profile = ReductionProfile(Decimal("0.25"), Decimal("25"), 3)
+
+    signed_claims = {
+        LiveTrack.SIGNED_STATE_ONLY: _claims("kil-v3-signed"),
+        LiveTrack.SIGNED_PLUS_LOCAL_REDUCE: _claims("kil-v3-local"),
+    }
+    signed_tokens = {
+        track: issue_q_state(claims, private_key)
+        for track, claims in signed_claims.items()
+    }
 
     track_inputs = (
         (
@@ -72,12 +109,12 @@ def _execute() -> tuple[tuple[GatewayResult, ...], str]:
         (
             LiveTrack.SIGNED_STATE_ONLY,
             AuthorizationAdapter(LiveTrack.SIGNED_STATE_ONLY, keys=keys),
-            issue_q_state(_claims("kil-v3-signed"), private_key),
+            signed_tokens[LiveTrack.SIGNED_STATE_ONLY],
         ),
         (
             LiveTrack.SIGNED_PLUS_LOCAL_REDUCE,
             AuthorizationAdapter(LiveTrack.SIGNED_PLUS_LOCAL_REDUCE, keys=keys),
-            issue_q_state(_claims("kil-v3-local"), private_key),
+            signed_tokens[LiveTrack.SIGNED_PLUS_LOCAL_REDUCE],
         ),
     )
     results = []
@@ -98,7 +135,19 @@ def _execute() -> tuple[tuple[GatewayResult, ...], str]:
             f"{track.value} {result.decision.outcome.value} "
             f"markers={result.marker_count} proof={proof}"
         )
-    return tuple(results), key_id(public_key)
+    q_states = tuple(
+        {
+            "audience": signed_claims[track].audience,
+            "compact_jws": signed_tokens[track],
+            "state_id": signed_claims[track].state_id,
+            "track": track.value,
+        }
+        for track in (
+            LiveTrack.SIGNED_STATE_ONLY,
+            LiveTrack.SIGNED_PLUS_LOCAL_REDUCE,
+        )
+    )
+    return tuple(results), verification_key, q_states
 
 
 def _live_html(results: tuple[GatewayResult, ...], run_id: str) -> str:
@@ -151,6 +200,9 @@ h1 { margin: 0 0 8px; font-size: 34px; }
 .outcome { margin: 18px 0 8px; font-size: 30px; font-weight: 900; }
 .permit { color: #5eead4; } .deny { color: #fca5a5; }
 .markers { color: #cbd5e1; }
+figure { margin: 30px 0; padding: 16px; background: #f8fafc; border-radius: 16px; }
+figure img { display: block; width: 100%; height: auto; }
+figcaption { margin-top: 10px; color: #334155; font-size: 13px; }
 table { width: 100%; border-collapse: collapse; background: #0b1f33; font-size: 13px; }
 th, td { padding: 12px 10px; border: 1px solid #27445f; text-align: left; vertical-align: top; }
 th { color: #bae6fd; } code { overflow-wrap: anywhere; }
@@ -165,6 +217,11 @@ th { color: #bae6fd; } code { overflow-wrap: anywhere; }
         "<div class='summary'>PERMIT / PERMIT / DENY</div>"
         "<p>The same action facts traverse three infrastructure-fixed authorization tracks.</p>"
         f"<section class='cards'>{''.join(cards)}</section>"
+        "<figure><img src='../../../../docs/architecture/v3-envoy-live-validation.svg' "
+        "alt='Approved Gate V3 three-track Envoy live-validation architecture'>"
+        "<figcaption>Approved Gate V3 architecture. If this standalone bundle is "
+        "moved outside the repository, use the textual track and proof tables below.</figcaption>"
+        "</figure>"
         "<table><thead><tr><th>track</th><th>request</th><th>decision digest</th>"
         "<th>engine reasons</th><th>forwarded</th><th>markers</th><th>proof valid</th>"
         f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
@@ -179,7 +236,8 @@ def _artifact_contents(
     results: tuple[GatewayResult, ...],
     run_id: str,
     implementation_version: str,
-    verification_key_id: str,
+    verification_key: dict[str, object],
+    q_states: tuple[dict[str, str], ...],
 ) -> dict[str, str]:
     manifest = {
         "run_id": run_id,
@@ -189,7 +247,8 @@ def _artifact_contents(
         "evidence_class": "modeled",
         "validation_scope": "process_contract_only",
         "signature_profile": "kil-q-jws-eddsa-lab-v0",
-        "verification_key_id": verification_key_id,
+        "verification_key_id": verification_key["jwk"]["kid"],
+        "verification_key": verification_key,
         "ktp_citation": KTP_CITATION_URL,
     }
     joins = tuple(
@@ -228,6 +287,10 @@ def _artifact_contents(
         ),
         "summary.md": summary,
         "live.html": _live_html(results, run_id),
+        "verification-key.json": canonical_json(verification_key) + "\n",
+        "q-states.jsonl": "".join(
+            canonical_json(item) + "\n" for item in q_states
+        ),
     }
 
 
@@ -235,7 +298,8 @@ def _write_bundle(
     output_root: Path,
     results: tuple[GatewayResult, ...],
     implementation_version: str,
-    verification_key_id: str,
+    verification_key: dict[str, object],
+    q_states: tuple[dict[str, str], ...],
 ) -> Path:
     identity = {
         "scenario_id": SCENARIO_ID,
@@ -246,6 +310,8 @@ def _write_bundle(
             (result.forwarded, result.marker_count, result.proof_valid)
             for result in results
         ),
+        "q_states": q_states,
+        "verification_key": verification_key,
     }
     run_id = canonical_digest(identity)[:16]
     output_root.mkdir(parents=True, exist_ok=True)
@@ -256,7 +322,8 @@ def _write_bundle(
         results,
         run_id,
         implementation_version,
-        verification_key_id,
+        verification_key,
+        q_states,
     )
     temporary = Path(mkdtemp(prefix=f".{run_id}-", dir=output_root))
     try:
@@ -290,12 +357,13 @@ def main() -> None:
     arguments = parser.parse_args()
     if not arguments.implementation_version.strip():
         parser.error("--implementation-version must be nonblank")
-    results, verification_key_id = _execute()
+    results, verification_key, q_states = _execute()
     bundle = _write_bundle(
         arguments.output,
         results,
         arguments.implementation_version,
-        verification_key_id,
+        verification_key,
+        q_states,
     )
     print(f"bundle {bundle}")
 
