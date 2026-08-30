@@ -268,7 +268,7 @@ git commit -m "Add isolated V3B tool bootstrap"
 - Create: `src/kil/ext_authz_http.py`
 - Create: `tests/test_ext_authz_http.py`
 
-- [ ] **Step 1: Write failing pure HTTP-mapping tests**
+- [x] **Step 1: Write failing pure HTTP-mapping tests**
 
 Define immutable `HttpRequest`, `HttpResponse`, and `AuthorizationHttpApp`
 interfaces in the tests. Prove:
@@ -297,13 +297,13 @@ def test_log_record_redacts_credential_and_signed_state(self):
     self.assertNotIn(b"eyJ", encoded)
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```bash
 PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_ext_authz_http -v
 ```
 
-- [ ] **Step 3: Implement the thin adapter**
+- [x] **Step 3: Implement the thin adapter**
 
 The trusted semantic inputs are original method, original path,
 `x-request-id`, `authorization`, and `x-kil-q-state`. In Envoy raw HTTP
@@ -325,7 +325,7 @@ path, fixes the track at process construction, limits headers to 16 KiB, limits
 the request body to zero bytes, binds inside the container only, and handles
 `/healthz` without invoking authorization.
 
-- [ ] **Step 4: Verify and commit Task 3**
+- [x] **Step 4: Verify and commit Task 3**
 
 ```bash
 PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_ext_authz_http -v

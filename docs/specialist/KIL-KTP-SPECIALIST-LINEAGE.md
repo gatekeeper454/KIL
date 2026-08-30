@@ -2710,3 +2710,69 @@ the existing immutable adapter, redact credential and signed state from logs,
 and fail closed with generic client responses.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-056 — 2026-08-30 — Fixed-track HTTP authorization boundary implemented
+
+**Input:** The founder directed execution of V3B-1 Task 3.
+
+**Interpretation:** Implement the process-level raw HTTP authorization service
+that will sit behind Envoy's `ext_authz` filter. Preserve the existing immutable
+`AuthorizationAdapter` decision semantics, fix the validation track at process
+construction from read-only configuration, accept only the five planned
+semantic inputs, and create no live-cluster or live-Envoy evidence claim at
+this gate.
+
+**Decision status:** Confirmed implemented and locally verified at the process
+boundary. Nineteen focused tests and the complete 176-test repository suite
+pass. The service exposes immutable request and response values, resolves
+server-held fixtures by request ID, maps the original method and path, compares
+the presented authorization value to the server-held digest in constant time,
+accepts the signed composite KTP enforcement state only through
+`x-kil-q-state`, and obtains action mapping, expected identity, and local
+evidence only from the selected server fixture. Track selection is fixed when
+the application is constructed and cannot be selected by a request header.
+
+Permit, policy denial, and parsing/internal failure map to HTTP 200, generic
+HTTP 403, and generic HTTP 503 respectively. Responses expose a decision digest
+when one exists. Canonical JSONL records exclude credentials, signed Q-state,
+private keys, and internal client-facing denial detail; unknown request-header
+values are not retained. The server enforces a 16 KiB header limit and a zero
+request-body contract. `/healthz` bypasses authorization and produces no
+decision record, while still rejecting a nonzero request body. Configuration
+is closed-schema, read-only, size-bounded, fixed to the container bind contract,
+and admits public verification keys but no private key material. A review-found
+failure path was reproduced test-first and corrected so an already-computed
+decision digest remains in the generic 503 response and error record when the
+durable recorder cannot append.
+
+**Rationale:** This preserves the distinction between transport carriage and
+authorization semantics. Envoy may convey the planned request context, but it
+cannot choose a KIL validation track or supply authoritative identity and local
+evidence. Reusing the existing adapter avoids creating a second policy engine,
+while generic client responses and secret-free durable records constrain the
+new HTTP surface. The no-activation server-construction test is paired with
+pure request/health behavior tests because this execution sandbox prohibits
+loopback socket binding; production construction continues to bind and
+activate by default.
+
+**Affected artifacts:**
+
+- `src/kil/ext_authz_http.py`
+- `tests/test_ext_authz_http.py`
+- `docs/superpowers/plans/2026-08-30-v3b1-toolchain-http-boundary.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- `src/kil/live_authz.py` (delegated to unchanged)
+
+**Unresolved questions:** Raw HTTP interoperability with the selected Envoy
+image has not yet been exercised. No Envoy filter configuration, container
+image, live socket exchange, Colima runtime, Kind cluster, Calico policy, or
+target-side marker evidence exists at this gate. The harmless target ledger,
+deterministic Envoy configuration, image-digest binding, local container
+boundary proof, and full live failure matrix remain pending.
+
+**Next gate:** Execute V3B-1 Task 4 test-first: implement the harmless target
+ledger process with append-before-response semantics so later live validation
+can prove both successful delivery and the absence of a target marker on
+denial.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
