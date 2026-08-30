@@ -203,6 +203,14 @@ enforcement adapter. These are execution rails—not timescales.
 The canonical architecture graphic is maintained as
 [hybrid-two-timescale-architecture.html](../design-drafts/hybrid-two-timescale-architecture.html).
 
+Gate V3 instantiates the live rail through three separately configured Envoy
+external-authorization tracks. The graphical deployment view below distinguishes
+the credential-policy control, signed-state consumption, and signed state plus
+local reducing-only overlay. A validated denial requires a joined decision,
+Envoy non-forwarding record, and absence of the target invocation marker.
+
+![Gate V3 Envoy live-validation architecture](../architecture/v3-envoy-live-validation.svg)
+
 ## 4. Formal trust-decay profile
 
 ### 4.1 Identity, authority, action, and trajectory

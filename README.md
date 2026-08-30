@@ -15,12 +15,12 @@ KTP-Transport, KTP-Enforce, KTP-Gravity, or Vector Identity constructs.
 
 ## Status
 
-The deterministic V1 decision kernel and V2 historical replay are locally
-executable. V2 normalizes eight source-cited incident cut points, evaluates one
-common stream under a modeled credential-policy baseline and two KIL modes, and
-emits a reproducible, integrity-checked bundle. Historical counterfactual
-results remain **modeled**, not validated. Concrete KTP signature verification
-and live-cluster enforcement remain later gates.
+The deterministic V1 decision kernel, V2 historical replay, and V3A signed-
+state authorization core are locally executable. V3A verifies an experimental
+Ed25519 composite-state envelope, three infrastructure-fixed comparison tracks,
+and a process-level forward-or-withhold proof with harmless target markers. Its
+visible bundle is **modeled** and limited to a `process_contract_only` scope.
+Envoy and Kind behavior remain the V3B live-cluster validation gate.
 
 ## Evidence classes
 
@@ -57,18 +57,24 @@ sensor process.
 | `scenarios/` | Replay scenarios and evidence manifests |
 | `schemas/` | Versioned wire and fixture schemas |
 | `src/kil/` | Deterministic model, replay engine, and decision records |
-| `adapters/kubernetes/` | Live transport-enforcement adapter |
+| `adapters/envoy/` | Frozen V3B Envoy external-authorization boundary |
+| `adapters/kubernetes/` | Earlier Kubernetes adapter scaffold |
 | `deploy/kind/` | Reproducible local Kubernetes environment |
 | `tests/` | Unit, property, conformance, replay, and live integration tests |
 | `tools/` | Source-ingestion, validation, and publication utilities |
 
 ## Bootstrap check
 
+Install the optional laboratory dependency set, then run the complete unit
+suite:
+
 ```bash
+python -m pip install -e ".[lab]"
 make test
 ```
 
-No cluster dependency is installed or downloaded by the bootstrap.
+This installs the pinned V3A cryptography library. No cluster dependency is
+installed or downloaded by the bootstrap.
 
 ## Historical replay
 
@@ -94,6 +100,24 @@ shasum -a 256 -c SHA256SUMS
 The replay uses source-cited observed incident summaries together with
 explicitly synthetic KTP state, local context signals, and credential-policy
 assumptions. Its decisions must not be relabeled as validated.
+
+## V3A process-contract demonstration
+
+V3A runs the same normalized action facts through three fixed tracks and emits
+an integrity-checked JSONL/HTML bundle. The expected outcome is
+`permit / permit / deny`; only permitted tracks receive a target marker.
+
+```bash
+make v3a-demo \
+  PYTHON=/path/to/python3.12 \
+  OUTPUT=/absolute/path/to/v3a-runs \
+  VERSION=<full-git-commit>
+```
+
+V3A does not exercise Envoy or Kubernetes and must not be described as a
+validated cluster result. See the
+[V3 architecture diagram](docs/architecture/v3-envoy-live-validation.svg) and
+[V3 progress record](docs/lab/V3-PROGRESS.md).
 
 ## Primary foundations
 

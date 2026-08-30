@@ -2041,3 +2041,541 @@ does not validate modeled parameter accuracy, historical prevention, concrete
 KTP cryptography, cluster behavior, or live KIL operation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-043 — 2026-08-29 — Gate V3 live-lab readiness assessed
+
+**Input:** The founder asked whether KIL is ready to begin live lab validation
+after V2 merge and closeout.
+
+**Interpretation:** “Ready to begin” must be separated from “ready to execute a
+validation run” and “ready to publish validated claims.” V1 and V2 provide a
+stable decision/evidence contract, but Gate V3 also requires an approved
+implementation plan, isolated runtime, concrete pre-execution adapter, signed
+state fixture or verifier, workload generators, collector, controller, failure
+experiments, and measurement protocol.
+
+**Decision status:** Confirmed ready to begin Gate V3 planning and test-first
+implementation; not yet ready to execute or label a live run validated. The V3
+design baseline and acceptance criteria exist. Repository paths
+`adapters/kubernetes/` and `deploy/kind/` contain README scaffolds only. No live
+manifests, adapter, issuer, collector, controller, or integration tests exist.
+On this host, Colima v0.10.3 and Lima 2.2.0 are installed, but Colima is stopped;
+`docker`, `kubectl`, `kind`, and `helm` are not available in `PATH`.
+
+**Rationale:** The merged V1/V2 kernel, schemas, provenance types, replay modes,
+and bundle format are sufficient foundations for V3. Beginning with cluster
+execution before selecting and specifying the enforcement boundary would make
+the experiment irreproducible and could produce results that do not support the
+paper's transport-enforcement claim. Missing local tooling is resolvable only
+after the environment and dependency versions are approved.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-08-29-kil-lab-validation-design.md`
+- `adapters/kubernetes/README.md`
+- `deploy/kind/README.md`
+- `tests/README.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Gate V3 needs a reviewed implementation plan and a
+selected first enforcement boundary. The concrete composite-state encoding and
+verification fixture, safe benign/adversarial action pair, local-reduction
+differentiation case, failure profiles, repetition counts, latency collection,
+tool versions, and isolated-cluster teardown contract remain open. Dependency
+installation and starting Colima require explicit execution authority.
+
+**Next gate:** Write and review the test-first V3 implementation plan. The plan
+should begin with environment preflight and isolation guards, then implement a
+minimal observable pre-execution transport adapter and the controlled case
+where signed state permits but fresh local evidence reduces or denies. Only
+after those checks pass should the cluster be created and validation runs begin.
+
+This checkpoint is a readiness assessment only. It does not validate the host,
+cluster, adapter, signed-state cryptography, modeled parameters, historical
+prevention, or live KIL behavior.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-044 — 2026-08-29 — Gate V3 planning authorized; adapter boundary pending
+
+**Input:** The founder authorized proceeding with the Gate V3 live-lab plan.
+
+**Interpretation:** Authorization covers collaborative design and creation of a
+test-first implementation plan. It does not yet authorize dependency
+installation, starting Colima, creating a cluster, or running live experiments.
+The existing V3 design baseline leaves the first enforcement adapter as an
+explicit approval gate, so that boundary must be resolved before the detailed
+specification and implementation plan can be finalized.
+
+**Decision status:** Confirmed V3 planning is active. Proposed, not confirmed:
+use a Kind-hosted Envoy external-authorization gateway as the first live
+pre-execution transport boundary. Kubernetes admission is a narrower fallback
+for workload-creation actions; eBPF is deferred because it would add kernel and
+portability variables before the validation contract is proven.
+
+**Rationale:** Envoy external authorization can block a request before the
+upstream workload executes, reuse the V1 decision contract, expose both KIL
+modes, and produce measurable allow/deny outcomes and latency without claiming
+eBPF, SmartNIC, SDN, or production-scale enforcement. It keeps the first live
+experiment focused on evidence quality and reproducibility.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-08-29-kil-lab-validation-design.md`
+- Planned V3 design specification and implementation plan
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Founder approval of the Envoy external-authorization
+boundary is pending. After that choice, the safe workload pair, concrete signed
+state fixture, failure profiles, repetition counts, latency clock, dependency
+versions, and teardown contract must be fixed in the design before plan writing.
+
+**Next gate:** Confirm or reject the proposed first adapter boundary, then
+compare the complete V3 implementation approaches and present the design for
+incremental approval.
+
+This checkpoint authorizes planning only. It does not validate or authorize
+host changes, cluster creation, adapter behavior, signed-state cryptography,
+modeled parameters, historical prevention, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-045 — 2026-08-29 — Envoy external authorization selected for V3
+
+**Input:** The founder approved the proposed Kind-hosted Envoy external-
+authorization gateway as the first Gate V3 live enforcement boundary.
+
+**Interpretation:** V3 will validate pre-upstream request enforcement through
+Envoy `ext_authz`, not Kubernetes admission or eBPF. The selected boundary must
+remain infrastructure-controlled: a workload request cannot choose, bypass, or
+downgrade the active comparison mode.
+
+**Decision status:** Confirmed first live adapter boundary: Envoy `ext_authz`
+inside an isolated Kind cluster. Kubernetes admission and eBPF are deferred and
+must not be claimed by V3 results.
+
+**Rationale:** Envoy can withhold a request before target execution, exposes
+observable allow/deny and latency behavior, and can consume the existing V1
+decision contract through a focused authorization service. It gives the lab a
+transport-faithful first validation surface without introducing kernel-specific
+variables or conflating workload admission with continuous request transport.
+
+**Affected artifacts:**
+
+- Planned V3 design specification
+- Planned `adapters/envoy/` authorization adapter
+- Planned Kind deployment and live integration suite
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The component topology, mode isolation, safe target
+workload, signed-state fixture, local-evidence injection, collection contract,
+failure matrix, repetitions, latency method, and tool versions still require
+design approval.
+
+**Next gate:** Approve the V3 component and data-flow architecture, including
+mode isolation and the observable definition of pre-execution denial.
+
+This decision selects an experimental adapter only. It does not validate or
+authorize host changes, cluster creation, Envoy behavior, signed-state
+cryptography, modeled parameters, historical prevention, or live KIL operation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-046 — 2026-08-29 — V3 topology, extension envelope, and diagram approved
+
+**Input:** The founder approved the three-track Envoy architecture and directed
+implementation to begin without another design prompt. The founder also
+required a documented graphical diagram during implementation.
+
+**Interpretation:** Approval fixes the V3 topology and permits direct transition
+from specification to an inline, test-first implementation plan. It does not
+remove normal host-security approval gates for dependency installation or
+runtime mutation. The signed state must be expressed as a narrow KIL extension
+that consumes and references KTP v2.0.0 Trust Proof and Kinetic Envelope
+artifacts rather than replacing them.
+
+**Decision status:** Confirmed: three isolated, infrastructure-fixed tracks
+(`credential_policy_baseline`, `signed_state_only`, and
+`signed_plus_local_reduce`) behind Envoy HTTP `ext_authz`; same normalized
+requests; no client-controlled mode; harmless targets with append-only
+invocation ledgers; and a denial proof requiring a joined KIL decision, Envoy
+non-forwarding outcome, and absent target marker. Confirmed experimental
+signature profile: Ed25519 compact JWS, software Level 1 lab key, maximum
+ten-second lifetime, track-bound audience, and explicit non-conformance label
+`kil.q-state.v0`. Confirmed evidence boundary: cluster behavior may become
+validated, while synthetic Q values and local context remain modeled.
+
+**Rationale:** KTP v2.0.0 already provides a signed Trust Proof, a ten-second
+validity ceiling, the Kinetic Envelope tightening contract, and a gateway
+consumption boundary. KIL's contribution is the authority-class-bound composite
+state and reducing-only transport consumption profile. Separate tracks prevent
+request-level downgrade, while target-side markers establish whether denial
+occurred before the representative action executed.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md`
+- `docs/superpowers/specs/2026-08-29-kil-lab-validation-design.md`
+- `docs/architecture/v3-envoy-live-validation.svg`
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The implementation has not yet verified the exact
+Envoy container digest, local runtime installation path, Kind networking,
+container hardening compatibility, or latency behavior. The KTP specialist
+must still determine whether the extension is expressed in KTP 2.1 or 3.0.
+
+**Next gate:** Self-review and commit the V3 design, write the complete
+test-first implementation plan, create an isolated worktree, and begin V3A
+contract and process-level enforcement work.
+
+This approval authorizes implementation but does not itself validate the host,
+cluster, adapter, signature profile, modeled inputs, historical prevention, or
+live KIL behavior.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-047 — 2026-08-29 — V3A implementation plan fixed for inline execution
+
+**Input:** The founder authorized implementation without another design prompt
+after approving the Envoy topology and requiring a documented graphical
+diagram.
+
+**Interpretation:** The multi-subsystem V3 design is split at a falsifiable
+boundary. V3A implements the signed-state and authorization core plus a visible
+process-contract demonstration. V3B introduces Envoy and Kind only after the
+cryptographic, binding, fixed-mode, no-forward, and evidence-join contracts pass
+without cluster variables.
+
+**Decision status:** Confirmed V3A plan for inline execution. It will implement
+the strict `kil.q-state.v0` payload, Ed25519 compact JWS, maximum ten-second
+lifetime, exact subject/audience/class/action binding, revocation, three fixed
+tracks, downgrade-header resistance, harmless target markers, proof joins, and
+a modeled visible bundle. V3A output cannot use the project evidence label
+`validated`; V3B remains the first live-cluster validation gate.
+
+**Rationale:** Separating cryptographic and adapter contracts from cluster
+orchestration makes failures attributable and keeps the first software increment
+small enough for strict red-green testing. The reference gateway can prove the
+join logic and target-marker semantics without pretending to prove Envoy
+behavior.
+
+**Affected artifacts:**
+
+- `docs/superpowers/plans/2026-08-29-v3a-signed-state-authorization-core.md`
+- Planned `schemas/q-state-v0.schema.json`
+- Planned `src/kil/q_state.py`
+- Planned `src/kil/live_authz.py`
+- Planned `src/kil/reference_gateway.py`
+- Planned `tools/v3a_demo.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** V3B still must resolve the installed Docker client,
+Kind and kubectl installation, Envoy and application image digests, exact HTTP
+header mapping, NetworkPolicy behavior under Kind, and cluster-level latency.
+
+**Next gate:** Commit the V3A plan, create an ignored isolated worktree, verify
+the 104-test baseline, then execute Task 1 with a witnessed failing test before
+production code is added.
+
+This plan authorizes process-level implementation only. It does not validate
+Envoy, Kubernetes, modeled parameters, historical prevention, or live KIL
+behavior.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-048 — 2026-08-29 — V3A signed-state and authorization core implemented
+
+**Input:** The founder directed implementation to proceed without another
+prompt and required the implementation documentation to include a graphical
+diagram. The approved V3A plan required a signed, short-lived composite KTP
+enforcement state, three fixed comparison tracks, a harmless target marker,
+and a visible but explicitly modeled process-contract bundle.
+
+**Interpretation:** V3A is the executable contract beneath the approved V3B
+Envoy topology. It may prove strict signature consumption, reducing-only local
+authorization, fixed-mode behavior, and joined forward-or-withhold semantics in
+one process. It cannot prove Envoy, Kind, network isolation, cluster latency,
+or historical prevention.
+
+**Decision status:** Confirmed implemented: closed `kil.q-state.v0` claims;
+canonical bounded fixed-point decimal wire values; Ed25519 compact JWS with a
+ten-second maximum lifetime; revocation and exact time, subject, audience,
+authority-class, and action-class binding; immutable adapter tracks; rejection
+of malformed non-ASCII segments through the fail-closed path; three same-input
+tracks; harmless target markers; and content-addressed evidence. Confirmed
+review-complete modeled result: `permit / permit / deny`, marker counts
+`1 / 1 / 0`, and valid proof joins. This is not a validated cluster result.
+
+**Rationale:** Review found four material contract gaps before closeout: an
+uncontrolled Unicode exception, a reassignable adapter track, noncanonical and
+unbounded decimal encodings, and insufficient verification-key provenance.
+Each runtime issue received a witnessed failing regression test before the
+boundary fix. The evidence bundle now publishes the two signed state fixtures,
+public JWK, full public-key thumbprint, deterministic software Level 1 fixture
+provenance, graphical architecture, and eight integrity-checked artifacts.
+
+**Affected artifacts:**
+
+- `schemas/q-state-v0.schema.json`
+- `src/kil/q_state.py`
+- `src/kil/live_authz.py`
+- `src/kil/reference_gateway.py`
+- `tools/v3a_demo.py`
+- `tests/test_q_state.py`
+- `tests/test_live_authz.py`
+- `tests/test_reference_gateway.py`
+- `tests/test_v3a_demo.py`
+- `docs/architecture/v3-envoy-live-validation.svg`
+- `docs/lab/V3-PROGRESS.md`
+- `adapters/envoy/README.md`
+- `README.md`
+- `tools/README.md`
+
+**Evidence:** The pre-review run `52c90309d00439e7` at commit
+`ad3db6aa7686781761bd8622a435c279f534df05` passed 121 tests but is development
+history only. The review-complete run `b0cdc26b471c9539` at implementation
+commit `700b307a573e3668024d51e3b156d7044b03fca3` passed 125 tests and all eight
+published checksum checks. Both runs remain labeled `modeled` with validation
+scope `process_contract_only`.
+
+**Unresolved questions:** V3B still must install or resolve the local container
+toolchain, pin Envoy and workload image digests, implement the frozen HTTP
+adapter contract, prove NetworkPolicy and target isolation under Kind, execute
+the full failure matrix, and measure cluster-level latency. The KTP specialist
+must still decide whether the extension belongs in KTP 2.1 or 3.0.
+
+**Next gate:** Review and integrate the V3A feature branch, then write and
+execute the V3B Envoy/Kind implementation plan against the approved diagram and
+the frozen adapter contract. Only a passing joined cluster run may introduce
+`validated` for the observed transport result.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-049 — 2026-08-29 — V3A zero-exponent allocation boundary closed
+
+**Input:** Final re-review of the T-048 implementation found that a Decimal zero
+with an extreme negative exponent passed the calculated 64-character wire
+bound but still entered Python fixed-point formatting before trailing-zero
+normalization.
+
+**Interpretation:** The mathematical value and calculated canonical wire value
+were both zero, but the serializer's intermediate representation could still
+allocate memory proportional to the attacker- or issuer-controlled exponent.
+This was an availability defect in the experimental issuer path and meant the
+T-048 evidence run was not yet the final review-complete implementation.
+
+**Decision status:** Confirmed fixed. Any accepted Decimal zero now serializes
+directly to the literal `"0"` before fixed-point formatting. A witnessed failing
+regression uses a guarded formatter to prove that an extreme-exponent zero does
+not reach the expansion operation. The T-048 run `b0cdc26b471c9539` remains
+development history and is superseded by canonical modeled run
+`ca26ff63c09cd78b`.
+
+**Rationale:** A declared maximum wire length must bound intermediate work as
+well as the final string. Short-circuiting the unique canonical zero form
+preserves wire determinism and removes exponent-sized allocation without
+changing charge semantics.
+
+**Affected artifacts:**
+
+- `src/kil/q_state.py`
+- `tests/test_q_state.py`
+- `docs/lab/V3-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Evidence:** Implementation commit
+`4e02ed3727096174456de0b6edcb33403d7870df` passes 126 tests. Canonical modeled
+run `ca26ff63c09cd78b` reproduces `permit / permit / deny`, marker counts
+`1 / 1 / 0`, valid joins, and eight passing checksum verifications. Its scope
+remains `process_contract_only`, not validated cluster behavior.
+
+**Unresolved questions:** The V3B container toolchain, image digests, Envoy
+adapter implementation, Kind network isolation, failure matrix, and cluster
+latency remain unvalidated. KTP 2.1 versus 3.0 placement remains a specialist
+decision.
+
+**Next gate:** Obtain final feature review, integrate V3A, and then execute the
+separately planned V3B Envoy/Kind live-cluster validation without relabeling the
+modeled V3A evidence.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-050 — 2026-08-29 — V3A feature branch published for pull request
+
+**Input:** After the final V3A review reported no remaining blockers, the
+founder selected integration option 2: push the feature branch and create a
+GitHub pull request.
+
+**Interpretation:** Publication exposes the reviewed implementation for normal
+repository review without merging it into `main`. The generated V3A evidence
+remains modeled and the pull request must retain the V3A/V3B validation
+boundary.
+
+**Decision status:** Confirmed branch publication. Branch
+`feature/v3a-signed-state-authz` is pushed to `origin` at commit `fb84507` plus
+this lineage closeout. Pull-request title and description are prepared in the
+authenticated GitHub interface; final creation is pending the required
+action-time confirmation for external submission.
+
+**Rationale:** A pull request preserves the isolated worktree for review and
+iteration. The proposed description records 126 passing tests, canonical
+modeled run `ca26ff63c09cd78b`, eight verified checksums, the independent review
+result, and the prohibition on treating V3A as Envoy or Kind validation.
+
+**Affected artifacts:**
+
+- Remote branch `origin/feature/v3a-signed-state-authz`
+- Prepared GitHub pull request from the feature branch to `main`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The pull request has not yet been submitted. Merge
+review and the separate V3B live-cluster plan remain future gates.
+
+**Next gate:** Confirm and submit the prepared GitHub pull request, record its
+number and URL, then preserve the feature worktree for review feedback.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-051 — 2026-08-29 — V3A pull request 4 created
+
+**Input:** The founder confirmed the prepared GitHub pull-request submission
+after selecting integration option 2.
+
+**Interpretation:** The confirmed external submission completes branch
+publication while preserving the feature worktree for review feedback. It does
+not authorize merge or advance the evidence class of any V3A result.
+
+**Decision status:** Confirmed pull request created: [gatekeeper454/KIL
+#4](https://github.com/gatekeeper454/KIL/pull/4), titled “Implement V3A
+signed-state authorization core,” from `feature/v3a-signed-state-authz` into
+`main`. The PR description records the canonical modeled run, verification
+count, checksum result, independent review, graphical architecture, and V3A/V3B
+claim boundary.
+
+**Rationale:** The pull-request path provides a durable review surface without
+merging or deleting the isolated implementation branch. The worktree remains
+available for corrections and review responses.
+
+**Affected artifacts:**
+
+- [GitHub pull request #4](https://github.com/gatekeeper454/KIL/pull/4)
+- Remote branch `origin/feature/v3a-signed-state-authz`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Pull-request review and merge remain pending. Gate V3B
+still requires its separate Envoy/Kind implementation and live-cluster
+validation plan.
+
+**Next gate:** Review and merge pull request #4 when accepted, preserve V3A's
+modeled/process-only classification, then begin the approved V3B planning gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-052 — 2026-08-29 — Pull request 4 CI dependency failure diagnosed
+
+**Input:** The founder reported that pull request 4 was failing and requested a
+check of the pull-request validation state.
+
+**Interpretation:** Both red checks are executions of the same `bootstrap` job,
+once for the branch `push` event and once for the `pull_request` event. The
+immediate task was diagnosis only; no workflow, dependency, implementation, or
+remote pull-request change was authorized.
+
+**Decision status:** Confirmed diagnosis; no fix applied. The clean GitHub
+Actions Python 3.11 runner executes `make validate` without first installing
+`requirements-lab.txt`. Test discovery then raises
+`ModuleNotFoundError: No module named 'cryptography'` in
+`test_live_authz.py`, `test_q_state.py`, and `test_reference_gateway.py`; the
+V3A demonstration test fails downstream when its subprocess imports the same
+missing library. The separate GitHub Actions Node.js 20 deprecation annotation
+is a warning and is not the cause of this run's failure.
+
+**Rationale:** `requirements-lab.txt` pins `cryptography==50.0.0`, while
+`.github/workflows/ci.yml` proceeds directly from Python setup to
+`make validate`. The repository's dependency metadata also requires
+reconciliation: `pyproject.toml` currently declares `dependencies = []`, even
+though the V3A implementation imports `cryptography` at module load, and the
+Makefile still describes the entire test suite as dependency-free.
+
+**Affected artifacts:**
+
+- [GitHub pull request #4](https://github.com/gatekeeper454/KIL/pull/4)
+- `.github/workflows/ci.yml`
+- `requirements-lab.txt`
+- `pyproject.toml`
+- `Makefile`
+- `src/kil/q_state.py`
+- `src/kil/live_authz.py`
+- `tools/v3a_demo.py`
+- `tests/test_live_authz.py`
+- `tests/test_q_state.py`
+- `tests/test_reference_gateway.py`
+- `tests/test_v3a_demo.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The immediate workflow repair and the durable package
+dependency contract have not yet been selected or implemented. The duplicate
+`push` and `pull_request` executions may be intentional, so trigger
+deduplication is a separate maintenance decision rather than part of the
+failure cause.
+
+**Next gate:** Authorize a focused CI/dependency repair. At minimum, install the
+pinned lab requirements before `make validate`; before merge, also decide
+whether `cryptography` is a required project dependency or a documented
+optional lab extra, then make `pyproject.toml`, the Makefile description, and
+the CI bootstrap path express the same contract.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-053 — 2026-08-29 — V3A CI dependency contract repaired locally
+
+**Input:** After reviewing the pull-request failure diagnosis, the founder
+authorized execution of the recommended repair steps on pull request 4.
+
+**Interpretation:** The approved V3A design already classifies
+`cryptography==50.0.0` as an optional laboratory dependency so the V1 decision
+kernel can retain its standard-library-only boundary. The repair therefore
+must expose and install the V3A lab dependency without recasting it as a V1
+kernel dependency or changing any KIL/KTP protocol semantics.
+
+**Decision status:** Confirmed implemented and locally verified. GitHub Actions
+now installs the exact `requirements-lab.txt` pin before `make validate`;
+`pyproject.toml` publishes a matching `lab` optional extra; Makefile help and
+README bootstrap instructions disclose the dependency boundary. Four
+repository-contract regressions were observed failing before implementation
+and passing afterward. The complete Python 3.12.13 validation run passes 130
+tests, the metadata check, and `git diff --check`.
+
+**Rationale:** A clean runner must materialize every dependency required by the
+suite it invokes. Keeping one exact version in both the existing lab
+requirements pin and the `lab` project extra makes the installation path
+discoverable while preserving the approved split between the deterministic V1
+kernel and V3A cryptographic validation. The regression test makes divergence
+between those declarations, CI ordering, command help, and bootstrap guidance
+visible in future changes.
+
+**Affected artifacts:**
+
+- `.github/workflows/ci.yml`
+- `requirements-lab.txt` (unchanged canonical pin)
+- `pyproject.toml`
+- `Makefile`
+- `README.md`
+- `tests/test_dependency_contract.py`
+- `docs/superpowers/plans/2026-08-29-v3a-ci-dependency-repair.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- [GitHub pull request #4](https://github.com/gatekeeper454/KIL/pull/4)
+
+**Unresolved questions:** Fresh GitHub-hosted `push` and `pull_request` jobs
+must still verify the branch after publication. The duplicate event triggers
+and the noncausal GitHub Actions Node.js runtime warning remain separate
+maintenance questions. No V3A result changes evidence class: the process
+bundle remains `modeled`, not validated cluster evidence.
+
+**Next gate:** Publish the repair commit to pull request 4 and require both
+fresh bootstrap checks to pass. If green, the pull request returns to its merge
+review gate; V3B Envoy/Kind execution remains the next validation phase after
+integration.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
