@@ -1980,6 +1980,35 @@ class GatewayReadinessTest(unittest.TestCase):
         ):
             return controller.run()
 
+    def install_readiness_poison(
+        self,
+        controller,
+        *,
+        readiness_nonce=HEX_B,
+        mode=0o600,
+    ):
+        journal_event(
+            controller.journal_path,
+            "readiness_session_started",
+            {"readiness_nonce": readiness_nonce},
+        )
+        unsigned = {
+            "schema_version": "kil.v3b1-readiness-poison.v1",
+            "execution_nonce": HEX_A,
+            "readiness_nonce": readiness_nonce,
+            "reason_category": "connection_close_ambiguous",
+        }
+        value = {
+            **unsigned,
+            "binding_sha256": sha256(
+                canonical_json(unsigned).encode("utf-8")
+            ).hexdigest(),
+        }
+        path = controller.private_root / "readiness-poison.json"
+        path.write_text(canonical_json(value) + "\n")
+        path.chmod(mode)
+        return path
+
     def test_connection_factory_clock_and_sleeper_are_injected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "repo"
@@ -2334,6 +2363,9 @@ class GatewayReadinessTest(unittest.TestCase):
                 self.run_with_fake_http(controller)
             old_socket = first_factory.connections[0]
             self.assertFalse(old_socket.closed)
+            self.assertFalse(
+                (controller.private_root / "readiness-poison.json").exists()
+            )
 
             retry_events = []
             retry_clock = _RunClock()
@@ -2357,6 +2389,168 @@ class GatewayReadinessTest(unittest.TestCase):
             self.assertFalse(any(event[0] == "request" for event in retry_events))
             self.assertFalse(any(event[0] == "collect" for event in retry_events))
             self.assertFalse(old_socket.closed)
+
+    def test_double_journal_failure_persists_independent_poison_and_blocks_retry(self):
+        close_behaviors = (
+            {
+                "close_error": OSError(
+                    errno.EIO, "private close message with Bearer credential"
+                ),
+                "close_error_leaves_open": True,
+            },
+            {"close_unconfirmed": True},
+        )
+        for close_behavior in close_behaviors:
+            with (
+                self.subTest(close_behavior=close_behavior),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                controller, first_factory, _, request_path, _ = self.make_controller(
+                    directory,
+                    [
+                        close_behavior,
+                        {
+                            "connect_error": ConnectionRefusedError(
+                                errno.ECONNREFUSED,
+                                "private readiness message with signed state",
+                            )
+                        },
+                    ],
+                )
+                real_journal_event = journal_event
+
+                def fail_both_poison_appends(path, event, details):
+                    if event == "readiness_connect_failed":
+                        raise ControllerError("injected readiness journal failure")
+                    if event == "connection_close_failed":
+                        raise ControllerError("injected close journal failure")
+                    return real_journal_event(path, event, details)
+
+                with mock.patch(
+                    "tools.v3b1_local_envoy.journal_event",
+                    side_effect=fail_both_poison_appends,
+                ):
+                    with self.assertRaisesRegex(
+                        ControllerError, "readiness journal failure"
+                    ):
+                        self.run_with_fake_http(controller)
+
+                poison_path = controller.private_root / "readiness-poison.json"
+                self.assertTrue(poison_path.is_file())
+                self.assertEqual(stat.S_IMODE(poison_path.stat().st_mode), 0o600)
+                poison = json.loads(poison_path.read_text())
+                self.assertEqual(
+                    set(poison),
+                    {
+                        "schema_version",
+                        "execution_nonce",
+                        "readiness_nonce",
+                        "reason_category",
+                        "binding_sha256",
+                    },
+                )
+                self.assertEqual(
+                    poison_path.read_bytes(),
+                    (canonical_json(poison) + "\n").encode("utf-8"),
+                )
+                self.assertEqual(poison["execution_nonce"], HEX_A)
+                self.assertEqual(
+                    poison["reason_category"], "connection_close_ambiguous"
+                )
+                self.assertNotIn("Bearer", poison_path.read_text())
+                self.assertNotIn("signed state", poison_path.read_text())
+                self.assertFalse(first_factory.connections[0].closed)
+
+                retry_events = []
+                retry_clock = _RunClock()
+                retry_factory = _RunConnectionFactory(
+                    [{}, {}, {}],
+                    events=retry_events,
+                    journal_path=controller.journal_path,
+                    request_path=request_path,
+                    clock=retry_clock,
+                )
+                controller.connection_factory = retry_factory
+                controller.monotonic_ns = retry_clock.monotonic_ns
+                controller.sleeper = retry_clock.sleep
+
+                with self.assertRaisesRegex(
+                    ControllerError, "poison|teardown|manual recovery"
+                ):
+                    self.run_with_fake_http(controller)
+
+                self.assertEqual(retry_factory.connections, [])
+                self.assertFalse(
+                    any(event[0] == "request" for event in retry_events)
+                )
+                self.assertFalse(
+                    any(event[0] == "collect" for event in retry_events)
+                )
+
+    def test_readiness_poison_integrity_is_checked_before_connection_construction(self):
+        mutations = ("binding", "mode", "symlink")
+        for mutation in mutations:
+            with (
+                self.subTest(mutation=mutation),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                controller, factory, _, _, events = self.make_controller(
+                    directory, [{}, {}, {}]
+                )
+                poison_path = self.install_readiness_poison(controller)
+                if mutation == "binding":
+                    value = json.loads(poison_path.read_text())
+                    value["readiness_nonce"] = HEX_C
+                    poison_path.write_text(canonical_json(value) + "\n")
+                elif mutation == "mode":
+                    poison_path.chmod(0o644)
+                else:
+                    outside = Path(directory) / "outside-poison.json"
+                    outside.write_bytes(poison_path.read_bytes())
+                    poison_path.unlink()
+                    poison_path.symlink_to(outside)
+
+                with self.assertRaisesRegex(
+                    ControllerError,
+                    "poison|binding|mode|symbolic|unsafe|teardown|manual recovery",
+                ):
+                    self.run_with_fake_http(controller)
+
+                self.assertEqual(factory.connections, [])
+                self.assertFalse(any(event[0] == "request" for event in events))
+
+    def test_down_retains_poison_until_exact_absence_then_clears_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, _, _ = self.make_controller(
+                directory, [{}, {}, {}]
+            )
+            poison_path = self.install_readiness_poison(controller)
+            controller.runner = FakeRunner(
+                [
+                    CommandResult(
+                        0,
+                        '{"name":"kil-v3-lab","status":"Running",'
+                        '"arch":"aarch64","cpus":4,'
+                        '"memory":8589934592,"disk":64424509440,'
+                        '"runtime":"docker"}\n',
+                        "",
+                    )
+                ]
+            )
+
+            with self.assertRaisesRegex(ControllerError, "manual recovery"):
+                controller.down()
+            self.assertTrue(poison_path.exists())
+
+            controller.runner = FakeRunner(
+                [
+                    CommandResult(0, "[]\n", ""),
+                    CommandResult(0, "personal\n", ""),
+                ]
+            )
+            controller.down()
+
+            self.assertFalse(poison_path.exists())
 
     def assert_readiness_record_failure_closes_round(self, patcher, message):
         with tempfile.TemporaryDirectory() as directory:

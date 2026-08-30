@@ -57,6 +57,7 @@ PLATFORM = "linux/arm64"
 MANIFEST_SCHEMA = "kil.v3b1-manifest.v1"
 STATE_SCHEMA = "kil.v3b1-active-state.v1"
 JOURNAL_SCHEMA = "kil.v3b1-lifecycle-journal.v1"
+READINESS_POISON_SCHEMA = "kil.v3b1-readiness-poison.v1"
 JOIN_SCHEMA = "kil.v3b1-join.v1"
 _HEX = re.compile(r"^[a-f0-9]{64}$")
 _IMAGE_ID = re.compile(r"^sha256:[a-f0-9]{64}$")
@@ -3679,6 +3680,7 @@ class LocalEnvoyController:
         self.staging_root = self.root / ".tools/v3b1-staging"
         self.private_root = self.root / ".tools/v3b1-private"
         self.journal_path = self.private_root / "journal.json"
+        self.readiness_poison_path = self.private_root / "readiness-poison.json"
         self.manifest_root = self.private_root / "manifests"
         self.provisional_root = self.private_root / "provisional"
         self.completed_root = self.private_root / "completed"
@@ -3926,6 +3928,112 @@ class LocalEnvoyController:
         return self._ensure_private_child(
             self.publication_staging_root, "private publication staging root"
         )
+
+    def _load_readiness_poison(self) -> dict[str, object] | None:
+        path = self.readiness_poison_path
+        _require_contained(path, self.private_root, "readiness poison sentinel")
+        if not path.exists():
+            return None
+        if path.is_symlink() or not path.is_file():
+            raise ControllerError("readiness poison sentinel is unsafe")
+        if (path.stat().st_mode & 0o7777) != 0o600:
+            raise ControllerError("readiness poison sentinel mode is unsafe")
+        payload = path.read_bytes()
+        value = _load_json_bytes(payload, "readiness poison sentinel")
+        expected = {
+            "schema_version",
+            "execution_nonce",
+            "readiness_nonce",
+            "reason_category",
+            "binding_sha256",
+        }
+        if (
+            set(value) != expected
+            or value["schema_version"] != READINESS_POISON_SCHEMA
+        ):
+            raise ControllerError("readiness poison sentinel fields are not closed")
+        if payload != _canonical_bytes(value):
+            raise ControllerError("readiness poison sentinel is not canonical")
+        _require_sha256("readiness poison execution nonce", value["execution_nonce"])
+        _require_sha256("readiness poison readiness nonce", value["readiness_nonce"])
+        if value["reason_category"] != "connection_close_ambiguous":
+            raise ControllerError("readiness poison reason category is invalid")
+        if value["binding_sha256"] != _journal_binding(value):
+            raise ControllerError("readiness poison sentinel binding does not match")
+        journal = load_lifecycle_journal(self.journal_path)
+        if value["execution_nonce"] != journal["execution_nonce"]:
+            raise ControllerError("readiness poison sentinel lifecycle does not match")
+        events = journal["events"]
+        assert isinstance(events, list)
+        if not any(
+            event["event"] == "readiness_session_started"
+            and event["details"]["readiness_nonce"] == value["readiness_nonce"]
+            for event in events
+        ):
+            raise ControllerError("readiness poison sentinel session does not match")
+        return value
+
+    def _assert_no_readiness_poison(self) -> None:
+        if self._load_readiness_poison() is not None:
+            raise ControllerError(
+                "readiness is poisoned; teardown or manual recovery is required"
+            )
+
+    def _persist_readiness_poison(
+        self,
+        *,
+        readiness_nonce: str,
+        reason_category: str,
+    ) -> None:
+        _require_sha256("readiness poison readiness nonce", readiness_nonce)
+        if reason_category != "connection_close_ambiguous":
+            raise ControllerError("readiness poison reason category is invalid")
+        journal = load_lifecycle_journal(self.journal_path)
+        events = journal["events"]
+        assert isinstance(events, list)
+        current_readiness, _ = _validate_lifecycle_history(
+            events, journal["requests"]  # type: ignore[arg-type]
+        )
+        if current_readiness != readiness_nonce:
+            raise ControllerError("readiness poison session is not current")
+        unsigned = {
+            "schema_version": READINESS_POISON_SCHEMA,
+            "execution_nonce": journal["execution_nonce"],
+            "readiness_nonce": readiness_nonce,
+            "reason_category": reason_category,
+        }
+        value = {**unsigned, "binding_sha256": _journal_binding(unsigned)}
+        existing = self._load_readiness_poison()
+        if existing is not None:
+            if existing != value:
+                raise ControllerError("readiness poison sentinel would be clobbered")
+            return
+        _require_contained(
+            self.readiness_poison_path,
+            self.private_root,
+            "readiness poison sentinel",
+        )
+        _write_file(
+            self.readiness_poison_path,
+            _canonical_bytes(value),
+            0o600,
+        )
+        if self._load_readiness_poison() != value:
+            raise ControllerError("readiness poison sentinel write was not durable")
+
+    def _clear_readiness_poison(self, execution_nonce: str) -> None:
+        _require_sha256("readiness poison execution nonce", execution_nonce)
+        value = self._load_readiness_poison()
+        if value is None:
+            return
+        if value["execution_nonce"] != execution_nonce:
+            raise ControllerError("readiness poison sentinel lifecycle does not match")
+        self.readiness_poison_path.unlink()
+        directory_fd = os.open(self.private_root, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
 
     def _capture_global_context(self) -> str:
         """Observe, but never mutate, the user's global Docker context."""
@@ -5046,16 +5154,28 @@ class LocalEnvoyController:
         primary_failure: str | None,
         failures: list[dict[str, str]],
     ) -> None:
-        journal_event(
-            self.journal_path,
-            "connection_close_failed",
-            {
-                "readiness_nonce": readiness_nonce,
-                "stage": stage,
-                "primary_failure": primary_failure,
-                "failures": failures,
-            },
-        )
+        try:
+            journal_event(
+                self.journal_path,
+                "connection_close_failed",
+                {
+                    "readiness_nonce": readiness_nonce,
+                    "stage": stage,
+                    "primary_failure": primary_failure,
+                    "failures": failures,
+                },
+            )
+        except Exception as journal_error:
+            try:
+                self._persist_readiness_poison(
+                    readiness_nonce=readiness_nonce,
+                    reason_category="connection_close_ambiguous",
+                )
+            except Exception as poison_error:
+                raise ControllerError(
+                    "independent readiness poison persistence failed"
+                ) from poison_error
+            raise journal_error
 
     @staticmethod
     def _reset_request_timeouts(
@@ -5115,6 +5235,7 @@ class LocalEnvoyController:
         self,
         readiness_nonce: str,
     ) -> tuple[dict[LiveTrack, object], dict[LiveTrack, int]]:
+        self._assert_no_readiness_poison()
         _require_sha256("readiness_nonce", readiness_nonce)
         start_ns = self._monotonic_now()
         deadline_ns = start_ns + _READINESS_DEADLINE_NS
@@ -5303,6 +5424,7 @@ class LocalEnvoyController:
         )
 
     def run(self) -> Path:
+        self._assert_no_readiness_poison()
         state, manifest = self._load_and_reverify()
         runtime_root = _runtime_root(self.root, manifest)
         request_path = runtime_root / "requests.jsonl"
@@ -5773,6 +5895,7 @@ class LocalEnvoyController:
                 archived = archive_root / f"preprofile-{journal['execution_nonce']}.journal.json"
                 if archived.exists():
                     raise ControllerError("pre-profile lifecycle journal archive would clobber")
+                self._clear_readiness_poison(str(journal["execution_nonce"]))
                 os.rename(self.journal_path, archived)
                 return self.private_root
 
@@ -5796,6 +5919,7 @@ class LocalEnvoyController:
                 archived = archive_root / f"premanifest-{journal['execution_nonce']}.journal.json"
                 if archived.exists():
                     raise ControllerError("pre-manifest lifecycle journal archive would clobber")
+                self._clear_readiness_poison(str(journal["execution_nonce"]))
                 os.rename(self.journal_path, archived)
                 return self.private_root
             manifest = _load_json_bytes(
@@ -5901,6 +6025,7 @@ class LocalEnvoyController:
             archived = archive_root / f"{manifest['run_id']}.journal.json"
             if archived.exists():
                 raise ControllerError("completed lifecycle journal archive would clobber")
+            self._clear_readiness_poison(str(journal["execution_nonce"]))
             os.rename(self.journal_path, archived)
             return published
         if dedicated["status"].lower() != "running":
@@ -5979,6 +6104,7 @@ class LocalEnvoyController:
             archived = archive_root / f"premanifest-{journal['execution_nonce']}.journal.json"
             if archived.exists():
                 raise ControllerError("pre-manifest lifecycle journal archive would clobber")
+            self._clear_readiness_poison(str(journal["execution_nonce"]))
             os.rename(self.journal_path, archived)
             return self.private_root
         self._assert_only_recorded_managed(state, expect_present=True)
@@ -6220,6 +6346,7 @@ class LocalEnvoyController:
         archived_journal = archive_root / f"{manifest['run_id']}.journal.json"
         if archived_journal.exists():
             raise ControllerError("completed lifecycle journal would clobber an archive")
+        self._clear_readiness_poison(str(journal["execution_nonce"]))
         os.rename(self.journal_path, archived_journal)
         return published
 
