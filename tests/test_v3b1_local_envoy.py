@@ -2720,6 +2720,133 @@ class JournalRecoveryTest(unittest.TestCase):
                 "not_attempted",
             )
 
+    def poisoned_readiness(self, journal: Path, nonce: str = HEX_B) -> None:
+        _record_test_readiness(journal, nonce)
+        journal_event(
+            journal,
+            "connection_close_failed",
+            {
+                "readiness_nonce": nonce,
+                "stage": "readiness_round",
+                "primary_failure": "request_processing",
+                "failures": [
+                    {
+                        "track": LiveTrack.CREDENTIAL_POLICY_BASELINE.value,
+                        "category": "close_unconfirmed",
+                    }
+                ],
+            },
+        )
+
+    def test_poisoned_readiness_rejects_later_completion_and_failure_events(self):
+        later_events = (
+            (
+                "readiness_connect_complete",
+                {
+                    "readiness_nonce": HEX_B,
+                    "round": 2,
+                    "host": "127.0.0.1",
+                    "tracks": [track.value for track in LiveTrack],
+                    "ports": [18080, 18081, 18082],
+                    "ready_monotonic_ns": 2,
+                },
+            ),
+            (
+                "readiness_connect_failed",
+                {
+                    "readiness_nonce": HEX_B,
+                    "track": LiveTrack.CREDENTIAL_POLICY_BASELINE.value,
+                    "host": "127.0.0.1",
+                    "port": 18080,
+                    "round": 2,
+                    "connect_monotonic_ns": 2,
+                    "failure_monotonic_ns": 3,
+                    "exception_class": "ConnectionRefusedError",
+                    "errno": errno.ECONNREFUSED,
+                    "errno_name": "ECONNREFUSED",
+                    "request_bytes_may_have_been_sent": False,
+                },
+            ),
+        )
+        for event_name, details in later_events:
+            with self.subTest(event_name=event_name), tempfile.TemporaryDirectory() as directory:
+                journal = self.create(Path(directory))
+                self.poisoned_readiness(journal)
+
+                with self.assertRaisesRegex(ControllerError, "poison|terminal"):
+                    journal_event(journal, event_name, details)
+
+    def test_poisoned_readiness_cannot_be_resurrected_to_authorize_intent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = self.create(Path(directory))
+            self.poisoned_readiness(journal)
+            value = load_lifecycle_journal(journal)
+            events = value["events"]
+            events.append(
+                {
+                    "sequence": len(events) + 1,
+                    "event": "readiness_connect_complete",
+                    "details": {
+                        "readiness_nonce": HEX_B,
+                        "round": 2,
+                        "host": "127.0.0.1",
+                        "tracks": [track.value for track in LiveTrack],
+                        "ports": [18080, 18081, 18082],
+                        "ready_monotonic_ns": 2,
+                    },
+                }
+            )
+            events.append(
+                {
+                    "sequence": len(events) + 1,
+                    "event": "request_send_intent",
+                    "details": {
+                        "track": LiveTrack.CREDENTIAL_POLICY_BASELINE.value,
+                        "intent_id": HEX_A,
+                    },
+                }
+            )
+            value["requests"][LiveTrack.CREDENTIAL_POLICY_BASELINE.value] = {
+                "status": "intent_persisted",
+                "intent_id": HEX_A,
+            }
+            value["phase"] = "request_send_intent"
+            _persist_journal(journal, value)
+
+            with self.assertRaisesRegex(ControllerError, "poison|terminal"):
+                load_lifecycle_journal(journal)
+
+    def test_readiness_session_nonce_cannot_be_reused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = self.create(Path(directory))
+            _record_test_readiness(journal, HEX_B)
+
+            with self.assertRaisesRegex(ControllerError, "nonce.*reus|unique"):
+                journal_event(
+                    journal,
+                    "readiness_session_started",
+                    {"readiness_nonce": HEX_B},
+                )
+
+    def test_reused_readiness_nonce_is_rejected_during_recovery_load(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = self.create(Path(directory))
+            _record_test_readiness(journal, HEX_B)
+            value = load_lifecycle_journal(journal)
+            events = value["events"]
+            events.append(
+                {
+                    "sequence": len(events) + 1,
+                    "event": "readiness_session_started",
+                    "details": {"readiness_nonce": HEX_B},
+                }
+            )
+            value["phase"] = "readiness_session_started"
+            _persist_journal(journal, value)
+
+            with self.assertRaisesRegex(ControllerError, "nonce.*reus|unique"):
+                load_lifecycle_journal(journal)
+
     def test_request_intent_event_fields_are_closed_and_secret_free(self):
         for mutation in (
             {"raw_message": "Bearer secret"},

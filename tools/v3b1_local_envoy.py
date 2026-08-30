@@ -488,6 +488,8 @@ def _validate_lifecycle_history(
 ) -> tuple[str | None, bool]:
     current_readiness: str | None = None
     readiness_complete = False
+    seen_readiness_nonces: set[str] = set()
+    poisoned_readiness_nonces: set[str] = set()
     replayed: dict[str, dict[str, object]] = {
         track.value: {"status": "not_attempted", "intent_id": None}
         for track in _TRACKS
@@ -498,7 +500,11 @@ def _validate_lifecycle_history(
         assert isinstance(event_name, str)
         assert isinstance(details, Mapping)
         if event_name == "readiness_session_started":
-            current_readiness = str(details["readiness_nonce"])
+            readiness_nonce = str(details["readiness_nonce"])
+            if readiness_nonce in seen_readiness_nonces:
+                raise ControllerError("readiness session nonce reuse is forbidden")
+            seen_readiness_nonces.add(readiness_nonce)
+            current_readiness = readiness_nonce
             readiness_complete = False
         elif event_name in {"readiness_connect_failed", "readiness_connect_complete"}:
             if (
@@ -508,15 +514,25 @@ def _validate_lifecycle_history(
                 raise ControllerError(
                     "readiness event does not bind the current readiness session"
                 )
+            if current_readiness in poisoned_readiness_nonces:
+                raise ControllerError("readiness session is permanently poisoned")
             readiness_complete = event_name == "readiness_connect_complete"
         elif event_name == "connection_close_failed":
             if details["readiness_nonce"] != current_readiness:
                 raise ControllerError(
                     "connection close event does not bind the current readiness session"
                 )
+            if current_readiness in poisoned_readiness_nonces:
+                raise ControllerError("readiness session is permanently poisoned")
+            assert current_readiness is not None
+            poisoned_readiness_nonces.add(current_readiness)
             readiness_complete = False
         elif event_name == "request_send_intent":
-            if current_readiness is None or not readiness_complete:
+            if (
+                current_readiness is None
+                or current_readiness in poisoned_readiness_nonces
+                or not readiness_complete
+            ):
                 raise ControllerError(
                     "request intent lacks a complete current readiness set"
                 )
