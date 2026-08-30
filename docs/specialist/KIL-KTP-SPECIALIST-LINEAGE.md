@@ -3652,3 +3652,104 @@ with zero central requests before authorizing another proof attempt. Preserve
 the rule that any post-intent ambiguity is nonpromotable and never replayed.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-073 — 2026-08-30 — Demo-readiness assessment separates showcase from publication validation
+
+**Input:** Confirm whether KIL can reach an executable demonstration and identify
+the remaining work before that demonstration can be constructed and run.
+
+**Interpretation:** Distinguish an immediately available modeled presentation,
+a minimum credible live Envoy showcase, and the complete publication-grade Kind
+validation. Do not make completion of the full research protocol a prerequisite
+for honestly demonstrating the already-implemented KIL mechanism.
+
+**Decision status:** Confirmed feasible. The deterministic Hugging Face replay
+and V3A three-track process-contract demonstration already execute and can be
+shown now with explicit `modeled` and `process_contract_only` boundaries. A live
+KIL showcase becomes eligible after the formal V3B-1 integration-contract
+redesign, a zero-request lifecycle smoke cycle, and one accepted local Envoy
+`permit / permit / deny` proof with target markers `1 / 1 / 0`. The resulting
+presenter view may claim only `local_envoy_boundary`. Full local-cluster
+validation remains V3B-2; repetitions, latency, publication promotion, and
+white-paper run-ID integration remain V3C/V4 work.
+
+**Rationale:** The core signed-state, reducing-only authorization, harmless
+target, Envoy configuration, lifecycle controller, evidence joiner, architecture
+graphics, and modeled HTML view already exist. The blocking work is evidence
+integrity at the installed-runtime boundary: non-consuming readiness, sanitized
+request-stage provenance, evidence freeze before tmpfs-bearing services stop,
+independent per-leg collection status, and inventory-based exact absence. These
+gaps must be closed before another live proof request, but they do not invalidate
+the existing modeled demonstrations or require the entire Kind/performance
+program before a bounded live showcase.
+
+**Affected artifacts:**
+
+- `artifacts/generated/v3b1-task6-live-status.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- reviewed `docs/lab/V3-PROGRESS.md`
+- reviewed `docs/superpowers/plans/2026-08-30-v3b1-toolchain-http-boundary.md`
+- reviewed `docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md`
+- reviewed `docs/paper/kinetic-infrastructure.md`
+
+**Unresolved questions:** Whether the first public showcase should stop at the
+accepted local Envoy boundary or wait for the stronger Kind/Calico topology.
+This is a presentation-scope choice, not an architectural blocker. The live
+runtime cycle will again require explicit authorization to pause and restore the
+pre-existing `default` Colima profile.
+
+**Next gate:** Implement and independently review the transcript-driven V3B-1
+integration contract, pass the zero-request `up`/`down` smoke cycle, then request
+authorization for exactly one new central proof attempt. Construct the live
+presenter view only from an accepted integrity-checked bundle; continue to
+V3B-2 and V3C for publication-grade validation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-074 — 2026-08-30 — Transcript-driven harness-hardening phase approved
+
+**Input:** Use multiple specialists to validate and repair the V3B-1 harness,
+keep the work outside KIL's durable trust and authorization semantics, prove the
+harness, and publish all commits so public and local repositories are fully
+synchronized for offline backup.
+
+**Interpretation:** The T-072 integration-contract redesign and T-073 minimum
+live-showcase boundary are approved for execution. Parallel specialists may
+audit independent harness domains, but one implementation stream owns shared
+controller files. The KIL decay engine, signed composite state, authorization
+decisions, Envoy enforcement policy, and target semantics are frozen.
+
+**Decision status:** Confirmed execution gate. The design specifies three
+pre-proof requirements: non-consuming three-port readiness with already-open
+sockets; closed per-stage request failure provenance; and evidence freeze with
+independent source status before tmpfs-bearing services stop. Docker object
+absence moves from error prose to closed full-ID/name inventories. A zero-request
+live smoke must pass before exactly one new central proof attempt. Publication
+requires reviewed commits, GitHub merge, equal public/local `main` identities,
+fresh tests, valid public checksums, and explicit separation of ignored private
+failed-run evidence.
+
+**Rationale:** Three live attempts showed that the remaining uncertainty is in
+host/runtime orchestration and evidence durability, not the KIL decision model.
+Freezing KIL semantics while making the harness transcript-driven allows the
+lab to prove what happened without silently changing the behavior under test.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-08-30-v3b1-integration-contract-design.md`
+- `docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- planned harness-only changes to `tools/v3b1_local_envoy.py`,
+  `tools/v3b1_harness_contract.py`, fixtures, and controller tests
+
+**Unresolved questions:** Exact historical socket errno and Docker not-found
+stderr were not durably retained by the third failed run. Any reconstructed
+test fixture must be labeled reconstructed; new installed-runtime behavior will
+be captured exactly without raw secrets. The separate offline backup may or may
+not include ignored private failed-run directories, at the user's discretion.
+
+**Next gate:** Complete parallel read-only audits, implement Tasks 1–4 test-first
+with two-stage review, pass the full static suite, then execute the zero-request
+live smoke from a committed source identity.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
