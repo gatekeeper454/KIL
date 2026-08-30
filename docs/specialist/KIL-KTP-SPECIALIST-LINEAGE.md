@@ -2471,3 +2471,111 @@ validation plan.
 modeled/process-only classification, then begin the approved V3B planning gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-052 — 2026-08-29 — Pull request 4 CI dependency failure diagnosed
+
+**Input:** The founder reported that pull request 4 was failing and requested a
+check of the pull-request validation state.
+
+**Interpretation:** Both red checks are executions of the same `bootstrap` job,
+once for the branch `push` event and once for the `pull_request` event. The
+immediate task was diagnosis only; no workflow, dependency, implementation, or
+remote pull-request change was authorized.
+
+**Decision status:** Confirmed diagnosis; no fix applied. The clean GitHub
+Actions Python 3.11 runner executes `make validate` without first installing
+`requirements-lab.txt`. Test discovery then raises
+`ModuleNotFoundError: No module named 'cryptography'` in
+`test_live_authz.py`, `test_q_state.py`, and `test_reference_gateway.py`; the
+V3A demonstration test fails downstream when its subprocess imports the same
+missing library. The separate GitHub Actions Node.js 20 deprecation annotation
+is a warning and is not the cause of this run's failure.
+
+**Rationale:** `requirements-lab.txt` pins `cryptography==50.0.0`, while
+`.github/workflows/ci.yml` proceeds directly from Python setup to
+`make validate`. The repository's dependency metadata also requires
+reconciliation: `pyproject.toml` currently declares `dependencies = []`, even
+though the V3A implementation imports `cryptography` at module load, and the
+Makefile still describes the entire test suite as dependency-free.
+
+**Affected artifacts:**
+
+- [GitHub pull request #4](https://github.com/gatekeeper454/KIL/pull/4)
+- `.github/workflows/ci.yml`
+- `requirements-lab.txt`
+- `pyproject.toml`
+- `Makefile`
+- `src/kil/q_state.py`
+- `src/kil/live_authz.py`
+- `tools/v3a_demo.py`
+- `tests/test_live_authz.py`
+- `tests/test_q_state.py`
+- `tests/test_reference_gateway.py`
+- `tests/test_v3a_demo.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The immediate workflow repair and the durable package
+dependency contract have not yet been selected or implemented. The duplicate
+`push` and `pull_request` executions may be intentional, so trigger
+deduplication is a separate maintenance decision rather than part of the
+failure cause.
+
+**Next gate:** Authorize a focused CI/dependency repair. At minimum, install the
+pinned lab requirements before `make validate`; before merge, also decide
+whether `cryptography` is a required project dependency or a documented
+optional lab extra, then make `pyproject.toml`, the Makefile description, and
+the CI bootstrap path express the same contract.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-053 — 2026-08-29 — V3A CI dependency contract repaired locally
+
+**Input:** After reviewing the pull-request failure diagnosis, the founder
+authorized execution of the recommended repair steps on pull request 4.
+
+**Interpretation:** The approved V3A design already classifies
+`cryptography==50.0.0` as an optional laboratory dependency so the V1 decision
+kernel can retain its standard-library-only boundary. The repair therefore
+must expose and install the V3A lab dependency without recasting it as a V1
+kernel dependency or changing any KIL/KTP protocol semantics.
+
+**Decision status:** Confirmed implemented and locally verified. GitHub Actions
+now installs the exact `requirements-lab.txt` pin before `make validate`;
+`pyproject.toml` publishes a matching `lab` optional extra; Makefile help and
+README bootstrap instructions disclose the dependency boundary. Four
+repository-contract regressions were observed failing before implementation
+and passing afterward. The complete Python 3.12.13 validation run passes 130
+tests, the metadata check, and `git diff --check`.
+
+**Rationale:** A clean runner must materialize every dependency required by the
+suite it invokes. Keeping one exact version in both the existing lab
+requirements pin and the `lab` project extra makes the installation path
+discoverable while preserving the approved split between the deterministic V1
+kernel and V3A cryptographic validation. The regression test makes divergence
+between those declarations, CI ordering, command help, and bootstrap guidance
+visible in future changes.
+
+**Affected artifacts:**
+
+- `.github/workflows/ci.yml`
+- `requirements-lab.txt` (unchanged canonical pin)
+- `pyproject.toml`
+- `Makefile`
+- `README.md`
+- `tests/test_dependency_contract.py`
+- `docs/superpowers/plans/2026-08-29-v3a-ci-dependency-repair.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- [GitHub pull request #4](https://github.com/gatekeeper454/KIL/pull/4)
+
+**Unresolved questions:** Fresh GitHub-hosted `push` and `pull_request` jobs
+must still verify the branch after publication. The duplicate event triggers
+and the noncausal GitHub Actions Node.js runtime warning remain separate
+maintenance questions. No V3A result changes evidence class: the process
+bundle remains `modeled`, not validated cluster evidence.
+
+**Next gate:** Publish the repair commit to pull request 4 and require both
+fresh bootstrap checks to pass. If green, the pull request returns to its merge
+review gate; V3B Envoy/Kind execution remains the next validation phase after
+integration.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

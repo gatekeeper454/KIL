@@ -3,7 +3,7 @@
 PYTHON ?= python3
 
 help:
-	@echo "test      Run the dependency-free unit suite"
+	@echo "test      Run the complete unit suite (requires lab dependencies)"
 	@echo "validate  Run all bootstrap checks"
 	@echo "replay    Emit a modeled historical bundle (requires OUTPUT and VERSION)"
 	@echo "v3a-demo  Emit the modeled V3A process bundle (requires OUTPUT and VERSION)"

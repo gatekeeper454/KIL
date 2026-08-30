@@ -65,11 +65,16 @@ sensor process.
 
 ## Bootstrap check
 
+Install the optional laboratory dependency set, then run the complete unit
+suite:
+
 ```bash
+python -m pip install -e ".[lab]"
 make test
 ```
 
-No cluster dependency is installed or downloaded by the bootstrap.
+This installs the pinned V3A cryptography library. No cluster dependency is
+installed or downloaded by the bootstrap.
 
 ## Historical replay
 
