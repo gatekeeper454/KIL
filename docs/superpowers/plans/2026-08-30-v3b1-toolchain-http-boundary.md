@@ -475,7 +475,7 @@ git commit -m "Lock the V3B Envoy and container contract"
 - Modify: `docs/lab/V3-PROGRESS.md`
 - Modify: `README.md`
 
-- [ ] **Step 1: Write failing lifecycle and evidence tests**
+- [x] **Step 1: Write failing lifecycle and evidence tests**
 
 Use an injected command runner. Prove that the controller:
 
@@ -503,13 +503,13 @@ Use an injected command runner. Prove that the controller:
 - labels output `local_envoy_boundary`, never `kind_cluster_validated` or
   historical prevention.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b1_local_envoy -v
 ```
 
-- [ ] **Step 3: Implement the exact lifecycle controller**
+- [x] **Step 3: Implement the exact lifecycle controller**
 
 Provide `preflight`, `up`, `run`, `collect`, and `down` subcommands. `up`
 refuses any running non-dedicated profile or occupied port; `down` requires a
@@ -519,7 +519,7 @@ requests, decisions, Envoy access records, target records, joins, manifest,
 summary, and `SHA256SUMS` under
 `artifacts/generated/v3b1-local-envoy/<run-id>/`.
 
-- [ ] **Step 4: Verify all non-container behavior**
+- [x] **Step 4: Verify all non-container behavior**
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b1_local_envoy -v
@@ -527,6 +527,12 @@ make validate PYTHON=.venv/bin/python
 ```
 
 - [ ] **Step 5: Execute the explicit runtime-mutation gate**
+
+Before any live mutation, commit the reviewed controller and tests on a clean
+tree. The runtime manifest must record that exact implementation commit. This
+corrects the original ordering below: evidence produced by uncommitted code
+cannot honestly cite a later commit as its implementation identity. The final
+evidence and documentation therefore use a second commit after teardown.
 
 After approval to start Colima, pull images, and create local containers:
 
@@ -550,8 +556,11 @@ commit, tool/image identities, checksum result, exact joined outcome, and the
 statement that V3B-1 does not validate Kind, NetworkPolicy, the historical
 incident, or production performance.
 
+Commit the controller and tests before Step 5, then commit the verified
+evidence references, progress record, README, plan correction, and specialist
+lineage after Step 5. The evidence commit message remains:
+
 ```bash
-git add tools/v3b1_local_envoy.py tests/test_v3b1_local_envoy.py docs/lab/V3-PROGRESS.md README.md
 git commit -m "Validate the local Envoy enforcement boundary"
 ```
 

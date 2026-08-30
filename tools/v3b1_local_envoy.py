@@ -1,0 +1,5447 @@
+#!/usr/bin/env python3
+"""Run the closed, local-only V3B-1 pinned Envoy boundary proof."""
+
+from argparse import ArgumentParser
+from base64 import urlsafe_b64encode
+from dataclasses import dataclass
+from decimal import Decimal
+from hashlib import sha256
+import http.client
+import json
+import os
+from pathlib import Path
+import re
+import secrets
+import shutil
+import socket
+import subprocess
+import tempfile
+import time
+from typing import Callable, Mapping, Protocol, Sequence
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+from kil.canonical import canonical_json
+from kil.live_authz import LiveTrack
+from kil.q_state import QStateClaims, issue_q_state, key_id
+from kil.v3b_envoy import render_envoy_json
+from kil.v3b_preflight import EVIDENCE_SCOPE, LAB_IDENTITY, V3BProfile
+
+try:
+    from tools.bootstrap_v3b_tools import verify_content_lock
+except ModuleNotFoundError:  # Direct execution places ``tools`` on sys.path.
+    from bootstrap_v3b_tools import verify_content_lock
+
+
+ROOT = Path(__file__).resolve().parents[1]
+ACTIVE_STATE_PATH = ROOT / ".tools/state/v3b1-active.json"
+PYTHON_IMAGE_TAG = "docker.io/library/python:3.12.13-slim"
+REQUEST_ID = "v3b1-central-request"
+AUTHORIZATION = "Bearer v3b1-lab-credential"
+SUBJECT = "spiffe://kil.local/workload/demo"
+PLATFORM = "linux/arm64"
+MANIFEST_SCHEMA = "kil.v3b1-manifest.v1"
+STATE_SCHEMA = "kil.v3b1-active-state.v1"
+JOURNAL_SCHEMA = "kil.v3b1-lifecycle-journal.v1"
+JOIN_SCHEMA = "kil.v3b1-join.v1"
+_HEX = re.compile(r"^[a-f0-9]{64}$")
+_IMAGE_ID = re.compile(r"^sha256:[a-f0-9]{64}$")
+_DIGEST_REF = re.compile(
+    r"^(?P<repository>[a-z0-9.-]+(?::[0-9]+)?/[a-z0-9._/-]+)"
+    r"@sha256:(?P<digest>[a-f0-9]{64})$"
+)
+_ANY_DIGEST_REF = re.compile(
+    r"^(?P<repository>[a-z0-9._/-]+(?::[0-9]+)?(?:/[a-z0-9._/-]+)*)"
+    r"@sha256:(?P<digest>[a-f0-9]{64})$"
+)
+_TRACKS = tuple(LiveTrack)
+_BUILD_CONTEXT_FILES = (
+    "README.md",
+    "pyproject.toml",
+    "deploy/kind/Dockerfile.v3b",
+    "deploy/kind/Dockerfile.v3b.dockerignore",
+    "deploy/kind/requirements-v3b-build.txt",
+    "deploy/kind/requirements-v3b-runtime.txt",
+    "src/kil/__init__.py",
+    "src/kil/canonical.py",
+    "src/kil/decay.py",
+    "src/kil/domain.py",
+    "src/kil/engine.py",
+    "src/kil/ext_authz_http.py",
+    "src/kil/live_authz.py",
+    "src/kil/q_state.py",
+    "src/kil/target_http.py",
+)
+RETRY_CONTROL_HEADERS = {
+    "x-envoy-hedge-on-per-try-timeout": "false",
+    "x-envoy-max-retries": "0",
+}
+ADVERSARIAL_HEADERS = {
+    "x-kil-decision-digest": "f" * 64,
+    "x-kil-issuer": "https://attacker.invalid",
+    "x-kil-local-evidence": '{"divergence":"0"}',
+    "x-kil-mode": "credential_policy_baseline",
+    "x-kil-track": "client-selected-track",
+    "x-kil-verified-subject": "spiffe://attacker.invalid/workload",
+}
+_AUTHZ_BOOTSTRAP = (
+    "import os,runpy;"
+    "fd=os.open('/evidence/decisions.jsonl',"
+    "os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600);"
+    "os.close(fd);"
+    "runpy.run_module('kil.ext_authz_http',run_name='__main__')"
+)
+_TARGET_BOOTSTRAP = (
+    "import os,runpy;"
+    "fd=os.open('/evidence/targets.jsonl',"
+    "os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600);"
+    "os.close(fd);"
+    "runpy.run_module('kil.target_http',run_name='__main__')"
+)
+_EVIDENCE_FILES = (
+    "requests.jsonl",
+    "decisions.jsonl",
+    "envoy.jsonl",
+    "targets.jsonl",
+    "joins.jsonl",
+    "manifest.json",
+    "summary.md",
+)
+
+
+class ControllerError(RuntimeError):
+    """Raised when the closed controller cannot preserve its invariants."""
+
+
+@dataclass(frozen=True, slots=True)
+class CommandResult:
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+class CommandRunner(Protocol):
+    def run(
+        self,
+        argv: Sequence[str],
+        *,
+        cwd: Path | None = None,
+        input_text: str | None = None,
+        env: Mapping[str, str] | None = None,
+        timeout_s: float = 30,
+    ) -> CommandResult: ...
+
+
+class SubprocessCommandRunner:
+    """Execute explicit argv lists without a shell."""
+
+    def run(
+        self,
+        argv: Sequence[str],
+        *,
+        cwd: Path | None = None,
+        input_text: str | None = None,
+        env: Mapping[str, str] | None = None,
+        timeout_s: float = 30,
+    ) -> CommandResult:
+        if not argv or any(type(part) is not str or not part for part in argv):
+            raise ControllerError("command must be a nonempty string list")
+        try:
+            completed = subprocess.run(
+                list(argv),
+                cwd=cwd,
+                input=input_text,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=timeout_s,
+                env=None if env is None else dict(env),
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            raise ControllerError(f"command execution failed: {argv[0]}") from error
+        return CommandResult(
+            completed.returncode,
+            completed.stdout,
+            completed.stderr,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MaterializedInputs:
+    runtime_root: Path
+    requests: Mapping[LiveTrack, dict[str, object]]
+
+
+def _digest_bytes(payload: bytes) -> str:
+    return sha256(payload).hexdigest()
+
+
+def _digest_file(path: Path) -> str:
+    digest = sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _canonical_bytes(value: object) -> bytes:
+    return (canonical_json(value) + "\n").encode("utf-8")
+
+
+def _closed_object(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ControllerError(f"duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def _load_json_bytes(payload: bytes, label: str) -> dict[str, object]:
+    try:
+        text = payload.decode("utf-8")
+        value = json.loads(text, object_pairs_hook=_closed_object)
+    except ControllerError:
+        raise
+    except (UnicodeError, json.JSONDecodeError) as error:
+        raise ControllerError(f"{label} is not closed UTF-8 JSON") from error
+    if type(value) is not dict:
+        raise ControllerError(f"{label} must be a JSON object")
+    return value
+
+
+def _write_file(path: Path, payload: bytes, mode: int = 0o600) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink():
+        raise ControllerError(f"refusing symbolic-link output: {path}")
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=path.parent, prefix=f".{path.name}.", delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _require_sha256(name: str, value: object) -> str:
+    if type(value) is not str or _HEX.fullmatch(value) is None:
+        raise ControllerError(f"{name} must be a SHA-256 digest")
+    return value
+
+
+def _require_digest_ref(name: str, value: object) -> str:
+    if type(value) is not str or _DIGEST_REF.fullmatch(value) is None:
+        raise ControllerError(f"{name} must be an immutable registry digest")
+    return value
+
+
+def _require_contained(path: Path, parent: Path, label: str) -> Path:
+    resolved_parent = parent.resolve()
+    resolved = path.resolve(strict=False)
+    try:
+        resolved.relative_to(resolved_parent)
+    except ValueError as error:
+        raise ControllerError(f"{label} is not contained in its private root") from error
+    current = Path(os.path.abspath(path))
+    while True:
+        if current.is_symlink():
+            raise ControllerError(f"symbolic-link {label} component is unsafe: {current}")
+        if current.resolve(strict=False) == resolved_parent:
+            break
+        if current.parent == current:
+            raise ControllerError(f"{label} containment root is unreachable")
+        current = current.parent
+    return resolved
+
+
+def comparison_facts_sha256(facts: Mapping[str, object]) -> str:
+    """Hash the one approved shared request projection used by all tracks."""
+    expected = {
+        "method",
+        "path",
+        "authorization_sha256",
+        "adversarial_headers",
+        "retry_control_headers",
+    }
+    if type(facts) is not dict or set(facts) != expected:
+        raise ControllerError("comparison facts are not closed")
+    if facts["method"] != "POST" or facts["path"] != "/consequential/admin":
+        raise ControllerError("comparison facts are not the approved central request")
+    _require_sha256("comparison authorization_sha256", facts["authorization_sha256"])
+    if facts["adversarial_headers"] != ADVERSARIAL_HEADERS:
+        raise ControllerError("comparison adversarial headers are invalid")
+    if facts["retry_control_headers"] != RETRY_CONTROL_HEADERS:
+        raise ControllerError("comparison retry controls are invalid")
+    return _digest_bytes(canonical_json(dict(facts)).encode("utf-8"))
+
+
+def _journal_binding(value: Mapping[str, object]) -> str:
+    unsigned = {key: item for key, item in value.items() if key != "binding_sha256"}
+    return _digest_bytes(canonical_json(unsigned).encode("utf-8"))
+
+
+def create_lifecycle_journal(
+    journal_path: Path,
+    *,
+    private_root: Path,
+    repository_root: Path,
+    docker_host: str,
+    source_commit: str,
+    execution_nonce: str,
+    global_context: str,
+) -> dict[str, object]:
+    """Create durable private ownership state before the first Colima mutation."""
+    repository = Path(os.path.abspath(repository_root))
+    private = _require_contained(private_root, repository, "private root")
+    journal = _require_contained(journal_path, private, "lifecycle journal")
+    if journal.exists():
+        raise ControllerError("lifecycle journal already exists; explicit recovery required")
+    if type(docker_host) is not str or not docker_host.startswith("unix:///"):
+        raise ControllerError("journal Docker host is invalid")
+    if type(source_commit) is not str or re.fullmatch(r"[a-f0-9]{40}", source_commit) is None:
+        raise ControllerError("journal source commit is invalid")
+    _require_sha256("execution_nonce", execution_nonce)
+    if type(global_context) is not str or not global_context:
+        raise ControllerError("journal global Docker context is invalid")
+    private.mkdir(parents=True, exist_ok=True)
+    os.chmod(private, 0o700)
+    value: dict[str, object] = {
+        "schema_version": JOURNAL_SCHEMA,
+        "repository_root": str(repository),
+        "private_root": str(private),
+        "docker_host": docker_host,
+        "source_commit": source_commit,
+        "execution_nonce": execution_nonce,
+        "global_context_before": global_context,
+        "phase": "prepared",
+        "profile_created": False,
+        "manifest_path": None,
+        "manifest_sha256": None,
+        "events": [],
+        "requests": {
+            track.value: {"status": "not_attempted", "intent_id": None}
+            for track in _TRACKS
+        },
+    }
+    value["binding_sha256"] = _journal_binding(value)
+    _write_file(journal, _canonical_bytes(value), 0o600)
+    return value
+
+
+def load_lifecycle_journal(journal_path: Path) -> dict[str, object]:
+    if journal_path.is_symlink() or not journal_path.is_file():
+        raise ControllerError("lifecycle journal is missing or unsafe")
+    value = _load_json_bytes(journal_path.read_bytes(), "lifecycle journal")
+    expected = {
+        "schema_version", "repository_root", "private_root", "docker_host",
+        "source_commit", "execution_nonce", "global_context_before", "phase",
+        "profile_created", "manifest_path", "manifest_sha256", "events",
+        "requests", "binding_sha256",
+    }
+    if set(value) != expected or value["schema_version"] != JOURNAL_SCHEMA:
+        raise ControllerError("lifecycle journal fields are not closed")
+    if value["binding_sha256"] != _journal_binding(value):
+        raise ControllerError("lifecycle journal binding does not match")
+    repository = Path(str(value["repository_root"]))
+    private = Path(str(value["private_root"]))
+    _require_contained(private, repository, "private root")
+    _require_contained(journal_path, private, "lifecycle journal")
+    manifest_path = value["manifest_path"]
+    manifest_sha = value["manifest_sha256"]
+    if (manifest_path is None) != (manifest_sha is None):
+        raise ControllerError("lifecycle private manifest binding is incomplete")
+    if manifest_path is not None:
+        if type(manifest_path) is not str or type(manifest_sha) is not str:
+            raise ControllerError("lifecycle private manifest binding is invalid")
+        bound_manifest = _require_contained(
+            Path(manifest_path), private, "private manifest"
+        )
+        _require_sha256("lifecycle manifest_sha256", manifest_sha)
+        if bound_manifest.is_symlink() or not bound_manifest.is_file() or _digest_file(bound_manifest) != manifest_sha:
+            raise ControllerError("lifecycle private manifest binding does not match")
+    requests = value["requests"]
+    if type(requests) is not dict or set(requests) != {track.value for track in _TRACKS}:
+        raise ControllerError("lifecycle request state is not closed")
+    for request in requests.values():
+        if (
+            type(request) is not dict
+            or set(request) != {"status", "intent_id"}
+            or request["status"] not in {"not_attempted", "intent_persisted", "completed", "failed"}
+            or (request["intent_id"] is not None and not isinstance(request["intent_id"], str))
+        ):
+            raise ControllerError("lifecycle request state is invalid")
+    events = value["events"]
+    if type(events) is not list:
+        raise ControllerError("lifecycle events are invalid")
+    for index, event in enumerate(events, start=1):
+        if type(event) is not dict or set(event) != {"sequence", "event", "details"}:
+            raise ControllerError("lifecycle event fields are invalid")
+        if event["sequence"] != index or type(event["event"]) is not str or type(event["details"]) is not dict:
+            raise ControllerError("lifecycle event ordering is invalid")
+    return value
+
+
+def _persist_journal(journal_path: Path, value: dict[str, object]) -> dict[str, object]:
+    value["binding_sha256"] = _journal_binding(value)
+    _write_file(journal_path, _canonical_bytes(value), 0o600)
+    return value
+
+
+def journal_event(
+    journal_path: Path, event: str, details: Mapping[str, object]
+) -> dict[str, object]:
+    value = load_lifecycle_journal(journal_path)
+    if type(event) is not str or not re.fullmatch(r"[a-z0-9_]+", event):
+        raise ControllerError("lifecycle event name is invalid")
+    if type(details) is not dict:
+        raise ControllerError("lifecycle event details must be an object")
+    events = value["events"]
+    assert isinstance(events, list)
+    events.append({"sequence": len(events) + 1, "event": event, "details": dict(details)})
+    value["phase"] = event
+    if event == "colima_attestation_complete":
+        value["profile_created"] = True
+    return _persist_journal(journal_path, value)
+
+
+def _bind_journal_manifest(
+    journal_path: Path, manifest_path: Path, manifest: dict[str, object]
+) -> dict[str, object]:
+    _validate_manifest(manifest)
+    if manifest_path.is_symlink() or manifest_path.read_bytes() != _canonical_bytes(manifest):
+        raise ControllerError("private manifest binding input is unsafe")
+    value = load_lifecycle_journal(journal_path)
+    private = Path(str(value["private_root"]))
+    resolved = _require_contained(manifest_path, private, "private manifest")
+    value["manifest_path"] = str(resolved)
+    value["manifest_sha256"] = _digest_file(resolved)
+    events = value["events"]
+    assert isinstance(events, list)
+    events.append(
+        {
+            "sequence": len(events) + 1,
+            "event": "manifest_persisted",
+            "details": {
+                "run_id": manifest["run_id"],
+                "manifest_sha256": value["manifest_sha256"],
+            },
+        }
+    )
+    value["phase"] = "manifest_persisted"
+    return _persist_journal(journal_path, value)
+
+
+def _complete_request_attempt(
+    journal_path: Path, track: LiveTrack, *, success: bool, record_sha256: str | None
+) -> dict[str, object]:
+    value = load_lifecycle_journal(journal_path)
+    requests = value["requests"]
+    assert isinstance(requests, dict)
+    request = requests[track.value]
+    assert isinstance(request, dict)
+    if request["status"] != "intent_persisted":
+        raise ControllerError("request completion lacks a durable intent")
+    if success is not (record_sha256 is not None):
+        raise ControllerError("request success/record SHA nullability mismatch")
+    if record_sha256 is not None:
+        _require_sha256("request record_sha256", record_sha256)
+    request["status"] = "completed" if success else "failed"
+    events = value["events"]
+    assert isinstance(events, list)
+    event = "request_send_complete" if success else "request_send_failed"
+    events.append(
+        {
+            "sequence": len(events) + 1,
+            "event": event,
+            "details": {"track": track.value, "record_sha256": record_sha256},
+        }
+    )
+    value["phase"] = event
+    return _persist_journal(journal_path, value)
+
+
+def _tool_identity_projection(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping) or set(value) != {"docker", "kind", "kubectl"}:
+        raise ControllerError("verified tool identity set is not closed")
+    projected: dict[str, object] = {}
+    for name, record in sorted(value.items()):
+        if type(name) is not str:
+            raise ControllerError("verified tool identity name is invalid")
+        if isinstance(record, Mapping):
+            source = record
+        else:
+            source = {
+                key: getattr(record, key)
+                for key in (
+                    "archive_sha256", "executable_sha256", "byte_size",
+                    "version_output", "checksum_attestation",
+                )
+                if hasattr(record, key)
+            }
+        projected[name] = {
+            key: source[key]
+            for key in (
+                "archive_sha256", "executable_sha256", "byte_size",
+                "version_output", "checksum_attestation",
+            )
+            if key in source
+        }
+    _validate_public_provenance(projected, None)
+    return projected
+
+
+def _validate_public_provenance(
+    tool_identities: Mapping[str, object],
+    engine_provenance: Mapping[str, object] | None,
+) -> None:
+    tool_fields = {
+        "archive_sha256", "executable_sha256", "byte_size", "version_output",
+        "checksum_attestation",
+    }
+    versions = {
+        "docker": "29.7.2",
+        "kind": "v0.32.0",
+        "kubectl": "v1.36.3",
+    }
+    if type(tool_identities) is not dict or set(tool_identities) != set(versions):
+        raise ControllerError("public tool identity set is not closed")
+    for name, marker in versions.items():
+        record = tool_identities[name]
+        if type(record) is not dict or set(record) != tool_fields:
+            raise ControllerError("public tool identity fields are not closed")
+        _require_sha256("tool archive_sha256", record["archive_sha256"])
+        _require_sha256("tool executable_sha256", record["executable_sha256"])
+        if type(record["byte_size"]) is not int or record["byte_size"] <= 0:
+            raise ControllerError("public tool byte_size is invalid")
+        version = record["version_output"]
+        if (
+            type(version) is not str
+            or not version.strip()
+            or len(version.encode("utf-8")) > 4096
+            or marker not in version
+        ):
+            raise ControllerError("public tool version identity is invalid")
+        if record["checksum_attestation"] not in {
+            "locally_observed", "upstream_sidecar",
+        }:
+            raise ControllerError("public tool checksum attestation is invalid")
+    _reject_public_secrets(tool_identities)
+    if engine_provenance is None:
+        return
+    engine_fields = {
+        "server_version", "api_version", "git_commit", "go_version", "os",
+        "architecture", "kernel_version", "storage_driver", "cgroup_driver",
+        "cgroup_version",
+    }
+    if type(engine_provenance) is not dict or set(engine_provenance) != engine_fields:
+        raise ControllerError("public engine provenance fields are not closed")
+    if any(
+        type(value) is not str
+        or not value.strip()
+        or len(value.encode("utf-8")) > 4096
+        for value in engine_provenance.values()
+    ):
+        raise ControllerError("public engine provenance values are invalid")
+    if (
+        engine_provenance["os"] != "linux"
+        or engine_provenance["architecture"] != "arm64"
+    ):
+        raise ControllerError("public engine provenance is not linux/arm64")
+    _reject_public_secrets(engine_provenance)
+
+
+def claim_request_attempt(journal_path: Path, track: LiveTrack) -> dict[str, object]:
+    if not isinstance(track, LiveTrack):
+        raise ControllerError("request track is invalid")
+    value = load_lifecycle_journal(journal_path)
+    requests = value["requests"]
+    assert isinstance(requests, dict)
+    request = requests[track.value]
+    assert isinstance(request, dict)
+    if request["status"] != "not_attempted":
+        raise ControllerError("request was already attempted or remains ambiguous")
+    intent_id = secrets.token_hex(32)
+    request.update({"status": "intent_persisted", "intent_id": intent_id})
+    events = value["events"]
+    assert isinstance(events, list)
+    events.append(
+        {
+            "sequence": len(events) + 1,
+            "event": "request_send_intent",
+            "details": {"track": track.value, "intent_id": intent_id},
+        }
+    )
+    value["phase"] = "request_send_intent"
+    _persist_journal(journal_path, value)
+    return {"track": track.value, "status": "intent_persisted", "intent_id": intent_id}
+
+
+def recovery_plan(journal: Mapping[str, object]) -> dict[str, object]:
+    events = journal.get("events")
+    if type(events) is not list:
+        raise ControllerError("recovery journal events are invalid")
+    last = "prepared" if not events else events[-1].get("event")
+    return {
+        "last_event": last,
+        "fail_closed": True,
+        "resume_mode": "exact_recorded_objects_only",
+        "request_replay_forbidden": any(
+            isinstance(item, dict) and item.get("status") != "not_attempted"
+            for item in (journal.get("requests") or {}).values()
+        ) if isinstance(journal.get("requests"), dict) else True,
+    }
+
+
+def validate_request_journal(
+    records: Sequence[Mapping[str, object]],
+    journal: Mapping[str, object],
+    *,
+    require_all: bool,
+) -> None:
+    if type(journal) is not dict:
+        raise ControllerError("request lifecycle journal is invalid")
+    requests = journal.get("requests")
+    events = journal.get("events")
+    if type(requests) is not dict or type(events) is not list:
+        raise ControllerError("request lifecycle journal fields are invalid")
+    record_by_track: dict[str, Mapping[str, object]] = {}
+    for record in records:
+        _request_closed(record)
+        track = record["track"]
+        assert isinstance(track, str)
+        if track in record_by_track:
+            raise ControllerError("request journal has duplicate request records")
+        record_by_track[track] = record
+    expected_tracks = {track.value for track in _TRACKS}
+    if require_all and set(record_by_track) != expected_tracks:
+        raise ControllerError("request journal does not cover all fixed tracks")
+    if not set(record_by_track).issubset(expected_tracks):
+        raise ControllerError("request journal contains an unknown track")
+    completions: dict[str, list[Mapping[str, object]]] = {}
+    for event in events:
+        if not isinstance(event, Mapping) or event.get("event") != "request_send_complete":
+            continue
+        details = event.get("details")
+        if type(details) is not dict or set(details) != {"track", "record_sha256"}:
+            raise ControllerError("request completion event fields are not closed")
+        track = details["track"]
+        if type(track) is not str:
+            raise ControllerError("request completion track is invalid")
+        completions.setdefault(track, []).append(details)
+    if set(completions) != set(record_by_track):
+        raise ControllerError("request records and successful completions do not match")
+    for track, record in record_by_track.items():
+        events_for_track = completions[track]
+        if len(events_for_track) != 1:
+            raise ControllerError("request record must have exactly one successful completion")
+        recorded_sha = events_for_track[0]["record_sha256"]
+        _require_sha256("request completion record SHA", recorded_sha)
+        if recorded_sha != _digest_bytes(_canonical_bytes(record)):
+            raise ControllerError("request record SHA does not match journal completion")
+        request_state = requests.get(track)
+        if (
+            type(request_state) is not dict
+            or request_state.get("status") != "completed"
+            or type(request_state.get("intent_id")) is not str
+            or _HEX.fullmatch(str(request_state["intent_id"])) is None
+        ):
+            raise ControllerError("request record lacks completed journal state")
+
+
+def stage_build_context(repository_root: Path, staging_root: Path) -> dict[str, object]:
+    """Copy only Dockerfile-required files and attest the complete context."""
+    repository = Path(os.path.abspath(repository_root))
+    if staging_root.is_symlink():
+        raise ControllerError("staged Docker build context cannot be a symbolic link")
+    if staging_root.exists() and any(staging_root.iterdir()):
+        raise ControllerError("staged Docker build context would clobber existing data")
+    staging_root.mkdir(parents=True, exist_ok=True)
+    os.chmod(staging_root, 0o700)
+    hashes: dict[str, str] = {}
+    for relative in _BUILD_CONTEXT_FILES:
+        source = repository / relative
+        _require_contained(source, repository, "Docker build input")
+        if source.is_symlink() or not source.is_file():
+            raise ControllerError(f"closed Docker build input is missing: {relative}")
+        destination = staging_root / relative
+        _require_contained(destination, staging_root, "staged Docker build input")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+        os.chmod(destination, 0o400)
+        hashes[relative] = _digest_file(destination)
+    context_sha = _digest_bytes(canonical_json(hashes).encode("utf-8"))
+    return {"files": list(_BUILD_CONTEXT_FILES), "file_sha256": hashes, "context_sha256": context_sha}
+
+
+def validate_image_architecture(value: Mapping[str, object]) -> None:
+    if type(value) is not dict or set(value) != {"Os", "Architecture"}:
+        raise ControllerError("image architecture inspection fields are not closed")
+    if value != {"Os": "linux", "Architecture": "arm64"}:
+        raise ControllerError("image architecture is not exact linux/arm64")
+
+
+def validate_container_attestation(
+    actual: Mapping[str, object], expected: Mapping[str, object]
+) -> dict[str, object]:
+    actual_fields = {
+        "id", "name", "image_id", "user", "readonly_rootfs", "cap_drop",
+        "security_opt", "nano_cpus", "memory", "memory_swap", "pids_limit",
+        "restart_policy", "stop_timeout", "log_driver", "log_options", "tmpfs",
+        "mounts", "networks", "port_bindings", "platform",
+        "entrypoint", "command", "environment",
+    }
+    expected_fields = {
+        "name", "role", "track", "image_id", "network", "config_path",
+        "config_sha256", "gateway_port",
+    }
+    if type(actual) is not dict or set(actual) != actual_fields:
+        raise ControllerError("container attestation fields are not closed")
+    if type(expected) is not dict or set(expected) != expected_fields:
+        raise ControllerError("expected container attestation is not closed")
+    if type(actual["id"]) is not str or _HEX.fullmatch(actual["id"]) is None:
+        raise ControllerError("container ID attestation is invalid")
+    if actual["name"] != expected["name"] or actual["image_id"] != expected["image_id"]:
+        raise ControllerError("container identity/image attestation failed")
+    if actual["user"] != "65532:65532" or actual["readonly_rootfs"] is not True:
+        raise ControllerError("container non-root/read-only attestation failed")
+    if actual["cap_drop"] != ["ALL"] or actual["security_opt"] != ["no-new-privileges"]:
+        raise ControllerError("container capability/security attestation failed")
+    if (
+        actual["nano_cpus"] != 500_000_000
+        or actual["memory"] != 268_435_456
+        or actual["memory_swap"] != 268_435_456
+        or actual["pids_limit"] != 128
+    ):
+        raise ControllerError("container CPU/memory/pids resource attestation failed")
+    if actual["restart_policy"] != "no" or actual["stop_timeout"] != 10:
+        raise ControllerError("container restart/stop policy attestation failed")
+    if actual["log_driver"] != "json-file" or actual["log_options"] != {"max-file": "1", "max-size": "1m"}:
+        raise ControllerError("container bounded log attestation failed")
+    expected_tmpfs = {
+        "/tmp": "rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700"
+    }
+    if expected["role"] in {"authz", "target"}:
+        expected_tmpfs["/evidence"] = "rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700"
+    if actual["tmpfs"] != expected_tmpfs:
+        raise ControllerError("container tmpfs attestation failed")
+    mounts = actual["mounts"]
+    expected_destination = (
+        "/etc/envoy/envoy.json"
+        if expected["role"] == "envoy"
+        else f"/config/{expected['role']}.json"
+    )
+    if (
+        type(mounts) is not list
+        or len(mounts) != 1
+        or type(mounts[0]) is not dict
+        or mounts[0].get("source") != expected["config_path"]
+        or mounts[0].get("destination") != expected_destination
+        or mounts[0].get("rw") is not False
+    ):
+        raise ControllerError("container read-only config mount attestation failed")
+    if actual["networks"] != [expected["network"]]:
+        raise ControllerError("container per-track network attestation failed")
+    if actual["platform"] != PLATFORM:
+        raise ControllerError("container architecture attestation failed")
+    environment = actual["environment"]
+    if (
+        type(environment) is not list
+        or not environment
+        or any(type(item) is not str or "=" not in item for item in environment)
+        or len({item.split("=", 1)[0] for item in environment}) != len(environment)
+    ):
+        raise ControllerError("container environment attestation is invalid")
+    if expected["role"] == "authz":
+        expected_entrypoint = []
+        expected_command = [
+            "python", "-c", _AUTHZ_BOOTSTRAP, "--config", "/config/authz.json",
+        ]
+    elif expected["role"] == "target":
+        expected_entrypoint = []
+        expected_command = [
+            "python", "-c", _TARGET_BOOTSTRAP, "--config", "/config/target.json",
+        ]
+    else:
+        expected_entrypoint = ["/usr/local/bin/envoy"]
+        expected_command = [
+            "--config-path", "/etc/envoy/envoy.json", "--disable-hot-restart",
+            "--concurrency", "1",
+        ]
+    if actual["entrypoint"] != expected_entrypoint or actual["command"] != expected_command:
+        raise ControllerError("container executed process attestation failed")
+    gateway = expected["gateway_port"]
+    if gateway is None:
+        if actual["port_bindings"] != {}:
+            raise ControllerError("non-gateway container exposes a port")
+    elif actual["port_bindings"] != {
+        "8080/tcp": [{"HostIp": "127.0.0.1", "HostPort": str(gateway)}]
+    }:
+        raise ControllerError("gateway port binding is not localhost-only")
+    return dict(actual)
+
+
+def _normalize_inspected_tmpfs(value: object) -> dict[str, str]:
+    if type(value) is not dict or any(type(path) is not str or type(options) is not str for path, options in value.items()):
+        raise ControllerError("container tmpfs inspection is invalid")
+    normalized: dict[str, str] = {}
+    canonical = "rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700"
+    for path, options in value.items():
+        parts = options.split(",")
+        flags = {part for part in parts if "=" not in part}
+        pairs = dict(part.split("=", 1) for part in parts if "=" in part)
+        if (
+            flags != {"rw", "noexec", "nosuid", "nodev"}
+            or pairs.get("size") not in {"16m", "16777216"}
+            or pairs.get("uid") != "65532"
+            or pairs.get("gid") != "65532"
+            or pairs.get("mode") not in {"0700", "700", "448"}
+            or set(pairs) != {"size", "uid", "gid", "mode"}
+        ):
+            raise ControllerError("container tmpfs options do not match the closed policy")
+        normalized[path] = canonical
+    return normalized
+
+
+def _repository_from_tag(tag: str) -> str:
+    if "@" in tag or ":" not in tag.rsplit("/", 1)[-1]:
+        raise ControllerError("image source must be an explicit mutable tag")
+    return _canonical_repository(tag.rsplit(":", 1)[0])
+
+
+def _canonical_repository(repository: str) -> str:
+    parts = repository.split("/")
+    if len(parts) == 1:
+        return f"docker.io/library/{repository}"
+    if "." not in parts[0] and ":" not in parts[0] and parts[0] != "localhost":
+        return f"docker.io/{repository}"
+    if parts[0] == "index.docker.io":
+        parts[0] = "docker.io"
+    return "/".join(parts)
+
+
+def select_registry_digest(tag: str, inspect_output: str) -> str:
+    """Select the one exact same-repository digest returned for a tag."""
+    repository = _repository_from_tag(tag)
+    try:
+        values = json.loads(inspect_output, object_pairs_hook=_closed_object)
+    except (json.JSONDecodeError, ControllerError) as error:
+        raise ControllerError("image inspection did not return registry digests") from error
+    if type(values) is not list or not values or any(type(item) is not str for item in values):
+        raise ControllerError("image inspection did not return registry digests")
+    matches = []
+    for item in values:
+        match = _ANY_DIGEST_REF.fullmatch(item)
+        if match is not None and _canonical_repository(match.group("repository")) == repository:
+            matches.append(f"{repository}@sha256:{match.group('digest')}")
+    if not matches:
+        if any(_ANY_DIGEST_REF.fullmatch(item) is not None for item in values):
+            raise ControllerError("registry digest repository does not match source")
+        raise ControllerError("image inspection did not return a registry digest")
+    if len(set(matches)) != 1:
+        raise ControllerError("image tag resolved to multiple registry digests")
+    return matches[0]
+
+
+def parse_colima_profiles(output: str) -> tuple[dict[str, object], ...]:
+    """Parse Colima's exact closed list-record shape without discarding resources."""
+    try:
+        raw = json.loads(output, object_pairs_hook=_closed_object)
+    except (json.JSONDecodeError, ControllerError):
+        try:
+            raw = [
+                json.loads(line, object_pairs_hook=_closed_object)
+                for line in output.splitlines()
+                if line.strip()
+            ]
+        except (json.JSONDecodeError, ControllerError) as error:
+            raise ControllerError("Colima profile list is not closed JSON") from error
+    if type(raw) is dict:
+        raw = [raw]
+    if type(raw) is not list:
+        raise ControllerError("Colima profile list must be a JSON array")
+    records = []
+    for item in raw:
+        expected_fields = {
+            "name", "status", "arch", "cpus", "memory", "disk", "runtime",
+        }
+        if type(item) is not dict or set(item) != expected_fields:
+            raise ControllerError("Colima profile fields are not closed")
+        if any(
+            type(item[name]) is not str or not item[name]
+            for name in ("name", "status", "arch", "runtime")
+        ) or any(
+            type(item[name]) is not int or item[name] <= 0
+            for name in ("cpus", "memory", "disk")
+        ):
+            raise ControllerError("Colima profile values are invalid")
+        records.append(dict(item))
+    return tuple(records)
+
+
+def validate_colima_profiles(records: Sequence[Mapping[str, object]]) -> None:
+    for record in records:
+        if record.get("status", "").lower() == "running" and record.get("name") != LAB_IDENTITY:
+            raise ControllerError("a non-dedicated Colima profile is running")
+
+
+def _colima_cpu_count(value: object) -> int:
+    if type(value) is not int or value <= 0:
+        raise ControllerError("dedicated Colima CPUs are invalid")
+    return value
+
+
+def _colima_size_gib(name: str, value: object) -> int:
+    gib = 1024 ** 3
+    if type(value) is not int or value <= 0 or value % gib:
+        raise ControllerError(f"dedicated Colima {name} is invalid")
+    return value // gib
+
+
+def validate_dedicated_colima_profile(
+    record: Mapping[str, object],
+) -> dict[str, object]:
+    fields = {"name", "status", "arch", "cpus", "memory", "disk", "runtime"}
+    if type(record) is not dict or set(record) != fields:
+        raise ControllerError("dedicated Colima profile fields are not closed")
+    canonical = {
+        "name": record["name"],
+        "status": record["status"],
+        "arch": record["arch"],
+        "cpus": _colima_cpu_count(record["cpus"]),
+        "memory": _colima_size_gib("memory", record["memory"]),
+        "disk": _colima_size_gib("disk", record["disk"]),
+        "runtime": record["runtime"],
+    }
+    if canonical != {
+        "name": LAB_IDENTITY,
+        "status": "Running",
+        "arch": "aarch64",
+        "cpus": 4,
+        "memory": 8,
+        "disk": 60,
+        "runtime": "docker",
+    }:
+        raise ControllerError("dedicated Colima profile does not match exact resources")
+    return canonical
+
+
+def _parse_saved_colima_config(payload: bytes, staging_root: Path) -> dict[str, object]:
+    if len(payload) > 64 * 1024:
+        raise ControllerError("saved Colima config is not bounded")
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ControllerError("saved Colima config is not UTF-8") from error
+    logical_lines = [
+        line
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    logical_text = "\n".join(logical_lines)
+    if any(token in logical_text for token in ("\t", "&", "*", "!")):
+        raise ControllerError("saved Colima config contains unsupported YAML features")
+    required_top_level = {
+        "cpu": "cpu: 4",
+        "memory": "memory: 8",
+        "disk": "disk: 60",
+        "arch": "arch: aarch64",
+        "runtime": "runtime: docker",
+        "vm_type": "vmType: vz",
+        "mount_type": "mountType: virtiofs",
+        "mount_inotify": "mountInotify: false",
+        "rosetta": "rosetta: false",
+        "binfmt": "binfmt: false",
+        "ssh_config": "sshConfig: false",
+        "forward_agent": "forwardAgent: false",
+        "nested_virtualization": "nestedVirtualization: false",
+        "port_forwarder": "portForwarder: ssh",
+    }
+    for name, expected in required_top_level.items():
+        if logical_lines.count(expected) != 1:
+            raise ControllerError(f"saved Colima config {name} is not exact")
+
+    def section(header: str) -> list[str]:
+        if logical_lines.count(header) != 1:
+            raise ControllerError(f"saved Colima config {header} section is not exact")
+        start = logical_lines.index(header) + 1
+        end = start
+        while end < len(logical_lines) and logical_lines[end].startswith(" "):
+            end += 1
+        return logical_lines[start:end]
+
+    kubernetes = section("kubernetes:")
+    if kubernetes.count("  enabled: false") != 1:
+        raise ControllerError("saved Colima Kubernetes configuration is not disabled")
+    required_network = {
+        "  mode: shared", "  address: false", "  hostAddresses: false",
+        "  preferredRoute: false",
+    }
+    network = section("network:")
+    if any(network.count(expected) != 1 for expected in required_network):
+        raise ControllerError("saved Colima network configuration is not restricted")
+    mounts = section("mounts:")
+    locations = [line for line in mounts if line.startswith("  - location: ")]
+    if len(locations) != 1:
+        raise ControllerError("saved Colima config staging mount is not exact")
+    if len([line for line in mounts if line.startswith("  - ")]) != 1:
+        raise ControllerError("saved Colima config includes an unexpected mount")
+    location = locations[0]
+    recorded_location = Path(location.removeprefix("  - location: "))
+    if (
+        not recorded_location.is_absolute()
+        or recorded_location != staging_root
+    ):
+        raise ControllerError("saved Colima config staging mount is not exact")
+    index = mounts.index(location)
+    mount_item = mounts[index:]
+    if mount_item.count("    writable: false") != 1:
+        raise ControllerError("saved Colima staging mount is not read-only")
+    return {
+        "runtime": "docker",
+        "kubernetes": False,
+        "vm_type": "vz",
+        "arch": "aarch64",
+        "cpus": 4,
+        "memory_gib": 8,
+        "disk_gib": 60,
+        "mount": str(staging_root),
+        "mount_type": "virtiofs",
+        "mount_writable": False,
+    }
+def _track_slug(track: LiveTrack) -> str:
+    return track.value.replace("_", "-")
+
+
+def _runtime_root(root: Path, manifest: Mapping[str, object]) -> Path:
+    identity = manifest.get("content_identity")
+    if type(identity) is not dict:
+        raise ControllerError("runtime staging identity is unavailable")
+    execution_nonce = _require_sha256(
+        "runtime execution nonce", identity.get("execution_nonce")
+    )
+    return (
+        root
+        / ".tools/v3b1-staging"
+        / execution_nonce
+        / str(manifest["run_id"])
+    )
+
+
+def _manifest_identity(
+    profile: V3BProfile,
+    *,
+    profile_sha256: str,
+    python_image_digest: str,
+    envoy_image_digest: str,
+    envoy_image_id: str,
+    kil_image_id: str,
+    kil_archive_sha256: str,
+    docker_host: str,
+    source_commit: str,
+    execution_nonce: str,
+    dockerfile_sha256: str,
+    dockerignore_sha256: str,
+    build_context_sha256: str,
+) -> dict[str, object]:
+    return {
+        "schema_version": "kil.v3b1-content-identity.v1",
+        "profile_sha256": profile_sha256,
+        "colima_profile": profile.colima_profile,
+        "docker_host": docker_host,
+        "platform": PLATFORM,
+        "source_commit": source_commit,
+        "execution_nonce": execution_nonce,
+        "dockerfile_sha256": dockerfile_sha256,
+        "dockerignore_sha256": dockerignore_sha256,
+        "build_context_sha256": build_context_sha256,
+        "python_image_digest": python_image_digest,
+        "envoy_image_digest": envoy_image_digest,
+        "envoy_image_id": envoy_image_id,
+        "kil_image_id": kil_image_id,
+        "kil_archive_sha256": kil_archive_sha256,
+        "request_id": REQUEST_ID,
+        "tracks": [
+            {"track": track.value, "gateway_port": port}
+            for track, port in zip(_TRACKS, profile.gateway_ports, strict=True)
+        ],
+    }
+
+
+def create_run_manifest(
+    profile: V3BProfile,
+    *,
+    profile_sha256: str,
+    python_image_digest: str,
+    envoy_image_digest: str,
+    envoy_image_id: str | None = None,
+    kil_image_id: str,
+    kil_archive_sha256: str,
+    docker_host: str,
+    source_commit: str = "0" * 40,
+    source_clean: bool = True,
+    execution_nonce: str = "0" * 64,
+    dockerfile_sha256: str = "0" * 64,
+    dockerignore_sha256: str = "0" * 64,
+    build_context_sha256: str = "0" * 64,
+) -> dict[str, object]:
+    """Create a manifest whose run identifier binds its immutable inputs."""
+    if not isinstance(profile, V3BProfile) or profile.colima_profile != LAB_IDENTITY:
+        raise ControllerError("profile must be the closed V3B profile")
+    _require_sha256("profile_sha256", profile_sha256)
+    _require_digest_ref("python_image_digest", python_image_digest)
+    _require_digest_ref("envoy_image_digest", envoy_image_digest)
+    if envoy_image_id is None:
+        envoy_image_id = "sha256:" + envoy_image_digest.rsplit(":", 1)[1]
+    if _IMAGE_ID.fullmatch(envoy_image_id) is None:
+        raise ControllerError("envoy_image_id must be an immutable image ID")
+    if _IMAGE_ID.fullmatch(kil_image_id) is None:
+        raise ControllerError("kil_image_id must be an immutable image ID")
+    _require_sha256("kil_archive_sha256", kil_archive_sha256)
+    if type(docker_host) is not str or not docker_host.startswith("unix:///"):
+        raise ControllerError("docker_host must be an explicit Unix socket")
+    if (
+        type(source_commit) is not str
+        or re.fullmatch(r"[a-f0-9]{40}", source_commit) is None
+        or source_clean is not True
+    ):
+        raise ControllerError("source must be a clean recorded Git commit")
+    _require_sha256("execution_nonce", execution_nonce)
+    _require_sha256("dockerfile_sha256", dockerfile_sha256)
+    _require_sha256("dockerignore_sha256", dockerignore_sha256)
+    _require_sha256("build_context_sha256", build_context_sha256)
+    identity = _manifest_identity(
+        profile,
+        profile_sha256=profile_sha256,
+        python_image_digest=python_image_digest,
+        envoy_image_digest=envoy_image_digest,
+        envoy_image_id=envoy_image_id,
+        kil_image_id=kil_image_id,
+        kil_archive_sha256=kil_archive_sha256,
+        docker_host=docker_host,
+        source_commit=source_commit,
+        execution_nonce=execution_nonce,
+        dockerfile_sha256=dockerfile_sha256,
+        dockerignore_sha256=dockerignore_sha256,
+        build_context_sha256=build_context_sha256,
+    )
+    identity_sha256 = _digest_bytes(canonical_json(identity).encode("utf-8"))
+    run_id = f"v3b1-{identity_sha256}"
+    suffix = identity_sha256[:12]
+    networks = []
+    tracks = []
+    containers = []
+    for track, port in zip(_TRACKS, profile.gateway_ports, strict=True):
+        slug = _track_slug(track)
+        names = {
+            role: f"kil-v3b1-{role}-{slug}-{suffix}"
+            for role in ("authz", "target", "envoy")
+        }
+        network = f"kil-v3b1-network-{slug}-{suffix}"
+        networks.append({"track": track.value, "name": network})
+        tracks.append(
+            {
+                "track": track.value,
+                "gateway_port": port,
+                "authz_container": names["authz"],
+                "target_container": names["target"],
+                "envoy_container": names["envoy"],
+                "network": network,
+                "decision_source": f"{track.value}/decisions.jsonl",
+                "target_source": f"{track.value}/targets.jsonl",
+                "envoy_source": f"{track.value}/envoy.stdout.jsonl",
+            }
+        )
+        for role in ("authz", "target", "envoy"):
+            containers.append(
+                {
+                    "name": names[role],
+                    "role": role,
+                    "track": track.value,
+                    "image": kil_image_id if role != "envoy" else envoy_image_digest,
+                }
+            )
+    return {
+        "schema_version": MANIFEST_SCHEMA,
+        "evidence_scope": EVIDENCE_SCOPE,
+        "content_identity_sha256": identity_sha256,
+        "content_identity": identity,
+        "run_id": run_id,
+        "request_id": REQUEST_ID,
+        "colima_profile": profile.colima_profile,
+        "docker_host": docker_host,
+        "platform": PLATFORM,
+        "source_commit": source_commit,
+        "python_image_digest": python_image_digest,
+        "envoy_image_digest": envoy_image_digest,
+        "envoy_image_id": envoy_image_id,
+        "kil_image_id": kil_image_id,
+        "kil_archive_sha256": kil_archive_sha256,
+        "networks": networks,
+        "tracks": tracks,
+        "containers": containers,
+        "teardown": {
+            "status": "pending",
+            "containers_removed": False,
+            "network_removed": False,
+            "profile_deleted": False,
+        },
+    }
+
+
+def _validate_manifest(value: object) -> dict[str, object]:
+    expected = {
+        "schema_version",
+        "evidence_scope",
+        "content_identity_sha256",
+        "content_identity",
+        "run_id",
+        "request_id",
+        "colima_profile",
+        "docker_host",
+        "platform",
+        "source_commit",
+        "python_image_digest",
+        "envoy_image_digest",
+        "envoy_image_id",
+        "kil_image_id",
+        "kil_archive_sha256",
+        "networks",
+        "tracks",
+        "containers",
+        "teardown",
+    }
+    if type(value) is not dict or set(value) != expected:
+        raise ControllerError("manifest fields are not closed")
+    if value["schema_version"] != MANIFEST_SCHEMA or value["evidence_scope"] != EVIDENCE_SCOPE:
+        raise ControllerError("manifest identity is invalid")
+    identity = value["content_identity"]
+    identity_fields = {
+        "schema_version",
+        "profile_sha256",
+        "colima_profile",
+        "docker_host",
+        "platform",
+        "source_commit",
+        "execution_nonce",
+        "dockerfile_sha256",
+        "dockerignore_sha256",
+        "build_context_sha256",
+        "python_image_digest",
+        "envoy_image_digest",
+        "envoy_image_id",
+        "kil_image_id",
+        "kil_archive_sha256",
+        "request_id",
+        "tracks",
+    }
+    if type(identity) is not dict or set(identity) != identity_fields:
+        raise ControllerError("manifest content identity is invalid")
+    if identity["schema_version"] != "kil.v3b1-content-identity.v1":
+        raise ControllerError("manifest content identity schema is invalid")
+    for name in (
+        "profile_sha256",
+        "execution_nonce",
+        "dockerfile_sha256",
+        "dockerignore_sha256",
+        "build_context_sha256",
+    ):
+        _require_sha256(name, identity[name])
+    digest = _digest_bytes(canonical_json(identity).encode("utf-8"))
+    if value["content_identity_sha256"] != digest or value["run_id"] != f"v3b1-{digest}":
+        raise ControllerError("manifest content address is invalid")
+    if value["request_id"] != REQUEST_ID or value["colima_profile"] != LAB_IDENTITY:
+        raise ControllerError("manifest fixed identifiers are invalid")
+    for name in (
+        "request_id",
+        "colima_profile",
+        "docker_host",
+        "platform",
+        "source_commit",
+        "python_image_digest",
+        "envoy_image_digest",
+        "envoy_image_id",
+        "kil_image_id",
+        "kil_archive_sha256",
+    ):
+        if value[name] != identity[name]:
+            raise ControllerError(f"manifest {name} diverges from content identity")
+    if value["platform"] != PLATFORM:
+        raise ControllerError("manifest platform is invalid")
+    if type(value["source_commit"]) is not str or re.fullmatch(
+        r"[a-f0-9]{40}", value["source_commit"]
+    ) is None:
+        raise ControllerError("manifest source commit is invalid")
+    _require_digest_ref("python_image_digest", value["python_image_digest"])
+    _require_digest_ref("envoy_image_digest", value["envoy_image_digest"])
+    if type(value["envoy_image_id"]) is not str or _IMAGE_ID.fullmatch(
+        value["envoy_image_id"]
+    ) is None:
+        raise ControllerError("manifest Envoy image ID is invalid")
+    if type(value["kil_image_id"]) is not str or _IMAGE_ID.fullmatch(value["kil_image_id"]) is None:
+        raise ControllerError("manifest KIL image ID is invalid")
+    _require_sha256("kil_archive_sha256", value["kil_archive_sha256"])
+    tracks = value["tracks"]
+    containers = value["containers"]
+    if type(tracks) is not list or len(tracks) != 3:
+        raise ControllerError("manifest tracks are invalid")
+    if type(containers) is not list or len(containers) != 9:
+        raise ControllerError("manifest containers are invalid")
+    expected_tracks = [track.value for track in _TRACKS]
+    networks = value["networks"]
+    if (
+        type(networks) is not list
+        or len(networks) != 3
+        or [item.get("track") for item in networks if type(item) is dict]
+        != expected_tracks
+        or any(
+            type(item) is not dict
+            or set(item) != {"track", "name"}
+            or not str(item["name"]).startswith("kil-v3b1-network-")
+            for item in networks
+        )
+    ):
+        raise ControllerError("manifest per-track networks are invalid")
+    if [item.get("track") for item in tracks if type(item) is dict] != expected_tracks:
+        raise ControllerError("manifest tracks are not fixed")
+    expected_ports = [18080, 18081, 18082]
+    track_fields = {
+        "track",
+        "gateway_port",
+        "authz_container",
+        "target_container",
+        "envoy_container",
+        "network",
+        "decision_source",
+        "target_source",
+        "envoy_source",
+    }
+    if any(type(item) is not dict or set(item) != track_fields for item in tracks):
+        raise ControllerError("manifest track fields are not closed")
+    if [item["gateway_port"] for item in tracks] != expected_ports:
+        raise ControllerError("manifest gateway ports are not fixed")
+    if identity["tracks"] != [
+        {"track": item["track"], "gateway_port": item["gateway_port"]}
+        for item in tracks
+    ]:
+        raise ControllerError("manifest tracks diverge from content identity")
+    network_by_track = {item["track"]: item["name"] for item in networks}
+    if any(item["network"] != network_by_track[item["track"]] for item in tracks):
+        raise ControllerError("manifest track network binding is invalid")
+    names = []
+    for item in containers:
+        if type(item) is not dict or set(item) != {"name", "role", "track", "image"}:
+            raise ControllerError("manifest container fields are invalid")
+        if not str(item["name"]).startswith("kil-v3b1-"):
+            raise ControllerError("manifest container name is invalid")
+        names.append(item["name"])
+    if len(set(names)) != 9:
+        raise ControllerError("manifest container names are not unique")
+    expected_role_tracks = {
+        (role, track.value) for track in _TRACKS for role in ("authz", "target", "envoy")
+    }
+    if {(item["role"], item["track"]) for item in containers} != expected_role_tracks:
+        raise ControllerError("manifest container roles/tracks are invalid")
+    teardown = value["teardown"]
+    if type(teardown) is not dict or set(teardown) != {
+        "status",
+        "containers_removed",
+        "network_removed",
+        "profile_deleted",
+    }:
+        raise ControllerError("manifest teardown fields are invalid")
+    if teardown not in (
+        {
+            "status": "pending",
+            "containers_removed": False,
+            "network_removed": False,
+            "profile_deleted": False,
+        },
+        {
+            "status": "complete",
+            "containers_removed": True,
+            "network_removed": True,
+            "profile_deleted": True,
+        },
+    ):
+        raise ControllerError("manifest teardown state is invalid")
+    return value
+
+
+def _claims(audience: str, issued_at_s: int) -> QStateClaims:
+    return QStateClaims(
+        schema_version="kil.q-state.v0",
+        state_id=f"q-v3b1-{audience}",
+        issuer="https://lab-issuer.kil.invalid",
+        subject=SUBJECT,
+        audience=audience,
+        authority_class="admin_action",
+        action_class="consequential_admin",
+        issued_at_s=issued_at_s,
+        not_before_s=issued_at_s,
+        expires_at_s=issued_at_s + 10,
+        evidence_horizon_s=issued_at_s - 1,
+        trust_proof_id="tp-v3b1-1",
+        trust_proof_digest="sha256:" + "a" * 64,
+        envelope_result_id="ke-v3b1-1",
+        envelope_result_digest="sha256:" + "b" * 64,
+        deployment_profile="kil-lab-v3@0",
+        charge=Decimal("80"),
+        threshold=Decimal("40"),
+        history_count=5,
+        minimum_history=2,
+        veto_clear=True,
+        envelope_allows=True,
+        decay_rate=Decimal("0"),
+        maximum_charge=Decimal("100"),
+        model_version="kil-decay-v1",
+        parameter_version="kil-v3b1-fixture-v1",
+    )
+
+
+def _b64url(payload: bytes) -> str:
+    return urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
+
+
+def _track_manifest(manifest: Mapping[str, object], track: LiveTrack) -> dict[str, object]:
+    tracks = manifest["tracks"]
+    assert isinstance(tracks, list)
+    for item in tracks:
+        if isinstance(item, dict) and item.get("track") == track.value:
+            return item
+    raise ControllerError(f"manifest omits track {track.value}")
+
+
+def materialize_run_inputs(root: Path, manifest: dict[str, object]) -> MaterializedInputs:
+    """Write deterministic, read-only service configs and central fixtures."""
+    _validate_manifest(manifest)
+    runtime_root = _runtime_root(root, manifest)
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+    public_key = private_key.public_key()
+    public_bytes = public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)
+    public_record = {
+        "key_id": key_id(public_key),
+        "raw_base64url": _b64url(public_bytes),
+    }
+    authorization_digest = _digest_bytes(AUTHORIZATION.encode("utf-8"))
+    fixture = {
+        "request_id": manifest["request_id"],
+        "method": "POST",
+        "path": "/consequential/admin",
+        "identity": SUBJECT,
+        "authority_class": "admin_action",
+        "action_class": "consequential_admin",
+        "expected_authorization_sha256": authorization_digest,
+        "policy_allows_action": True,
+        "local_evidence": {
+            "divergence": "0.9",
+            "coupled_loss": "0",
+            "fresh": True,
+        },
+        "reduction_profile": {
+            "divergence_threshold": "0.25",
+            "loss_rate": "25",
+            "exponent": 3,
+        },
+    }
+    requests: dict[LiveTrack, dict[str, object]] = {}
+    for track in _TRACKS:
+        track_root = runtime_root / track.value
+        track_root.mkdir(parents=True, exist_ok=True)
+        public_keys = [] if track is LiveTrack.CREDENTIAL_POLICY_BASELINE else [public_record]
+        authz = {
+            "schema_version": "kil.v3b-authz-http.v1",
+            "track": track.value,
+            "bind_host": "0.0.0.0",
+            "bind_port": 8080,
+            "records_path": "/evidence/decisions.jsonl",
+            "public_keys": public_keys,
+            "revoked_state_ids": [],
+            "fixtures": [fixture],
+        }
+        target = {
+            "schema_version": "kil.v3b-target-http.v1",
+            "run_id": manifest["run_id"],
+            "track": track.value,
+            "bind_host": "0.0.0.0",
+            "bind_port": 8080,
+            "ledger_path": "/evidence/targets.jsonl",
+        }
+        track_info = _track_manifest(manifest, track)
+        envoy = render_envoy_json(
+            track,
+            str(track_info["authz_container"]),
+            str(track_info["target_container"]),
+        )
+        for name, payload in (
+            ("authz.json", _canonical_bytes(authz)),
+            ("target.json", _canonical_bytes(target)),
+            ("envoy.json", (envoy + "\n").encode("utf-8")),
+        ):
+            _write_file(track_root / name, payload, 0o444)
+        requests[track] = {
+            "method": "POST",
+            "path": "/consequential/admin",
+            "authorization": AUTHORIZATION,
+            "q_state": None,
+            "adversarial_headers": dict(ADVERSARIAL_HEADERS),
+            "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
+        }
+    return MaterializedInputs(runtime_root, requests)
+
+
+def _docker_prefix(
+    docker_binary: Path,
+    manifest: Mapping[str, object],
+    docker_config: Path | None = None,
+) -> list[str]:
+    host = manifest.get("docker_host")
+    if type(host) is not str or not host.startswith("unix:///"):
+        raise ControllerError("manifest Docker host is invalid")
+    config = docker_config or docker_binary.parent.parent / "v3b1-docker-config"
+    return [str(docker_binary), "--config", str(config), "--host", host]
+
+
+def _labels(manifest: Mapping[str, object], role: str, track: LiveTrack) -> list[str]:
+    return [
+        "--label",
+        "kil.v3b1.managed=true",
+        "--label",
+        f"kil.v3b1.run-id={manifest['run_id']}",
+        "--label",
+        f"kil.v3b1.role={role}",
+        "--label",
+        f"kil.v3b1.track={track.value}",
+    ]
+
+
+def _hardened_kil_options() -> list[str]:
+    return [
+        "--platform",
+        PLATFORM,
+        "--pull=never",
+        "--read-only",
+        "--user",
+        "65532:65532",
+        "--security-opt",
+        "no-new-privileges",
+        "--cap-drop",
+        "ALL",
+        "--cpus",
+        "0.50",
+        "--memory",
+        "256m",
+        "--memory-swap",
+        "256m",
+        "--pids-limit",
+        "128",
+        "--restart=no",
+        "--stop-timeout",
+        "10",
+        "--log-driver",
+        "json-file",
+        "--log-opt",
+        "max-size=1m",
+        "--log-opt",
+        "max-file=1",
+        "--tmpfs",
+        "/evidence:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700",
+        "--tmpfs",
+        "/tmp:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700",
+    ]
+
+
+def build_runtime_commands(
+    root: Path,
+    manifest: dict[str, object],
+    *,
+    docker_binary: Path,
+) -> list[list[str]]:
+    """Construct exact validation, network, and nine-container commands."""
+    _validate_manifest(manifest)
+    runtime_root = _runtime_root(root, manifest)
+    prefix = _docker_prefix(
+        docker_binary, manifest, root / ".tools/v3b1-docker-config"
+    )
+    commands: list[list[str]] = []
+    for track in _TRACKS:
+        config = runtime_root / track.value / "envoy.json"
+        commands.append(
+            [
+                *prefix,
+                "run",
+                "--rm",
+                "--name",
+                f"kil-v3b1-validate-{_track_slug(track)}-{str(manifest['content_identity_sha256'])[:12]}",
+                *_labels(manifest, "validator", track),
+                "--platform",
+                PLATFORM,
+                "--pull=never",
+                "--network",
+                "none",
+                "--read-only",
+                "--user",
+                "65532:65532",
+                "--security-opt",
+                "no-new-privileges",
+                "--cap-drop",
+                "ALL",
+                "--tmpfs",
+                "/tmp:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700",
+                "--mount",
+                f"type=bind,src={config},dst=/etc/envoy/envoy.json,readonly",
+                "--entrypoint",
+                "/usr/local/bin/envoy",
+                str(manifest["envoy_image_digest"]),
+                "--mode",
+                "validate",
+                "--config-path",
+                "/etc/envoy/envoy.json",
+                "--disable-hot-restart",
+                "--concurrency",
+                "1",
+            ]
+        )
+    for network in manifest["networks"]:  # type: ignore[union-attr]
+        commands.append(
+            [
+                *prefix,
+                "network",
+                "create",
+                "--driver",
+                "bridge",
+                "--internal",
+                "--label",
+                f"kil.v3b1.run-id={manifest['run_id']}",
+                "--label",
+                "kil.v3b1.managed=true",
+                "--label",
+                f"kil.v3b1.track={network['track']}",
+                str(network["name"]),
+            ]
+        )
+    for track in _TRACKS:
+        track_root = runtime_root / track.value
+        item = _track_manifest(manifest, track)
+        common_network = ["--network", str(item["network"])]
+        authz_name = str(item["authz_container"])
+        target_name = str(item["target_container"])
+        envoy_name = str(item["envoy_container"])
+        commands.append(
+            [
+                *prefix,
+                "run",
+                "-d",
+                "--name",
+                authz_name,
+                "--network-alias",
+                authz_name,
+                *common_network,
+                *_labels(manifest, "authz", track),
+                *_hardened_kil_options(),
+                "--mount",
+                f"type=bind,src={track_root / 'authz.json'},dst=/config/authz.json,readonly",
+                str(manifest["kil_image_id"]),
+                "python",
+                "-c",
+                _AUTHZ_BOOTSTRAP,
+                "--config",
+                "/config/authz.json",
+            ]
+        )
+        commands.append(
+            [
+                *prefix,
+                "run",
+                "-d",
+                "--name",
+                target_name,
+                "--network-alias",
+                target_name,
+                *common_network,
+                *_labels(manifest, "target", track),
+                *_hardened_kil_options(),
+                "--mount",
+                f"type=bind,src={track_root / 'target.json'},dst=/config/target.json,readonly",
+                str(manifest["kil_image_id"]),
+                "python",
+                "-c",
+                _TARGET_BOOTSTRAP,
+                "--config",
+                "/config/target.json",
+            ]
+        )
+        commands.append(
+            [
+                *prefix,
+                "run",
+                "-d",
+                "--name",
+                envoy_name,
+                "--network-alias",
+                envoy_name,
+                *common_network,
+                *_labels(manifest, "envoy", track),
+                "--platform",
+                PLATFORM,
+                "--pull=never",
+                "--read-only",
+                "--user",
+                "65532:65532",
+                "--security-opt",
+                "no-new-privileges",
+                "--cap-drop",
+                "ALL",
+                "--cpus",
+                "0.50",
+                "--memory",
+                "256m",
+                "--memory-swap",
+                "256m",
+                "--pids-limit",
+                "128",
+                "--restart=no",
+                "--stop-timeout",
+                "10",
+                "--log-driver",
+                "json-file",
+                "--log-opt",
+                "max-size=1m",
+                "--log-opt",
+                "max-file=1",
+                "--tmpfs",
+                "/tmp:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700",
+                "--publish",
+                f"127.0.0.1:{item['gateway_port']}:8080/tcp",
+                "--mount",
+                f"type=bind,src={track_root / 'envoy.json'},dst=/etc/envoy/envoy.json,readonly",
+                "--entrypoint",
+                "/usr/local/bin/envoy",
+                str(manifest["envoy_image_digest"]),
+                "--config-path",
+                "/etc/envoy/envoy.json",
+                "--disable-hot-restart",
+                "--concurrency",
+                "1",
+            ]
+        )
+    return commands
+
+
+def collection_commands(
+    root: Path,
+    manifest: dict[str, object],
+    *,
+    docker_binary: Path,
+) -> list[list[str]]:
+    """Return exact per-container evidence extraction commands."""
+    _validate_manifest(manifest)
+    prefix = _docker_prefix(
+        docker_binary, manifest, root / ".tools/v3b1-docker-config"
+    )
+    collected = _runtime_root(root, manifest) / "collected"
+    commands = []
+    for track in _TRACKS:
+        destination = collected / track.value
+        item = _track_manifest(manifest, track)
+        commands.extend(
+            [
+                [
+                    *prefix,
+                    "cp",
+                    f"{item['authz_container']}:/evidence/decisions.jsonl",
+                    str(destination / "decisions.jsonl"),
+                ],
+                [
+                    *prefix,
+                    "cp",
+                    f"{item['target_container']}:/evidence/targets.jsonl",
+                    str(destination / "targets.jsonl"),
+                ],
+                [*prefix, "logs", str(item["envoy_container"])],
+            ]
+        )
+    return commands
+
+
+def _object_labels(run_id: str, role: str | None, track: str | None) -> dict[str, str]:
+    labels = {"kil.v3b1.managed": "true", "kil.v3b1.run-id": run_id}
+    if role is not None:
+        labels["kil.v3b1.role"] = role
+    if track is not None:
+        labels["kil.v3b1.track"] = track
+    return labels
+
+
+def _state_binding(value: Mapping[str, object]) -> str:
+    unsigned = {key: item for key, item in value.items() if key != "binding_sha256"}
+    return _digest_bytes(canonical_json(unsigned).encode("utf-8"))
+
+
+def _synthetic_state_object(
+    manifest: Mapping[str, object], item: Mapping[str, object]
+) -> dict[str, object]:
+    role = str(item["role"])
+    track = str(item["track"])
+    name = str(item["name"])
+    object_id = _digest_bytes(name.encode("utf-8"))
+    image_id = (
+        manifest["envoy_image_id"] if role == "envoy" else manifest["kil_image_id"]
+    )
+    config_path = f"/unavailable/{track}/{role}.json"
+    track_record = next(
+        record
+        for record in manifest["tracks"]  # type: ignore[union-attr]
+        if record["track"] == track
+    )
+    tmpfs = {
+        "/tmp": "rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700"
+    }
+    if role != "envoy":
+        tmpfs["/evidence"] = "rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700"
+    destination = "/etc/envoy/envoy.json" if role == "envoy" else f"/config/{role}.json"
+    runtime = {
+        "id": object_id,
+        "name": name,
+        "image_id": image_id,
+        "user": "65532:65532",
+        "readonly_rootfs": True,
+        "cap_drop": ["ALL"],
+        "security_opt": ["no-new-privileges"],
+        "nano_cpus": 500_000_000,
+        "memory": 268_435_456,
+        "memory_swap": 268_435_456,
+        "pids_limit": 128,
+        "restart_policy": "no",
+        "stop_timeout": 10,
+        "log_driver": "json-file",
+        "log_options": {"max-file": "1", "max-size": "1m"},
+        "tmpfs": tmpfs,
+        "mounts": [{"source": config_path, "destination": destination, "rw": False}],
+        "networks": [track_record["network"]],
+        "port_bindings": (
+            {
+                "8080/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": str(track_record["gateway_port"]),
+                    }
+                ]
+            }
+            if role == "envoy"
+            else {}
+        ),
+        "platform": PLATFORM,
+        "entrypoint": ["/usr/local/bin/envoy"] if role == "envoy" else [],
+        "command": (
+            [
+                "--config-path", "/etc/envoy/envoy.json", "--disable-hot-restart",
+                "--concurrency", "1",
+            ]
+            if role == "envoy"
+            else [
+                "python", "-c",
+                _AUTHZ_BOOTSTRAP if role == "authz" else _TARGET_BOOTSTRAP,
+                "--config", f"/config/{role}.json",
+            ]
+        ),
+        "environment": ["PATH=/usr/local/bin"],
+    }
+    return {
+        "name": name,
+        "id": object_id,
+        "role": role,
+        "track": track,
+        "labels": _object_labels(str(manifest["run_id"]), role, track),
+        "image_id": image_id,
+        "image_reference": item["image"],
+        "config_path": config_path,
+        "config_sha256": "0" * 64,
+        "runtime_attestation": runtime,
+    }
+
+
+def persist_active_state(
+    state_path: Path,
+    manifest_path: Path,
+    manifest: dict[str, object],
+    *,
+    objects: Sequence[Mapping[str, object]] | None = None,
+    network_objects: Sequence[Mapping[str, object]] | None = None,
+    profile_created: bool = True,
+) -> None:
+    """Persist an ignored exact state cryptographically bound to a manifest."""
+    _validate_manifest(manifest)
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise ControllerError("active manifest path is not a regular file")
+    manifest_payload = manifest_path.read_bytes()
+    if manifest_payload != _canonical_bytes(manifest):
+        raise ControllerError("active manifest is not canonical")
+    run_id = str(manifest["run_id"])
+    if objects is None:
+        objects = [
+            _synthetic_state_object(manifest, item)
+            for item in manifest["containers"]  # type: ignore[union-attr]
+        ]
+    if network_objects is None:
+        network_objects = [
+            {
+                "name": item["name"],
+                "id": _digest_bytes(str(item["name"]).encode("utf-8")),
+                "track": item["track"],
+                "labels": _object_labels(run_id, None, str(item["track"])),
+            }
+            for item in manifest["networks"]  # type: ignore[union-attr]
+        ]
+    base: dict[str, object] = {
+        "schema_version": STATE_SCHEMA,
+        "run_id": run_id,
+        "manifest_path": str(manifest_path.resolve()),
+        "manifest_sha256": _digest_bytes(manifest_payload),
+        "colima_profile": manifest["colima_profile"],
+        "profile_created": profile_created,
+        "docker_host": manifest["docker_host"],
+        "docker_config": str(state_path.parents[1] / "v3b1-docker-config"),
+        "networks": manifest["networks"],
+        "objects": [dict(item) for item in objects],
+        "network_objects": [dict(item) for item in network_objects],
+    }
+    base["binding_sha256"] = _state_binding(base)
+    _write_file(state_path, _canonical_bytes(base), 0o600)
+
+
+def _validate_state_objects(
+    state: Mapping[str, object], manifest: Mapping[str, object]
+) -> None:
+    objects = state.get("objects")
+    if type(objects) is not list or len(objects) != 9:
+        raise ControllerError("active state Docker objects are invalid")
+    expected = {
+        item["name"]: item
+        for item in manifest["containers"]  # type: ignore[union-attr]
+    }
+    seen = set()
+    for item in objects:
+        if type(item) is not dict or set(item) != {
+            "name",
+            "id",
+            "role",
+            "track",
+            "labels",
+            "image_id",
+            "image_reference",
+            "config_path",
+            "config_sha256",
+            "runtime_attestation",
+        }:
+            raise ControllerError("active state Docker object fields are invalid")
+        name = item["name"]
+        if name not in expected or name in seen:
+            raise ControllerError("active state Docker names do not match manifest")
+        seen.add(name)
+        if type(item["id"]) is not str or _HEX.fullmatch(item["id"]) is None:
+            raise ControllerError("active state Docker object ID is invalid")
+        source = expected[name]
+        if item["role"] != source["role"] or item["track"] != source["track"]:
+            raise ControllerError("active state Docker role does not match manifest")
+        if item["labels"] != _object_labels(
+            str(state["run_id"]), str(item["role"]), str(item["track"])
+        ):
+            raise ControllerError("active state Docker labels are invalid")
+        expected_image_id = (
+            manifest["envoy_image_id"]
+            if item["role"] == "envoy"
+            else manifest["kil_image_id"]
+        )
+        if item["image_id"] != expected_image_id or item["image_reference"] != source["image"]:
+            raise ControllerError("active state Docker image identity is invalid")
+        if (
+            type(item["config_path"]) is not str
+            or not Path(item["config_path"]).is_absolute()
+            or type(item["config_sha256"]) is not str
+            or _HEX.fullmatch(item["config_sha256"]) is None
+        ):
+            raise ControllerError("active state config attestation is invalid")
+        track_record = next(
+            record
+            for record in manifest["tracks"]  # type: ignore[union-attr]
+            if record["track"] == item["track"]
+        )
+        expected_runtime = {
+            "name": item["name"],
+            "role": item["role"],
+            "track": item["track"],
+            "image_id": item["image_id"],
+            "network": track_record["network"],
+            "config_path": item["config_path"],
+            "config_sha256": item["config_sha256"],
+            "gateway_port": track_record["gateway_port"] if item["role"] == "envoy" else None,
+        }
+        runtime = validate_container_attestation(
+            item["runtime_attestation"], expected_runtime
+        )
+        if runtime["id"] != item["id"]:
+            raise ControllerError("active state runtime ID does not match object ID")
+    networks = state.get("network_objects")
+    expected_networks = {
+        item["name"]: item
+        for item in manifest["networks"]  # type: ignore[union-attr]
+    }
+    if type(networks) is not list or len(networks) != 3:
+        raise ControllerError("active state network objects are invalid")
+    for network in networks:
+        if type(network) is not dict or set(network) != {"name", "id", "track", "labels"}:
+            raise ControllerError("active state network object is invalid")
+        if (
+            network["name"] not in expected_networks
+            or expected_networks[network["name"]]["track"] != network["track"]
+            or type(network["id"]) is not str
+            or _HEX.fullmatch(network["id"]) is None
+        ):
+            raise ControllerError("active state network identity is invalid")
+        if network["labels"] != _object_labels(
+            str(state["run_id"]), None, str(network["track"])
+        ):
+            raise ControllerError("active state network labels are invalid")
+
+
+def load_bound_active_state(state_path: Path) -> dict[str, object]:
+    """Load active state only after checking both state and manifest bindings."""
+    if state_path.is_symlink() or not state_path.is_file():
+        raise ControllerError("active state is missing or unsafe")
+    state = _load_json_bytes(state_path.read_bytes(), "active state")
+    expected = {
+        "schema_version",
+        "run_id",
+        "manifest_path",
+        "manifest_sha256",
+        "colima_profile",
+        "profile_created",
+        "docker_host",
+        "docker_config",
+        "networks",
+        "objects",
+        "network_objects",
+        "binding_sha256",
+    }
+    if set(state) != expected or state["schema_version"] != STATE_SCHEMA:
+        raise ControllerError("active state fields are not closed")
+    if state["binding_sha256"] != _state_binding(state):
+        raise ControllerError("active state binding does not match")
+    manifest_path = Path(str(state["manifest_path"]))
+    if not manifest_path.is_absolute() or manifest_path.is_symlink() or not manifest_path.is_file():
+        raise ControllerError("active manifest is missing or unsafe")
+    payload = manifest_path.read_bytes()
+    if state["manifest_sha256"] != _digest_bytes(payload):
+        raise ControllerError("active manifest hash does not match state")
+    manifest = _load_json_bytes(payload, "active manifest")
+    _validate_manifest(manifest)
+    if payload != _canonical_bytes(manifest):
+        raise ControllerError("active manifest is not canonical")
+    for name in ("run_id", "colima_profile", "docker_host", "networks"):
+        if state[name] != manifest[name]:
+            raise ControllerError(f"active manifest {name} does not match state")
+    if state["profile_created"] is not True:
+        raise ControllerError("active state does not prove profile ownership")
+    _validate_state_objects(state, manifest)
+    state["manifest"] = manifest
+    return state
+
+
+def teardown_commands(
+    state: Mapping[str, object], *, docker_binary: Path
+) -> list[list[str]]:
+    """Construct exact ID-addressed cleanup; never discover deletion targets."""
+    if state.get("profile_created") is not True:
+        raise ControllerError("profile ownership is not proven")
+    if state.get("colima_profile") != LAB_IDENTITY:
+        raise ControllerError("profile ownership identity is invalid")
+    manifest = state.get("manifest")
+    if isinstance(manifest, dict):
+        _validate_state_objects(state, manifest)
+    prefix = [
+        str(docker_binary),
+        "--config",
+        str(state["docker_config"]),
+        "--host",
+        str(state["docker_host"]),
+    ]
+    objects = state.get("objects")
+    if type(objects) is not list or len(objects) != 9:
+        raise ControllerError("exact teardown objects are unavailable")
+    ordered = [
+        item for role in ("envoy", "authz", "target")
+        for item in objects
+        if isinstance(item, dict) and item.get("role") == role
+    ]
+    commands = [
+        [*prefix, "stop", "--timeout", "10", str(item["id"])]
+        for item in ordered
+    ]
+    commands.extend([*prefix, "rm", str(item["id"])] for item in ordered)
+    networks = state.get("network_objects")
+    if type(networks) is not list or len(networks) != 3:
+        raise ControllerError("exact teardown networks are unavailable")
+    commands.extend(
+        [*prefix, "network", "rm", str(network["id"])]
+        for network in networks
+        if isinstance(network, dict)
+    )
+    commands.extend(
+        [
+            ["colima", "stop", "--profile", LAB_IDENTITY],
+            [
+                "colima",
+                "delete",
+                "--profile",
+                LAB_IDENTITY,
+                "--force",
+                "--data",
+            ],
+        ]
+    )
+    return commands
+
+
+def _record_key(record: Mapping[str, object]) -> tuple[str, str]:
+    track = record.get("track")
+    request_id = record.get("request_id")
+    if type(track) is not str or type(request_id) is not str:
+        raise ControllerError("evidence record is missing its fixed join key")
+    try:
+        LiveTrack(track)
+    except ValueError as error:
+        raise ControllerError("evidence record track is invalid") from error
+    return track, request_id
+
+
+def _index_unique(
+    label: str, records: Sequence[Mapping[str, object]]
+) -> dict[tuple[str, str], Mapping[str, object]]:
+    result = {}
+    for record in records:
+        if type(record) is not dict:
+            raise ControllerError(f"{label} record must be an object")
+        key = _record_key(record)
+        if key in result:
+            raise ControllerError(f"duplicate {label} record for fixed join key")
+        result[key] = record
+    return result
+
+
+def _request_closed(record: Mapping[str, object]) -> None:
+    expected = {
+        "schema_version",
+        "run_id",
+        "request_id",
+        "track",
+        "method",
+        "path",
+        "attempt_count",
+        "retry_observed",
+        "retry_control_headers",
+        "authorization_sha256",
+        "q_state_present",
+        "q_state_sha256",
+        "adversarial_headers",
+        "comparison_facts_sha256",
+        "send_monotonic_ns",
+        "receive_monotonic_ns",
+        "client_response_status",
+        "client_decision_digest",
+    }
+    if set(record) != expected:
+        raise ControllerError("request record fields are not closed")
+    if record["schema_version"] != "kil.v3b1-request.v1":
+        raise ControllerError("request record schema is invalid")
+    if (
+        type(record["run_id"]) is not str
+        or type(record["request_id"]) is not str
+        or type(record["track"]) is not str
+        or type(record["method"]) is not str
+        or type(record["path"]) is not str
+        or type(record["attempt_count"]) is not int
+        or type(record["retry_observed"]) is not bool
+        or type(record["retry_control_headers"]) is not dict
+        or type(record["q_state_present"]) is not bool
+        or type(record["adversarial_headers"]) is not dict
+        or type(record["send_monotonic_ns"]) is not int
+        or type(record["receive_monotonic_ns"]) is not int
+        or type(record["client_response_status"]) is not int
+    ):
+        raise ControllerError("request record values are invalid")
+    _require_sha256("authorization_sha256", record["authorization_sha256"])
+    _require_sha256("comparison_facts_sha256", record["comparison_facts_sha256"])
+    if record["q_state_sha256"] is not None:
+        _require_sha256("q_state_sha256", record["q_state_sha256"])
+    if record["client_decision_digest"] is not None:
+        _require_sha256("client_decision_digest", record["client_decision_digest"])
+    if record["adversarial_headers"] != ADVERSARIAL_HEADERS:
+        raise ControllerError("request adversarial header record is invalid")
+    if record["send_monotonic_ns"] < 0 or record["receive_monotonic_ns"] < record["send_monotonic_ns"]:
+        raise ControllerError("request monotonic timing is invalid")
+
+
+def _decision_closed(record: Mapping[str, object]) -> None:
+    expected = {
+        "schema_version",
+        "request_id",
+        "track",
+        "method",
+        "path",
+        "outcome",
+        "http_status",
+        "decision_digest",
+        "adapter_reasons",
+        "engine_reasons",
+        "untrusted_header_names",
+        "monotonic_ns",
+    }
+    if set(record) != expected or record["schema_version"] != "kil.v3b-authz-record.v1":
+        raise ControllerError("decision record fields are not closed")
+    if (
+        record["method"] != "POST"
+        or record["path"] != "/consequential/admin"
+        or record["outcome"] not in {"permit", "deny", "error"}
+        or type(record["http_status"]) is not int
+        or type(record["monotonic_ns"]) is not int
+        or record["monotonic_ns"] < 0
+    ):
+        raise ControllerError("decision record values are invalid")
+    allowed_adapter = {
+        "untrusted_mode_header_ignored", "credential_invalid", "policy_denied",
+        "baseline_permitted", "q_state_missing", "q_state_verification_failed",
+    }
+    allowed_engine = {
+        "permitted", "identity_mismatch", "class_mismatch", "immutable_veto",
+        "outside_environmental_envelope", "state_unauthentic",
+        "state_not_yet_valid", "state_expired", "arithmetic_failure",
+        "local_evidence_stale", "insufficient_charge", "insufficient_history",
+    }
+    allowed_untrusted = set(ADVERSARIAL_HEADERS)
+    for name, allowed in (
+        ("adapter_reasons", allowed_adapter),
+        ("engine_reasons", allowed_engine),
+        ("untrusted_header_names", allowed_untrusted),
+    ):
+        values = record[name]
+        if (
+            type(values) is not list
+            or len(values) != len(set(values))
+            or any(type(value) is not str or value not in allowed for value in values)
+        ):
+            raise ControllerError(f"decision {name} type/value/redaction is invalid")
+    encoded = canonical_json(dict(record)).lower()
+    if "bearer " in encoded or "eyj" in encoded or "authorization" in encoded:
+        raise ControllerError("decision record redaction is invalid")
+
+
+def _envoy_closed(record: Mapping[str, object]) -> None:
+    expected = {
+        "run_id",
+        "request_id",
+        "track",
+        "response_code",
+        "upstream_host",
+        "upstream_service_time",
+        "decision_digest",
+    }
+    if set(record) != expected:
+        raise ControllerError("Envoy record fields are not closed")
+    if any(type(record[name]) is not str for name in expected):
+        raise ControllerError("Envoy record values are invalid")
+    service_time = record["upstream_service_time"]
+    if service_time != "-" and re.fullmatch(r"0|[1-9][0-9]*", service_time) is None:
+        raise ControllerError("Envoy upstream service time is not canonical")
+
+
+def _target_closed(record: Mapping[str, object]) -> None:
+    expected = {
+        "schema_version",
+        "run_id",
+        "request_id",
+        "track",
+        "path",
+        "decision_digest",
+        "received_monotonic_ns",
+        "response_monotonic_ns",
+    }
+    if set(record) != expected or record["schema_version"] != "kil.v3b-target-record.v1":
+        raise ControllerError("target record fields are not closed")
+    if (
+        type(record["path"]) is not str
+        or type(record["received_monotonic_ns"]) is not int
+        or type(record["response_monotonic_ns"]) is not int
+        or record["received_monotonic_ns"] < 0
+        or record["response_monotonic_ns"] < record["received_monotonic_ns"]
+    ):
+        raise ControllerError("target timestamps are invalid")
+
+
+def _exact_digest(name: str, value: object) -> str:
+    if type(value) is not str or _HEX.fullmatch(value) is None:
+        raise ControllerError(f"{name} must be an exact decision digest")
+    return value
+
+
+def join_evidence(
+    manifest: dict[str, object],
+    requests: Sequence[Mapping[str, object]],
+    decisions: Sequence[Mapping[str, object]],
+    envoy: Sequence[Mapping[str, object]],
+    targets: Sequence[Mapping[str, object]],
+    *,
+    require_all_tracks: bool = True,
+) -> list[dict[str, object]]:
+    """Join closed records using manifest run, fixed track, and request ID."""
+    _validate_manifest(manifest)
+    request_index = _index_unique("request", requests)
+    decision_index = _index_unique("decision", decisions)
+    envoy_index = _index_unique("envoy", envoy)
+    target_index = _index_unique("target", targets)
+    expected_tracks = list(_TRACKS) if require_all_tracks else [
+        track for track in _TRACKS if (track.value, str(manifest["request_id"])) in request_index
+    ]
+    expected_keys = {
+        (track.value, str(manifest["request_id"])) for track in expected_tracks
+    }
+    if set(request_index) != expected_keys:
+        raise ControllerError("request evidence does not cover the fixed tracks exactly")
+    if set(decision_index) != expected_keys or set(envoy_index) != expected_keys:
+        raise ControllerError("decision and Envoy evidence must cover request keys exactly")
+    if not set(target_index).issubset(expected_keys):
+        raise ControllerError("target evidence contains an unplanned join key")
+    joins = []
+    comparison_hash: str | None = None
+    for track in expected_tracks:
+        key = (track.value, str(manifest["request_id"]))
+        request = request_index[key]
+        decision = decision_index[key]
+        proxy = envoy_index[key]
+        target = target_index.get(key)
+        _request_closed(request)
+        _decision_closed(decision)
+        _envoy_closed(proxy)
+        if target is not None:
+            _target_closed(target)
+        if request["run_id"] != manifest["run_id"]:
+            raise ControllerError("request run_id does not match fixed manifest")
+        if proxy["run_id"] != manifest["run_id"]:
+            raise ControllerError("Envoy run_id does not match fixed manifest")
+        if target is not None and target["run_id"] != manifest["run_id"]:
+            raise ControllerError("target run_id does not match fixed manifest")
+        if (
+            request["attempt_count"] != 1
+            or request["retry_observed"] is not False
+            or request["retry_control_headers"] != RETRY_CONTROL_HEADERS
+        ):
+            raise ControllerError("retry evidence invalidates the run")
+        if request["method"] != "POST" or request["path"] != "/consequential/admin":
+            raise ControllerError("request facts are not the central case")
+        if request["authorization_sha256"] != _digest_bytes(AUTHORIZATION.encode("utf-8")):
+            raise ControllerError("request authorization digest is not fixed")
+        expected_q_present = track is not LiveTrack.CREDENTIAL_POLICY_BASELINE
+        if request["q_state_present"] is not expected_q_present or (
+            expected_q_present and request["q_state_sha256"] is None
+        ) or (not expected_q_present and request["q_state_sha256"] is not None):
+            raise ControllerError("request Q-state presence does not match fixed track")
+        projected = {
+            "method": request["method"],
+            "path": request["path"],
+            "authorization_sha256": request["authorization_sha256"],
+            "adversarial_headers": request["adversarial_headers"],
+            "retry_control_headers": request["retry_control_headers"],
+        }
+        calculated_comparison = comparison_facts_sha256(projected)
+        if request["comparison_facts_sha256"] != calculated_comparison:
+            raise ControllerError("request comparison facts digest is invalid")
+        if comparison_hash is None:
+            comparison_hash = calculated_comparison
+        elif comparison_hash != calculated_comparison:
+            raise ControllerError("request comparison facts differ across tracks")
+        if decision["method"] != request["method"] or decision["path"] != request["path"]:
+            raise ControllerError("decision facts do not match request")
+        if target is not None:
+            if target["path"] != request["path"]:
+                raise ControllerError("target path does not match central request path")
+            if target["received_monotonic_ns"] > target["response_monotonic_ns"]:
+                raise ControllerError("target timestamps are invalid")
+        try:
+            response_code = str(proxy["response_code"])
+            if re.fullmatch(r"[1-9][0-9]{2}", response_code) is None:
+                raise ValueError
+            status = int(response_code)
+        except ValueError as error:
+            raise ControllerError("Envoy response code is invalid") from error
+        if type(decision["http_status"]) is not int or decision["http_status"] != status:
+            raise ControllerError("decision and Envoy HTTP statuses do not match")
+        if request["client_response_status"] != status:
+            raise ControllerError("client response status does not match observed boundary")
+        upstream_raw = proxy["upstream_host"]
+        if type(upstream_raw) is not str or not upstream_raw:
+            raise ControllerError("Envoy upstream value is invalid")
+        upstream = None if upstream_raw == "-" else upstream_raw
+        service_raw = proxy["upstream_service_time"]
+        if (upstream is None) != (service_raw == "-"):
+            raise ControllerError("deny/upstream service time sentinel disagrees with upstream")
+        upstream_service_time = None if service_raw == "-" else int(service_raw)
+        proxy_digest_raw = proxy["decision_digest"]
+        if status >= 500:
+            proxy_digest = (
+                None
+                if proxy_digest_raw == "-"
+                else _exact_digest("5xx Envoy decision_digest", proxy_digest_raw)
+            )
+        else:
+            if proxy_digest_raw == "-":
+                raise ControllerError(f"{status} Envoy digest cannot be the sentinel")
+            proxy_digest = _exact_digest("Envoy decision_digest", proxy_digest_raw)
+        decision_digest = decision["decision_digest"]
+        marker_count = 1 if target is not None else 0
+        outcome = decision["outcome"]
+        if status == 200:
+            if outcome != "permit" or upstream is None or target is None:
+                raise ControllerError("permit requires KIL permit, upstream, and one target")
+            digest = _exact_digest("decision_digest", decision_digest)
+            target_digest = _exact_digest("target decision_digest", target["decision_digest"])
+            if digest != proxy_digest or digest != target_digest:
+                raise ControllerError("permit decision digest equality failed")
+            if request["client_decision_digest"] != digest:
+                raise ControllerError("client response decision digest does not match permit")
+        elif status == 403:
+            if outcome != "deny" or upstream is not None or target is not None:
+                raise ControllerError("policy deny requires no upstream and zero targets")
+            digest = _exact_digest("decision_digest", decision_digest)
+            if digest != proxy_digest:
+                raise ControllerError("policy deny decision digest equality failed")
+            if request["client_decision_digest"] != digest:
+                raise ControllerError("client response decision digest does not match deny")
+        elif status >= 500:
+            if outcome != "error" or upstream is not None or target is not None:
+                raise ControllerError("authz error requires a KIL error and no forwarding")
+            if proxy_digest_raw != "-" or proxy_digest is not None:
+                raise ControllerError("5xx Envoy digest must be the raw sentinel")
+            if request["client_decision_digest"] is not None:
+                raise ControllerError("5xx client digest must be absent")
+            if decision_digest is not None:
+                _exact_digest("error decision_digest", decision_digest)
+        else:
+            raise ControllerError("unapproved evidence response status")
+        joins.append(
+            {
+                "schema_version": JOIN_SCHEMA,
+                "run_id": manifest["run_id"],
+                "request_id": manifest["request_id"],
+                "track": track.value,
+                "outcome": outcome,
+                "http_status": status,
+                "decision_digest": decision_digest,
+                "envoy_decision_digest": proxy_digest,
+                "upstream_host": upstream,
+                "upstream_service_time_ms": upstream_service_time,
+                "client_response_status": request["client_response_status"],
+                "client_decision_digest": request["client_decision_digest"],
+                "target_marker_count": marker_count,
+                "valid": True,
+            }
+        )
+    if require_all_tracks:
+        tuple_value = [
+            (item["outcome"], item["http_status"], item["target_marker_count"])
+            for item in joins
+        ]
+        if tuple_value != [
+            ("permit", 200, 1),
+            ("permit", 200, 1),
+            ("deny", 403, 0),
+        ]:
+            raise ControllerError(
+                "central result must be permit / permit / deny with 200 / 200 / 403 and 1 / 1 / 0 markers"
+            )
+        causal_reasons = {
+            LiveTrack.CREDENTIAL_POLICY_BASELINE: (
+                ["baseline_permitted"],
+                [],
+            ),
+            LiveTrack.SIGNED_STATE_ONLY: (
+                [],
+                ["permitted"],
+            ),
+            LiveTrack.SIGNED_PLUS_LOCAL_REDUCE: (
+                [],
+                ["insufficient_charge"],
+            ),
+        }
+        for track in _TRACKS:
+            decision = decision_index[(track.value, str(manifest["request_id"]))]
+            expected_adapter, expected_engine = causal_reasons[track]
+            if (
+                decision["adapter_reasons"] != expected_adapter
+                or decision["engine_reasons"] != expected_engine
+            ):
+                raise ControllerError(
+                    f"{track.value} decision reasons do not prove the fixed causal path"
+                )
+            if decision["untrusted_header_names"] != []:
+                raise ControllerError(
+                    f"{track.value} decision violates the filtered header boundary"
+                )
+    return joins
+
+
+def _jsonl_payload(records: Sequence[Mapping[str, object]]) -> bytes:
+    return b"".join(_canonical_bytes(dict(record)) for record in records)
+
+
+def _parse_jsonl_bytes(
+    payload: bytes,
+    label: str,
+    validator: Callable[[Mapping[str, object]], None],
+    *,
+    allow_empty: bool,
+) -> list[dict[str, object]]:
+    if len(payload) > 64 * 1024 * 1024 or (payload and not payload.endswith(b"\n")):
+        raise ControllerError(f"{label} is not bounded complete JSONL")
+    if not payload and not allow_empty:
+        raise ControllerError(f"{label} must not be empty")
+    records = []
+    for raw_line in payload.splitlines():
+        if not raw_line or len(raw_line) > 128 * 1024:
+            raise ControllerError(f"{label} contains an invalid record")
+        record = _load_json_bytes(raw_line, label)
+        validator(record)
+        if raw_line.decode("utf-8") != canonical_json(record):
+            raise ControllerError(f"{label} contains non-canonical JSON")
+        records.append(record)
+    return records
+
+
+def _summary(manifest: Mapping[str, object], joins: Sequence[Mapping[str, object]]) -> str:
+    teardown = manifest["teardown"]
+    assert isinstance(teardown, dict)
+    outcomes = " / ".join(str(item["outcome"]) for item in joins)
+    markers = " / ".join(str(item["target_marker_count"]) for item in joins)
+    return (
+        "# KIL V3B-1 local Envoy boundary evidence\n\n"
+        f"- Run ID: `{manifest['run_id']}`\n"
+        f"- Evidence scope: `{EVIDENCE_SCOPE}`\n"
+        f"- Outcomes: `{outcomes}`\n"
+        f"- Target markers: `{markers}`\n"
+        f"- Teardown: {teardown['status']}\n\n"
+        "This bundle is limited to the local pinned Envoy authorization boundary. "
+        "It does not establish cluster orchestration, past-event causality, or "
+        "workload benchmarking.\n"
+    )
+
+
+def _write_sums(output: Path) -> None:
+    paths = [output / name for name in _EVIDENCE_FILES]
+    raw_root = output / "raw/decisions"
+    if raw_root.is_dir():
+        paths.extend(sorted(raw_root.glob("*.jsonl")))
+    lines = []
+    for path in sorted(paths, key=lambda item: item.relative_to(output).as_posix()):
+        if not path.is_file() or path.is_symlink():
+            raise ControllerError("evidence checksum input is missing or unsafe")
+        relative = path.relative_to(output).as_posix()
+        lines.append(f"{_digest_bytes(path.read_bytes())}  {relative}\n")
+    _write_file(output / "SHA256SUMS", "".join(lines).encode("utf-8"), 0o444)
+
+
+def _verify_sums(output: Path) -> None:
+    path = output / "SHA256SUMS"
+    if path.is_symlink() or not path.is_file():
+        raise ControllerError("evidence checksum file is missing or unsafe")
+    seen = set()
+    for line in path.read_text(encoding="ascii").splitlines():
+        if "  " not in line:
+            raise ControllerError("evidence checksum line is malformed")
+        digest, relative = line.split("  ", 1)
+        _require_sha256("evidence checksum", digest)
+        if (
+            not relative
+            or relative.startswith("/")
+            or ".." in Path(relative).parts
+            or relative in seen
+        ):
+            raise ControllerError("evidence checksum path is invalid")
+        seen.add(relative)
+        target = output / relative
+        if target.is_symlink() or not target.is_file():
+            raise ControllerError("checksummed evidence file is missing or unsafe")
+        if _digest_bytes(target.read_bytes()) != digest:
+            raise ControllerError("evidence checksum mismatch")
+
+
+def verify_public_checksums(output: Path) -> None:
+    """Verify SHA256SUMS is sorted and covers every other public file exactly."""
+    if output.is_symlink() or not output.is_dir():
+        raise ControllerError("public evidence directory is missing or unsafe")
+    checksum_path = output / "SHA256SUMS"
+    if checksum_path.is_symlink() or not checksum_path.is_file():
+        raise ControllerError("public checksum file is missing or unsafe")
+    expected_files = []
+    for path in output.rglob("*"):
+        if path == checksum_path:
+            continue
+        if path.is_symlink():
+            raise ControllerError("public evidence contains an unchecked symbolic link")
+        if path.is_file():
+            expected_files.append(path.relative_to(output).as_posix())
+        elif not path.is_dir():
+            raise ControllerError("public evidence contains an unsafe unchecked object")
+    expected_files.sort()
+    lines = checksum_path.read_text(encoding="ascii").splitlines()
+    recorded: list[str] = []
+    for line in lines:
+        if "  " not in line:
+            raise ControllerError("public checksum line is malformed")
+        digest, relative = line.split("  ", 1)
+        _require_sha256("public checksum", digest)
+        if not relative or relative.startswith("/") or ".." in Path(relative).parts:
+            raise ControllerError("public checksum path is invalid")
+        target = output / relative
+        if target.is_symlink() or not target.is_file():
+            raise ControllerError("public checksum target is missing or unsafe")
+        if _digest_file(target) != digest:
+            raise ControllerError("public checksum mismatch")
+        recorded.append(relative)
+    if recorded != sorted(recorded):
+        raise ControllerError("public checksum entries are not sorted")
+    if recorded != expected_files:
+        raise ControllerError("public checksum set is incomplete: unchecked file or omission")
+
+
+_AUTHORITATIVE_BUNDLE_SCHEMA = "kil.v3b1-authoritative-bundle.v1"
+_FAILURE_BUNDLE_REPLACEMENT = "deterministic_empty_failure_v1"
+
+
+def _authoritative_file_names() -> set[str]:
+    return {
+        *_EVIDENCE_FILES,
+        "SHA256SUMS",
+        *{f"raw/decisions/{track.value}.jsonl" for track in _TRACKS},
+    }
+
+
+def _validate_authoritative_attestation(
+    value: Mapping[str, object],
+) -> dict[str, object]:
+    if type(value) is not dict or set(value) != {
+        "schema_version", "file_sha256", "binding_sha256",
+    }:
+        raise ControllerError("authoritative bundle attestation fields are not closed")
+    if value["schema_version"] != _AUTHORITATIVE_BUNDLE_SCHEMA:
+        raise ControllerError("authoritative bundle attestation schema is invalid")
+    hashes = value["file_sha256"]
+    if type(hashes) is not dict or set(hashes) != _authoritative_file_names():
+        raise ControllerError("authoritative bundle attestation file set is not closed")
+    for relative, digest in hashes.items():
+        if type(relative) is not str:
+            raise ControllerError("authoritative bundle attestation path is invalid")
+        _require_sha256("authoritative artifact sha256", digest)
+    _require_sha256("authoritative binding_sha256", value["binding_sha256"])
+    bound = {
+        "schema_version": _AUTHORITATIVE_BUNDLE_SCHEMA,
+        "file_sha256": dict(hashes),
+    }
+    expected_binding = _digest_bytes(canonical_json(bound).encode("utf-8"))
+    if value["binding_sha256"] != expected_binding:
+        raise ControllerError("authoritative bundle attestation binding is invalid")
+    return {**bound, "binding_sha256": expected_binding}
+
+
+def authoritative_bundle_attestation(output: Path) -> dict[str, object]:
+    """Bind every byte in one closed, checksummed provisional bundle."""
+    verify_public_checksums(output)
+    hashes = {
+        relative: _digest_file(output / relative)
+        for relative in sorted(_authoritative_file_names())
+    }
+    bound: dict[str, object] = {
+        "schema_version": _AUTHORITATIVE_BUNDLE_SCHEMA,
+        "file_sha256": hashes,
+    }
+    bound["binding_sha256"] = _digest_bytes(
+        canonical_json(bound).encode("utf-8")
+    )
+    return _validate_authoritative_attestation(bound)
+
+
+def _reattest_authoritative_bundle(
+    output: Path, expected: Mapping[str, object]
+) -> dict[str, object]:
+    recorded = _validate_authoritative_attestation(expected)
+    try:
+        observed = authoritative_bundle_attestation(output)
+    except ControllerError as error:
+        raise ControllerError(
+            "authoritative provisional bundle changed after durable binding"
+        ) from error
+    if observed != recorded:
+        raise ControllerError(
+            "authoritative provisional bundle changed after durable binding"
+        )
+    return observed
+
+
+def _journal_authoritative_attestation(
+    events: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    for event in reversed(events):
+        details = event.get("details")
+        if type(details) is dict and "authoritative_attestation" in details:
+            attestation = details["authoritative_attestation"]
+            if type(attestation) is not dict:
+                raise ControllerError(
+                    "durable authoritative bundle attestation is malformed"
+                )
+            return _validate_authoritative_attestation(attestation)
+    raise ControllerError("durable authoritative bundle attestation is missing")
+
+
+def _post_teardown_failure_transition(
+    events: Sequence[Mapping[str, object]], run_id: str
+) -> tuple[Mapping[str, object], Mapping[str, object] | None] | None:
+    intent_fields = {"run_id", "evidence_rejection", "replacement"}
+    completion_fields = {
+        *intent_fields,
+        "intent_sequence",
+        "authoritative_attestation",
+    }
+    latest_intent: Mapping[str, object] | None = None
+    for event in events:
+        if event.get("event") != "post_teardown_failure_bundle_intent":
+            continue
+        details = event.get("details")
+        if (
+            type(details) is not dict
+            or set(details) != intent_fields
+            or details["run_id"] != run_id
+            or type(details["evidence_rejection"]) is not str
+            or not details["evidence_rejection"]
+            or details["replacement"] != _FAILURE_BUNDLE_REPLACEMENT
+            or type(event.get("sequence")) is not int
+        ):
+            raise ControllerError("failure bundle replacement intent is invalid")
+        latest_intent = event
+    if latest_intent is None:
+        return None
+    intent_sequence = latest_intent["sequence"]
+    matches: list[Mapping[str, object]] = []
+    for event in events:
+        if event.get("event") != "post_teardown_failure_bundle_prepared":
+            continue
+        details = event.get("details")
+        if type(details) is not dict or details.get("intent_sequence") != intent_sequence:
+            continue
+        if (
+            set(details) != completion_fields
+            or details["run_id"] != run_id
+            or details["evidence_rejection"]
+            != latest_intent["details"]["evidence_rejection"]  # type: ignore[index]
+            or details["replacement"] != _FAILURE_BUNDLE_REPLACEMENT
+            or type(details["authoritative_attestation"]) is not dict
+        ):
+            raise ControllerError("failure bundle replacement completion is invalid")
+        _validate_authoritative_attestation(
+            details["authoritative_attestation"]  # type: ignore[arg-type]
+        )
+        matches.append(event)
+    if len(matches) > 1:
+        raise ControllerError("failure bundle replacement completion is duplicated")
+    return latest_intent, matches[0] if matches else None
+
+
+def _public_summary(public_manifest: Mapping[str, object]) -> str:
+    completion = "verified teardown completed" if public_manifest["run_complete"] else "failed/incomplete lifecycle"
+    return (
+        "# KIL V3B-1 provisional local Envoy boundary bundle\n\n"
+        f"- Run ID: `{public_manifest['run_id']}`\n"
+        f"- Evidence scope: `{EVIDENCE_SCOPE}`\n"
+        f"- Bundle class: `{public_manifest['bundle_class']}`\n"
+        f"- Promotion: `not_promoted`\n"
+        f"- Lifecycle: {completion}\n"
+        "- Teardown: complete before publication\n\n"
+        "This is a provisional, non-promoted observation of the pinned local Envoy "
+        "authorization boundary. Inputs are modeled and outputs are observed. It does "
+        "not establish cluster orchestration, past-event guarantees, workload "
+        "benchmarking, or cross-track network-policy enforcement.\n"
+    )
+
+
+def _reject_public_secrets(value: object) -> None:
+    encoded = canonical_json(value)
+    forbidden = ("/Users/", "unix:///", "docker_host", "docker_config", "manifest_path")
+    if any(token in encoded for token in forbidden):
+        raise ControllerError("public manifest contains private host identity")
+
+
+def _validate_provisional_tree(output: Path, *, completed: bool) -> None:
+    expected = _authoritative_file_names()
+    actual = set()
+    for path in output.rglob("*"):
+        if path.is_symlink():
+            raise ControllerError("provisional bundle contains a symbolic link")
+        if path.is_file():
+            actual.add(path.relative_to(output).as_posix())
+        elif not path.is_dir():
+            raise ControllerError("provisional bundle contains an unsafe object")
+    if actual != expected:
+        raise ControllerError("provisional bundle public artifact set is not closed")
+    for track in _TRACKS:
+        records = _parse_jsonl_bytes(
+            (output / "raw/decisions" / f"{track.value}.jsonl").read_bytes(),
+            f"raw decisions {track.value}",
+            _decision_closed,
+            allow_empty=not completed,
+        )
+        if (completed and len(records) != 1) or len(records) > 1:
+            raise ControllerError("provisional raw decision cardinality is invalid")
+        if any(record["track"] != track.value for record in records):
+            raise ControllerError("provisional raw decision track is invalid")
+
+
+def _validate_source_attestations(
+    source_attestations: Sequence[Mapping[str, object]], *, completed: bool
+) -> None:
+    if not source_attestations and not completed:
+        return
+    fields = {
+        "track", "container_ids", "image_ids", "config_sha256",
+        "raw_decisions_sha256", "raw_decision_count", "raw_envoy_sha256",
+        "raw_envoy_count", "raw_targets_sha256", "raw_target_count",
+    }
+    roles = {"authz", "target", "envoy"}
+    if [item.get("track") for item in source_attestations] != [
+        track.value for track in _TRACKS
+    ]:
+        raise ControllerError("source attestations are not in fixed track order")
+    for index, item in enumerate(source_attestations):
+        if type(item) is not dict or set(item) != fields:
+            raise ControllerError("source attestation fields are not closed")
+        for name in ("container_ids", "image_ids", "config_sha256"):
+            mapping = item[name]
+            if type(mapping) is not dict or set(mapping) != roles:
+                raise ControllerError(f"source attestation {name} is not closed")
+        if any(
+            type(value) is not str or _HEX.fullmatch(value) is None
+            for value in item["container_ids"].values()  # type: ignore[union-attr]
+        ):
+            raise ControllerError("source attestation container IDs are invalid")
+        if any(
+            type(value) is not str or _IMAGE_ID.fullmatch(value) is None
+            for value in item["image_ids"].values()  # type: ignore[union-attr]
+        ):
+            raise ControllerError("source attestation image IDs are invalid")
+        for value in item["config_sha256"].values():  # type: ignore[union-attr]
+            _require_sha256("source config_sha256", value)
+        for name in (
+            "raw_decisions_sha256", "raw_envoy_sha256", "raw_targets_sha256",
+        ):
+            _require_sha256(f"source {name}", item[name])
+        expected_target_count = 0 if index == 2 else 1
+        if (
+            type(item["raw_decision_count"]) is not int
+            or type(item["raw_envoy_count"]) is not int
+            or type(item["raw_target_count"]) is not int
+            or item["raw_decision_count"] not in ({1} if completed else {0, 1})
+            or item["raw_envoy_count"] not in ({1} if completed else {0, 1})
+            or (
+                completed
+                and item["raw_target_count"] != expected_target_count
+            )
+            or (not completed and item["raw_target_count"] not in {0, 1})
+        ):
+            raise ControllerError("source attestation counts are invalid")
+
+
+def _validate_source_attestation_bindings(
+    output: Path,
+    source_attestations: Sequence[Mapping[str, object]],
+    manifest: Mapping[str, object],
+) -> None:
+    if not source_attestations:
+        return
+    envoy = _parse_jsonl_bytes(
+        (output / "envoy.jsonl").read_bytes(),
+        "published Envoy source",
+        _envoy_closed,
+        allow_empty=True,
+    )
+    targets = _parse_jsonl_bytes(
+        (output / "targets.jsonl").read_bytes(),
+        "published target source",
+        _target_closed,
+        allow_empty=True,
+    )
+    seen_container_ids: set[str] = set()
+    for track, attestation in zip(_TRACKS, source_attestations, strict=True):
+        raw_decisions = (
+            output / "raw/decisions" / f"{track.value}.jsonl"
+        ).read_bytes()
+        decision_records = _parse_jsonl_bytes(
+            raw_decisions,
+            f"published raw decisions {track.value}",
+            _decision_closed,
+            allow_empty=True,
+        )
+        track_envoy = [item for item in envoy if item["track"] == track.value]
+        track_targets = [item for item in targets if item["track"] == track.value]
+        bindings = {
+            "raw_decisions_sha256": _digest_bytes(raw_decisions),
+            "raw_decision_count": len(decision_records),
+            "raw_envoy_sha256": _digest_bytes(_jsonl_payload(track_envoy)),
+            "raw_envoy_count": len(track_envoy),
+            "raw_targets_sha256": _digest_bytes(_jsonl_payload(track_targets)),
+            "raw_target_count": len(track_targets),
+        }
+        if any(attestation[name] != value for name, value in bindings.items()):
+            raise ControllerError("source attestation does not bind published source bytes")
+        image_ids = attestation["image_ids"]
+        assert isinstance(image_ids, dict)
+        if image_ids != {
+            "authz": manifest["kil_image_id"],
+            "target": manifest["kil_image_id"],
+            "envoy": manifest["envoy_image_id"],
+        }:
+            raise ControllerError("source attestation image IDs diverge from manifest")
+        container_ids = attestation["container_ids"]
+        assert isinstance(container_ids, dict)
+        if seen_container_ids.intersection(container_ids.values()):
+            raise ControllerError("source attestation reuses a container ID")
+        seen_container_ids.update(container_ids.values())
+
+
+def _artifact_hash_map(output: Path) -> dict[str, str]:
+    hashes: dict[str, str] = {}
+    excluded = {"manifest.json", "summary.md", "SHA256SUMS"}
+    for path in sorted(
+        output.rglob("*"), key=lambda item: item.relative_to(output).as_posix()
+    ):
+        relative = path.relative_to(output).as_posix()
+        if relative in excluded:
+            continue
+        if path.is_symlink() or (not path.is_file() and not path.is_dir()):
+            raise ControllerError("provisional evidence contains an unsafe artifact")
+        if path.is_file():
+            hashes[relative] = _digest_file(path)
+    return hashes
+
+
+def finalize_publication(
+    provisional: Path,
+    public_parent: Path,
+    private_manifest: dict[str, object],
+    *,
+    source_attestations: Sequence[Mapping[str, object]],
+    tool_identities: Mapping[str, object],
+    engine_provenance: Mapping[str, object],
+    global_context_before: str,
+    global_context_after: str,
+    completed: bool,
+    authoritative_attestation: Mapping[str, object],
+    publication_fault: Callable[[str, Path], None] | None = None,
+    repository_root: Path | None = None,
+    publication_staging_root: Path | None = None,
+) -> Path:
+    """Finalize privately, then atomically rename one immutable public bundle."""
+    _validate_manifest(private_manifest)
+    safety_root = (
+        repository_root.resolve()
+        if repository_root is not None
+        else Path(
+            os.path.commonpath(
+                [str(provisional.absolute()), str(public_parent.absolute())]
+            )
+        ).resolve()
+    )
+    _require_contained(provisional, safety_root, "authoritative provisional")
+    _require_contained(public_parent, safety_root, "public evidence root")
+    if provisional.is_symlink() or not provisional.is_dir():
+        raise ControllerError("provisional evidence directory is missing or unsafe")
+    if public_parent.is_symlink():
+        raise ControllerError("public evidence root cannot be a symbolic link")
+    destination = public_parent / str(private_manifest["run_id"])
+    _require_contained(destination, public_parent, "public evidence destination")
+    if provisional.resolve() == destination.resolve(strict=False) or destination.exists():
+        raise ControllerError("public evidence clobber is forbidden")
+    manifest_path = provisional / "manifest.json"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise ControllerError("provisional manifest is missing or unsafe")
+    recorded_private = _load_json_bytes(manifest_path.read_bytes(), "provisional manifest")
+    _validate_manifest(recorded_private)
+    if recorded_private != private_manifest:
+        raise ControllerError("provisional manifest diverges from private lifecycle state")
+    if type(global_context_before) is not str or type(global_context_after) is not str:
+        raise ControllerError("global Docker context attestation is invalid")
+    if global_context_before != global_context_after:
+        raise ControllerError("global Docker context changed during controller lifecycle")
+    if type(source_attestations) not in (list, tuple):
+        raise ControllerError("source attestations must be a sequence")
+    _validate_public_provenance(tool_identities, engine_provenance)
+    _validate_source_attestations(source_attestations, completed=completed)
+    _validate_provisional_tree(provisional, completed=completed)
+    authoritative = _reattest_authoritative_bundle(
+        provisional, authoritative_attestation
+    )
+    _validate_source_attestation_bindings(
+        provisional, source_attestations, private_manifest
+    )
+    artifact_hashes = _artifact_hash_map(provisional)
+    bundle_class = (
+        "intermediate_provisional_local_boundary"
+        if completed
+        else "intermediate_provisional_failure_local_boundary"
+    )
+    identity = private_manifest["content_identity"]
+    assert isinstance(identity, dict)
+    public_manifest: dict[str, object] = {
+        "schema_version": "kil.v3b1-public-manifest.v1",
+        "run_id": private_manifest["run_id"],
+        "request_id": private_manifest["request_id"],
+        "evidence_scope": EVIDENCE_SCOPE,
+        "bundle_class": bundle_class,
+        "promotion_status": "not_promoted",
+        "run_complete": completed,
+        "platform": PLATFORM,
+        "source_commit": private_manifest["source_commit"],
+        "content_identity_sha256": private_manifest["content_identity_sha256"],
+        "private_manifest_sha256": _digest_bytes(_canonical_bytes(private_manifest)),
+        "immutable_images": {
+            "python": private_manifest["python_image_digest"],
+            "envoy_digest": private_manifest["envoy_image_digest"],
+            "envoy_image_id": private_manifest["envoy_image_id"],
+            "kil_image_id": private_manifest["kil_image_id"],
+            "kil_archive_sha256": private_manifest["kil_archive_sha256"],
+        },
+        "build_inputs": {
+            "dockerfile_sha256": identity["dockerfile_sha256"],
+            "dockerignore_sha256": identity["dockerignore_sha256"],
+            "build_context_sha256": identity["build_context_sha256"],
+            "context_strategy": "controller_exact_allowlist_for_legacy_builder",
+        },
+        "verified_tool_identities": dict(tool_identities),
+        "docker_engine_provenance": dict(engine_provenance),
+        "global_context_attestation": {
+            "before": global_context_before,
+            "after": global_context_after,
+            "unchanged": True,
+        },
+        "evidence_policy": {"inputs": "modeled", "outputs": "observed"},
+        "source_attestations": [dict(item) for item in source_attestations],
+        "artifact_hash_rule": "sha256_excludes_manifest_summary_and_SHA256SUMS",
+        "artifact_sha256": artifact_hashes,
+        "authoritative_bundle_sha256": authoritative["binding_sha256"],
+        "teardown": {
+            "status": "complete",
+            "verified_before_publication": True,
+        },
+        "claim_exclusions": [
+            "kind_cluster_validated",
+            "historical_prevention",
+            "production_performance",
+            "network_policy_validation",
+        ],
+    }
+    _reject_public_secrets(public_manifest)
+    publication_root = (
+        publication_staging_root
+        if publication_staging_root is not None
+        else provisional.parent / ".publication-staging"
+    )
+    _require_contained(publication_root, safety_root, "private publication staging")
+    if publication_root.is_symlink():
+        raise ControllerError("private publication staging cannot be a symbolic link")
+    publication_root.mkdir(parents=True, exist_ok=True)
+    _require_contained(publication_root, safety_root, "private publication staging")
+    if publication_root.is_symlink() or not publication_root.is_dir():
+        raise ControllerError("private publication staging is missing or unsafe")
+    staging = publication_root / (
+        f"{private_manifest['run_id']}-{secrets.token_hex(16)}"
+    )
+    _require_contained(staging, safety_root, "private publication staging run")
+    shutil.copytree(provisional, staging, symlinks=True)
+    _validate_provisional_tree(staging, completed=completed)
+    _reattest_authoritative_bundle(staging, authoritative)
+    if publication_fault is not None:
+        publication_fault("after_copy", staging)
+    staging_manifest = staging / "manifest.json"
+    _write_file(staging_manifest, _canonical_bytes(public_manifest), 0o444)
+    _write_file(
+        staging / "summary.md",
+        _public_summary(public_manifest).encode("utf-8"),
+        0o444,
+    )
+    if publication_fault is not None:
+        publication_fault("after_public_manifest", staging)
+    if publication_fault is not None:
+        publication_fault("before_atomic_rename", staging)
+    staged_manifest = _load_json_bytes(
+        (staging / "manifest.json").read_bytes(), "staged public manifest"
+    )
+    if staged_manifest != public_manifest:
+        raise ControllerError("staged public manifest changed before publication")
+    _validate_provisional_tree(staging, completed=completed)
+    staged_artifact_hashes = _artifact_hash_map(staging)
+    if staged_artifact_hashes != public_manifest["artifact_sha256"]:
+        raise ControllerError("staged artifact hash map changed before publication")
+    _validate_source_attestation_bindings(
+        staging, source_attestations, private_manifest
+    )
+    expected_summary = _public_summary(staged_manifest).encode("utf-8")
+    if (staging / "summary.md").read_bytes() != expected_summary:
+        raise ControllerError("staged public summary changed before publication")
+    _write_sums(staging)
+    verify_public_checksums(staging)
+    _require_contained(publication_root, safety_root, "private publication staging")
+    _require_contained(staging, publication_root, "private publication staging run")
+    if publication_root.is_symlink() or staging.is_symlink():
+        raise ControllerError("private publication staging changed before rename")
+    public_parent.mkdir(parents=True, exist_ok=True)
+    _require_contained(public_parent, safety_root, "public evidence root")
+    _require_contained(destination, public_parent, "public evidence destination")
+    if destination.exists():
+        raise ControllerError("public evidence clobber is forbidden")
+    os.rename(staging, destination)
+    verify_public_checksums(destination)
+    return destination
+
+
+def write_evidence_bundle(
+    evidence_root: Path,
+    manifest: dict[str, object],
+    *,
+    requests: Sequence[Mapping[str, object]],
+    decisions: Sequence[Mapping[str, object]],
+    envoy: Sequence[Mapping[str, object]],
+    targets: Sequence[Mapping[str, object]],
+    joins: Sequence[Mapping[str, object]],
+    raw_decisions: Mapping[LiveTrack, bytes] | None = None,
+    resume_attested: bool = False,
+) -> Path:
+    """Rebuild the exact public bundle from verified source records."""
+    _validate_manifest(manifest)
+    output = evidence_root / str(manifest["run_id"])
+    if output.exists() and any(output.iterdir()) and not resume_attested:
+        raise ControllerError("evidence run already exists; attested resume required")
+    output.mkdir(parents=True, exist_ok=True)
+    allowed = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
+    unexpected = {item.name for item in output.iterdir()} - allowed
+    if unexpected:
+        raise ControllerError(f"evidence directory contains unexpected files: {sorted(unexpected)}")
+    raw_root = output / "raw/decisions"
+    raw_root.mkdir(parents=True, exist_ok=True)
+    if raw_decisions is None:
+        raw_decisions = {
+            track: _jsonl_payload(
+                [record for record in decisions if record.get("track") == track.value]
+            )
+            for track in _TRACKS
+        }
+    if set(raw_decisions) != set(_TRACKS):
+        raise ControllerError("raw decision sources must cover the three fixed tracks")
+    for track in _TRACKS:
+        payload = raw_decisions[track]
+        parsed = _parse_jsonl_bytes(
+            payload,
+            f"raw decisions for {track.value}",
+            _decision_closed,
+            allow_empty=False,
+        )
+        if any(record["track"] != track.value for record in parsed):
+            raise ControllerError("raw decision source track does not match fixed file")
+        _write_file(raw_root / f"{track.value}.jsonl", payload, 0o444)
+    normalized_decisions = _normalized_decision_records(manifest, decisions)
+    _write_file(output / "requests.jsonl", _jsonl_payload(requests), 0o444)
+    _write_file(
+        output / "decisions.jsonl", _jsonl_payload(normalized_decisions), 0o444
+    )
+    _write_file(output / "envoy.jsonl", _jsonl_payload(envoy), 0o444)
+    _write_file(output / "targets.jsonl", _jsonl_payload(targets), 0o444)
+    _write_file(output / "joins.jsonl", _jsonl_payload(joins), 0o444)
+    _write_file(output / "manifest.json", _canonical_bytes(manifest), 0o444)
+    _write_file(output / "summary.md", _summary(manifest, joins).encode("utf-8"), 0o444)
+    _write_sums(output)
+    _verify_sums(output)
+    return output
+
+
+def _normalized_decision_records(
+    manifest: Mapping[str, object], decisions: Sequence[Mapping[str, object]]
+) -> list[dict[str, object]]:
+    return [
+        {
+            "schema_version": "kil.v3b1-collected-decision.v1",
+            "source_schema_version": record["schema_version"],
+            "source_record_sha256": _digest_bytes(
+                canonical_json(record).encode("utf-8")
+            ),
+            "run_id": manifest["run_id"],
+            "run_id_provenance": "manifest_attested_enrichment",
+            **{
+                key: value
+                for key, value in record.items()
+                if key != "schema_version"
+            },
+        }
+        for record in decisions
+    ]
+
+
+def _prepare_failure_provisional(
+    provisional_root: Path,
+    manifest: dict[str, object],
+    *,
+    requests: Sequence[Mapping[str, object]] | None = None,
+    raw_decisions: Mapping[LiveTrack, bytes] | None = None,
+    envoy: Sequence[Mapping[str, object]] | None = None,
+    targets: Sequence[Mapping[str, object]] | None = None,
+    reset: bool = False,
+) -> Path:
+    """Preserve an incomplete lifecycle without representing it as promotable proof."""
+    _validate_manifest(manifest)
+    output = provisional_root / str(manifest["run_id"])
+    output.mkdir(parents=True, exist_ok=True)
+    allowed = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
+    unexpected = {item.name for item in output.iterdir()} - allowed
+    if unexpected:
+        raise ControllerError("failure provisional contains unexpected files")
+    raw_root = output / "raw/decisions"
+    raw_root.mkdir(parents=True, exist_ok=True)
+    if raw_decisions is not None and set(raw_decisions) != set(_TRACKS):
+        raise ControllerError("failure raw decisions do not cover fixed tracks")
+    parsed_decisions: list[dict[str, object]] = []
+    for track in _TRACKS:
+        path = raw_root / f"{track.value}.jsonl"
+        if raw_decisions is not None:
+            payload = raw_decisions[track]
+            parsed = _parse_jsonl_bytes(
+                payload,
+                f"failure raw decisions {track.value}",
+                _decision_closed,
+                allow_empty=True,
+            )
+            if any(record["track"] != track.value for record in parsed):
+                raise ControllerError("failure raw decision track is invalid")
+            parsed_decisions.extend(parsed)
+            _write_file(path, payload, 0o444)
+        elif reset or not path.exists():
+            _write_file(path, b"", 0o444)
+    supplied = {
+        "requests.jsonl": requests,
+        "decisions.jsonl": (
+            _normalized_decision_records(manifest, parsed_decisions)
+            if raw_decisions is not None
+            else None
+        ),
+        "envoy.jsonl": envoy,
+        "targets.jsonl": targets,
+        "joins.jsonl": None,
+    }
+    for name, records in supplied.items():
+        path = output / name
+        if records is not None:
+            _write_file(path, _jsonl_payload(records), 0o444)
+        elif reset or not path.exists():
+            _write_file(path, b"", 0o444)
+    _write_file(output / "manifest.json", _canonical_bytes(manifest), 0o444)
+    _write_file(
+        output / "summary.md",
+        (
+            "# KIL V3B-1 incomplete private lifecycle evidence\n\n"
+            "This provisional bundle is non-promotable and awaits verified teardown.\n"
+        ).encode("utf-8"),
+        0o444,
+    )
+    _write_sums(output)
+    _verify_sums(output)
+    return output
+
+
+def finalize_teardown_evidence(output: Path, run_id: str) -> None:
+    """Finalize teardown only after exact runtime cleanup has completed."""
+    manifest_path = output / "manifest.json"
+    manifest = _load_json_bytes(manifest_path.read_bytes(), "evidence manifest")
+    _validate_manifest(manifest)
+    if manifest["run_id"] != run_id:
+        raise ControllerError("teardown run does not match evidence manifest")
+    teardown = manifest["teardown"]
+    assert isinstance(teardown, dict)
+    teardown.update(
+        {
+            "status": "complete",
+            "containers_removed": True,
+            "network_removed": True,
+            "profile_deleted": True,
+        }
+    )
+    joins = _parse_jsonl_bytes(
+        (output / "joins.jsonl").read_bytes(),
+        "joins",
+        lambda record: None,
+        allow_empty=False,
+    )
+    _write_file(manifest_path, _canonical_bytes(manifest), 0o444)
+    _write_file(output / "summary.md", _summary(manifest, joins).encode("utf-8"), 0o444)
+    _write_sums(output)
+    _verify_sums(output)
+
+
+def _default_port_probe(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.1)
+        return probe.connect_ex(("127.0.0.1", port)) == 0
+
+
+class LocalEnvoyController:
+    """Exact lifecycle controller with an injected argv command runner."""
+
+    def __init__(
+        self,
+        root: Path = ROOT,
+        runner: CommandRunner | None = None,
+        *,
+        home: Path | None = None,
+        port_probe: Callable[[int], bool] = _default_port_probe,
+        tool_verifier: Callable[[], object] | None = None,
+    ) -> None:
+        self.root = root.resolve()
+        self.runner = runner or SubprocessCommandRunner()
+        self.home = (home or Path.home()).resolve()
+        self.profile_path = self.root / "deploy/kind/v3b-profile.json"
+        self.profile = V3BProfile.load(self.profile_path)
+        self.docker_binary = self.root / ".tools/bin/docker"
+        self.docker_config = self.root / ".tools/v3b1-docker-config"
+        self.staging_root = self.root / ".tools/v3b1-staging"
+        self.private_root = self.root / ".tools/v3b1-private"
+        self.journal_path = self.private_root / "journal.json"
+        self.manifest_root = self.private_root / "manifests"
+        self.provisional_root = self.private_root / "provisional"
+        self.completed_root = self.private_root / "completed"
+        self.publication_staging_root = self.private_root / "publication-staging"
+        self.state_path = self.root / ".tools/state/v3b1-active.json"
+        self.evidence_root = self.root / "artifacts/generated/v3b1-local-envoy"
+        self.docker_host = (
+            f"unix://{self.home}/.colima/{LAB_IDENTITY}/docker.sock"
+        )
+        self.port_probe = port_probe
+        self.tool_verifier = tool_verifier or self._verify_tool_lock
+        self.command_env = {
+            "HOME": str(self.home),
+            "LANG": "C",
+            "LC_ALL": "C",
+            "PATH": os.environ.get("PATH", os.defpath),
+        }
+        self.docker_env = {**self.command_env, "DOCKER_BUILDKIT": "0"}
+
+    def _execute(
+        self,
+        argv: Sequence[str],
+        *,
+        timeout_s: float,
+        docker: bool = False,
+    ) -> CommandResult:
+        if not argv or any(type(part) is not str or not part for part in argv):
+            raise ControllerError("controller command is not an explicit argv list")
+        if docker:
+            required_prefix = [
+                str(self.docker_binary),
+                "--config",
+                str(self.docker_config),
+                "--host",
+                self.docker_host,
+            ]
+            if list(argv[:5]) != required_prefix:
+                raise ControllerError("Docker command is not explicitly isolated")
+            if not self.docker_config.is_dir() or any(self.docker_config.iterdir()):
+                raise ControllerError("controller Docker config is not an empty directory")
+        result = self.runner.run(
+            list(argv),
+            cwd=self.root,
+            env=self.docker_env if docker else self.command_env,
+            timeout_s=timeout_s,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip()[:1000]
+            raise ControllerError(f"command failed ({argv[0]}): {detail}")
+        return result
+
+    def _execute_optional(
+        self,
+        argv: Sequence[str],
+        *,
+        timeout_s: float,
+        docker: bool = False,
+    ) -> CommandResult:
+        if not argv or any(type(part) is not str or not part for part in argv):
+            raise ControllerError("controller command is not an explicit argv list")
+        if docker:
+            required_prefix = [
+                str(self.docker_binary), "--config", str(self.docker_config),
+                "--host", self.docker_host,
+            ]
+            if list(argv[:5]) != required_prefix:
+                raise ControllerError("Docker command is not explicitly isolated")
+            if not self.docker_config.is_dir() or any(self.docker_config.iterdir()):
+                raise ControllerError("controller Docker config is not an empty directory")
+        return self.runner.run(
+            list(argv),
+            cwd=self.root,
+            env=self.docker_env if docker else self.command_env,
+            timeout_s=timeout_s,
+        )
+
+    def _verify_tool_lock(self) -> object:
+        version_arguments = {
+            "docker": ("--version",),
+            "kind": ("version",),
+            "kubectl": ("version", "--client", "-o", "json"),
+        }
+
+        def version_runner(name: str, binary: Path) -> str:
+            result = self._execute(
+                [str(binary), *version_arguments[name]], timeout_s=20
+            )
+            return (result.stdout + result.stderr).strip()
+
+        return verify_content_lock(
+            self.root / ".tools/locks/v3b-tools.json",
+            self.profile_path,
+            self.root / ".tools",
+            version_runner=version_runner,
+            require_complete=True,
+        )
+
+    def _execution_staging_root(
+        self, execution_nonce: str, *, create: bool = False
+    ) -> Path:
+        _require_sha256("execution staging nonce", execution_nonce)
+        path = self.staging_root / execution_nonce
+        _require_contained(path, self.staging_root, "execution staging root")
+        if path.is_symlink():
+            raise ControllerError("execution staging root cannot be a symbolic link")
+        if create:
+            path.mkdir(parents=False, exist_ok=True)
+            _require_contained(path, self.staging_root, "execution staging root")
+            if path.is_symlink() or not path.is_dir():
+                raise ControllerError("execution staging root is missing or unsafe")
+            os.chmod(path, 0o700)
+        return path
+
+    def colima_start_command(self, execution_nonce: str) -> list[str]:
+        execution_staging = self._execution_staging_root(execution_nonce)
+        return [
+            "colima",
+            "start",
+            "--profile",
+            LAB_IDENTITY,
+            "--runtime",
+            "docker",
+            "--activate=false",
+            "--ssh-config=false",
+            "--cpus",
+            "4",
+            "--memory",
+            "8",
+            "--disk",
+            "60",
+            "--vm-type",
+            "vz",
+            "--kubernetes=false",
+            "--arch=aarch64",
+            "--save-config=true",
+            "--template=false",
+            "--binfmt=false",
+            "--vz-rosetta=false",
+            "--mount-inotify=false",
+            "--network-mode=shared",
+            "--network-address=false",
+            "--network-host-addresses=false",
+            "--network-preferred-route=false",
+            "--port-forwarder=ssh",
+            "--ssh-agent=false",
+            "--nested-virtualization=false",
+            "--mount",
+            str(execution_staging),
+            "--mount-type=virtiofs",
+        ]
+
+    def docker_command(self, *arguments: str) -> list[str]:
+        if any(type(item) is not str or not item for item in arguments):
+            raise ControllerError("Docker arguments must be nonempty strings")
+        return [
+            str(self.docker_binary),
+            "--config",
+            str(self.docker_config),
+            "--host",
+            self.docker_host,
+            *arguments,
+        ]
+
+    def validate_ports(self) -> None:
+        for port in self.profile.gateway_ports:
+            if self.port_probe(port):
+                raise ControllerError(f"gateway port {port} is occupied")
+
+    def preflight(self) -> dict[str, object]:
+        tools = self.tool_verifier()
+        colima = self._execute(["colima", "version"], timeout_s=20)
+        lima = self._execute(["limactl", "--version"], timeout_s=20)
+        if self.profile.colima_version not in (colima.stdout + colima.stderr):
+            raise ControllerError("Colima version does not match profile")
+        if self.profile.lima_version not in (lima.stdout + lima.stderr):
+            raise ControllerError("Lima version does not match profile")
+        listed = self._execute(["colima", "list", "--json"], timeout_s=20)
+        profiles = parse_colima_profiles(listed.stdout)
+        validate_colima_profiles(profiles)
+        self.validate_ports()
+        return {
+            "profiles": profiles,
+            "ports": self.profile.gateway_ports,
+            "tool_identities": _tool_identity_projection(tools),
+        }
+
+    def _prepare_private_roots(self) -> None:
+        for path, label in (
+            (self.staging_root, "Colima staging root"),
+            (self.docker_config, "Docker config root"),
+            (self.private_root, "controller private root"),
+            (self.state_path.parent, "active state directory"),
+            (self.evidence_root, "public evidence root"),
+        ):
+            _require_contained(path, self.root, label)
+            if path.is_symlink():
+                raise ControllerError(f"{label} cannot be a symbolic link")
+            path.mkdir(parents=True, exist_ok=True)
+        if any(self.docker_config.iterdir()):
+            raise ControllerError("controller Docker config directory must be empty")
+        os.chmod(self.staging_root, 0o700)
+        os.chmod(self.docker_config, 0o700)
+        os.chmod(self.private_root, 0o700)
+        self._ensure_private_child(self.manifest_root, "private manifest root")
+        self._ensure_private_child(self.provisional_root, "private provisional root")
+        self._ensure_private_child(self.completed_root, "private completed root")
+        self._ensure_private_child(
+            self.publication_staging_root, "private publication staging root"
+        )
+
+    def _ensure_private_child(self, path: Path, label: str) -> Path:
+        _require_contained(path, self.private_root, label)
+        if path.is_symlink():
+            raise ControllerError(f"{label} cannot be a symbolic link")
+        path.mkdir(parents=False, exist_ok=True)
+        resolved = _require_contained(path, self.private_root, label)
+        if path.is_symlink() or not path.is_dir() or resolved != path.resolve():
+            raise ControllerError(f"{label} is missing or unsafe")
+        os.chmod(path, 0o700)
+        return path
+
+    def _private_manifest_root(self) -> Path:
+        return self._ensure_private_child(
+            self.manifest_root, "private manifest root"
+        )
+
+    def _private_provisional_root(self) -> Path:
+        return self._ensure_private_child(
+            self.provisional_root, "private provisional root"
+        )
+
+    def _private_completed_root(self) -> Path:
+        return self._ensure_private_child(
+            self.completed_root, "private completed root"
+        )
+
+    def _private_publication_root(self) -> Path:
+        return self._ensure_private_child(
+            self.publication_staging_root, "private publication staging root"
+        )
+
+    def _capture_global_context(self) -> str:
+        """Observe, but never mutate, the user's global Docker context."""
+        result = self._execute(
+            [str(self.docker_binary), "context", "show"], timeout_s=20
+        )
+        context = result.stdout.strip()
+        if not context or "\n" in context or "\r" in context:
+            raise ControllerError("global Docker context observation is invalid")
+        return context
+
+    def _capture_engine_provenance(self) -> dict[str, object]:
+        version = self._execute(
+            self.docker_command("version", "--format", "{{json .Server}}"),
+            timeout_s=60,
+            docker=True,
+        )
+        info = self._execute(
+            self.docker_command("info", "--format", "{{json .}}"),
+            timeout_s=60,
+            docker=True,
+        )
+        try:
+            version_value = json.loads(version.stdout, object_pairs_hook=_closed_object)
+            info_value = json.loads(info.stdout, object_pairs_hook=_closed_object)
+        except (json.JSONDecodeError, ControllerError) as error:
+            raise ControllerError("Docker engine provenance is not closed JSON") from error
+        if type(version_value) is not dict or type(info_value) is not dict:
+            raise ControllerError("Docker engine provenance is invalid")
+        observed_architecture = info_value.get("Architecture")
+        result = {
+            "server_version": version_value.get("Version"),
+            "api_version": version_value.get("ApiVersion"),
+            "git_commit": version_value.get("GitCommit"),
+            "go_version": version_value.get("GoVersion"),
+            "os": info_value.get("OSType"),
+            "architecture": "arm64" if observed_architecture in {"aarch64", "arm64"} else observed_architecture,
+            "kernel_version": info_value.get("KernelVersion"),
+            "storage_driver": info_value.get("Driver"),
+            "cgroup_driver": info_value.get("CgroupDriver"),
+            "cgroup_version": info_value.get("CgroupVersion"),
+        }
+        if result["os"] != "linux" or result["architecture"] != "arm64":
+            raise ControllerError("Docker engine is not the required linux/arm64 server")
+        if any(value is None for value in result.values()):
+            raise ControllerError("Docker engine provenance is incomplete")
+        return result
+
+    def _verify_profile_absent(self) -> None:
+        listed = self._execute(["colima", "list", "--json"], timeout_s=30)
+        profiles = parse_colima_profiles(listed.stdout)
+        if any(record["name"] == LAB_IDENTITY for record in profiles):
+            raise ControllerError("dedicated Colima profile remains after deletion")
+
+    def _validate_controller_identity(self, execution_nonce: str) -> str:
+        _require_sha256("Colima execution nonce", execution_nonce)
+        execution_staging = self._execution_staging_root(execution_nonce)
+        identity_path = execution_staging / f"ownership-{execution_nonce}.json"
+        _require_contained(
+            identity_path, execution_staging, "Colima ownership identity"
+        )
+        expected = _canonical_bytes(
+            {
+                "schema_version": "kil.v3b1-colima-ownership.v1",
+                "execution_nonce": execution_nonce,
+                "profile": LAB_IDENTITY,
+            }
+        )
+        if (
+            identity_path.is_symlink()
+            or not identity_path.is_file()
+            or identity_path.read_bytes() != expected
+        ):
+            raise ControllerError("controller-specific Colima identity is unavailable")
+        return _digest_bytes(expected)
+
+    def _attest_colima_after_start(
+        self, execution_nonce: str
+    ) -> dict[str, object]:
+        listed = self._execute(["colima", "list", "--json"], timeout_s=30)
+        profiles = parse_colima_profiles(listed.stdout)
+        matches = [record for record in profiles if record["name"] == LAB_IDENTITY]
+        if len(matches) != 1:
+            raise ControllerError("dedicated Colima profile identity is not unique")
+        profile = validate_dedicated_colima_profile(matches[0])
+        identity_sha256 = self._validate_controller_identity(execution_nonce)
+        config_path = self.home / ".colima" / LAB_IDENTITY / "colima.yaml"
+        _require_contained(config_path, self.home, "saved Colima config")
+        if config_path.is_symlink() or not config_path.is_file():
+            raise ControllerError("saved Colima config is missing or unsafe")
+        saved_config = _parse_saved_colima_config(
+            config_path.read_bytes(), self._execution_staging_root(execution_nonce)
+        )
+        return {
+            "profile": profile,
+            "saved_config": saved_config,
+            "controller_identity_sha256": identity_sha256,
+        }
+
+    def _resolve_image(self, tag: str) -> tuple[str, str]:
+        self._execute(
+            self.docker_command("image", "pull", "--platform", PLATFORM, tag),
+            timeout_s=900,
+            docker=True,
+        )
+        inspected = self._execute(
+            self.docker_command(
+                "image", "inspect", "--format", "{{json .RepoDigests}}", tag
+            ),
+            timeout_s=60,
+            docker=True,
+        )
+        digest = select_registry_digest(tag, inspected.stdout.strip())
+        image = self._execute(
+            self.docker_command("image", "inspect", "--format", "{{.Id}}", digest),
+            timeout_s=60,
+            docker=True,
+        ).stdout.strip()
+        if _IMAGE_ID.fullmatch(image) is None:
+            raise ControllerError("resolved image did not produce an immutable image ID")
+        architecture = self._execute(
+            self.docker_command(
+                "image", "inspect", "--format", "{{json .}}", image
+            ),
+            timeout_s=60,
+            docker=True,
+        )
+        try:
+            raw = json.loads(architecture.stdout, object_pairs_hook=_closed_object)
+            validate_image_architecture(
+                {"Os": raw.get("Os"), "Architecture": raw.get("Architecture")}
+            )
+        except (json.JSONDecodeError, ControllerError) as error:
+            raise ControllerError("resolved image architecture attestation failed") from error
+        return digest, image
+
+    def _clean_source_identity(self) -> str:
+        status = self._execute(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            timeout_s=30,
+        )
+        if status.stdout:
+            raise ControllerError("source tree must be clean before live execution")
+        commit = self._execute(
+            ["git", "rev-parse", "HEAD"], timeout_s=30
+        ).stdout.strip()
+        if re.fullmatch(r"[a-f0-9]{40}", commit) is None:
+            raise ControllerError("Git source commit is invalid")
+        return commit
+
+    def _build_kil_image(
+        self, python_digest: str, *, build_key: str | None = None
+    ) -> tuple[str, str]:
+        if build_key is None:
+            build_key = secrets.token_hex(32)
+        _require_sha256("build_key", build_key)
+        build_root = self.staging_root / "build" / build_key
+        _require_contained(build_root, self.staging_root, "per-execution build root")
+        build_root.mkdir(parents=True, exist_ok=True)
+        context_root = build_root / "context"
+        self._build_context_attestation = stage_build_context(self.root, context_root)
+        iid_path = build_root / "kil-image.id"
+        archive_path = build_root / "kil-image.tar"
+        for path in (iid_path, archive_path):
+            if path.exists():
+                path.unlink()
+        dockerfile = context_root / "deploy/kind/Dockerfile.v3b"
+        dockerignore = context_root / "deploy/kind/Dockerfile.v3b.dockerignore"
+        if any(path.is_symlink() or not path.is_file() for path in (dockerfile, dockerignore)):
+            raise ControllerError("closed Docker build inputs are missing or unsafe")
+        self._execute(
+            self.docker_command(
+                "build",
+                "--platform",
+                PLATFORM,
+                "--pull=false",
+                "--file",
+                str(dockerfile),
+                "--build-arg",
+                f"PYTHON_BASE_IMAGE={python_digest}",
+                "--iidfile",
+                str(iid_path),
+                str(context_root),
+            ),
+            timeout_s=1800,
+            docker=True,
+        )
+        if iid_path.is_symlink() or not iid_path.is_file():
+            raise ControllerError("Docker build did not record an image ID")
+        image_id = iid_path.read_text(encoding="ascii").strip()
+        if _IMAGE_ID.fullmatch(image_id) is None:
+            raise ControllerError("built KIL image ID is not immutable")
+        confirmed = self._execute(
+            self.docker_command("image", "inspect", "--format", "{{.Id}}", image_id),
+            timeout_s=60,
+            docker=True,
+        ).stdout.strip()
+        if confirmed != image_id:
+            raise ControllerError("built KIL image ID changed after build")
+        architecture = self._execute(
+            self.docker_command(
+                "image", "inspect", "--format", "{{json .}}", image_id
+            ),
+            timeout_s=60,
+            docker=True,
+        )
+        try:
+            raw = json.loads(architecture.stdout, object_pairs_hook=_closed_object)
+            validate_image_architecture(
+                {"Os": raw.get("Os"), "Architecture": raw.get("Architecture")}
+            )
+        except (json.JSONDecodeError, ControllerError) as error:
+            raise ControllerError("built image architecture attestation failed") from error
+        self._execute(
+            self.docker_command(
+                "image", "save", "--output", str(archive_path), image_id
+            ),
+            timeout_s=900,
+            docker=True,
+        )
+        if archive_path.is_symlink() or not archive_path.is_file():
+            raise ControllerError("KIL image archive was not saved")
+        return image_id, _digest_file(archive_path)
+
+    def _config_path(self, manifest: Mapping[str, object], role: str, track: str) -> Path:
+        name = "envoy.json" if role == "envoy" else f"{role}.json"
+        return _runtime_root(self.root, manifest) / track / name
+
+    def _inspect_container(
+        self,
+        identifier: str,
+        manifest: Mapping[str, object],
+        role: str,
+        track: str,
+        *,
+        require_running: bool = True,
+    ) -> dict[str, object]:
+        output = self._execute(
+            self.docker_command(
+                "inspect",
+                "--format",
+                "{{json .}}",
+                identifier,
+            ),
+            timeout_s=60,
+            docker=True,
+        ).stdout
+        try:
+            raw = json.loads(output, object_pairs_hook=_closed_object)
+        except (json.JSONDecodeError, ControllerError) as error:
+            raise ControllerError("container inspection is not closed JSON") from error
+        if type(raw) is not dict:
+            raise ControllerError("container inspection shape is invalid")
+        try:
+            object_id = raw["Id"]
+            name = raw["Name"]
+            image_id = raw["Image"]
+            config_value = raw["Config"]
+            host = raw["HostConfig"]
+            state_value = raw["State"]
+            network_settings = raw["NetworkSettings"]
+            mounts_value = raw["Mounts"]
+            assert isinstance(config_value, dict)
+            assert isinstance(host, dict)
+            assert isinstance(state_value, dict)
+            assert isinstance(network_settings, dict)
+            assert isinstance(mounts_value, list)
+            image_reference = config_value["Image"]
+            labels = config_value["Labels"]
+        except (KeyError, TypeError, AssertionError) as error:
+            raise ControllerError("container inspection required fields are missing") from error
+        expected_labels = _object_labels(str(manifest["run_id"]), role, track)
+        track_manifest = _track_manifest(manifest, LiveTrack(track))
+        expected_name = str(track_manifest[f"{role}_container"])
+        health_value = state_value.get("Health")
+        health = (
+            health_value.get("Status") if isinstance(health_value, dict) else "none"
+        )
+        if (
+            type(object_id) is not str
+            or _HEX.fullmatch(object_id) is None
+            or name != f"/{expected_name}"
+            or labels != expected_labels
+            or (require_running and state_value.get("Running") is not True)
+            or (require_running and role != "envoy" and health != "healthy")
+            or (require_running and role == "envoy" and health not in {"healthy", "none"})
+        ):
+            raise ControllerError("container ID/name/label/running attestation failed")
+        expected_image_id = (
+            manifest["envoy_image_id"] if role == "envoy" else manifest["kil_image_id"]
+        )
+        expected_reference = (
+            manifest["envoy_image_digest"] if role == "envoy" else manifest["kil_image_id"]
+        )
+        if image_id != expected_image_id or image_reference != expected_reference:
+            raise ControllerError("container immutable image attestation failed")
+        architecture = self._execute(
+            self.docker_command(
+                "image", "inspect", "--format", "{{json .}}", str(image_id)
+            ),
+            timeout_s=60,
+            docker=True,
+        )
+        try:
+            image_value = json.loads(
+                architecture.stdout, object_pairs_hook=_closed_object
+            )
+            validate_image_architecture(
+                {
+                    "Os": image_value.get("Os"),
+                    "Architecture": image_value.get("Architecture"),
+                }
+            )
+            image_config = image_value.get("Config")
+            if type(image_config) is not dict or config_value.get("Env") != image_config.get("Env"):
+                raise ControllerError("container environment diverges from immutable image")
+        except (json.JSONDecodeError, ControllerError, AttributeError) as error:
+            raise ControllerError("container image architecture attestation failed") from error
+        config = self._config_path(manifest, role, track)
+        if (
+            config.is_symlink()
+            or not config.is_file()
+            or config.stat().st_mode & 0o222
+        ):
+            raise ControllerError("container config is not fixed read-only input")
+        security = host.get("SecurityOpt") or []
+        if security == ["no-new-privileges:true"]:
+            security = ["no-new-privileges"]
+        raw_networks = network_settings.get("Networks")
+        if type(raw_networks) is not dict:
+            raise ControllerError("container network inspection is invalid")
+        raw_log = host.get("LogConfig")
+        if type(raw_log) is not dict:
+            raise ControllerError("container log inspection is invalid")
+        actual = {
+            "id": object_id,
+            "name": expected_name,
+            "image_id": image_id,
+            "user": config_value.get("User"),
+            "readonly_rootfs": host.get("ReadonlyRootfs"),
+            "cap_drop": host.get("CapDrop") or [],
+            "security_opt": security,
+            "nano_cpus": host.get("NanoCpus"),
+            "memory": host.get("Memory"),
+            "memory_swap": host.get("MemorySwap"),
+            "pids_limit": host.get("PidsLimit"),
+            "restart_policy": (
+                host.get("RestartPolicy") or {}
+            ).get("Name"),
+            "stop_timeout": config_value.get("StopTimeout"),
+            "log_driver": raw_log.get("Type"),
+            "log_options": raw_log.get("Config") or {},
+            "tmpfs": _normalize_inspected_tmpfs(host.get("Tmpfs") or {}),
+            "mounts": [
+                {
+                    "source": item.get("Source"),
+                    "destination": item.get("Destination"),
+                    "rw": item.get("RW"),
+                }
+                for item in mounts_value
+                if isinstance(item, dict)
+            ],
+            "networks": sorted(raw_networks),
+            "port_bindings": host.get("PortBindings") or {},
+            "platform": PLATFORM,
+            "entrypoint": config_value.get("Entrypoint") or [],
+            "command": config_value.get("Cmd") or [],
+            "environment": config_value.get("Env") or [],
+        }
+        expected = {
+            "name": expected_name,
+            "role": role,
+            "track": track,
+            "image_id": expected_image_id,
+            "network": track_manifest["network"],
+            "config_path": str(config),
+            "config_sha256": _digest_file(config),
+            "gateway_port": track_manifest["gateway_port"] if role == "envoy" else None,
+        }
+        validate_container_attestation(actual, expected)
+        return {
+            "name": expected_name,
+            "id": object_id,
+            "role": role,
+            "track": track,
+            "labels": labels,
+            "image_id": image_id,
+            "image_reference": image_reference,
+            "config_path": str(config),
+            "config_sha256": _digest_bytes(config.read_bytes()),
+            "runtime_attestation": actual,
+        }
+
+    def _inspect_network(
+        self,
+        identifier: str,
+        manifest: Mapping[str, object],
+        track: str,
+        *,
+        require_complete_membership: bool = True,
+    ) -> dict[str, object]:
+        output = self._execute(
+            self.docker_command(
+                "network",
+                "inspect",
+                "--format",
+                "{{.Id}}\\n{{.Name}}\\n{{.Driver}}\\n{{.Internal}}\\n{{json .Labels}}",
+                identifier,
+            ),
+            timeout_s=60,
+            docker=True,
+        ).stdout.splitlines()
+        if len(output) != 5:
+            raise ControllerError("network inspection shape is invalid")
+        object_id, name, driver, internal, raw_labels = output
+        try:
+            labels = json.loads(raw_labels, object_pairs_hook=_closed_object)
+        except (json.JSONDecodeError, ControllerError) as error:
+            raise ControllerError("network labels are invalid") from error
+        if (
+            _HEX.fullmatch(object_id) is None
+            or driver != "bridge"
+            or internal != "true"
+            or labels != _object_labels(str(manifest["run_id"]), None, track)
+        ):
+            raise ControllerError("network ID/label/internal attestation failed")
+        members = self._execute(
+            self.docker_command(
+                "network",
+                "inspect",
+                "--format",
+                "{{range .Containers}}{{println .Name}}{{end}}",
+                identifier,
+            ),
+            timeout_s=60,
+            docker=True,
+        ).stdout.split()
+        expected_members = {
+            str(item["name"])
+            for item in manifest["containers"]  # type: ignore[union-attr]
+            if item["track"] == track
+        }
+        if (
+            not set(members).issubset(expected_members)
+            or len(members) != len(set(members))
+            or (require_complete_membership and set(members) != expected_members)
+        ):
+            raise ControllerError("cross-track or incomplete network membership")
+        return {"name": name, "id": object_id, "track": track, "labels": labels}
+
+    def _inspect_validation_container(
+        self, identifier: str, manifest: Mapping[str, object], track: LiveTrack
+    ) -> dict[str, object]:
+        raw_output = self._execute(
+            self.docker_command("inspect", "--format", "{{json .}}", identifier),
+            timeout_s=60,
+            docker=True,
+        ).stdout
+        try:
+            raw = json.loads(raw_output, object_pairs_hook=_closed_object)
+        except (json.JSONDecodeError, ControllerError) as error:
+            raise ControllerError("Envoy validator inspection is not closed JSON") from error
+        if type(raw) is not dict or type(raw.get("Config")) is not dict or type(raw.get("HostConfig")) is not dict:
+            raise ControllerError("Envoy validator inspection fields are invalid")
+        config = raw["Config"]
+        host = raw["HostConfig"]
+        assert isinstance(config, dict) and isinstance(host, dict)
+        name = f"kil-v3b1-validate-{_track_slug(track)}-{str(manifest['content_identity_sha256'])[:12]}"
+        labels = _object_labels(str(manifest["run_id"]), "validator", track.value)
+        security = host.get("SecurityOpt") or []
+        if security == ["no-new-privileges:true"]:
+            security = ["no-new-privileges"]
+        if (
+            type(raw.get("Id")) is not str
+            or _HEX.fullmatch(str(raw["Id"])) is None
+            or raw.get("Name") != f"/{name}"
+            or raw.get("Image") != manifest["envoy_image_id"]
+            or config.get("Image") != manifest["envoy_image_digest"]
+            or config.get("Labels") != labels
+            or config.get("User") != "65532:65532"
+            or config.get("Entrypoint") != ["/usr/local/bin/envoy"]
+            or config.get("Cmd") != [
+                "--mode", "validate", "--config-path", "/etc/envoy/envoy.json",
+                "--disable-hot-restart", "--concurrency", "1",
+            ]
+            or host.get("ReadonlyRootfs") is not True
+            or host.get("CapDrop") != ["ALL"]
+            or security != ["no-new-privileges"]
+            or host.get("NetworkMode") != "none"
+            or (host.get("PortBindings") or {}) != {}
+        ):
+            raise ControllerError("Envoy validator immutable/sandbox attestation failed")
+        return {
+            "id": raw["Id"],
+            "name": name,
+            "role": "validator",
+            "track": track.value,
+            "labels": labels,
+            "image_id": manifest["envoy_image_id"],
+            "image_reference": manifest["envoy_image_digest"],
+        }
+
+    def _attest_runtime(
+        self, manifest: dict[str, object]
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        deadline = time.monotonic() + 60
+        while True:
+            try:
+                objects = []
+                for item in manifest["containers"]:  # type: ignore[union-attr]
+                    objects.append(
+                        self._inspect_container(
+                            str(item["name"]),
+                            manifest,
+                            str(item["role"]),
+                            str(item["track"]),
+                        )
+                    )
+                break
+            except ControllerError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.25)
+        networks = [
+            self._inspect_network(str(item["name"]), manifest, str(item["track"]))
+            for item in manifest["networks"]  # type: ignore[union-attr]
+        ]
+        return objects, networks
+
+    def _docker_object_exists(self, kind: str, identifier: str) -> bool:
+        if kind == "container":
+            command = self.docker_command(
+                "inspect", "--format", "{{.Id}}", identifier
+            )
+            absent_markers = ("no such object", "no such container")
+        elif kind == "network":
+            command = self.docker_command(
+                "network", "inspect", "--format", "{{.Id}}", identifier
+            )
+            absent_markers = ("no such network",)
+        else:
+            raise ControllerError("Docker recovery object kind is invalid")
+        result = self._execute_optional(command, timeout_s=30, docker=True)
+        if result.returncode == 0:
+            object_id = result.stdout.strip()
+            if _HEX.fullmatch(object_id) is None:
+                raise ControllerError("Docker recovery inspection returned an invalid ID")
+            return True
+        detail = (result.stderr or result.stdout).lower()
+        if any(marker in detail for marker in absent_markers):
+            return False
+        raise ControllerError("Docker recovery inspection failed ambiguously")
+
+    def _load_for_down(
+        self,
+    ) -> tuple[dict[str, object], dict[str, object] | None, dict[str, object]]:
+        journal = load_lifecycle_journal(self.journal_path)
+        if journal["docker_host"] != self.docker_host:
+            raise ControllerError("lifecycle Docker host ownership does not match")
+        manifest: dict[str, object] | None = None
+        if journal["manifest_path"] is not None:
+            manifest_path = Path(str(journal["manifest_path"]))
+            manifest = _load_json_bytes(manifest_path.read_bytes(), "private manifest")
+            _validate_manifest(manifest)
+            if _digest_file(manifest_path) != journal["manifest_sha256"]:
+                raise ControllerError("private manifest does not match lifecycle journal")
+        if self.state_path.exists():
+            bound = load_bound_active_state(self.state_path)
+            if manifest is None or bound["manifest"] != manifest:
+                raise ControllerError("active state and lifecycle manifest diverge")
+            candidate_objects = bound["objects"]
+            candidate_networks = bound["network_objects"]
+        elif manifest is not None:
+            candidate_objects = manifest["containers"]
+            candidate_networks = manifest["networks"]
+        else:
+            candidate_objects = []
+            candidate_networks = []
+        objects: list[dict[str, object]] = []
+        if manifest is not None:
+            for item in candidate_objects:  # type: ignore[union-attr]
+                name = str(item["name"])
+                identifier = str(item.get("id", name))
+                if not self._docker_object_exists("container", identifier):
+                    if identifier != name and self._docker_object_exists("container", name):
+                        raise ControllerError("recorded container ID disappeared but its name was reused")
+                    continue
+                current = self._inspect_container(
+                    identifier,
+                    manifest,
+                    str(item["role"]),
+                    str(item["track"]),
+                    require_running=False,
+                )
+                if "id" in item and current != item:
+                    raise ControllerError("recorded container attestation changed during recovery")
+                objects.append(current)
+        networks: list[dict[str, object]] = []
+        if manifest is not None:
+            for item in candidate_networks:  # type: ignore[union-attr]
+                name = str(item["name"])
+                identifier = str(item.get("id", name))
+                if not self._docker_object_exists("network", identifier):
+                    if identifier != name and self._docker_object_exists("network", name):
+                        raise ControllerError("recorded network ID disappeared but its name was reused")
+                    continue
+                current = self._inspect_network(
+                    identifier,
+                    manifest,
+                    str(item["track"]),
+                    require_complete_membership=False,
+                )
+                if "id" in item and current != item:
+                    raise ControllerError("recorded network attestation changed during recovery")
+                networks.append(current)
+        transient_objects: list[dict[str, object]] = []
+        if manifest is not None:
+            for track in _TRACKS:
+                name = (
+                    f"kil-v3b1-validate-{_track_slug(track)}-"
+                    f"{str(manifest['content_identity_sha256'])[:12]}"
+                )
+                if self._docker_object_exists("container", name):
+                    transient_objects.append(
+                        self._inspect_validation_container(name, manifest, track)
+                    )
+        state: dict[str, object] = {
+            "objects": objects,
+            "transient_objects": transient_objects,
+            "network_objects": networks,
+            "profile_created": journal["profile_created"],
+            "colima_profile": LAB_IDENTITY,
+            "docker_host": self.docker_host,
+            "docker_config": str(self.docker_config),
+        }
+        return state, manifest, journal
+
+    def up(self) -> dict[str, object]:
+        if self.state_path.exists() or self.journal_path.exists():
+            raise ControllerError("an active V3B-1 lifecycle already exists")
+        preflight = self.preflight()
+        profiles = preflight["profiles"]
+        if any(record["name"] == LAB_IDENTITY for record in profiles):
+            raise ControllerError("pre-existing dedicated profile is not controller-owned")
+        source_commit = self._clean_source_identity()
+        self._prepare_private_roots()
+        execution_nonce = secrets.token_hex(32)
+        execution_staging = self._execution_staging_root(
+            execution_nonce, create=True
+        )
+        global_context = self._capture_global_context()
+        create_lifecycle_journal(
+            self.journal_path,
+            private_root=self.private_root,
+            repository_root=self.root,
+            docker_host=self.docker_host,
+            source_commit=source_commit,
+            execution_nonce=execution_nonce,
+            global_context=global_context,
+        )
+        ownership_path = execution_staging / f"ownership-{execution_nonce}.json"
+        ownership_payload = _canonical_bytes(
+            {
+                "schema_version": "kil.v3b1-colima-ownership.v1",
+                "execution_nonce": execution_nonce,
+                "profile": LAB_IDENTITY,
+            }
+        )
+        _write_file(ownership_path, ownership_payload, 0o400)
+        journal_event(
+            self.journal_path,
+            "preflight_complete",
+            {
+                "tool_identities": preflight["tool_identities"],
+                "ports": list(self.profile.gateway_ports),
+                "dedicated_profile_absent": True,
+            },
+        )
+        start_command = self.colima_start_command(execution_nonce)
+        journal_event(
+            self.journal_path,
+            "colima_start_intent",
+            {
+                "profile": LAB_IDENTITY,
+                "command_sha256": _digest_bytes(_canonical_bytes(start_command)),
+            },
+        )
+        self._execute(start_command, timeout_s=900)
+        journal_event(
+            self.journal_path,
+            "colima_start_returned",
+            {"profile": LAB_IDENTITY, "command_returned_success": True},
+        )
+        journal_event(
+            self.journal_path,
+            "colima_attestation_intent",
+            {"profile": LAB_IDENTITY},
+        )
+        try:
+            colima_attestation = self._attest_colima_after_start(execution_nonce)
+        except Exception as error:
+            journal_event(
+                self.journal_path,
+                "colima_attestation_failed",
+                {"reason": f"{type(error).__name__}: {error}"[:1000]},
+            )
+            raise
+        journal_event(
+            self.journal_path,
+            "colima_attestation_complete",
+            {"profile": LAB_IDENTITY, "attestation": colima_attestation},
+        )
+        engine = self._capture_engine_provenance()
+        journal_event(self.journal_path, "engine_provenance_observed", engine)
+        journal_event(
+            self.journal_path,
+            "image_resolution_intent",
+            {"tag": PYTHON_IMAGE_TAG},
+        )
+        python_digest, python_image_id = self._resolve_image(PYTHON_IMAGE_TAG)
+        journal_event(
+            self.journal_path,
+            "image_resolution_complete",
+            {"tag": PYTHON_IMAGE_TAG, "digest": python_digest, "image_id": python_image_id},
+        )
+        journal_event(
+            self.journal_path,
+            "image_resolution_intent",
+            {"tag": self.profile.envoy_image},
+        )
+        envoy_digest, envoy_image_id = self._resolve_image(self.profile.envoy_image)
+        journal_event(
+            self.journal_path,
+            "image_resolution_complete",
+            {"tag": self.profile.envoy_image, "digest": envoy_digest, "image_id": envoy_image_id},
+        )
+        journal_event(
+            self.journal_path,
+            "image_build_intent",
+            {"base_digest": python_digest, "platform": PLATFORM},
+        )
+        kil_image_id, archive_sha = self._build_kil_image(
+            python_digest, build_key=execution_nonce
+        )
+        journal_event(
+            self.journal_path,
+            "image_build_complete",
+            {
+                "image_id": kil_image_id,
+                "archive_sha256": archive_sha,
+                "build_context": self._build_context_attestation,
+            },
+        )
+        if self._clean_source_identity() != source_commit:
+            raise ControllerError("source commit changed while staging build inputs")
+        staged_hashes = self._build_context_attestation.get("file_sha256")
+        if type(staged_hashes) is not dict:
+            raise ControllerError("staged build input hashes are unavailable")
+        dockerfile_hash = staged_hashes.get("deploy/kind/Dockerfile.v3b")
+        dockerignore_hash = staged_hashes.get(
+            "deploy/kind/Dockerfile.v3b.dockerignore"
+        )
+        _require_sha256("staged Dockerfile", dockerfile_hash)
+        _require_sha256("staged Docker ignore", dockerignore_hash)
+        manifest = create_run_manifest(
+            self.profile,
+            profile_sha256=_digest_bytes(self.profile_path.read_bytes()),
+            python_image_digest=python_digest,
+            envoy_image_digest=envoy_digest,
+            envoy_image_id=envoy_image_id,
+            kil_image_id=kil_image_id,
+            kil_archive_sha256=archive_sha,
+            docker_host=self.docker_host,
+            source_commit=source_commit,
+            source_clean=True,
+            execution_nonce=execution_nonce,
+            dockerfile_sha256=dockerfile_hash,
+            dockerignore_sha256=dockerignore_hash,
+            build_context_sha256=str(self._build_context_attestation["context_sha256"]),
+        )
+        output = self._private_provisional_root() / str(manifest["run_id"])
+        public_output = self.evidence_root / str(manifest["run_id"])
+        if output.exists() or public_output.exists():
+            raise ControllerError("content-addressed run output would clobber existing evidence")
+        output.mkdir(parents=True)
+        private_manifest_path = (
+            self._private_manifest_root() / f"{manifest['run_id']}.json"
+        )
+        if private_manifest_path.exists():
+            raise ControllerError("private content-addressed manifest would clobber existing state")
+        _write_file(private_manifest_path, _canonical_bytes(manifest), 0o400)
+        _write_file(output / "manifest.json", _canonical_bytes(manifest), 0o444)
+        _bind_journal_manifest(self.journal_path, private_manifest_path, manifest)
+        materialize_run_inputs(self.root, manifest)
+        created_ids: dict[str, str] = {}
+        for command in build_runtime_commands(
+            self.root, manifest, docker_binary=self.docker_binary
+        ):
+            if "network" in command and "create" in command:
+                event = "network_create"
+                name = command[-1]
+                details: dict[str, object] = {"name": name}
+            elif "run" in command and "-d" in command:
+                event = "container_create"
+                name = command[command.index("--name") + 1]
+                details = {"name": name}
+            else:
+                event = "config_validate"
+                name = command[command.index("--name") + 1]
+                details = {"name": name}
+            journal_event(self.journal_path, f"{event}_intent", details)
+            result = self._execute(command, timeout_s=300, docker=True)
+            completed_details = dict(details)
+            if event in {"network_create", "container_create"}:
+                object_id = result.stdout.strip()
+                if _HEX.fullmatch(object_id) is None:
+                    raise ControllerError(f"{event} did not return an exact object ID")
+                completed_details["id"] = object_id
+                created_ids[str(details["name"])] = object_id
+            journal_event(
+                self.journal_path, f"{event}_complete", completed_details
+            )
+        objects, networks = self._attest_runtime(manifest)
+        attested_ids = {
+            str(item["name"]): str(item["id"]) for item in [*objects, *networks]
+        }
+        if created_ids != attested_ids:
+            raise ControllerError("created Docker object IDs diverge from later attestation")
+        persist_active_state(
+            self.state_path,
+            private_manifest_path,
+            manifest,
+            objects=objects,
+            network_objects=networks,
+            profile_created=True,
+        )
+        journal_event(
+            self.journal_path,
+            "up_complete",
+            {
+                "state_path": str(self.state_path),
+                "state_sha256": _digest_file(self.state_path),
+            },
+        )
+        return manifest
+
+    def _load_and_reverify(self) -> tuple[dict[str, object], dict[str, object]]:
+        state = load_bound_active_state(self.state_path)
+        manifest = state["manifest"]
+        assert isinstance(manifest, dict)
+        for record in state["objects"]:  # type: ignore[union-attr]
+            current = self._inspect_container(
+                str(record["id"]),
+                manifest,
+                str(record["role"]),
+                str(record["track"]),
+            )
+            if current != record:
+                raise ControllerError("recorded container attestation changed")
+        for record in state["network_objects"]:  # type: ignore[union-attr]
+            current = self._inspect_network(
+                str(record["id"]), manifest, str(record["track"])
+            )
+            if current != record:
+                raise ControllerError("recorded network attestation changed")
+        return state, manifest
+
+    def _request_records(self, manifest: Mapping[str, object]) -> list[dict[str, object]]:
+        path = _runtime_root(self.root, manifest) / "requests.jsonl"
+        if path.is_symlink() or not path.is_file():
+            raise ControllerError("recorded central requests are unavailable")
+        records = _parse_jsonl_bytes(
+            path.read_bytes(), "requests", _request_closed, allow_empty=False
+        )
+        validate_request_journal(
+            records, load_lifecycle_journal(self.journal_path), require_all=True
+        )
+        return records
+
+    def _copy_sources(
+        self,
+        state: Mapping[str, object],
+        manifest: dict[str, object],
+        name: str,
+        *,
+        allow_incomplete: bool = False,
+    ) -> tuple[
+        dict[LiveTrack, bytes],
+        list[dict[str, object]],
+        list[dict[str, object]],
+    ]:
+        root = _runtime_root(self.root, manifest) / name
+        raw_decisions = {}
+        envoy_records = []
+        target_records = []
+        object_by_role_track = {
+            (item["role"], item["track"]): item
+            for item in state["objects"]  # type: ignore[union-attr]
+        }
+        for track in _TRACKS:
+            destination = root / track.value
+            destination.mkdir(parents=True, exist_ok=True)
+            decision_path = destination / "decisions.jsonl"
+            target_path = destination / "targets.jsonl"
+            envoy_path = destination / "envoy.stdout.jsonl"
+            for path in (decision_path, target_path, envoy_path):
+                if path.exists():
+                    path.unlink()
+            authz = object_by_role_track[("authz", track.value)]
+            target = object_by_role_track[("target", track.value)]
+            proxy = object_by_role_track[("envoy", track.value)]
+            self._execute(
+                self.docker_command(
+                    "cp",
+                    f"{authz['id']}:/evidence/decisions.jsonl",
+                    str(decision_path),
+                ),
+                timeout_s=60,
+                docker=True,
+            )
+            self._execute(
+                self.docker_command(
+                    "cp",
+                    f"{target['id']}:/evidence/targets.jsonl",
+                    str(target_path),
+                ),
+                timeout_s=60,
+                docker=True,
+            )
+            logs = self._execute(
+                self.docker_command("logs", str(proxy["id"])),
+                timeout_s=60,
+                docker=True,
+            )
+            _write_file(envoy_path, logs.stdout.encode("utf-8"), 0o444)
+            raw_decisions[track] = decision_path.read_bytes()
+            decisions = _parse_jsonl_bytes(
+                raw_decisions[track],
+                f"decisions {track.value}",
+                _decision_closed,
+                allow_empty=allow_incomplete,
+            )
+            if len(decisions) > 1 or (
+                not allow_incomplete and len(decisions) != 1
+            ) or any(item["track"] != track.value for item in decisions):
+                raise ControllerError("authz source cardinality/track is invalid")
+            targets = _parse_jsonl_bytes(
+                target_path.read_bytes(),
+                f"targets {track.value}",
+                _target_closed,
+                allow_empty=True,
+            )
+            if any(item["track"] != track.value for item in targets):
+                raise ControllerError("target source track is invalid")
+            if len(targets) > 1:
+                raise ControllerError("target source cardinality is invalid")
+            proxies = _parse_jsonl_bytes(
+                envoy_path.read_bytes(),
+                f"Envoy {track.value}",
+                _envoy_closed,
+                allow_empty=allow_incomplete,
+            )
+            if len(proxies) > 1 or (
+                not allow_incomplete and len(proxies) != 1
+            ) or any(item["track"] != track.value for item in proxies):
+                raise ControllerError("Envoy source cardinality/track is invalid")
+            envoy_records.extend(proxies)
+            target_records.extend(targets)
+        return raw_decisions, envoy_records, target_records
+
+    def collect(self) -> Path:
+        provisional_root = self._private_provisional_root()
+        journal_event(
+            self.journal_path,
+            "evidence_collect_intent",
+            {"mode": "independent_runtime_reverification"},
+        )
+        state, manifest = self._load_and_reverify()
+        requests = self._request_records(manifest)
+        raw, envoy, targets = self._copy_sources(
+            state, manifest, f"collect-{time.monotonic_ns()}"
+        )
+        decisions = []
+        for track in _TRACKS:
+            decisions.extend(
+                _parse_jsonl_bytes(
+                    raw[track],
+                    f"decisions {track.value}",
+                    _decision_closed,
+                    allow_empty=False,
+                )
+            )
+        joins = join_evidence(manifest, requests, decisions, envoy, targets)
+        output = write_evidence_bundle(
+            provisional_root,
+            manifest,
+            requests=requests,
+            decisions=decisions,
+            envoy=envoy,
+            targets=targets,
+            joins=joins,
+            raw_decisions=raw,
+            resume_attested=True,
+        )
+        authoritative = authoritative_bundle_attestation(output)
+        journal_event(
+            self.journal_path,
+            "evidence_collect_complete",
+            {
+                "completed": True,
+                "provisional_sha256s": {
+                    name: _digest_file(output / name)
+                    for name in _EVIDENCE_FILES
+                },
+                "authoritative_attestation": authoritative,
+            },
+        )
+        return output
+
+    def run(self) -> Path:
+        state, manifest = self._load_and_reverify()
+        runtime_root = _runtime_root(self.root, manifest)
+        request_path = runtime_root / "requests.jsonl"
+        if request_path.exists():
+            raise ControllerError("central request was already attempted")
+        journal = load_lifecycle_journal(self.journal_path)
+        if journal["manifest_sha256"] != _digest_file(Path(str(state["manifest_path"]))):
+            raise ControllerError("request lifecycle journal does not bind active manifest")
+        private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+        records: list[dict[str, object]] = []
+        comparison = {
+            "method": "POST",
+            "path": "/consequential/admin",
+            "authorization_sha256": _digest_bytes(AUTHORIZATION.encode("utf-8")),
+            "adversarial_headers": dict(ADVERSARIAL_HEADERS),
+            "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
+        }
+        comparison_sha = comparison_facts_sha256(comparison)
+        for track, port in zip(_TRACKS, self.profile.gateway_ports, strict=True):
+            issued = int(time.time())
+            q_state = None
+            if track is LiveTrack.SIGNED_STATE_ONLY:
+                q_state = issue_q_state(_claims("kil-v3-signed", issued), private_key)
+            elif track is LiveTrack.SIGNED_PLUS_LOCAL_REDUCE:
+                q_state = issue_q_state(_claims("kil-v3-local", issued), private_key)
+            headers = {
+                "authorization": AUTHORIZATION,
+                "x-request-id": str(manifest["request_id"]),
+                "x-kil-run-id": str(manifest["run_id"]),
+                **ADVERSARIAL_HEADERS,
+                **RETRY_CONTROL_HEADERS,
+            }
+            if q_state is not None:
+                headers["x-kil-q-state"] = q_state
+            if q_state is not None and int(time.time()) >= issued + 10:
+                raise ControllerError("signed-state request validity expired before send")
+            claim_request_attempt(self.journal_path, track)
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            send_ns = time.monotonic_ns()
+            try:
+                connection.request("POST", "/consequential/admin", body=b"", headers=headers)
+                response = connection.getresponse()
+                response.read(4096)
+            except OSError as error:
+                _complete_request_attempt(
+                    self.journal_path, track, success=False, record_sha256=None
+                )
+                raise ControllerError("central request failed without retry") from error
+            finally:
+                connection.close()
+            receive_ns = time.monotonic_ns()
+            if q_state is not None and int(time.time()) >= issued + 10:
+                _complete_request_attempt(
+                    self.journal_path, track, success=False, record_sha256=None
+                )
+                raise ControllerError("signed-state request missed its 10-second validity window")
+            client_digest = response.getheader("x-kil-decision-digest")
+            if response.status in {200, 403}:
+                client_digest = _exact_digest("client response decision digest", client_digest)
+            elif response.status >= 500:
+                if client_digest is not None:
+                    _complete_request_attempt(
+                        self.journal_path,
+                        track,
+                        success=False,
+                        record_sha256=None,
+                    )
+                    raise ControllerError("authz 5xx exposed a forbidden client digest")
+            else:
+                _complete_request_attempt(
+                    self.journal_path, track, success=False, record_sha256=None
+                )
+                raise ControllerError("client received an unapproved response status")
+            record = {
+                "schema_version": "kil.v3b1-request.v1",
+                "run_id": manifest["run_id"],
+                "request_id": manifest["request_id"],
+                "track": track.value,
+                "method": "POST",
+                "path": "/consequential/admin",
+                "attempt_count": 1,
+                "retry_observed": False,
+                "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
+                "authorization_sha256": comparison["authorization_sha256"],
+                "q_state_present": q_state is not None,
+                "q_state_sha256": (
+                    None if q_state is None else _digest_bytes(q_state.encode("utf-8"))
+                ),
+                "adversarial_headers": dict(ADVERSARIAL_HEADERS),
+                "comparison_facts_sha256": comparison_sha,
+                "send_monotonic_ns": send_ns,
+                "receive_monotonic_ns": receive_ns,
+                "client_response_status": response.status,
+                "client_decision_digest": client_digest,
+            }
+            _request_closed(record)
+            records.append(record)
+            _write_file(request_path, _jsonl_payload(records), 0o444)
+            _complete_request_attempt(
+                self.journal_path,
+                track,
+                success=True,
+                record_sha256=_digest_bytes(_canonical_bytes(record)),
+            )
+        return self.collect()
+
+    def _assert_only_recorded_managed(
+        self, state: Mapping[str, object], *, expect_present: bool
+    ) -> None:
+        containers = self._execute(
+            self.docker_command(
+                "ps",
+                "--all",
+                "--no-trunc",
+                "--format",
+                "{{.ID}}",
+            ),
+            timeout_s=60,
+            docker=True,
+        ).stdout.split()
+        networks = self._execute(
+            self.docker_command(
+                "network",
+                "ls",
+                "--no-trunc",
+                "--filter",
+                "type=custom",
+                "--format",
+                "{{.ID}}",
+            ),
+            timeout_s=60,
+            docker=True,
+        ).stdout.split()
+        expected_containers = {
+            str(item["id"]) for item in state["objects"]  # type: ignore[union-attr]
+        }
+        expected_containers.update(
+            str(item["id"])
+            for item in state.get("transient_objects", [])  # type: ignore[union-attr]
+        )
+        expected_networks = {
+            str(item["id"])
+            for item in state["network_objects"]  # type: ignore[union-attr]
+        }
+        if expect_present:
+            if set(containers) != expected_containers or set(networks) != expected_networks:
+                raise ControllerError("unrecorded managed Docker objects prevent teardown")
+        elif containers or networks:
+            raise ControllerError("managed Docker objects remain after exact teardown")
+
+    def _prepare_teardown_evidence(
+        self,
+        state: Mapping[str, object],
+        manifest: dict[str, object],
+        journal: Mapping[str, object],
+        objects: list[dict[str, object]],
+    ) -> tuple[Path | None, list[dict[str, object]], bool, str | None]:
+        """Freeze evidence without allowing evidence rejection to block owned cleanup."""
+        try:
+            provisional_root = self._private_provisional_root()
+            requests_state = journal["requests"]
+            assert isinstance(requests_state, dict)
+            attempted_complete = all(
+                item["status"] == "completed" for item in requests_state.values()
+            )
+            runtime_complete = len(objects) == 9 and len(state["network_objects"]) == 3  # type: ignore[arg-type]
+            prior_events = journal["events"]
+            assert isinstance(prior_events, list)
+            prior_collection_event = next(
+                (
+                    event
+                    for event in reversed(prior_events)
+                    if event["event"] == "evidence_collect_complete"
+                    and event["details"].get("completed") is True
+                ),
+                None,
+            )
+            prior_collection_complete = prior_collection_event is not None
+            prior_source_attestations = next(
+                (
+                    event["details"].get("source_attestations", [])
+                    for event in reversed(prior_events)
+                    if event["event"] == "source_attestations_persisted"
+                    and event["details"].get("source_attestations")
+                ),
+                [],
+            )
+            copied_raw: dict[LiveTrack, bytes] = {}
+            copied_envoy: list[dict[str, object]] = []
+            copied_targets: list[dict[str, object]] = []
+            if len(objects) == 9:
+                journal_event(
+                    self.journal_path,
+                    "evidence_collect_intent",
+                    {"mode": "stopped_container_byte_recopy"},
+                )
+                copied_raw, copied_envoy, copied_targets = self._copy_sources(
+                    state,
+                    manifest,
+                    f"down-{time.monotonic_ns()}",
+                    allow_incomplete=not attempted_complete,
+                )
+            completed = attempted_complete and (
+                runtime_complete or prior_collection_complete
+            )
+            resumed_after_removal = completed and not runtime_complete
+            if completed and not resumed_after_removal:
+                requests = self._request_records(manifest)
+                decisions: list[dict[str, object]] = []
+                for track in _TRACKS:
+                    decisions.extend(
+                        _parse_jsonl_bytes(
+                            copied_raw[track],
+                            f"decisions {track.value}",
+                            _decision_closed,
+                            allow_empty=False,
+                        )
+                    )
+                joins = join_evidence(
+                    manifest, requests, decisions, copied_envoy, copied_targets
+                )
+                output = write_evidence_bundle(
+                    provisional_root,
+                    manifest,
+                    requests=requests,
+                    decisions=decisions,
+                    envoy=copied_envoy,
+                    targets=copied_targets,
+                    joins=joins,
+                    raw_decisions=copied_raw,
+                    resume_attested=True,
+                )
+                if {
+                    track: (
+                        output / "raw/decisions" / f"{track.value}.jsonl"
+                    ).read_bytes()
+                    for track in _TRACKS
+                } != copied_raw:
+                    raise ControllerError(
+                        "stopped-container decision byte comparison failed"
+                    )
+                if (output / "envoy.jsonl").read_bytes() != _jsonl_payload(copied_envoy):
+                    raise ControllerError("stopped-container Envoy byte comparison failed")
+                if (output / "targets.jsonl").read_bytes() != _jsonl_payload(copied_targets):
+                    raise ControllerError("stopped-container target byte comparison failed")
+            elif resumed_after_removal:
+                output = provisional_root / str(manifest["run_id"])
+                if prior_collection_event is None:
+                    raise ControllerError(
+                        "completed recovery lacks durable collection authority"
+                    )
+                prior_authoritative = prior_collection_event["details"].get(
+                    "authoritative_attestation"
+                )
+                if type(prior_authoritative) is not dict:
+                    raise ControllerError(
+                        "completed recovery lacks durable authoritative binding"
+                    )
+                _reattest_authoritative_bundle(output, prior_authoritative)
+            else:
+                partial_requests: list[dict[str, object]] | None = None
+                if len(objects) == 9:
+                    request_path = _runtime_root(self.root, manifest) / "requests.jsonl"
+                    partial_requests = (
+                        _parse_jsonl_bytes(
+                            request_path.read_bytes(),
+                            "incomplete central requests",
+                            _request_closed,
+                            allow_empty=True,
+                        )
+                        if request_path.is_file() and not request_path.is_symlink()
+                        else []
+                    )
+                    validate_request_journal(
+                        partial_requests,
+                        load_lifecycle_journal(self.journal_path),
+                        require_all=False,
+                    )
+                output = _prepare_failure_provisional(
+                    provisional_root,
+                    manifest,
+                    requests=partial_requests,
+                    raw_decisions=copied_raw if len(objects) == 9 else None,
+                    envoy=copied_envoy if len(objects) == 9 else None,
+                    targets=copied_targets if len(objects) == 9 else None,
+                )
+            source_attestations: list[dict[str, object]] = [
+                dict(item) for item in prior_source_attestations
+            ]
+            if len(objects) == 9:
+                source_attestations = []
+                by_track_role = {
+                    (item["track"], item["role"]): item for item in objects
+                }
+                for track in _TRACKS:
+                    target_records = [
+                        item for item in copied_targets if item["track"] == track.value
+                    ]
+                    envoy_records = [
+                        item for item in copied_envoy if item["track"] == track.value
+                    ]
+                    source_attestations.append(
+                        {
+                            "track": track.value,
+                            "container_ids": {
+                                role: by_track_role[(track.value, role)]["id"]
+                                for role in ("authz", "target", "envoy")
+                            },
+                            "image_ids": {
+                                role: by_track_role[(track.value, role)]["image_id"]
+                                for role in ("authz", "target", "envoy")
+                            },
+                            "config_sha256": {
+                                role: by_track_role[(track.value, role)]["config_sha256"]
+                                for role in ("authz", "target", "envoy")
+                            },
+                            "raw_decisions_sha256": _digest_bytes(copied_raw[track]),
+                            "raw_decision_count": len(copied_raw[track].splitlines()),
+                            "raw_envoy_sha256": _digest_bytes(
+                                _jsonl_payload(envoy_records)
+                            ),
+                            "raw_envoy_count": len(envoy_records),
+                            "raw_targets_sha256": _digest_bytes(
+                                _jsonl_payload(target_records)
+                            ),
+                            "raw_target_count": len(target_records),
+                        }
+                    )
+            authoritative = authoritative_bundle_attestation(output)
+            journal_event(
+                self.journal_path,
+                "evidence_collect_complete",
+                {
+                    "completed": completed,
+                    "bundle_sha256": _digest_file(output / "SHA256SUMS"),
+                    "authoritative_attestation": authoritative,
+                },
+            )
+            journal_event(
+                self.journal_path,
+                "source_attestations_persisted",
+                {"source_attestations": source_attestations},
+            )
+            return output, source_attestations, completed, None
+        except Exception as error:
+            reason = f"{type(error).__name__}: {error}"[:1000]
+            journal_event(
+                self.journal_path,
+                "evidence_rejected_before_teardown",
+                {"reason": reason},
+            )
+            return None, [], False, reason
+
+    def down(self) -> Path:
+        journal = load_lifecycle_journal(self.journal_path)
+        listed = self._execute(["colima", "list", "--json"], timeout_s=30)
+        profiles = parse_colima_profiles(listed.stdout)
+        dedicated = next(
+            (record for record in profiles if record["name"] == LAB_IDENTITY), None
+        )
+        if journal["profile_created"] is not True:
+            if dedicated is not None:
+                raise ControllerError(
+                    "ambiguous Colima start requires manual recovery; dedicated profile left untouched"
+                )
+            else:
+                journal_event(
+                    self.journal_path,
+                    "down_complete_without_owned_profile",
+                    {"profile_absent": True},
+                )
+                global_after = self._capture_global_context()
+                if global_after != journal["global_context_before"]:
+                    raise ControllerError("global Docker context changed during lifecycle")
+                archive_root = self._private_completed_root()
+                archived = archive_root / f"preprofile-{journal['execution_nonce']}.journal.json"
+                if archived.exists():
+                    raise ControllerError("pre-profile lifecycle journal archive would clobber")
+                os.rename(self.journal_path, archived)
+                return self.private_root
+
+        if dedicated is not None:
+            if str(dedicated["status"]).lower() not in {"running", "stopped"}:
+                raise ControllerError("owned Colima profile status is invalid")
+            validate_dedicated_colima_profile(
+                {**dedicated, "status": "Running"}
+            )
+
+        events = journal["events"]
+        assert isinstance(events, list)
+        if dedicated is None:
+            if not any(event["event"] == "colima_delete_intent" for event in events):
+                raise ControllerError("owned profile disappeared before an exact deletion intent")
+            if journal["manifest_path"] is None:
+                global_after = self._capture_global_context()
+                if global_after != journal["global_context_before"]:
+                    raise ControllerError("global Docker context changed during lifecycle")
+                archive_root = self._private_completed_root()
+                archived = archive_root / f"premanifest-{journal['execution_nonce']}.journal.json"
+                if archived.exists():
+                    raise ControllerError("pre-manifest lifecycle journal archive would clobber")
+                os.rename(self.journal_path, archived)
+                return self.private_root
+            manifest = _load_json_bytes(
+                Path(str(journal["manifest_path"])).read_bytes(), "private manifest"
+            )
+            _validate_manifest(manifest)
+            published = self.evidence_root / str(manifest["run_id"])
+            if not published.exists():
+                failure_transition = _post_teardown_failure_transition(
+                    events, str(manifest["run_id"])
+                )
+                if failure_transition is not None:
+                    intent, prepared = failure_transition
+                    intent_details = intent["details"]
+                    assert isinstance(intent_details, dict)
+                    source_attestations = []
+                    completed = False
+                    provisional = (
+                        self._private_provisional_root()
+                        / str(manifest["run_id"])
+                    )
+                    if prepared is None:
+                        provisional = _prepare_failure_provisional(
+                            self._private_provisional_root(), manifest, reset=True
+                        )
+                        authoritative = authoritative_bundle_attestation(
+                            provisional
+                        )
+                        updated = journal_event(
+                            self.journal_path,
+                            "post_teardown_failure_bundle_prepared",
+                            {
+                                **intent_details,
+                                "intent_sequence": intent["sequence"],
+                                "authoritative_attestation": authoritative,
+                            },
+                        )
+                        updated_events = updated["events"]
+                        assert isinstance(updated_events, list)
+                        events = updated_events
+                    else:
+                        prepared_details = prepared["details"]
+                        assert isinstance(prepared_details, dict)
+                        authoritative = _validate_authoritative_attestation(
+                            prepared_details["authoritative_attestation"]  # type: ignore[arg-type]
+                        )
+                else:
+                    source_attestations = next(
+                        (
+                            event["details"]["source_attestations"]
+                            for event in events
+                            if event["event"] == "source_attestations_persisted"
+                        ),
+                        [],
+                    )
+                    completed = next(
+                        (
+                            bool(event["details"]["completed"])
+                            for event in reversed(events)
+                            if event["event"] == "evidence_collect_complete"
+                        ),
+                        False,
+                    )
+                    authoritative = _journal_authoritative_attestation(events)
+                tool_identities = next(
+                    (
+                        event["details"].get("tool_identities", {})
+                        for event in events
+                        if event["event"] == "preflight_complete"
+                    ),
+                    {},
+                )
+                engine_provenance = next(
+                    (
+                        event["details"]
+                        for event in events
+                        if event["event"] == "engine_provenance_observed"
+                    ),
+                    {},
+                )
+                provisional = self._private_provisional_root() / str(manifest["run_id"])
+                if not provisional.is_dir():
+                    raise ControllerError("post-delete provisional evidence is unavailable")
+                global_after = self._capture_global_context()
+                published = finalize_publication(
+                    provisional,
+                    self.evidence_root,
+                    manifest,
+                    source_attestations=source_attestations,
+                    tool_identities=tool_identities,
+                    engine_provenance=engine_provenance,
+                    global_context_before=str(journal["global_context_before"]),
+                    global_context_after=global_after,
+                    completed=completed,
+                    authoritative_attestation=authoritative,
+                    repository_root=self.root,
+                    publication_staging_root=self._private_publication_root(),
+                )
+            verify_public_checksums(published)
+            if self.state_path.exists():
+                self.state_path.unlink()
+            archive_root = self._private_completed_root()
+            archived = archive_root / f"{manifest['run_id']}.journal.json"
+            if archived.exists():
+                raise ControllerError("completed lifecycle journal archive would clobber")
+            os.rename(self.journal_path, archived)
+            return published
+        if dedicated["status"].lower() != "running":
+            journal_event(
+                self.journal_path,
+                "colima_recovery_start_intent",
+                {"profile": LAB_IDENTITY},
+            )
+            self._execute(
+                self.colima_start_command(str(journal["execution_nonce"])),
+                timeout_s=900,
+            )
+            journal_event(
+                self.journal_path,
+                "colima_recovery_start_complete",
+                {"profile": LAB_IDENTITY},
+            )
+        try:
+            recovery_attestation = self._attest_colima_after_start(
+                str(journal["execution_nonce"])
+            )
+        except Exception as error:
+            journal_event(
+                self.journal_path,
+                "colima_recovery_attestation_failed",
+                {"reason": f"{type(error).__name__}: {error}"[:1000]},
+            )
+            raise ControllerError(
+                "Colima recovery attestation failed; manual recovery required and profile left untouched"
+            ) from error
+        else:
+            journal_event(
+                self.journal_path,
+                "colima_recovery_attested",
+                {"attestation": recovery_attestation},
+            )
+
+        state, manifest, journal = self._load_for_down()
+        if manifest is None:
+            self._assert_only_recorded_managed(state, expect_present=True)
+            journal_event(
+                self.journal_path,
+                "colima_stop_intent",
+                {"profile": LAB_IDENTITY, "pre_manifest_failure": True},
+            )
+            self._execute(
+                ["colima", "stop", "--profile", LAB_IDENTITY], timeout_s=300
+            )
+            journal_event(
+                self.journal_path,
+                "colima_stop_complete",
+                {"profile": LAB_IDENTITY, "pre_manifest_failure": True},
+            )
+            journal_event(
+                self.journal_path,
+                "colima_delete_intent",
+                {"profile": LAB_IDENTITY, "pre_manifest_failure": True},
+            )
+            self._execute(
+                [
+                    "colima", "delete", "--profile", LAB_IDENTITY,
+                    "--force", "--data",
+                ],
+                timeout_s=300,
+            )
+            self._verify_profile_absent()
+            global_after = self._capture_global_context()
+            if global_after != journal["global_context_before"]:
+                raise ControllerError("global Docker context changed during lifecycle")
+            journal_event(
+                self.journal_path,
+                "colima_delete_complete",
+                {"profile": LAB_IDENTITY, "verified_absent": True},
+            )
+            archive_root = self._private_completed_root()
+            archived = archive_root / f"premanifest-{journal['execution_nonce']}.journal.json"
+            if archived.exists():
+                raise ControllerError("pre-manifest lifecycle journal archive would clobber")
+            os.rename(self.journal_path, archived)
+            return self.private_root
+        self._assert_only_recorded_managed(state, expect_present=True)
+        objects = state["objects"]
+        assert isinstance(objects, list)
+        transient_objects = state.get("transient_objects", [])
+        assert isinstance(transient_objects, list)
+        ordered = list(transient_objects) + [
+            item
+            for role in ("envoy", "authz", "target")
+            for item in objects
+            if item["role"] == role
+        ]
+        for item in ordered:
+            current = (
+                self._inspect_validation_container(
+                    str(item["id"]), manifest, LiveTrack(str(item["track"]))
+                )
+                if item["role"] == "validator"
+                else self._inspect_container(
+                    str(item["id"]),
+                    manifest,
+                    str(item["role"]),
+                    str(item["track"]),
+                    require_running=False,
+                )
+            )
+            if current != item:
+                raise ControllerError("container changed before exact stop")
+            running = self._execute(
+                self.docker_command(
+                    "inspect", "--format", "{{.State.Running}}", str(item["id"])
+                ),
+                timeout_s=30,
+                docker=True,
+            ).stdout.strip()
+            if running not in {"true", "false"}:
+                raise ControllerError("container running state is invalid")
+            if running == "true":
+                journal_event(
+                    self.journal_path,
+                    "container_stop_intent",
+                    {"id": item["id"], "name": item["name"], "role": item["role"]},
+                )
+                self._execute(
+                    self.docker_command(
+                        "stop", "--timeout", "10", str(item["id"])
+                    ),
+                    timeout_s=30,
+                    docker=True,
+                )
+                stopped = self._execute(
+                    self.docker_command(
+                        "inspect", "--format", "{{.State.Running}}", str(item["id"])
+                    ),
+                    timeout_s=30,
+                    docker=True,
+                ).stdout.strip()
+                if stopped != "false":
+                    raise ControllerError("recorded container did not stop")
+                journal_event(
+                    self.journal_path,
+                    "container_stop_complete",
+                    {"id": item["id"], "name": item["name"]},
+                )
+
+        output, source_attestations, completed, evidence_rejection = (
+            self._prepare_teardown_evidence(state, manifest, journal, objects)
+        )
+
+        for item in ordered:
+            current = (
+                self._inspect_validation_container(
+                    str(item["id"]), manifest, LiveTrack(str(item["track"]))
+                )
+                if item["role"] == "validator"
+                else self._inspect_container(
+                    str(item["id"]),
+                    manifest,
+                    str(item["role"]),
+                    str(item["track"]),
+                    require_running=False,
+                )
+            )
+            if current != item:
+                raise ControllerError("container changed before exact removal")
+            journal_event(
+                self.journal_path,
+                "container_remove_intent",
+                {"id": item["id"], "name": item["name"]},
+            )
+            self._execute(
+                self.docker_command("rm", str(item["id"])),
+                timeout_s=30,
+                docker=True,
+            )
+            if self._docker_object_exists("container", str(item["id"])):
+                raise ControllerError("recorded container remains after exact removal")
+            journal_event(
+                self.journal_path,
+                "container_remove_complete",
+                {"id": item["id"], "name": item["name"]},
+            )
+        networks = state["network_objects"]
+        assert isinstance(networks, list)
+        for item in networks:
+            current = self._inspect_network(
+                str(item["id"]),
+                manifest,
+                str(item["track"]),
+                require_complete_membership=False,
+            )
+            if current != item:
+                raise ControllerError("network changed before exact removal")
+            journal_event(
+                self.journal_path,
+                "network_remove_intent",
+                {"id": item["id"], "name": item["name"]},
+            )
+            self._execute(
+                self.docker_command("network", "rm", str(item["id"])),
+                timeout_s=30,
+                docker=True,
+            )
+            if self._docker_object_exists("network", str(item["id"])):
+                raise ControllerError("recorded network remains after exact removal")
+            journal_event(
+                self.journal_path,
+                "network_remove_complete",
+                {"id": item["id"], "name": item["name"]},
+            )
+        empty_state = {
+            **state,
+            "objects": [],
+            "transient_objects": [],
+            "network_objects": [],
+        }
+        self._assert_only_recorded_managed(empty_state, expect_present=False)
+        journal_event(
+            self.journal_path, "colima_stop_intent", {"profile": LAB_IDENTITY}
+        )
+        self._execute(["colima", "stop", "--profile", LAB_IDENTITY], timeout_s=300)
+        journal_event(
+            self.journal_path, "colima_stop_complete", {"profile": LAB_IDENTITY}
+        )
+        journal_event(
+            self.journal_path, "colima_delete_intent", {"profile": LAB_IDENTITY}
+        )
+        self._execute(
+            [
+                "colima", "delete", "--profile", LAB_IDENTITY, "--force", "--data",
+            ],
+            timeout_s=300,
+        )
+        self._verify_profile_absent()
+        journal_event(
+            self.journal_path,
+            "colima_delete_complete",
+            {"profile": LAB_IDENTITY, "verified_absent": True},
+        )
+        global_after = self._capture_global_context()
+        if global_after != journal["global_context_before"]:
+            raise ControllerError("global Docker context changed during lifecycle")
+        if output is None:
+            failure_details = {
+                "run_id": manifest["run_id"],
+                "evidence_rejection": evidence_rejection,
+                "replacement": _FAILURE_BUNDLE_REPLACEMENT,
+            }
+            intent_journal = journal_event(
+                self.journal_path,
+                "post_teardown_failure_bundle_intent",
+                failure_details,
+            )
+            intent_events = intent_journal["events"]
+            assert isinstance(intent_events, list)
+            intent_sequence = len(intent_events)
+            output = _prepare_failure_provisional(
+                self._private_provisional_root(), manifest, reset=True
+            )
+            source_attestations = []
+            completed = False
+            authoritative = authoritative_bundle_attestation(output)
+            journal_event(
+                self.journal_path,
+                "post_teardown_failure_bundle_prepared",
+                {
+                    **failure_details,
+                    "intent_sequence": intent_sequence,
+                    "authoritative_attestation": authoritative,
+                },
+            )
+        events = load_lifecycle_journal(self.journal_path)["events"]
+        assert isinstance(events, list)
+        authoritative = _journal_authoritative_attestation(events)
+        tool_identities = next(
+            (
+                event["details"].get("tool_identities", {})
+                for event in events
+                if event["event"] == "preflight_complete"
+            ),
+            {},
+        )
+        engine_provenance = next(
+            (
+                event["details"]
+                for event in events
+                if event["event"] == "engine_provenance_observed"
+            ),
+            {},
+        )
+        journal_event(
+            self.journal_path,
+            "publication_intent",
+            {"run_id": manifest["run_id"], "completed": completed},
+        )
+        published = finalize_publication(
+            output,
+            self.evidence_root,
+            manifest,
+            source_attestations=source_attestations,
+            tool_identities=tool_identities,
+            engine_provenance=engine_provenance,
+            global_context_before=str(journal["global_context_before"]),
+            global_context_after=global_after,
+            completed=completed,
+            authoritative_attestation=authoritative,
+            repository_root=self.root,
+            publication_staging_root=self._private_publication_root(),
+        )
+        journal_event(
+            self.journal_path,
+            "publication_complete",
+            {"run_id": manifest["run_id"], "public_manifest_sha256": _digest_file(published / "manifest.json")},
+        )
+        if self.state_path.exists():
+            self.state_path.unlink()
+        archive_root = self._private_completed_root()
+        archived_journal = archive_root / f"{manifest['run_id']}.journal.json"
+        if archived_journal.exists():
+            raise ControllerError("completed lifecycle journal would clobber an archive")
+        os.rename(self.journal_path, archived_journal)
+        return published
+
+
+def make_parser() -> ArgumentParser:
+    parser = ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    for command in ("preflight", "up", "run", "collect", "down"):
+        subparsers.add_parser(command)
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    arguments = make_parser().parse_args(argv)
+    controller = LocalEnvoyController()
+    try:
+        result = getattr(controller, arguments.command)()
+    except ControllerError as error:
+        raise SystemExit(f"v3b1-local-envoy: {error}") from error
+    if isinstance(result, Path):
+        print(result)
+    else:
+        print(canonical_json(result))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

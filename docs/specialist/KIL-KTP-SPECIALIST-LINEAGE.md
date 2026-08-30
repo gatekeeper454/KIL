@@ -2948,3 +2948,440 @@ controls, and prove exactly one target marker for a permit and zero for every
 denial or error before any V3B-2 Kind claim.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-059 — 2026-08-30 — V3B-1 controller code-quality review identified blockers
+
+**Input:** Review only the finished uncommitted V3B-1 local Envoy controller
+and focused tests for correctness, maintainability, security pitfalls, and test
+gaps without editing those files or invoking Colima, Docker, the network, or
+other live operations.
+
+**Interpretation:** Perform a static post-implementation audit of
+`tools/v3b1_local_envoy.py` and `tests/test_v3b1_local_envoy.py`, limited to the
+approved V3B-1 local boundary and excluding V3B-2 scope.
+
+**Decision status:** Review not approved. The focused 18-test suite passes and
+both files compile, but static counterexamples show that the evidence join
+accepts an all-deny three-track result even though the central run is accepted
+only for `permit / permit / deny`; it also accepts a permit marker for a target
+path that differs from the central request and accepts reduced request records
+that omit the authorization, Q-state, and adversarial-header attestations.
+Lifecycle mutation is not recoverable if `up`, a partially issued `run`, or
+`down` fails between durable checkpoints, and private controller directories
+are prepared without rejecting symbolic-link roots.
+
+**Rationale:** Passing happy-path construction and join tests does not establish
+the experiment's acceptance predicate or safe lifecycle recovery. The live gate
+must not begin while an internally consistent but wrong three-track outcome can
+be marked valid, while unrelated target evidence can satisfy a permit join, or
+while an ordinary command/HTTP/teardown failure can leave the dedicated profile
+outside controller-managed recovery.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py` (reviewed only; no changes)
+- `tests/test_v3b1_local_envoy.py` (reviewed only; no changes)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The blockers require implementation and regression
+tests. No assertion is made about live Envoy, image, Colima, container, or
+network behavior because this review intentionally ran no live operations.
+
+**Next gate:** Enforce the exact central three-track acceptance tuple, bind the
+target path and complete request facts into the join, add durable resumable or
+exact rollback checkpoints for every mutating lifecycle phase, reject symbolic
+link private roots, then rerun the focused static suite and independent review
+before the runtime-mutation gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-060 — 2026-08-30 — V3B-1 controller remediation re-review
+
+**Input:** Re-review the finished Task 6 controller and tests after remediation,
+including durable-journal recovery, exact central outcomes, request/target
+evidence, private-root safety, and test quality, without live operations.
+
+**Interpretation:** Verify closure of the T-059 findings and inspect the newly
+expanded recovery and publication paths for current correctness or security
+defects, still limited to V3B-1.
+
+**Decision status:** Review remains unapproved. The prior central-outcome,
+complete-request-schema, target-path, and three primary private-root findings
+are substantially corrected, and the focused suite now passes 31 tests. Current
+static counterexamples nevertheless show that the full-run join requires an
+`untrusted_mode_header_ignored` reason even though the pinned Envoy header
+allowlist prevents `x-kil-mode` from reaching authz, so correct live records
+cannot pass the claimed causal tuple. Authz-5xx evidence can again claim an
+Envoy/client digest that pinned Envoy discards, while state and public evidence
+paths still accept unchecked symbolic-link ancestors. The ambiguous
+Colima-start recovery also upgrades mere intent plus prior absence into profile
+ownership, which can authorize deletion of a later unrelated profile. Journal
+request hashes are recorded but not checked against the recovered request file,
+and the mutation-phase test only echoes synthetic event names rather than
+executing failure recovery.
+
+**Rationale:** Durable intent improves crash handling, but an intent is not
+proof that a particular profile was created by the controller, and unused
+record hashes do not bind recovered evidence. Publication and deletion must
+remain fail-safe under ambiguous external state and redirected filesystem
+paths.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py` (reviewed only; no changes)
+- `tests/test_v3b1_local_envoy.py` (reviewed only; no changes)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The current findings require focused fixes and real
+injected-runner recovery tests. No live Envoy, Colima, Docker, image, socket, or
+network behavior was exercised by this re-review.
+
+**Next gate:** Align the causal-reason tuple with the pinned Envoy request-header
+boundary, require pinned-Envoy 5xx sentinels, close every writable state and
+publication path against symlink ancestors, replace intent-only profile
+ownership reconciliation with uniquely observed ownership or fail-safe manual
+recovery, verify completed-request journal hashes during collection/down, and
+exercise actual controller failures before the runtime-mutation gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-061 — 2026-08-30 — V3B-1 controller final remediation re-review
+
+**Input:** Perform a final static code-quality and correctness re-review after
+the second Task 6 remediation, verifying causal reasons, ambiguous-profile
+handling, symlink ancestry, authz-5xx sentinels, journal/request hash binding,
+teardown continuation, and atomic publication without live operations.
+
+**Interpretation:** Re-run the focused isolated tests and inspect only the
+current V3B-1 local Envoy controller and tests, with special attention to
+failure/retry boundaries introduced by the latest remediation.
+
+**Decision status:** Review remains unapproved on one filesystem-safety
+blocker. The five previously enumerated behavioral findings are corrected:
+the live causal tuple matches the filtered header boundary, ambiguous Colima
+start remains manual and non-destructive, configured state/evidence ancestors
+are rejected when symbolic links, 5xx requires the raw Envoy sentinel and no
+client digest, and request records are hash-bound to exactly one successful
+journal completion. Teardown evidence rejection now continues exact owned
+cleanup and publication staging is private and atomic. However, fixed child
+directories under the validated private root are not themselves validated.
+A pre-existing `.tools/v3b1-private/manifests` symbolic link is followed by
+the manifest write before `_bind_journal_manifest` checks containment, and the
+same class of redirection exists for the `completed` journal archive path.
+
+**Rationale:** Validating a parent root once does not make attacker- or
+stale-state-controlled descendants safe. The controller must reject every
+lexical ancestor before the first write or rename, rather than detect the
+redirection only after data has already been written outside the private root.
+The focused 34-test suite otherwise passes, and no live Envoy, Colima, Docker,
+image, socket, or network operation was performed.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py` (reviewed only; no changes)
+- `tests/test_v3b1_local_envoy.py` (reviewed only; no changes)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Add regression coverage for symbolic-link
+`manifests`, `provisional`, and `completed` child directories, including the
+guarantee that rejection occurs before any external write or journal move.
+
+**Next gate:** Validate and create all fixed private child directories through
+the same ancestor-walking containment primitive before mutation, then rerun
+the focused static suite and final review before the runtime-mutation gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-062 — 2026-08-30 — V3B-1 child-symlink and final ownership/publication verification
+
+**Input:** Narrowly verify the remediated manifest, provisional, and completed
+child-directory symbolic-link attacks, then inspect start ownership and staged
+publication revalidation without edits or live operations.
+
+**Interpretation:** Reproduce the filesystem counterexamples entirely in
+temporary directories, run the focused static suite, and examine only the new
+ownership and publication-boundary logic.
+
+**Decision status:** Review remains unapproved on two blockers. The three
+private child-directory attacks are closed: `manifests`, `provisional`, and
+`completed` symbolic links are rejected before external writes, and the
+completed-archive regression leaves the journal in place. However, a successful
+`colima start` command now marks the profile owned before post-start identity
+attestation. If attestation fails before a manifest exists, cleanup relies only
+on the controller's local nonce file and can stop/delete a same-name profile
+that raced into existence and was never bound to that nonce. Separately,
+publication revalidates the staged manifest and evidence artifact hashes but
+does not compare the staged summary to the canonical public summary. A fault
+injection that rewrites `summary.md` after public-manifest creation is accepted,
+checksummed, renamed, and published.
+
+**Rationale:** Command success plus an unbound local file is insufficient
+identity evidence for destructive deletion when the profile attestation failed.
+Likewise, checksum correctness only proves the bytes that were checksummed; it
+does not prove that an excluded, human-readable claim artifact has the expected
+canonical content.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py` (reviewed only; no changes)
+- `tests/test_v3b1_local_envoy.py` (reviewed only; no changes)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Bind a successful start to profile-observed nonce
+identity before authorizing deletion, with manual recovery on failed identity
+attestation, and compare staged `summary.md` bytes to `_public_summary(...)`
+after the final fault boundary.
+
+**Next gate:** Correct both fail-safe checks, add race/failed-attestation and
+summary-mutation regressions, then rerun the focused suite and independent
+review before live mutation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-063 — 2026-08-30 — V3B-1 final static recovery and publication review passed
+
+**Input:** Perform the final narrow read-only review of profile deletion
+authority, canonical staged publication, symbolic-link ancestry, journal
+recovery, and teardown/publication invariants, with focused tests and no live
+operations.
+
+**Interpretation:** Verify closure of T-062 using independent temporary-path
+counterexamples, the complete focused controller suite, compilation, and a
+static trace of mutation/recovery boundaries.
+
+**Decision status:** Confirmed static code-quality/recovery review pass. Profile
+ownership is now granted only by `colima_attestation_complete`; a successful
+start followed by failed attestation remains manual and cannot stop or delete
+the profile. Recovery re-attests the nonce-specific saved mount before owned
+cleanup. Publication compares the staged manifest, artifact hashes, source
+bindings, and exact canonical summary after the fault hooks and before checksum
+generation and atomic rename. Manifest, provisional, and completed child
+symbolic links are rejected before external mutation, request evidence remains
+journal-hash-bound, and evidence rejection does not block exact owned teardown.
+
+**Rationale:** The focused 36-test suite passes, both reviewed Python files
+compile, and independent temporary-directory replays rejected all three child
+symbolic links with empty external targets. No current correctness, security,
+or recovery blocker was found within the V3B-1 scope. No Envoy, Colima, Docker,
+image, socket, or network operation was performed.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py` (reviewed only; no changes)
+- `tests/test_v3b1_local_envoy.py` (reviewed only; no changes)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** None for this static Task 6 gate. Runtime behavior
+still requires the separately authorized live mutation/evidence gate.
+
+**Next gate:** Proceed only through the approved live V3B-1 runtime mutation
+and evidence workflow; do not infer any V3B-2 result from this static pass.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-064 — 2026-08-30 — V3B-1 installed-runtime command-contract review passed
+
+**Input:** Perform the final narrow read-only runtime-safety review of the
+latest V3B-1 controller and tests, specifically covering Colima YAML
+full-comment handling, attestation-gated profile ownership and deletion,
+nonce-bound saved staging mounts, installed Colima/Docker command semantics,
+and all previously identified runtime blockers. Run only focused tests and the
+read-only preflight; perform no live runtime mutation.
+
+**Interpretation:** Compare the controller's exact argv and readback contracts
+to locally installed Colima 0.10.3, Lima 2.2.0, and Docker CLI 29.7.2; parse an
+in-memory desired-value transformation of Colima's actual generated YAML; and
+trace the journal authority transition from start intent through exact
+post-start attestation and recovery deletion.
+
+**Decision status:** Confirmed static runtime-safety implementation pass. The
+saved-config parser removes full-line comments before rejecting active YAML
+alias/tag syntax, so Colima's generated comments containing `&&` and `!` are
+accepted. Colima list memory and disk byte values are normalized to exact GiB,
+the named profile config path is correct, `forwardAgent: false` and the whole
+network section are checked, and no fabricated status-JSON dependency remains.
+The read-only mount must be the exact lexical nonce-specific staging directory;
+a resolving symbolic-link alias is rejected. Profile deletion authority is
+granted only by `colima_attestation_complete`, and both initial and recovery
+attestation bind the exact profile resources, saved mount/config, and nonce
+ownership record. A successful start without attestation remains manual and
+cannot stop or delete the profile.
+
+**Rationale:** The focused 36-test controller suite and read-only preflight
+pass. An in-memory transformation of the host's actual Colima 0.10.3 generated
+config to the desired 4 CPU, 8 GiB, 60 GiB, Docker, disabled-emulation, and
+nonce-mount values also passes the closed parser. Local help confirms every
+used Colima and Docker flag, including the Colima network, VZ, mount, and
+no-Kubernetes controls; Docker build/run/save controls; and `docker stop
+--timeout`. No Colima or Docker daemon was started or stopped, and no image,
+container, network, or external network operation occurred.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py` (reviewed only; no changes)
+- `tests/test_v3b1_local_envoy.py` (reviewed only; no changes)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` (this append-only entry)
+
+**Unresolved questions:** No static implementation blocker remains. The live
+gate must still observe named-profile YAML serialization, linux/arm64 Python
+and Envoy availability, legacy-builder execution, virtiofs read-only mount
+behavior, Docker inspect/health normalization, localhost-only forwarding, and
+single-attempt HTTP behavior with the retry-control headers.
+
+**Next gate:** Commit the reviewed controller and tests on a clean tree, then
+run the separately authorized V3B-1 live mutation workflow. Accept evidence
+only if post-start and recovery attestations, runtime object attestations,
+joined outcomes, checksums, exact teardown, profile absence, and unchanged
+global Docker context all pass.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-065 — 2026-08-30 — V3B-1 final evidence-publication audit found an authority-binding blocker
+
+**Input:** Independently audit the latest Task 6 controller and focused tests
+against Task 6 of the V3B-1 toolchain/HTTP-boundary plan, with particular
+attention to staged and public byte binding (including `summary.md`), public
+provenance closure, exact track/outcome/cardinality joins, authz-5xx semantics,
+sanitization, complete checksums, atomic publication, and the
+`local_envoy_boundary` claim scope. Run focused tests only and perform no live
+runtime mutation.
+
+**Interpretation:** Trace evidence from stopped-container collection through
+the authoritative private provisional bundle, publication staging, public
+manifest construction, checksum generation, and atomic rename. Treat the
+collection-time bundle/journal binding as the authority that public artifacts
+must preserve, rather than allowing publication to create a new authority from
+whatever bytes happen to be present later.
+
+**Decision status:** Static audit failed on one precise publication-provenance
+blocker. `finalize_publication` correctly rechecks the staged public manifest,
+artifact hash map, source attestations, exact generated summary, complete
+sorted `SHA256SUMS`, and destination clobber checks after all fault hooks.
+However, before copying, it does not verify the authoritative provisional
+bundle's existing `SHA256SUMS` or compare that checksum-file digest with the
+recorded `evidence_collect_complete.bundle_sha256` journal event. It instead
+derives the public artifact map from the provisional bytes currently on disk.
+Consequently, a pre-publication mutation of `requests.jsonl`, normalized
+`decisions.jsonl`, or `joins.jsonl` can be adopted into a newly self-consistent
+public manifest and checksum set; current source-attestation rebinding covers
+raw decisions, Envoy, and target bytes but not those three derived/request
+artifacts.
+
+**Rationale:** The focused controller suite passes 36/36. Exact
+`permit / permit / deny`, `200 / 200 / 403`, and `1 / 1 / 0` joins; duplicate
+and retry rejection; raw `-`/normalized-null authz-5xx handling; closed
+tool/engine/source provenance schemas; socket/path sanitization; exact staged
+summary regeneration; complete public checksum coverage; private staging plus
+atomic rename; and local-boundary claim exclusions all conform. The remaining
+gap is not detected by the current staged-mutation tests because those mutate
+only after the public manifest's artifact map has been constructed.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py` (audited only; no implementation change)
+- `tests/test_v3b1_local_envoy.py` (audited only; no implementation change)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` (this append-only entry)
+
+**Unresolved questions:** The implementation must choose the exact durable
+authority check: at minimum verify the provisional checksum set and bind its
+`SHA256SUMS` digest to the collection journal event immediately before
+publication. A regression should mutate each uncovered authoritative source
+class before finalization and require rejection without creating the public
+destination.
+
+**Next gate:** Add the authority-binding regression and fix, rerun the focused
+suite, then repeat this publication audit before any live V3B-1 mutation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-066 — 2026-08-30 — V3B-1 T-065 fix passed, post-teardown binding recovery blocked
+
+**Input:** Independently re-audit the T-065 authority-binding fix by mutating
+`requests.jsonl`, `decisions.jsonl`, and `joins.jsonl` after collection while
+rewriting `SHA256SUMS`, and verify destination absence, authoritative snapshot
+immutability, durable recovery binding, failure-bundle continuation, and all
+prior publication/recovery invariants without live operations.
+
+**Interpretation:** Exercise the new closed authoritative-bundle attestation at
+direct finalization and recovery boundaries, then inspect crash ordering around
+the post-teardown failure-bundle replacement.
+
+**Decision status:** The T-065 publication mutation is corrected: all three
+checksum-consistent mutations are rejected against the recorded full-file
+attestation, no public destination is created, and the original authoritative
+snapshot remains unchanged. The focused 36-test suite passes and both reviewed
+Python files compile. Review nevertheless remains unapproved on one recovery
+ordering blocker. After the owned profile has been deleted, an evidence
+rejection causes the controller to overwrite the authoritative provisional with
+a reset failure bundle, compute its new attestation, and only then journal that
+replacement. A crash between the overwrite and journal event leaves the new
+failure bytes on disk but only the old collection binding durable. Post-delete
+recovery selects that old binding and fails re-attestation, so it cannot publish
+the non-promotable failure bundle or finish journal archival.
+
+**Rationale:** The new binding correctly prevents adoption of rewritten
+evidence, but authority replacement must itself be crash-consistent. A durable
+old binding plus new on-disk bytes is intentionally rejected and therefore
+cannot serve as a recovery protocol without a deterministic, journal-directed
+repair path or a separately staged immutable failure bundle.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py` (reviewed only; no changes)
+- `tests/test_v3b1_local_envoy.py` (reviewed only; no changes)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Choose an atomic authority-transition design. The
+smallest recovery-oriented option is to durably record failure-bundle intent,
+then have post-delete recovery deterministically rebuild, attest, and journal
+the failure bundle before publication. A separate immutable failure path bound
+before selection would also avoid overwriting the prior authority.
+
+**Next gate:** Add a fault injection between failure-bundle reset and durable
+binding, make post-delete recovery complete safely from that state, and repeat
+the focused publication/recovery audit before live mutation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-067 — 2026-08-30 — V3B-1 T-066 failure-authority recovery review passed
+
+**Input:** Re-audit only the T-066 fix and final publication/recovery boundary,
+including a crash after durable failure-replacement intent and byte replacement
+but before replacement completion, while rechecking the T-065 mutation cases.
+
+**Interpretation:** Trace and execute the post-delete two-phase replacement
+protocol through deterministic reconstruction, new durable attestation,
+publication, completion, and journal archival without live operations.
+
+**Decision status:** Confirmed static review pass. The pending replacement
+intent is durably closed over run ID, evidence-rejection reason, and the fixed
+deterministic replacement strategy. After the injected crash, post-delete
+recovery detects that exact unmatched intent, deterministically rewrites the
+failure bundle, computes and journals one new authoritative attestation tied to
+the intent sequence, and publishes from that authority. The stale collection
+authority is not selected, no profile stop/delete command is repeated, exactly
+one non-promotable destination is created, and the completed lifecycle journal
+is archived with exactly one matching replacement completion. A prepared
+replacement is also re-attested by finalization before publication.
+
+**Rationale:** The focused 37-test suite and `py_compile` pass. The T-065
+checksum-consistent mutations of `requests.jsonl`, `decisions.jsonl`, and
+`joins.jsonl` remain rejected without a public destination and with the
+authoritative source snapshot unchanged. Prior profile-ownership, symlink,
+canonical-summary, checksum-completeness, atomic-rename, teardown-continuation,
+and recovery invariants remain enforced. No live Envoy, Colima, Docker, image,
+socket, or network operation was performed.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py` (reviewed only; no changes)
+- `tests/test_v3b1_local_envoy.py` (reviewed only; no changes)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** None for the T-066 static recovery fix. The separately
+authorized live gate remains responsible for runtime evidence.
+
+**Next gate:** Proceed only through the approved V3B-1 live mutation/evidence
+workflow; do not infer V3B-2 validation from this static pass.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
