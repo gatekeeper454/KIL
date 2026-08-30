@@ -4185,6 +4185,92 @@ class TeardownContinuationTest(unittest.TestCase):
                 )
                 self.assertEqual(controller.running, set())
 
+    def test_nested_source_json_totalizes_all_nine_legs_and_teardown(self):
+        malformed = (
+            b'{"value":'
+            + (b"[" * 10_000)
+            + b"0"
+            + (b"]" * 10_000)
+            + b"}\n"
+        )
+        key = ("credential_policy_baseline", "target_markers")
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(
+                directory, payload_overrides={key: malformed}
+            )
+
+            freeze = controller._freeze_before_service_teardown(
+                state,
+                value,
+                attempted_complete=True,
+                transient_objects=[],
+            )
+
+            selected = next(
+                status
+                for status in freeze.statuses
+                if (status.track, status.source) == key
+            )
+            journal = load_lifecycle_journal(controller.journal_path)
+            terminals = [
+                event
+                for event in journal["events"]
+                if event["event"] == "source_collection_terminal"
+            ]
+            completed = next(
+                event
+                for event in journal["events"]
+                if event["event"] == "evidence_freeze_complete"
+            )
+            self.assertFalse(freeze.complete)
+            self.assertEqual(len(freeze.statuses), 9)
+            self.assertEqual(len(terminals), 9)
+            self.assertEqual(completed["details"]["terminal_count"], 9)
+            self.assertFalse(completed["details"]["promotable"])
+            self.assertEqual(selected.status, "malformed")
+            self.assertEqual(selected.error_class, "invalid_json")
+            self.assertEqual(selected.source_byte_count, len(malformed))
+            self.assertEqual(selected.copied_byte_count, len(malformed))
+            self.assertEqual(selected.source_sha256, sha256(malformed).hexdigest())
+            self.assertEqual(selected.copied_sha256, sha256(malformed).hexdigest())
+            self.assertEqual(freeze.raw_paths[key].read_bytes(), malformed)
+            self.assertEqual(controller.running, set())
+
+    def test_source_json_parser_normalizes_recursion_at_each_parse_boundary(self):
+        nested = (
+            b'{"value":'
+            + (b"[" * 10_000)
+            + b"0"
+            + (b"]" * 10_000)
+            + b"}"
+        )
+        with self.assertRaisesRegex(ControllerError, "closed UTF-8 JSON"):
+            local_envoy_module._load_json_bytes(nested, "nested source")
+
+        def recursive_validator(record):
+            raise RecursionError("validator recursion")
+
+        with self.assertRaisesRegex(ControllerError, "record validation failed"):
+            local_envoy_module._parse_jsonl_bytes(
+                b"{}\n",
+                "recursive source",
+                recursive_validator,
+                allow_empty=False,
+            )
+        with (
+            mock.patch(
+                "tools.v3b1_local_envoy.canonical_json",
+                side_effect=RecursionError("canonical recursion"),
+            ),
+            self.assertRaisesRegex(ControllerError, "record validation failed"),
+        ):
+            local_envoy_module._parse_jsonl_bytes(
+                b"{}\n",
+                "recursive source",
+                lambda record: None,
+                allow_empty=False,
+            )
+
     def test_copied_ledgers_are_atomically_fsynced_before_terminal_journal(self):
         with tempfile.TemporaryDirectory() as directory:
             controller, state, value = self.make_freeze_controller(directory)

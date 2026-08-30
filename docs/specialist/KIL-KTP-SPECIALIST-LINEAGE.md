@@ -3848,3 +3848,40 @@ harness tasks, then execute the zero-request live smoke from the reviewed and
 committed source identity.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-077 — 2026-08-30 — Recursive malformed source parsing is totalized
+
+**Input:** Close the final Task 3 parser-totality blocker by ensuring deeply
+nested JSON cannot escape evidence collection, suppress the other eight source
+legs, or prevent teardown.
+
+**Interpretation:** `RecursionError` raised by bounded source JSON decoding,
+record validation, or canonicalization is a malformed-source classification,
+not a controller crash. This normalization is limited to the parser boundary;
+unrelated process and filesystem failures retain their existing classifications.
+
+**Decision status:** Confirmed harness-only correction complete, pending
+independent re-review. A roughly 10,000-level nested array now becomes a
+terminal `malformed` / `invalid_json` source record. Its raw target-ledger bytes,
+size, and SHA-256 remain preserved, all nine collection terminals and the freeze
+completion record are written, and service teardown continues.
+
+**Rationale:** Python's JSON decoder, semantic validators, and canonicalizer can
+raise `RecursionError` independently of `ValueError` and `TypeError`. Leaving it
+outside the closed parser-domain exceptions allowed one adversarial but bounded
+ledger record to interrupt the entire evidence freeze.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker or Colima operation was performed.
+Installed-runtime behavior remains gated on the reviewed zero-request smoke;
+KIL, authorization, Envoy, and target semantics remain unchanged.
+
+**Next gate:** Independent Task 3 re-review, followed by the remaining harness
+integration and committed zero-request live smoke.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

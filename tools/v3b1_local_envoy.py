@@ -265,7 +265,7 @@ def _load_json_bytes(payload: bytes, label: str) -> dict[str, object]:
         value = json.loads(text, object_pairs_hook=_closed_object)
     except ControllerError:
         raise
-    except (UnicodeError, ValueError) as error:
+    except (UnicodeError, ValueError, RecursionError) as error:
         raise ControllerError(f"{label} is not closed UTF-8 JSON") from error
     if type(value) is not dict:
         raise ControllerError(f"{label} must be a JSON object")
@@ -3063,7 +3063,7 @@ def _parse_jsonl_bytes(
             canonical_record = canonical_json(record)
         except ControllerError:
             raise
-        except (TypeError, ValueError, UnicodeError) as error:
+        except (TypeError, ValueError, UnicodeError, RecursionError) as error:
             raise ControllerError(f"{label} record validation failed") from error
         try:
             decoded_line = raw_line.decode("utf-8")
