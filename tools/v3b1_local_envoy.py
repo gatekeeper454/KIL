@@ -265,7 +265,7 @@ def _load_json_bytes(payload: bytes, label: str) -> dict[str, object]:
         value = json.loads(text, object_pairs_hook=_closed_object)
     except ControllerError:
         raise
-    except (UnicodeError, json.JSONDecodeError) as error:
+    except (UnicodeError, ValueError) as error:
         raise ControllerError(f"{label} is not closed UTF-8 JSON") from error
     if type(value) is not dict:
         raise ControllerError(f"{label} must be a JSON object")
@@ -3058,8 +3058,18 @@ def _parse_jsonl_bytes(
         if not raw_line or len(raw_line) > 128 * 1024:
             raise ControllerError(f"{label} contains an invalid record")
         record = _load_json_bytes(raw_line, label)
-        validator(record)
-        if raw_line.decode("utf-8") != canonical_json(record):
+        try:
+            validator(record)
+            canonical_record = canonical_json(record)
+        except ControllerError:
+            raise
+        except (TypeError, ValueError, UnicodeError) as error:
+            raise ControllerError(f"{label} record validation failed") from error
+        try:
+            decoded_line = raw_line.decode("utf-8")
+        except UnicodeError as error:
+            raise ControllerError(f"{label} is not closed UTF-8 JSON") from error
+        if decoded_line != canonical_record:
             raise ControllerError(f"{label} contains non-canonical JSON")
         records.append(record)
     return records
@@ -3349,6 +3359,8 @@ def _validate_provisional_tree(output: Path, *, completed: bool) -> None:
             raise ControllerError("provisional raw decision cardinality is invalid")
         if any(record["track"] != track.value for record in records):
             raise ControllerError("provisional raw decision track is invalid")
+    if not completed and (output / "joins.jsonl").read_bytes() != b"":
+        raise ControllerError("incomplete provisional joins must be empty")
 
 
 def _validate_source_attestations(
@@ -5416,7 +5428,8 @@ class LocalEnvoyController:
                 )
                 if path.is_symlink() or not path.is_file():
                     raise ControllerError("Docker copy did not produce a regular file")
-                os.chmod(path, 0o400)
+                copied_bytes = path.read_bytes()
+                _write_file(path, copied_bytes, 0o400)
                 copied_bytes = path.read_bytes()
             except (ControllerError, OSError, UnicodeError):
                 if path.exists() and not path.is_symlink() and path.is_file():
@@ -6524,10 +6537,48 @@ class LocalEnvoyController:
                         load_lifecycle_journal(self.journal_path),
                         require_all=False,
                     )
+                failure_raw_decisions = {
+                    track: (
+                        raw[(track.value, "authz_decisions")]
+                        if status_by_key[
+                            (track.value, "authz_decisions")
+                        ].status
+                        == "copied"
+                        else b""
+                    )
+                    for track in _TRACKS
+                }
+                failure_envoy: list[dict[str, object]] = []
+                failure_targets: list[dict[str, object]] = []
+                for track in _TRACKS:
+                    envoy_key = (track.value, "envoy_access")
+                    if status_by_key[envoy_key].status == "copied":
+                        failure_envoy.extend(
+                            _parse_jsonl_bytes(
+                                raw[envoy_key],
+                                f"incomplete frozen Envoy {track.value}",
+                                _envoy_closed,
+                                allow_empty=True,
+                            )
+                        )
+                    target_key = (track.value, "target_markers")
+                    if status_by_key[target_key].status == "copied":
+                        failure_targets.extend(
+                            _parse_jsonl_bytes(
+                                raw[target_key],
+                                f"incomplete frozen targets {track.value}",
+                                _target_closed,
+                                allow_empty=True,
+                            )
+                        )
                 output = _prepare_failure_provisional(
                     provisional_root,
                     manifest,
                     requests=partial_requests,
+                    raw_decisions=failure_raw_decisions,
+                    envoy=failure_envoy,
+                    targets=failure_targets,
+                    reset=True,
                 )
             source_attestations: list[dict[str, object]] = []
             if completed:

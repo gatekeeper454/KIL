@@ -3800,3 +3800,51 @@ specification and quality reviews over the complete harness, then execute the
 committed zero-request lifecycle smoke before any central proof request.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-076 — 2026-08-30 — Incomplete evidence freeze integrity closed after review
+
+**Input:** Address the Task 3 specification review findings: prevent stale
+joins from surviving an incomplete freeze, totalize adversarial JSON and
+record-type failures without interrupting the remaining collection legs, and
+durably re-persist every copied tmpfs ledger before recording its terminal
+collection status.
+
+**Interpretation:** A previously successful provisional tree cannot contribute
+any proof relation to a later incomplete collection. Only legs with terminal
+`copied` status may enter the rebuilt nonpromotable provisional tree; malformed
+raw bytes remain preserved and hash-bound solely in the private freeze. Parser
+domain failures are evidence-quality outcomes, while filesystem and process
+failures retain their distinct collection-error classification.
+
+**Decision status:** Confirmed controller-only correction complete, pending
+independent re-review and the separately gated live smoke. Incomplete trees are
+reset with empty joins, retain only independently copied partial sources, and
+are rejected by publication validation if joins are nonempty. Overlong JSON
+integers and unhashable semantic fields now normalize through `ControllerError`
+to a malformed terminal record, allowing all nine legs and cleanup to finish.
+Copied ledger bytes now traverse the atomic writer, including file and parent
+directory fsync, before their terminal journal event.
+
+**Rationale:** Reusing a prior provisional directory without reset allowed
+stale joins to outlive a failed recollection. Separately, Python JSON integer
+limits and set membership over unhashable values could escape the controller's
+closed malformed path. Finally, a successful `docker cp` did not itself prove
+the destination bytes and directory entry were durably persisted before the
+journal claimed collection completion.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker or Colima operation was performed.
+Installed-runtime behavior remains subject to the committed zero-request smoke
+and full harness review; KIL, authorization, Envoy, and target semantics remain
+unchanged.
+
+**Next gate:** Obtain independent Task 3 re-review, complete the remaining
+harness tasks, then execute the zero-request live smoke from the reviewed and
+committed source identity.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

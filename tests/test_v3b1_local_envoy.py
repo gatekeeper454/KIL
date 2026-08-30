@@ -10,6 +10,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+import tools.v3b1_local_envoy as local_envoy_module
+
 from kil.canonical import canonical_json
 from kil.live_authz import LiveTrack
 from kil.v3b_preflight import V3BProfile
@@ -3666,7 +3668,14 @@ class JournalRecoveryTest(unittest.TestCase):
 
 
 class TeardownContinuationTest(unittest.TestCase):
-    def make_freeze_controller(self, directory, *, injections=None, no_run=False):
+    def make_freeze_controller(
+        self,
+        directory,
+        *,
+        injections=None,
+        no_run=False,
+        payload_overrides=None,
+    ):
         root = Path(directory) / "repo"
         profile_path = root / "deploy/kind/v3b-profile.json"
         profile_path.parent.mkdir(parents=True)
@@ -3696,6 +3705,7 @@ class TeardownContinuationTest(unittest.TestCase):
             )
         if no_run:
             payloads = {key: b"" for key in payloads}
+        payloads.update(payload_overrides or {})
 
         class FreezeController(LocalEnvoyController):
             def __init__(self, *args, **kwargs):
@@ -4046,6 +4056,231 @@ class TeardownContinuationTest(unittest.TestCase):
             self.assertEqual(attestations, [])
             self.assertIsNone(rejection)
             self.assertEqual((output / "joins.jsonl").read_bytes(), b"")
+
+    def test_incomplete_freeze_resets_stale_joins_and_preserves_only_copied_sources(self):
+        for injected in ("missing", "malformed"):
+            with (
+                self.subTest(injected=injected),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                key = ("credential_policy_baseline", "authz_decisions")
+                controller, state, value = self.make_freeze_controller(
+                    directory, injections={key: injected}
+                )
+                _, requests, decisions, envoy, targets = (
+                    JoinContractTest().all_records()
+                )
+                raw_decisions = {
+                    track: (
+                        canonical_json(
+                            next(
+                                item
+                                for item in decisions
+                                if item["track"] == track.value
+                            )
+                        )
+                        + "\n"
+                    ).encode("utf-8")
+                    for track in LiveTrack
+                }
+                seeded = write_evidence_bundle(
+                    controller._private_provisional_root(),
+                    value,
+                    requests=requests,
+                    decisions=decisions,
+                    envoy=envoy,
+                    targets=targets,
+                    joins=join_evidence(value, requests, decisions, envoy, targets),
+                    raw_decisions=raw_decisions,
+                )
+                self.assertNotEqual((seeded / "joins.jsonl").read_bytes(), b"")
+
+                freeze = controller._freeze_sources(
+                    state, value, attempted_complete=True
+                )
+                output, _, completed, rejection = (
+                    controller._prepare_teardown_evidence(
+                        value, state["objects"], freeze
+                    )
+                )
+
+                copied_key = ("signed_state_only", "authz_decisions")
+                copied_path = freeze.raw_paths[copied_key]
+                self.assertFalse(completed)
+                self.assertIsNone(rejection)
+                self.assertEqual((output / "joins.jsonl").read_bytes(), b"")
+                self.assertEqual(
+                    (
+                        output
+                        / "raw/decisions/credential_policy_baseline.jsonl"
+                    ).read_bytes(),
+                    b"",
+                )
+                self.assertEqual(
+                    (
+                        output / "raw/decisions/signed_state_only.jsonl"
+                    ).read_bytes(),
+                    copied_path.read_bytes(),
+                )
+
+    def test_all_nine_legs_totalize_type_and_integer_parse_failures(self):
+        _, _, decisions, _, _ = JoinContractTest().all_records()
+        outcome_record = dict(decisions[0])
+        outcome_record["outcome"] = []
+        outcome_list = (canonical_json(outcome_record) + "\n").encode("utf-8")
+        overlong_integer = b'{"value":' + (b"9" * 5000) + b"}\n"
+        keys = [
+            (track.value, source)
+            for track in LiveTrack
+            for source in ("envoy_access", "authz_decisions", "target_markers")
+        ]
+        for key in keys:
+            malformed = (
+                outcome_list if key[1] == "authz_decisions" else overlong_integer
+            )
+            with (
+                self.subTest(key=key),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                controller, state, value = self.make_freeze_controller(
+                    directory, payload_overrides={key: malformed}
+                )
+
+                freeze = controller._freeze_before_service_teardown(
+                    state,
+                    value,
+                    attempted_complete=True,
+                    transient_objects=[],
+                )
+
+                selected = next(
+                    status
+                    for status in freeze.statuses
+                    if (status.track, status.source) == key
+                )
+                self.assertFalse(freeze.complete)
+                self.assertEqual(len(freeze.statuses), 9)
+                self.assertEqual(selected.status, "malformed")
+                self.assertEqual(selected.error_class, "invalid_json")
+                self.assertEqual(freeze.raw_paths[key].read_bytes(), malformed)
+                self.assertEqual(
+                    len(
+                        [
+                            event
+                            for event in load_lifecycle_journal(
+                                controller.journal_path
+                            )["events"]
+                            if event["event"] == "source_collection_terminal"
+                        ]
+                    ),
+                    9,
+                )
+                self.assertTrue(
+                    any(
+                        event["event"] == "evidence_freeze_complete"
+                        for event in load_lifecycle_journal(
+                            controller.journal_path
+                        )["events"]
+                    )
+                )
+                self.assertEqual(controller.running, set())
+
+    def test_copied_ledgers_are_atomically_fsynced_before_terminal_journal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(directory)
+            actual_write = local_envoy_module._write_file
+            actual_journal = local_envoy_module.journal_event
+            actual_fsync = os.fsync
+            actual_replace = os.replace
+            active = {"key": None}
+            durability = {}
+            ordering = []
+
+            def tracked_write(path, payload, mode=0o600):
+                path = Path(path)
+                source = {
+                    "decisions.jsonl": "authz_decisions",
+                    "targets.jsonl": "target_markers",
+                }.get(path.name)
+                key = (
+                    (path.parent.name, source)
+                    if source is not None and "source-freezes" in path.parts
+                    else None
+                )
+                active["key"] = key
+                if key is not None:
+                    durability[key] = {"fsync": 0, "replace": 0}
+                try:
+                    actual_write(path, payload, mode)
+                finally:
+                    active["key"] = None
+                if key is not None:
+                    ordering.append(("durable", key, len(controller.commands)))
+
+            def tracked_fsync(descriptor):
+                if active["key"] is not None:
+                    durability[active["key"]]["fsync"] += 1
+                return actual_fsync(descriptor)
+
+            def tracked_replace(source, destination):
+                if active["key"] is not None:
+                    durability[active["key"]]["replace"] += 1
+                return actual_replace(source, destination)
+
+            def tracked_journal(path, event, details):
+                if event == "source_collection_terminal":
+                    record = details["record"]
+                    ordering.append(
+                        (
+                            "terminal",
+                            (record["track"], record["source"]),
+                            len(controller.commands),
+                        )
+                    )
+                return actual_journal(path, event, details)
+
+            with (
+                mock.patch(
+                    "tools.v3b1_local_envoy._write_file",
+                    side_effect=tracked_write,
+                ),
+                mock.patch(
+                    "tools.v3b1_local_envoy.os.fsync",
+                    side_effect=tracked_fsync,
+                ),
+                mock.patch(
+                    "tools.v3b1_local_envoy.os.replace",
+                    side_effect=tracked_replace,
+                ),
+                mock.patch(
+                    "tools.v3b1_local_envoy.journal_event",
+                    side_effect=tracked_journal,
+                ),
+            ):
+                controller._freeze_sources(
+                    state, value, attempted_complete=True
+                )
+
+            ledger_keys = {
+                (track.value, source)
+                for track in LiveTrack
+                for source in ("authz_decisions", "target_markers")
+            }
+            self.assertEqual(set(durability), ledger_keys)
+            for key in ledger_keys:
+                self.assertGreaterEqual(durability[key]["fsync"], 2)
+                self.assertEqual(durability[key]["replace"], 1)
+                durable_index = next(
+                    index
+                    for index, item in enumerate(ordering)
+                    if item[:2] == ("durable", key)
+                )
+                terminal_index = next(
+                    index
+                    for index, item in enumerate(ordering)
+                    if item[:2] == ("terminal", key)
+                )
+                self.assertLess(durable_index, terminal_index)
 
     def test_completed_freeze_recovery_reattests_private_bytes(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -5564,19 +5799,16 @@ class EvidenceBundleTest(unittest.TestCase):
                 verify_public_checksums(published)
 
     def test_incomplete_run_publishes_nonpromotable_failure_bundle(self):
-        value, requests, decisions, envoy, targets = JoinContractTest().all_records()
-        joins = join_evidence(value, requests, decisions, envoy, targets)
+        value, requests, _, _, _ = JoinContractTest().all_records()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            provisional = write_evidence_bundle(
+            provisional = _prepare_failure_provisional(
                 root / "private",
                 value,
                 requests=requests,
-                decisions=decisions,
-                envoy=envoy,
-                targets=targets,
-                joins=joins,
+                reset=True,
             )
+            self.assertEqual((provisional / "joins.jsonl").read_bytes(), b"")
             authoritative = authoritative_bundle_attestation(provisional)
             published = finalize_publication(
                 provisional,
