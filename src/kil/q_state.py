@@ -22,6 +22,7 @@ from .domain import CompositeState
 Q_STATE_SCHEMA_VERSION = "kil.q-state.v0"
 MAX_VALIDITY_SECONDS = 10
 _DIGEST_PATTERN = re.compile(r"^sha256:[a-f0-9]{64}$")
+_DECIMAL_PATTERN = re.compile(r"^(0|[1-9][0-9]*)(\.[0-9]*[1-9])?$")
 _DECIMAL_FIELDS = frozenset(
     {"charge", "threshold", "decay_rate", "maximum_charge"}
 )
@@ -59,9 +60,18 @@ def _require_boolean(name: str, value: object) -> bool:
 def _require_decimal(name: str, value: object) -> Decimal:
     if type(value) is not Decimal or not value.is_finite():
         raise ValueError(f"{name} must be a finite Decimal")
+    if value.is_zero() and value.is_signed():
+        raise ValueError(f"{name} cannot be negative zero")
     if value < 0:
         raise ValueError(f"{name} must be nonnegative")
     return value
+
+
+def _decimal_wire(value: Decimal) -> str:
+    wire = format(value, "f")
+    if "." in wire:
+        wire = wire.rstrip("0").rstrip(".")
+    return wire
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,7 +159,9 @@ class QStateClaims:
         payload: dict[str, object] = {}
         for item in fields(self):
             value = getattr(self, item.name)
-            payload[item.name] = str(value) if item.name in _DECIMAL_FIELDS else value
+            payload[item.name] = (
+                _decimal_wire(value) if item.name in _DECIMAL_FIELDS else value
+            )
         return payload
 
     @classmethod
@@ -168,12 +180,14 @@ class QStateClaims:
         values: dict[str, Any] = dict(payload)
         for name in _DECIMAL_FIELDS:
             raw = values[name]
-            if type(raw) is not str or not raw:
-                raise ValueError(f"{name} must be a decimal string")
+            if type(raw) is not str or _DECIMAL_PATTERN.fullmatch(raw) is None:
+                raise ValueError(f"{name} must be canonical fixed-point decimal")
             try:
                 values[name] = Decimal(raw)
             except InvalidOperation as error:
-                raise ValueError(f"{name} must be a decimal string") from error
+                raise ValueError(
+                    f"{name} must be canonical fixed-point decimal"
+                ) from error
         return cls(**values)
 
     def to_composite_state(self) -> CompositeState:

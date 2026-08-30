@@ -1,5 +1,7 @@
 from dataclasses import replace
 from decimal import Decimal
+import json
+from pathlib import Path
 import unittest
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -59,6 +61,31 @@ class QStateClaimsTest(unittest.TestCase):
         payload["mode"] = "signed_state_only"
         with self.assertRaisesRegex(ValueError, "unknown"):
             QStateClaims.from_payload(payload)
+
+    def test_decimal_wire_values_are_canonical_fixed_point(self):
+        for malformed in ("1e1", "+80", "-0", "080", "80.0", ".5"):
+            with self.subTest(malformed=malformed):
+                payload = claims().to_payload()
+                payload["charge"] = malformed
+                with self.assertRaisesRegex(ValueError, "canonical fixed-point"):
+                    QStateClaims.from_payload(payload)
+        self.assertEqual(
+            claims(charge=Decimal("8E+1")).to_payload()["charge"], "80"
+        )
+        self.assertEqual(
+            claims(charge=Decimal("0.2500")).to_payload()["charge"], "0.25"
+        )
+        with self.assertRaisesRegex(ValueError, "negative zero"):
+            claims(charge=Decimal("-0"))
+
+    def test_schema_uses_the_same_canonical_decimal_pattern(self):
+        schema = json.loads(
+            (Path(__file__).resolve().parents[1] / "schemas/q-state-v0.schema.json")
+            .read_text(encoding="utf-8")
+        )
+        expected = r"^(0|[1-9][0-9]*)(\.[0-9]*[1-9])?$"
+        for name in ("charge", "threshold", "decay_rate", "maximum_charge"):
+            self.assertEqual(schema["properties"][name]["pattern"], expected)
 
     def test_converts_only_claimed_authority_to_v1_state(self):
         state = claims().to_composite_state()
