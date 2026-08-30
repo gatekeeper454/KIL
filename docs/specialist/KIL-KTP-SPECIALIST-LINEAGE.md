@@ -3528,3 +3528,52 @@ only when the foreign-profile ownership prerequisite is satisfied, retaining
 the fail-closed readbacks and exact teardown/evidence gates.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-071 — 2026-08-30 — V3B-1 single-snapshot Docker network inspection passes
+
+**Input:** Independently re-audit the network-inspection remediation against
+Docker 29.7.2's `network inspect --format '{{json .}}'` object and exact versus
+partial teardown membership semantics, without live runtime operations.
+
+**Interpretation:** Treat one closed Docker JSON object as the only authority
+for network identity, ownership, configuration, and endpoint membership. Parse
+all nested objects with duplicate-key rejection; attest the network ID, fixed
+name, bridge driver, boolean internal mode, and exact KIL labels; then accept
+only well-shaped endpoint records whose unique names belong to the fixed track.
+Require the full three-container set during runtime attestation and allow only
+a subset, including empty, during resumable teardown.
+
+**Decision status:** Confirmed PASS for static implementation readiness. The
+inspector issues one `network inspect --format '{{json .}}'`, parses it through
+the recursive closed-object hook, validates the expected Docker network and
+five-field endpoint shapes, rejects invalid IDs or types, duplicate JSON keys,
+duplicate endpoint names, unknown or cross-track names, extra labels, and
+incomplete membership when completeness is required. Recovery invokes the same
+inspector with partial membership enabled and compares any previously persisted
+network projection before teardown.
+
+**Rationale:** The remediation removes the former time-of-check/time-of-use
+split between identity and membership inspections. The focused 40-test suite,
+`py_compile`, and diff whitespace validation pass. Static fixtures cover the
+Docker network object, complete membership, permitted recovery subset,
+malformed internal type, duplicate membership, unknown member, and extra-label
+rejections. No Docker daemon, Colima profile, image, container, network, socket,
+or external network operation was performed. The Docker client executable was
+not available on this shell's `PATH` or standard Homebrew locations, so no
+client-side help/version probe contributed to this decision.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py` (reviewed only; no changes by this specialist)
+- `tests/test_v3b1_local_envoy.py` (reviewed only; no changes by this specialist)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` (this append-only entry)
+
+**Unresolved questions:** The separately authorized live gate remains
+responsible for confirming the installed engine's emitted endpoint object and
+successful lifecycle behavior; no static network-inspection blocker remains.
+
+**Next gate:** Proceed only through the approved clean live lifecycle after the
+foreign-profile prerequisite is satisfied, retaining exact runtime membership
+and subset-only teardown recovery checks.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

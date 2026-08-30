@@ -2123,6 +2123,134 @@ class RuntimeAttestationTest(unittest.TestCase):
             self.assertEqual(inspected["labels"], runtime_labels)
             self.assertFalse(raw["State"]["Running"])
 
+    def test_network_inspection_uses_one_closed_json_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            profile_path = root / "deploy/kind/v3b-profile.json"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_bytes(
+                (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+            )
+            value = manifest()
+            track = LiveTrack.CREDENTIAL_POLICY_BASELINE
+            track_value = next(
+                item for item in value["tracks"] if item["track"] == track.value
+            )
+            labels = {
+                "kil.v3b1.managed": "true",
+                "kil.v3b1.run-id": value["run_id"],
+                "kil.v3b1.track": track.value,
+            }
+            member_names = [
+                track_value["authz_container"],
+                track_value["target_container"],
+                track_value["envoy_container"],
+            ]
+
+            def member(name):
+                return {
+                    "Name": name,
+                    "EndpointID": "e" * 64,
+                    "MacAddress": "02:42:ac:12:00:02",
+                    "IPv4Address": "172.18.0.2/16",
+                    "IPv6Address": "",
+                }
+
+            network = {
+                "Id": "a" * 64,
+                "Name": track_value["network"],
+                "Driver": "bridge",
+                "Internal": True,
+                "Labels": labels,
+                "Containers": {
+                    f"{index}" * 64: member(name)
+                    for index, name in enumerate(member_names, start=1)
+                },
+                "Created": "2026-08-30T00:00:00Z",
+                "Scope": "local",
+            }
+            observed_literal = (
+                f"{network['Id']}\\n{network['Name']}\\nbridge\\ntrue\\n"
+                f"{canonical_json(labels)}\n"
+            )
+
+            class NetworkRunner(FakeRunner):
+                def __init__(self, payload):
+                    super().__init__()
+                    self.payload = payload
+
+                def run(self, argv, **kwargs):
+                    self.calls.append((list(argv), kwargs))
+                    template = argv[argv.index("--format") + 1]
+                    if template == "{{json .}}":
+                        return CommandResult(
+                            0, canonical_json(self.payload) + "\n", ""
+                        )
+                    return CommandResult(0, observed_literal, "")
+
+            runner = NetworkRunner(network)
+            controller = LocalEnvoyController(
+                root,
+                runner,
+                home=Path(directory) / "home",
+                port_probe=lambda port: False,
+                tool_verifier=lambda: TOOL_IDENTITIES,
+            )
+            controller._prepare_private_roots()
+
+            inspected = controller._inspect_network(
+                "a" * 64, value, track.value
+            )
+
+            self.assertEqual(inspected["name"], track_value["network"])
+            self.assertEqual(len(runner.calls), 1)
+            self.assertIn("{{json .}}", runner.calls[0][0])
+
+            partial = {**network, "Containers": {
+                "1" * 64: member(member_names[0])
+            }}
+            controller.runner = NetworkRunner(partial)
+            controller._inspect_network(
+                "a" * 64,
+                value,
+                track.value,
+                require_complete_membership=False,
+            )
+
+            malformed = {**network, "Internal": "true"}
+            duplicate = {
+                **network,
+                "Containers": {
+                    **network["Containers"],
+                    "f" * 64: member(member_names[0]),
+                },
+            }
+            unknown = {
+                **network,
+                "Containers": {
+                    "f" * 64: member("kil-v3b1-attacker")
+                },
+            }
+            extra_label = {
+                **network,
+                "Labels": {**labels, "kil.v3b1.role": "network"},
+            }
+            for rejected, message in (
+                (malformed, "network.*type|shape"),
+                (duplicate, "duplicate.*membership|membership"),
+                (unknown, "cross-track|membership"),
+                (extra_label, "label"),
+            ):
+                with self.subTest(message=message):
+                    controller.runner = NetworkRunner(rejected)
+                    with self.assertRaisesRegex(ControllerError, message):
+                        controller._inspect_network(
+                            "a" * 64,
+                            value,
+                            track.value,
+                            require_complete_membership=False,
+                        )
+
     def test_image_architecture_is_exact_linux_arm64(self):
         validate_image_architecture({"Os": "linux", "Architecture": "arm64"})
         with self.assertRaisesRegex(ControllerError, "architecture"):

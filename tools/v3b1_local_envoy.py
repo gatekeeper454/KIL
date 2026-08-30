@@ -4008,42 +4008,72 @@ class LocalEnvoyController:
         *,
         require_complete_membership: bool = True,
     ) -> dict[str, object]:
-        output = self._execute(
+        raw_output = self._execute(
             self.docker_command(
                 "network",
                 "inspect",
                 "--format",
-                "{{.Id}}\\n{{.Name}}\\n{{.Driver}}\\n{{.Internal}}\\n{{json .Labels}}",
+                "{{json .}}",
                 identifier,
             ),
             timeout_s=60,
             docker=True,
-        ).stdout.splitlines()
-        if len(output) != 5:
-            raise ControllerError("network inspection shape is invalid")
-        object_id, name, driver, internal, raw_labels = output
+        ).stdout
         try:
-            labels = json.loads(raw_labels, object_pairs_hook=_closed_object)
+            raw = json.loads(raw_output, object_pairs_hook=_closed_object)
         except (json.JSONDecodeError, ControllerError) as error:
-            raise ControllerError("network labels are invalid") from error
+            raise ControllerError("network inspection is not closed JSON") from error
+        required = {"Id", "Name", "Driver", "Internal", "Labels", "Containers"}
+        if type(raw) is not dict or not required.issubset(raw):
+            raise ControllerError("network inspection shape is invalid")
+        object_id = raw["Id"]
+        name = raw["Name"]
+        driver = raw["Driver"]
+        internal = raw["Internal"]
+        labels = raw["Labels"]
+        containers = raw["Containers"]
+        expected_name = str(
+            _track_manifest(manifest, LiveTrack(track))["network"]
+        )
+        expected_labels = _object_labels(str(manifest["run_id"]), None, track)
         if (
-            _HEX.fullmatch(object_id) is None
+            type(object_id) is not str
+            or _HEX.fullmatch(object_id) is None
+            or (_HEX.fullmatch(identifier) is not None and object_id != identifier)
+            or type(name) is not str
+            or name != expected_name
+            or type(driver) is not str
             or driver != "bridge"
-            or internal != "true"
-            or labels != _object_labels(str(manifest["run_id"]), None, track)
+            or type(internal) is not bool
+            or internal is not True
+            or type(labels) is not dict
+            or any(
+                type(key) is not str or type(value) is not str
+                for key, value in labels.items()
+            )
+            or labels != expected_labels
         ):
-            raise ControllerError("network ID/label/internal attestation failed")
-        members = self._execute(
-            self.docker_command(
-                "network",
-                "inspect",
-                "--format",
-                "{{range .Containers}}{{println .Name}}{{end}}",
-                identifier,
-            ),
-            timeout_s=60,
-            docker=True,
-        ).stdout.split()
+            raise ControllerError(
+                "network identity/label/internal type attestation failed"
+            )
+        if type(containers) is not dict:
+            raise ControllerError("network membership shape is invalid")
+        endpoint_fields = {
+            "Name", "EndpointID", "MacAddress", "IPv4Address", "IPv6Address",
+        }
+        members: list[str] = []
+        for container_id, endpoint in containers.items():
+            if (
+                type(container_id) is not str
+                or _HEX.fullmatch(container_id) is None
+                or type(endpoint) is not dict
+                or set(endpoint) != endpoint_fields
+                or any(type(value) is not str for value in endpoint.values())
+                or not endpoint["Name"]
+                or _HEX.fullmatch(endpoint["EndpointID"]) is None
+            ):
+                raise ControllerError("network membership shape is invalid")
+            members.append(endpoint["Name"])
         expected_members = {
             str(item["name"])
             for item in manifest["containers"]  # type: ignore[union-attr]
