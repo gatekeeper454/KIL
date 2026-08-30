@@ -3385,3 +3385,50 @@ authorized live gate remains responsible for runtime evidence.
 workflow; do not infer V3B-2 validation from this static pass.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-068 — 2026-08-30 — V3B-1 implementation committed; live start refused on foreign profile
+
+**Input:** Execute Task 6 with visible progress after the static controller,
+runtime-safety, evidence-publication, and crash-recovery gates pass.
+
+**Interpretation:** Establish a clean implementation identity before any live
+mutation, repeat preflight from that exact commit, then invoke `up` through the
+closed lifecycle controller. Treat every non-dedicated Colima profile as
+outside Task 6 ownership even when it blocks the experiment.
+
+**Decision status:** The reviewed implementation was committed as
+`c0a02f1b6153904e66adc17e9d2da4a55690b6c5` after 37 focused tests, all 252
+repository tests, `py_compile`, and diff checks passed. The clean-tree
+preflight passed while the pre-existing `default` Colima profile was reported
+`Broken`. At the subsequent live `up` gate, `default` was reported `Running`
+with the containerd runtime. The controller failed closed before creating the
+dedicated profile or any Task 6 runtime resource. Readback confirmed that only
+`default` exists, `kil-v3-lab` is absent, and the Task 6 active-state file is
+absent.
+
+**Rationale:** Stopping or changing the user's non-dedicated `default` profile
+would exceed Task 6 ownership. The guard prevented interference with unrelated
+local workloads and preserved the exact experiment precondition. A successful
+static preflight is not authority to mutate a foreign profile if its state
+changes before `up`.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-30-v3b1-toolchain-http-boundary.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- ignored visible status board
+  `artifacts/generated/v3b1-task6-live-status.md`
+
+**Unresolved questions:** May Task 6 temporarily stop the pre-existing
+`default` Colima profile, or will its owner stop it before the next attempt?
+The controller will not proceed while any non-dedicated profile is running.
+
+**Next gate:** After explicit authorization or independent shutdown of
+`default`, repeat clean preflight and run `up`, `run`, and `down` from the exact
+implementation commit. Accept only the provisional `local_envoy_boundary`
+claim if evidence joins, checksums, exact teardown, profile absence, and global
+Docker-context invariants all pass.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
