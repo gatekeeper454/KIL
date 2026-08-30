@@ -19,6 +19,20 @@ The demonstration uses the same request facts in all three tracks. With the
 fixed V3A fixture, the expected result is `permit / permit / deny`, with target
 marker counts `1 / 1 / 0` and valid joins for all three outcomes.
 
+The first pre-review process run was `52c90309d00439e7` at implementation
+commit `ad3db6aa7686781761bd8622a435c279f534df05` with 121 passing tests. It
+exposed review findings and is retained only as development history. The first
+review-complete run is `b0cdc26b471c9539` at implementation commit
+`700b307a573e3668024d51e3b156d7044b03fca3` with 125 passing tests. Its eight
+published artifacts pass `SHA256SUMS` verification.
+
+The review-complete bundle records the full Ed25519 public-key thumbprint,
+public JWK, explicit deterministic Level 1 laboratory-fixture provenance, and
+the two audience-bound compact JWS states. No private or production key is
+claimed. The bundle is generated under
+`artifacts/generated/v3a-process-contract/b0cdc26b471c9539/` and remains
+reproducible from the recorded implementation commit.
+
 ## Evidence boundary
 
 V3A is a **modeled process-contract demonstration**. It proves the local

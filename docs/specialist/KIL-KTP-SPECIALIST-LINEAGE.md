@@ -2283,3 +2283,71 @@ Envoy, Kubernetes, modeled parameters, historical prevention, or live KIL
 behavior.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-048 — 2026-08-29 — V3A signed-state and authorization core implemented
+
+**Input:** The founder directed implementation to proceed without another
+prompt and required the implementation documentation to include a graphical
+diagram. The approved V3A plan required a signed, short-lived composite KTP
+enforcement state, three fixed comparison tracks, a harmless target marker,
+and a visible but explicitly modeled process-contract bundle.
+
+**Interpretation:** V3A is the executable contract beneath the approved V3B
+Envoy topology. It may prove strict signature consumption, reducing-only local
+authorization, fixed-mode behavior, and joined forward-or-withhold semantics in
+one process. It cannot prove Envoy, Kind, network isolation, cluster latency,
+or historical prevention.
+
+**Decision status:** Confirmed implemented: closed `kil.q-state.v0` claims;
+canonical bounded fixed-point decimal wire values; Ed25519 compact JWS with a
+ten-second maximum lifetime; revocation and exact time, subject, audience,
+authority-class, and action-class binding; immutable adapter tracks; rejection
+of malformed non-ASCII segments through the fail-closed path; three same-input
+tracks; harmless target markers; and content-addressed evidence. Confirmed
+review-complete modeled result: `permit / permit / deny`, marker counts
+`1 / 1 / 0`, and valid proof joins. This is not a validated cluster result.
+
+**Rationale:** Review found four material contract gaps before closeout: an
+uncontrolled Unicode exception, a reassignable adapter track, noncanonical and
+unbounded decimal encodings, and insufficient verification-key provenance.
+Each runtime issue received a witnessed failing regression test before the
+boundary fix. The evidence bundle now publishes the two signed state fixtures,
+public JWK, full public-key thumbprint, deterministic software Level 1 fixture
+provenance, graphical architecture, and eight integrity-checked artifacts.
+
+**Affected artifacts:**
+
+- `schemas/q-state-v0.schema.json`
+- `src/kil/q_state.py`
+- `src/kil/live_authz.py`
+- `src/kil/reference_gateway.py`
+- `tools/v3a_demo.py`
+- `tests/test_q_state.py`
+- `tests/test_live_authz.py`
+- `tests/test_reference_gateway.py`
+- `tests/test_v3a_demo.py`
+- `docs/architecture/v3-envoy-live-validation.svg`
+- `docs/lab/V3-PROGRESS.md`
+- `adapters/envoy/README.md`
+- `README.md`
+- `tools/README.md`
+
+**Evidence:** The pre-review run `52c90309d00439e7` at commit
+`ad3db6aa7686781761bd8622a435c279f534df05` passed 121 tests but is development
+history only. The review-complete run `b0cdc26b471c9539` at implementation
+commit `700b307a573e3668024d51e3b156d7044b03fca3` passed 125 tests and all eight
+published checksum checks. Both runs remain labeled `modeled` with validation
+scope `process_contract_only`.
+
+**Unresolved questions:** V3B still must install or resolve the local container
+toolchain, pin Envoy and workload image digests, implement the frozen HTTP
+adapter contract, prove NetworkPolicy and target isolation under Kind, execute
+the full failure matrix, and measure cluster-level latency. The KTP specialist
+must still decide whether the extension belongs in KTP 2.1 or 3.0.
+
+**Next gate:** Review and integrate the V3A feature branch, then write and
+execute the V3B Envoy/Kind implementation plan against the approved diagram and
+the frozen adapter contract. Only a passing joined cluster run may introduce
+`validated` for the observed transport result.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

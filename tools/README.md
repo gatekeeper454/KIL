@@ -8,7 +8,9 @@ and figures from canonical decision records.
 one normalized request, joins each decision to its forwarding outcome and
 harmless target marker, and emits an atomic, content-addressed evidence bundle.
 The bundle is labeled `modeled` with scope `process_contract_only`; it is not an
-Envoy or Kubernetes validation.
+Envoy or Kubernetes validation. It contains decisions, joins, target records,
+the two signed Q-state fixtures, the public verification JWK and provenance,
+the visible HTML view, a Markdown summary, a manifest, and checksums.
 
 ```bash
 PYTHONPATH=src python3 tools/v3a_demo.py \

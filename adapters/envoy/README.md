@@ -14,6 +14,37 @@ Kinetic Envelope results; it does not replace either KTP construct. The first
 lab profile uses Ed25519 compact JWS, track-bound audiences, exact request
 binding, a maximum ten-second lifetime, and fail-closed verification.
 
+## Fixed HTTP contract
+
+Each Envoy HTTP filter chain places `envoy.filters.http.ext_authz` immediately
+before `envoy.filters.http.router`. The laboratory profile fixes an authorization
+timeout of 250 ms, disables retries, sets `failure_mode_allow: false`, and does
+not enable route-cache clearing. An unavailable, timed-out, or malformed
+authorization response therefore cannot fall through to the target.
+
+The request-header allowlist sent to the authorization service is exactly:
+
+- `:method`
+- `:path`
+- `x-request-id`
+- `authorization`
+- `x-kil-q-state`
+
+The adapter must not forward client-supplied `x-kil-mode`,
+`x-kil-local-evidence`, `x-kil-verified-subject`, `x-kil-issuer`, or any
+undeclared header into trusted evaluation. Track, audience, expected subject,
+action mapping, and local evidence come from read-only server configuration or
+the server-side fixture store. `authorization` is consumed for the baseline
+comparison and must be redacted from all logs.
+
+On permit, the service returns an allow response and the
+`x-kil-decision-digest` value for Envoy to record and pass to the harmless
+target. On policy denial, the client receives a generic HTTP 403 response with
+no internal reason; on authorization-service error, it receives the configured
+generic HTTP 503 response. Both paths expose the decision digest to the run
+collector without exposing the signed state or credential. The digest, track,
+run ID, and request ID are the join keys for the authoritative JSONL record.
+
 V3B accepts a denial as pre-execution evidence only when the joined record
 contains all three facts: the KIL decision denies, Envoy does not forward the
 request, and the target workload has no matching invocation marker. V3A's
