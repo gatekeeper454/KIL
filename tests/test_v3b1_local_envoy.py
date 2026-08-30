@@ -27,6 +27,7 @@ from tools.v3b1_harness_contract import (
 from tools.v3b1_local_envoy import (
     _complete_request_attempt,
     _bind_journal_manifest,
+    _persist_journal,
     _prepare_failure_provisional,
     _runtime_root,
     ACTIVE_STATE_PATH,
@@ -1842,9 +1843,13 @@ class _RunConnection:
     def close(self) -> None:
         if self.closed:
             return
-        self.closed = True
         self.events.append(("close", self.port))
         error = self.behavior.get("close_error")
+        if error is not None and self.behavior.get("close_error_leaves_open"):
+            raise error
+        if self.behavior.get("close_unconfirmed"):
+            return
+        self.closed = True
         if error is not None:
             raise error
 
@@ -2063,6 +2068,21 @@ class GatewayReadinessTest(unittest.TestCase):
                 {value["status"] for value in journal["requests"].values()},
                 {"not_attempted"},
             )
+            session_events = [
+                event
+                for event in journal["events"]
+                if event["event"] == "readiness_session_started"
+            ]
+            completion_events = [
+                event
+                for event in journal["events"]
+                if event["event"] == "readiness_connect_complete"
+            ]
+            self.assertEqual(len(session_events), 1)
+            self.assertEqual(completion_events, [])
+            self.assertRegex(
+                session_events[0]["details"]["readiness_nonce"], r"^[a-f0-9]{64}$"
+            )
             self.assertFalse(request_path.exists())
             self.assertFalse(any(event[0] == "request" for event in events))
             self.assertTrue(factory.connections[0].closed)
@@ -2085,6 +2105,18 @@ class GatewayReadinessTest(unittest.TestCase):
                 {value["status"] for value in journal["requests"].values()},
                 {"not_attempted"},
             )
+            session_events = [
+                event
+                for event in journal["events"]
+                if event["event"] == "readiness_session_started"
+            ]
+            completion_events = [
+                event
+                for event in journal["events"]
+                if event["event"] == "readiness_connect_complete"
+            ]
+            self.assertEqual(len(session_events), 1)
+            self.assertEqual(completion_events, [])
             self.assertFalse(request_path.exists())
             self.assertFalse(any(event[0] == "request" for event in events))
             self.assertTrue(all(connection.closed for connection in factory.connections))
@@ -2132,6 +2164,133 @@ class GatewayReadinessTest(unittest.TestCase):
             self.assertFalse(any(event[0] == "request" for event in events))
             self.assertFalse(request_path.exists())
             self.assertTrue(all(connection.closed for connection in factory.connections))
+
+    def assert_failed_round_close_ambiguity(self, first_behavior, category):
+        with tempfile.TemporaryDirectory() as directory:
+            secret = "private close message with Bearer credential"
+            controller, factory, _, request_path, events = self.make_controller(
+                directory,
+                [
+                    first_behavior(secret),
+                    {
+                        "connect_error": ConnectionRefusedError(
+                            errno.ECONNREFUSED, "private primary detail"
+                        )
+                    },
+                    {},
+                    {},
+                    {},
+                ],
+            )
+
+            with self.assertRaisesRegex(
+                ControllerError, "readiness.*closure|closure.*readiness"
+            ):
+                self.run_with_fake_http(controller)
+
+            self.assertEqual(
+                [event[2] for event in events if event[0] == "factory"],
+                [18080, 18081],
+            )
+            self.assertFalse(any(event[0] == "request" for event in events))
+            self.assertFalse(any(event[0] == "collect" for event in events))
+            self.assertFalse(request_path.exists())
+            journal = load_lifecycle_journal(controller.journal_path)
+            self.assertEqual(
+                [event["event"] for event in journal["events"]][-2:],
+                ["readiness_connect_failed", "connection_close_failed"],
+            )
+            close_details = journal["events"][-1]["details"]
+            self.assertEqual(
+                close_details["failures"],
+                [
+                    {
+                        "track": "credential_policy_baseline",
+                        "category": category,
+                    }
+                ],
+            )
+            serialized = canonical_json(close_details)
+            self.assertNotIn(secret, serialized)
+            self.assertNotIn("private primary", serialized)
+            self.assertEqual(
+                len([event for event in events if event[0] == "close"]), 2
+            )
+
+    def test_failed_readiness_close_exception_stops_before_the_next_round(self):
+        self.assert_failed_round_close_ambiguity(
+            lambda secret: {
+                "close_error": OSError(errno.EIO, secret),
+                "close_error_leaves_open": True,
+            },
+            "close_raised",
+        )
+
+    def test_failed_readiness_unconfirmed_close_stops_before_the_next_round(self):
+        self.assert_failed_round_close_ambiguity(
+            lambda secret: {"close_unconfirmed": True},
+            "close_unconfirmed",
+        )
+
+    def test_successful_requests_do_not_collect_when_any_close_is_ambiguous(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, _, events = self.make_controller(
+                directory,
+                [
+                    {
+                        "close_error": OSError(errno.EIO, "private close"),
+                        "close_error_leaves_open": True,
+                    },
+                    {},
+                    {},
+                ],
+            )
+
+            with self.assertRaisesRegex(ControllerError, "closure"):
+                self.run_with_fake_http(controller)
+
+            self.assertEqual(sum(item.request_count for item in factory.connections), 3)
+            self.assertEqual(
+                len([event for event in events if event[0] == "close"]), 3
+            )
+            self.assertFalse(any(event[0] == "collect" for event in events))
+            close_event = load_lifecycle_journal(controller.journal_path)["events"][-1]
+            self.assertEqual(close_event["event"], "connection_close_failed")
+            self.assertIsNone(close_event["details"]["primary_failure"])
+
+    def test_transport_primary_is_retained_when_close_is_also_ambiguous(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, _, events = self.make_controller(
+                directory,
+                [
+                    {
+                        "request_error": BrokenPipeError(
+                            errno.EPIPE, "private request"
+                        ),
+                        "close_error": OSError(errno.EIO, "private close"),
+                        "close_error_leaves_open": True,
+                    },
+                    {},
+                    {},
+                ],
+            )
+
+            with self.assertRaisesRegex(
+                ControllerError, "request_send.*closure|closure.*request_send"
+            ):
+                self.run_with_fake_http(controller)
+
+            journal = load_lifecycle_journal(controller.journal_path)
+            self.assertEqual(journal["events"][-2]["event"], "request_send_failed")
+            self.assertEqual(journal["events"][-1]["event"], "connection_close_failed")
+            self.assertEqual(
+                journal["events"][-1]["details"]["primary_failure"],
+                "request_send",
+            )
+            self.assertEqual(
+                len([event for event in events if event[0] == "close"]), 3
+            )
+            self.assertFalse(any(event[0] == "collect" for event in events))
 
     def assert_transport_stage(self, stage, behavior, expected_class, expected_errno):
         with tempfile.TemporaryDirectory() as directory:
@@ -2301,6 +2460,26 @@ class GatewayReadinessTest(unittest.TestCase):
                 {value["status"] for value in journal["requests"].values()},
                 {"not_attempted"},
             )
+            session_events = [
+                event
+                for event in journal["events"]
+                if event["event"] == "readiness_session_started"
+            ]
+            completion_events = [
+                event
+                for event in journal["events"]
+                if event["event"] == "readiness_connect_complete"
+            ]
+            self.assertEqual(len(session_events), 2)
+            self.assertEqual(len(completion_events), 2)
+            session_nonces = [
+                event["details"]["readiness_nonce"] for event in session_events
+            ]
+            completion_nonces = [
+                event["details"]["readiness_nonce"] for event in completion_events
+            ]
+            self.assertEqual(session_nonces, completion_nonces)
+            self.assertEqual(len(set(session_nonces)), 2)
 
     def test_readiness_journal_event_schema_rejects_extra_secret_fields(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -2313,6 +2492,7 @@ class GatewayReadinessTest(unittest.TestCase):
                     controller.journal_path,
                     "readiness_connect_complete",
                     {
+                        "readiness_nonce": HEX_B,
                         "round": 1,
                         "host": "127.0.0.1",
                         "tracks": [track.value for track in LiveTrack],
@@ -2321,6 +2501,27 @@ class GatewayReadinessTest(unittest.TestCase):
                         "raw_message": "Bearer should-never-be-journaled",
                     },
                 )
+
+
+def _record_test_readiness(journal_path: Path, nonce: str = HEX_B) -> str:
+    journal_event(
+        journal_path,
+        "readiness_session_started",
+        {"readiness_nonce": nonce},
+    )
+    journal_event(
+        journal_path,
+        "readiness_connect_complete",
+        {
+            "readiness_nonce": nonce,
+            "round": 1,
+            "host": "127.0.0.1",
+            "tracks": [track.value for track in LiveTrack],
+            "ports": [18080, 18081, 18082],
+            "ready_monotonic_ns": 1,
+        },
+    )
+    return nonce
 
 
 class JournalRecoveryTest(unittest.TestCase):
@@ -2433,12 +2634,19 @@ class JournalRecoveryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             journal = self.create(root)
+            readiness_nonce = _record_test_readiness(journal)
             intent = claim_request_attempt(
-                journal, LiveTrack.SIGNED_STATE_ONLY
+                journal,
+                LiveTrack.SIGNED_STATE_ONLY,
+                readiness_nonce=readiness_nonce,
             )
             self.assertEqual(intent["status"], "intent_persisted")
             with self.assertRaisesRegex(ControllerError, "already attempted|ambiguous"):
-                claim_request_attempt(journal, LiveTrack.SIGNED_STATE_ONLY)
+                claim_request_attempt(
+                    journal,
+                    LiveTrack.SIGNED_STATE_ONLY,
+                    readiness_nonce=readiness_nonce,
+                )
             loaded = load_lifecycle_journal(journal)
             self.assertEqual(
                 loaded["requests"][LiveTrack.SIGNED_STATE_ONLY.value]["status"],
@@ -2448,6 +2656,157 @@ class JournalRecoveryTest(unittest.TestCase):
             raw["phase"] = "tampered"
             journal.write_text(canonical_json(raw) + "\n")
             with self.assertRaisesRegex(ControllerError, "binding"):
+                load_lifecycle_journal(journal)
+
+    def test_manifest_only_journal_cannot_claim_request_intent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            journal = self.create(root)
+            value = manifest()
+            private_manifest = (
+                root
+                / ".tools/v3b1-private/manifests"
+                / f"{value['run_id']}.json"
+            )
+            private_manifest.parent.mkdir(parents=True)
+            private_manifest.write_text(canonical_json(value) + "\n")
+            _bind_journal_manifest(journal, private_manifest, value)
+
+            with self.assertRaisesRegex(ControllerError, "readiness"):
+                claim_request_attempt(journal, LiveTrack.CREDENTIAL_POLICY_BASELINE)
+
+            loaded = load_lifecycle_journal(journal)
+            self.assertEqual(
+                loaded["requests"][LiveTrack.CREDENTIAL_POLICY_BASELINE.value],
+                {"status": "not_attempted", "intent_id": None},
+            )
+
+    def test_unpaired_stale_readiness_completion_cannot_authorize_intent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = self.create(Path(directory))
+            with self.assertRaisesRegex(ControllerError, "fresh|readiness"):
+                journal_event(
+                    journal,
+                    "readiness_connect_complete",
+                    {
+                        "readiness_nonce": HEX_B,
+                        "round": 1,
+                        "host": "127.0.0.1",
+                        "tracks": [track.value for track in LiveTrack],
+                        "ports": [18080, 18081, 18082],
+                        "ready_monotonic_ns": 1,
+                    },
+                )
+
+    def test_new_readiness_session_invalidates_a_crashed_session_completion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = self.create(Path(directory))
+            stale_nonce = _record_test_readiness(journal, HEX_B)
+            journal_event(
+                journal,
+                "readiness_session_started",
+                {"readiness_nonce": HEX_C},
+            )
+
+            with self.assertRaisesRegex(ControllerError, "fresh|readiness"):
+                claim_request_attempt(
+                    journal,
+                    LiveTrack.CREDENTIAL_POLICY_BASELINE,
+                    readiness_nonce=stale_nonce,
+                )
+            self.assertEqual(
+                load_lifecycle_journal(journal)["requests"]
+                [LiveTrack.CREDENTIAL_POLICY_BASELINE.value]["status"],
+                "not_attempted",
+            )
+
+    def test_request_intent_event_fields_are_closed_and_secret_free(self):
+        for mutation in (
+            {"raw_message": "Bearer secret"},
+            {"intent_id": "Bearer secret"},
+            {"track": "attacker_selected"},
+        ):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                journal = self.create(Path(directory))
+                readiness_nonce = _record_test_readiness(journal)
+                claim_request_attempt(
+                    journal,
+                    LiveTrack.CREDENTIAL_POLICY_BASELINE,
+                    readiness_nonce=readiness_nonce,
+                )
+                value = load_lifecycle_journal(journal)
+                intent_event = next(
+                    event
+                    for event in value["events"]
+                    if event["event"] == "request_send_intent"
+                )
+                intent_event["details"].update(mutation)
+                _persist_journal(journal, value)
+
+                with self.assertRaisesRegex(
+                    ControllerError, "intent.*closed|intent.*invalid|intent_id"
+                ):
+                    load_lifecycle_journal(journal)
+
+    def test_request_intent_must_cross_bind_the_durable_request_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = self.create(Path(directory))
+            readiness_nonce = _record_test_readiness(journal)
+            claim_request_attempt(
+                journal,
+                LiveTrack.CREDENTIAL_POLICY_BASELINE,
+                readiness_nonce=readiness_nonce,
+            )
+            value = load_lifecycle_journal(journal)
+            intent_event = next(
+                event
+                for event in value["events"]
+                if event["event"] == "request_send_intent"
+            )
+            intent_event["details"]["intent_id"] = HEX_C
+            _persist_journal(journal, value)
+
+            with self.assertRaisesRegex(ControllerError, "bind"):
+                load_lifecycle_journal(journal)
+
+    def test_request_intent_before_complete_current_readiness_is_invalid(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = self.create(Path(directory))
+            readiness_nonce = _record_test_readiness(journal)
+            claim_request_attempt(
+                journal,
+                LiveTrack.CREDENTIAL_POLICY_BASELINE,
+                readiness_nonce=readiness_nonce,
+            )
+            value = load_lifecycle_journal(journal)
+            session = next(
+                event
+                for event in value["events"]
+                if event["event"] == "readiness_session_started"
+            )
+            completion = next(
+                event
+                for event in value["events"]
+                if event["event"] == "readiness_connect_complete"
+            )
+            intent = next(
+                event
+                for event in value["events"]
+                if event["event"] == "request_send_intent"
+            )
+            other = [
+                event
+                for event in value["events"]
+                if event is not session
+                and event is not completion
+                and event is not intent
+            ]
+            value["events"] = other + [session, intent, completion]
+            for sequence, event in enumerate(value["events"], start=1):
+                event["sequence"] = sequence
+            _persist_journal(journal, value)
+
+            with self.assertRaisesRegex(ControllerError, "complete current readiness"):
                 load_lifecycle_journal(journal)
 
     def test_ambiguous_colima_start_requires_manual_recovery_and_is_not_deleted(self):
@@ -2596,7 +2955,6 @@ class JournalRecoveryTest(unittest.TestCase):
             "image_build",
             "network_create",
             "container_create",
-            "request_send",
             "evidence_collect",
             "container_stop",
             "container_remove",
@@ -2624,7 +2982,10 @@ class JournalRecoveryTest(unittest.TestCase):
             value = manifest()
             track = LiveTrack.CREDENTIAL_POLICY_BASELINE
             record = request_record(value, track)
-            claim_request_attempt(journal, track)
+            readiness_nonce = _record_test_readiness(journal)
+            claim_request_attempt(
+                journal, track, readiness_nonce=readiness_nonce
+            )
             _complete_request_attempt(
                 journal,
                 track,
@@ -2644,25 +3005,25 @@ class JournalRecoveryTest(unittest.TestCase):
                     [mutated], load_lifecycle_journal(journal), require_all=False
                 )
 
-            journal_event(
-                journal,
-                "request_send_complete",
-                {
-                    "track": track.value,
-                    "record_sha256": sha256(
-                        (canonical_json(record) + "\n").encode("utf-8")
-                    ).hexdigest(),
-                },
-            )
-            with self.assertRaisesRegex(ControllerError, "exactly one"):
-                validate_request_journal(
-                    [record], load_lifecycle_journal(journal), require_all=False
+            with self.assertRaisesRegex(ControllerError, "transition"):
+                journal_event(
+                    journal,
+                    "request_send_complete",
+                    {
+                        "track": track.value,
+                        "record_sha256": sha256(
+                            (canonical_json(record) + "\n").encode("utf-8")
+                        ).hexdigest(),
+                    },
                 )
 
         with tempfile.TemporaryDirectory() as directory:
             journal = self.create(Path(directory))
             track = LiveTrack.CREDENTIAL_POLICY_BASELINE
-            claim_request_attempt(journal, track)
+            readiness_nonce = _record_test_readiness(journal)
+            claim_request_attempt(
+                journal, track, readiness_nonce=readiness_nonce
+            )
             with self.assertRaisesRegex(ControllerError, "null|SHA"):
                 _complete_request_attempt(
                     journal, track, success=True, record_sha256=None
@@ -2820,8 +3181,13 @@ class TeardownContinuationTest(unittest.TestCase):
                 controller.bound_manifest = value
                 _, requests, _, _, _ = JoinContractTest().all_records()
                 controller.request_records = requests
+                readiness_nonce = _record_test_readiness(controller.journal_path)
                 for track, record in zip(LiveTrack, requests, strict=True):
-                    claim_request_attempt(controller.journal_path, track)
+                    claim_request_attempt(
+                        controller.journal_path,
+                        track,
+                        readiness_nonce=readiness_nonce,
+                    )
                     _complete_request_attempt(
                         controller.journal_path,
                         track,

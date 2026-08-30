@@ -318,8 +318,14 @@ def _validate_lifecycle_event_details(
     details: Mapping[str, object],
     requests: Mapping[str, object] | None = None,
 ) -> None:
+    if event_name == "readiness_session_started":
+        if set(details) != {"readiness_nonce"}:
+            raise ControllerError("readiness session event fields are not closed")
+        _require_sha256("readiness_nonce", details["readiness_nonce"])
+        return
     if event_name == "readiness_connect_complete":
         expected = {
+            "readiness_nonce",
             "round",
             "host",
             "tracks",
@@ -328,6 +334,7 @@ def _validate_lifecycle_event_details(
         }
         if set(details) != expected:
             raise ControllerError("readiness event fields are not closed")
+        _require_sha256("readiness_nonce", details["readiness_nonce"])
         if (
             type(details["round"]) is not int
             or details["round"] < 1
@@ -341,6 +348,7 @@ def _validate_lifecycle_event_details(
         return
     if event_name == "readiness_connect_failed":
         expected = {
+            "readiness_nonce",
             "track",
             "host",
             "port",
@@ -354,6 +362,7 @@ def _validate_lifecycle_event_details(
         }
         if set(details) != expected:
             raise ControllerError("readiness event fields are not closed")
+        _require_sha256("readiness_nonce", details["readiness_nonce"])
         try:
             track = LiveTrack(details["track"])
         except (TypeError, ValueError) as error:
@@ -412,6 +421,122 @@ def _validate_lifecycle_event_details(
                     raise ControllerError(
                         "request failure provenance does not bind its durable intent"
                     )
+        return
+    if event_name == "request_send_intent":
+        if set(details) != {"track", "intent_id"}:
+            raise ControllerError("request intent event fields are not closed")
+        if type(details["track"]) is not str:
+            raise ControllerError("request intent track is invalid")
+        try:
+            LiveTrack(details["track"])
+        except (TypeError, ValueError) as error:
+            raise ControllerError("request intent track is invalid") from error
+        _require_sha256("request intent_id", details["intent_id"])
+        return
+    if event_name == "request_send_complete":
+        if set(details) != {"track", "record_sha256"}:
+            raise ControllerError("request completion event fields are not closed")
+        if type(details["track"]) is not str:
+            raise ControllerError("request completion track is invalid")
+        try:
+            LiveTrack(details["track"])
+        except (TypeError, ValueError) as error:
+            raise ControllerError("request completion track is invalid") from error
+        _require_sha256("request completion record_sha256", details["record_sha256"])
+        return
+    if event_name == "connection_close_failed":
+        expected = {
+            "readiness_nonce",
+            "stage",
+            "primary_failure",
+            "failures",
+        }
+        if set(details) != expected:
+            raise ControllerError("connection close event fields are not closed")
+        _require_sha256("readiness_nonce", details["readiness_nonce"])
+        if details["stage"] not in {"readiness_round", "request_finalization"}:
+            raise ControllerError("connection close event stage is invalid")
+        if details["primary_failure"] not in {
+            None,
+            "readiness_connect_failed",
+            "request_processing",
+            "request_send",
+            "response_headers",
+            "response_body",
+        }:
+            raise ControllerError("connection close primary failure is invalid")
+        failures = details["failures"]
+        if type(failures) is not list or not failures:
+            raise ControllerError("connection close failures are invalid")
+        tracks: set[str] = set()
+        for failure in failures:
+            if (
+                type(failure) is not dict
+                or set(failure) != {"track", "category"}
+                or type(failure["track"]) is not str
+                or failure["track"] not in {track.value for track in _TRACKS}
+                or failure["track"] in tracks
+                or failure["category"] not in {"close_raised", "close_unconfirmed"}
+            ):
+                raise ControllerError("connection close failure is not closed")
+            tracks.add(failure["track"])
+
+
+def _validate_lifecycle_history(
+    events: Sequence[Mapping[str, object]],
+    requests: Mapping[str, object],
+) -> tuple[str | None, bool]:
+    current_readiness: str | None = None
+    readiness_complete = False
+    replayed: dict[str, dict[str, object]] = {
+        track.value: {"status": "not_attempted", "intent_id": None}
+        for track in _TRACKS
+    }
+    for event in events:
+        event_name = event["event"]
+        details = event["details"]
+        assert isinstance(event_name, str)
+        assert isinstance(details, Mapping)
+        if event_name == "readiness_session_started":
+            current_readiness = str(details["readiness_nonce"])
+            readiness_complete = False
+        elif event_name in {"readiness_connect_failed", "readiness_connect_complete"}:
+            if (
+                current_readiness is None
+                or details["readiness_nonce"] != current_readiness
+            ):
+                raise ControllerError(
+                    "readiness event does not bind the current readiness session"
+                )
+            readiness_complete = event_name == "readiness_connect_complete"
+        elif event_name == "connection_close_failed":
+            if details["readiness_nonce"] != current_readiness:
+                raise ControllerError(
+                    "connection close event does not bind the current readiness session"
+                )
+            readiness_complete = False
+        elif event_name == "request_send_intent":
+            if current_readiness is None or not readiness_complete:
+                raise ControllerError(
+                    "request intent lacks a complete current readiness set"
+                )
+            track = str(details["track"])
+            if replayed[track]["status"] != "not_attempted":
+                raise ControllerError("request intent transition is invalid")
+            replayed[track] = {
+                "status": "intent_persisted",
+                "intent_id": details["intent_id"],
+            }
+        elif event_name in {"request_send_complete", "request_send_failed"}:
+            track = str(details["track"])
+            if replayed[track]["status"] != "intent_persisted":
+                raise ControllerError("request completion transition is invalid")
+            replayed[track]["status"] = (
+                "completed" if event_name == "request_send_complete" else "failed"
+            )
+    if replayed != requests:
+        raise ControllerError("request events do not bind lifecycle request state")
+    return current_readiness, readiness_complete
 
 
 def create_lifecycle_journal(
@@ -501,9 +626,13 @@ def load_lifecycle_journal(journal_path: Path) -> dict[str, object]:
             type(request) is not dict
             or set(request) != {"status", "intent_id"}
             or request["status"] not in {"not_attempted", "intent_persisted", "completed", "failed"}
-            or (request["intent_id"] is not None and not isinstance(request["intent_id"], str))
         ):
             raise ControllerError("lifecycle request state is invalid")
+        if request["status"] == "not_attempted":
+            if request["intent_id"] is not None:
+                raise ControllerError("unattempted request has an intent")
+        else:
+            _require_sha256("lifecycle request intent_id", request["intent_id"])
     events = value["events"]
     if type(events) is not list:
         raise ControllerError("lifecycle events are invalid")
@@ -515,6 +644,7 @@ def load_lifecycle_journal(journal_path: Path) -> dict[str, object]:
         _validate_lifecycle_event_details(
             event["event"], event["details"], requests
         )
+    _validate_lifecycle_history(events, requests)
     return value
 
 
@@ -538,6 +668,7 @@ def journal_event(
     events = value["events"]
     assert isinstance(events, list)
     events.append({"sequence": len(events) + 1, "event": event, "details": dict(details)})
+    _validate_lifecycle_history(events, requests)
     value["phase"] = event
     if event == "colima_attestation_complete":
         value["profile_created"] = True
@@ -614,6 +745,7 @@ def _complete_request_attempt(
     events.append(
         {"sequence": len(events) + 1, "event": event, "details": details}
     )
+    _validate_lifecycle_history(events, requests)
     value["phase"] = event
     return _persist_journal(journal_path, value)
 
@@ -708,10 +840,25 @@ def _validate_public_provenance(
     _reject_public_secrets(engine_provenance)
 
 
-def claim_request_attempt(journal_path: Path, track: LiveTrack) -> dict[str, object]:
+def claim_request_attempt(
+    journal_path: Path,
+    track: LiveTrack,
+    *,
+    readiness_nonce: str | None = None,
+) -> dict[str, object]:
     if not isinstance(track, LiveTrack):
         raise ControllerError("request track is invalid")
     value = load_lifecycle_journal(journal_path)
+    if readiness_nonce is None:
+        raise ControllerError("request intent lacks fresh readiness authorization")
+    readiness_nonce = _require_sha256("readiness_nonce", readiness_nonce)
+    events = value["events"]
+    assert isinstance(events, list)
+    current_readiness, readiness_complete = _validate_lifecycle_history(
+        events, value["requests"]  # type: ignore[arg-type]
+    )
+    if current_readiness != readiness_nonce or not readiness_complete:
+        raise ControllerError("request intent lacks a complete fresh readiness set")
     requests = value["requests"]
     assert isinstance(requests, dict)
     request = requests[track.value]
@@ -720,8 +867,6 @@ def claim_request_attempt(journal_path: Path, track: LiveTrack) -> dict[str, obj
         raise ControllerError("request was already attempted or remains ambiguous")
     intent_id = secrets.token_hex(32)
     request.update({"status": "intent_persisted", "intent_id": intent_id})
-    events = value["events"]
-    assert isinstance(events, list)
     events.append(
         {
             "sequence": len(events) + 1,
@@ -729,6 +874,7 @@ def claim_request_attempt(journal_path: Path, track: LiveTrack) -> dict[str, obj
             "details": {"track": track.value, "intent_id": intent_id},
         }
     )
+    _validate_lifecycle_history(events, requests)
     value["phase"] = "request_send_intent"
     _persist_journal(journal_path, value)
     return {"track": track.value, "status": "intent_persisted", "intent_id": intent_id}
@@ -4844,12 +4990,49 @@ class LocalEnvoyController:
         return value
 
     @staticmethod
-    def _close_connections(connections: Sequence[object]) -> None:
-        for connection in connections:
+    def _close_connections(
+        connections: Mapping[LiveTrack, object],
+    ) -> list[dict[str, str]]:
+        failures: list[dict[str, str]] = []
+        for track, connection in connections.items():
             try:
                 connection.close()  # type: ignore[attr-defined]
             except Exception:
-                pass
+                failures.append({"track": track.value, "category": "close_raised"})
+                continue
+            try:
+                if hasattr(connection, "closed"):
+                    confirmed = connection.closed is True  # type: ignore[attr-defined]
+                elif hasattr(connection, "sock"):
+                    confirmed = connection.sock is None  # type: ignore[attr-defined]
+                else:
+                    confirmed = False
+            except Exception:
+                confirmed = False
+            if not confirmed:
+                failures.append(
+                    {"track": track.value, "category": "close_unconfirmed"}
+                )
+        return failures
+
+    def _record_close_failures(
+        self,
+        *,
+        readiness_nonce: str,
+        stage: str,
+        primary_failure: str | None,
+        failures: list[dict[str, str]],
+    ) -> None:
+        journal_event(
+            self.journal_path,
+            "connection_close_failed",
+            {
+                "readiness_nonce": readiness_nonce,
+                "stage": stage,
+                "primary_failure": primary_failure,
+                "failures": failures,
+            },
+        )
 
     def _readiness_failure_event(
         self,
@@ -4860,6 +5043,7 @@ class LocalEnvoyController:
         connect_ns: int,
         failure_ns: int,
         error: BaseException,
+        readiness_nonce: str,
     ) -> None:
         try:
             exception_class, error_number, error_name = normalize_transport_exception(
@@ -4871,6 +5055,7 @@ class LocalEnvoyController:
             self.journal_path,
             "readiness_connect_failed",
             {
+                "readiness_nonce": readiness_nonce,
                 "track": track.value,
                 "host": "127.0.0.1",
                 "port": port,
@@ -4886,7 +5071,9 @@ class LocalEnvoyController:
 
     def _connect_ready_gateways(
         self,
+        readiness_nonce: str,
     ) -> tuple[dict[LiveTrack, object], dict[LiveTrack, int]]:
+        _require_sha256("readiness_nonce", readiness_nonce)
         start_ns = self._monotonic_now()
         deadline_ns = start_ns + _READINESS_DEADLINE_NS
         round_number = 0
@@ -4939,7 +5126,17 @@ class LocalEnvoyController:
                     )
                     break
                 except Exception:
-                    self._close_connections(tuple(connections.values()))
+                    close_failures = self._close_connections(connections)
+                    if close_failures:
+                        self._record_close_failures(
+                            readiness_nonce=readiness_nonce,
+                            stage="readiness_round",
+                            primary_failure="request_processing",
+                            failures=close_failures,
+                        )
+                        raise ControllerError(
+                            "gateway readiness failed and connection closure is ambiguous"
+                        ) from None
                     raise
             if failure is None:
                 ready_ns = self._monotonic_now()
@@ -4948,6 +5145,7 @@ class LocalEnvoyController:
                         self.journal_path,
                         "readiness_connect_complete",
                         {
+                            "readiness_nonce": readiness_nonce,
                             "round": round_number,
                             "host": "127.0.0.1",
                             "tracks": [track.value for track in _TRACKS],
@@ -4956,11 +5154,20 @@ class LocalEnvoyController:
                         },
                     )
                 except Exception:
-                    self._close_connections(tuple(connections.values()))
+                    close_failures = self._close_connections(connections)
+                    if close_failures:
+                        self._record_close_failures(
+                            readiness_nonce=readiness_nonce,
+                            stage="readiness_round",
+                            primary_failure="request_processing",
+                            failures=close_failures,
+                        )
+                        raise ControllerError(
+                            "gateway readiness journaling failed and connection closure is ambiguous"
+                        ) from None
                     raise
                 return connections, connect_times
 
-            self._close_connections(tuple(connections.values()))
             track, port, connect_ns, failure_ns, error = failure
             self._readiness_failure_event(
                 track=track,
@@ -4969,7 +5176,19 @@ class LocalEnvoyController:
                 connect_ns=connect_ns,
                 failure_ns=failure_ns,
                 error=error,
+                readiness_nonce=readiness_nonce,
             )
+            close_failures = self._close_connections(connections)
+            if close_failures:
+                self._record_close_failures(
+                    readiness_nonce=readiness_nonce,
+                    stage="readiness_round",
+                    primary_failure="readiness_connect_failed",
+                    failures=close_failures,
+                )
+                raise ControllerError(
+                    "gateway readiness failed and connection closure is ambiguous"
+                ) from None
             if failure_ns >= deadline_ns:
                 raise ControllerError("gateway TCP readiness deadline expired") from None
             sleep_s = min(
@@ -5044,7 +5263,14 @@ class LocalEnvoyController:
             for request in journal["requests"].values()
         ):
             raise ControllerError("central request was already attempted; replay is forbidden")
-        connections, connect_times = self._connect_ready_gateways()
+        readiness_nonce = secrets.token_hex(32)
+        journal_event(
+            self.journal_path,
+            "readiness_session_started",
+            {"readiness_nonce": readiness_nonce},
+        )
+        connections, connect_times = self._connect_ready_gateways(readiness_nonce)
+        primary_failure: str | None = None
         try:
             private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
             records: list[dict[str, object]] = []
@@ -5074,7 +5300,11 @@ class LocalEnvoyController:
                     headers["x-kil-q-state"] = q_state
                 if q_state is not None and int(time.time()) >= issued + 10:
                     raise ControllerError("signed-state request validity expired before send")
-                claim_request_attempt(self.journal_path, track)
+                claim_request_attempt(
+                    self.journal_path,
+                    track,
+                    readiness_nonce=readiness_nonce,
+                )
                 connection = connections[track]
                 send_ns = self._monotonic_now()
                 try:
@@ -5082,6 +5312,7 @@ class LocalEnvoyController:
                         "POST", "/consequential/admin", body=b"", headers=headers
                     )
                 except (OSError, http.client.HTTPException) as error:
+                    primary_failure = "request_send"
                     self._record_transport_failure(
                         track=track,
                         stage="request_send",
@@ -5095,6 +5326,7 @@ class LocalEnvoyController:
                 try:
                     response = connection.getresponse()  # type: ignore[attr-defined]
                 except (OSError, http.client.HTTPException) as error:
+                    primary_failure = "response_headers"
                     self._record_transport_failure(
                         track=track,
                         stage="response_headers",
@@ -5108,6 +5340,7 @@ class LocalEnvoyController:
                 try:
                     response.read(4096)
                 except (OSError, http.client.HTTPException) as error:
+                    primary_failure = "response_body"
                     self._record_transport_failure(
                         track=track,
                         stage="response_body",
@@ -5189,7 +5422,29 @@ class LocalEnvoyController:
                     record_sha256=_digest_bytes(_canonical_bytes(record)),
                 )
         finally:
-            self._close_connections(tuple(connections.values()))
+            close_failures = self._close_connections(connections)
+            if close_failures:
+                if primary_failure is None and any(
+                    request["status"] == "intent_persisted"
+                    for request in load_lifecycle_journal(self.journal_path)[
+                        "requests"
+                    ].values()
+                ):
+                    primary_failure = "request_processing"
+                self._record_close_failures(
+                    readiness_nonce=readiness_nonce,
+                    stage="request_finalization",
+                    primary_failure=primary_failure,
+                    failures=close_failures,
+                )
+                if primary_failure is None:
+                    raise ControllerError(
+                        "central request connection closure is ambiguous"
+                    ) from None
+                raise ControllerError(
+                    f"central request failed during {primary_failure}; "
+                    "connection closure is ambiguous"
+                ) from None
         return self.collect()
 
     def _assert_only_recorded_managed(
