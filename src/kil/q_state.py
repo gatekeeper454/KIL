@@ -1,9 +1,20 @@
 """Experimental signed composite-state profile for KIL live validation."""
 
+from base64 import b64decode, urlsafe_b64encode
+import binascii
 from dataclasses import dataclass, fields
 from decimal import Decimal, InvalidOperation
+from hashlib import sha256
+import json
 import re
-from typing import Any
+from typing import Any, Mapping
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from .domain import CompositeState
 
@@ -14,6 +25,17 @@ _DIGEST_PATTERN = re.compile(r"^sha256:[a-f0-9]{64}$")
 _DECIMAL_FIELDS = frozenset(
     {"charge", "threshold", "decay_rate", "maximum_charge"}
 )
+
+
+class QStateVerificationError(ValueError):
+    """Raised when a signed composite state cannot be safely consumed."""
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedQState:
+    claims: "QStateClaims"
+    composite_state: CompositeState
+    key_id: str
 
 
 def _require_nonblank(name: str, value: object) -> str:
@@ -172,3 +194,139 @@ class QStateClaims:
             decay_rate=self.decay_rate,
             maximum_charge=self.maximum_charge,
         )
+
+
+def _json_bytes(value: object) -> bytes:
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
+def _b64encode(value: bytes) -> str:
+    return urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+def _b64decode(value: str) -> bytes:
+    if type(value) is not str or not value:
+        raise QStateVerificationError("malformed base64url")
+    try:
+        padding = "=" * (-len(value) % 4)
+        decoded = b64decode(
+            value + padding,
+            altchars=b"-_",
+            validate=True,
+        )
+    except (ValueError, UnicodeEncodeError, binascii.Error) as error:
+        raise QStateVerificationError("malformed base64url") from error
+    if _b64encode(decoded) != value:
+        raise QStateVerificationError("non-canonical base64url")
+    return decoded
+
+
+def key_id(public_key: Ed25519PublicKey) -> str:
+    if not isinstance(public_key, Ed25519PublicKey):
+        raise ValueError("public_key must be an Ed25519PublicKey")
+    raw = public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)
+    return sha256(raw).hexdigest()[:16]
+
+
+def issue_q_state(
+    claims: QStateClaims,
+    private_key: Ed25519PrivateKey,
+) -> str:
+    if not isinstance(claims, QStateClaims):
+        raise ValueError("claims must be QStateClaims")
+    if not isinstance(private_key, Ed25519PrivateKey):
+        raise ValueError("private_key must be an Ed25519PrivateKey")
+    kid = key_id(private_key.public_key())
+    header = {"alg": "EdDSA", "kid": kid, "typ": "KIL-Q+JWT"}
+    header_part = _b64encode(_json_bytes(header))
+    payload_part = _b64encode(_json_bytes(claims.to_payload()))
+    signing_input = f"{header_part}.{payload_part}".encode("ascii")
+    signature_part = _b64encode(private_key.sign(signing_input))
+    return f"{header_part}.{payload_part}.{signature_part}"
+
+
+def _json_object(raw: bytes, label: str) -> dict[str, object]:
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise QStateVerificationError(f"malformed {label}") from error
+    if type(value) is not dict:
+        raise QStateVerificationError(f"malformed {label}")
+    return value
+
+
+def verify_q_state(
+    token: str,
+    keys: Mapping[str, Ed25519PublicKey],
+    now_s: int,
+    expected_subject: str,
+    expected_audience: str,
+    expected_authority_class: str,
+    expected_action_class: str,
+    revoked_state_ids: frozenset[str],
+) -> VerifiedQState:
+    if type(token) is not str or not token:
+        raise QStateVerificationError("malformed token")
+    if not isinstance(keys, Mapping):
+        raise ValueError("keys must be a mapping")
+    if type(now_s) is not int:
+        raise ValueError("now_s must be an integer")
+    for name, value in (
+        ("expected_subject", expected_subject),
+        ("expected_audience", expected_audience),
+        ("expected_authority_class", expected_authority_class),
+        ("expected_action_class", expected_action_class),
+    ):
+        _require_nonblank(name, value)
+    if type(revoked_state_ids) is not frozenset or not all(
+        type(item) is str and item for item in revoked_state_ids
+    ):
+        raise ValueError("revoked_state_ids must be a frozenset of identifiers")
+
+    parts = token.split(".")
+    if len(parts) != 3 or not all(parts):
+        raise QStateVerificationError("malformed compact JWS")
+    header_part, payload_part, signature_part = parts
+    header = _json_object(_b64decode(header_part), "protected header")
+    if set(header) != {"alg", "kid", "typ"}:
+        raise QStateVerificationError("invalid protected header")
+    if header["alg"] != "EdDSA" or header["typ"] != "KIL-Q+JWT":
+        raise QStateVerificationError("invalid protected header")
+    kid = header["kid"]
+    if type(kid) is not str or not kid:
+        raise QStateVerificationError("invalid key identifier")
+    public_key = keys.get(kid)
+    if not isinstance(public_key, Ed25519PublicKey):
+        raise QStateVerificationError("verification key unavailable")
+
+    signing_input = f"{header_part}.{payload_part}".encode("ascii")
+    try:
+        public_key.verify(_b64decode(signature_part), signing_input)
+    except InvalidSignature as error:
+        raise QStateVerificationError("signature verification failed") from error
+
+    payload = _json_object(_b64decode(payload_part), "payload")
+    try:
+        claims = QStateClaims.from_payload(payload)
+    except ValueError as error:
+        raise QStateVerificationError("invalid q-state claims") from error
+    if claims.state_id in revoked_state_ids:
+        raise QStateVerificationError("state revoked")
+    if now_s < claims.not_before_s:
+        raise QStateVerificationError("state not yet valid")
+    if now_s >= claims.expires_at_s:
+        raise QStateVerificationError("state expired")
+    if claims.subject != expected_subject:
+        raise QStateVerificationError("subject binding mismatch")
+    if claims.audience != expected_audience:
+        raise QStateVerificationError("audience binding mismatch")
+    if claims.authority_class != expected_authority_class:
+        raise QStateVerificationError("authority class binding mismatch")
+    if claims.action_class != expected_action_class:
+        raise QStateVerificationError("action class binding mismatch")
+    return VerifiedQState(claims, claims.to_composite_state(), kid)

@@ -2,7 +2,15 @@ from dataclasses import replace
 from decimal import Decimal
 import unittest
 
-from kil.q_state import QStateClaims
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from kil.q_state import (
+    QStateClaims,
+    QStateVerificationError,
+    issue_q_state,
+    key_id,
+    verify_q_state,
+)
 
 
 def claims(**changes):
@@ -57,6 +65,73 @@ class QStateClaimsTest(unittest.TestCase):
         self.assertEqual(state.identity, "spiffe://kil.local/workload/demo")
         self.assertEqual(state.authority_class, "admin_action")
         self.assertTrue(state.authentic)
+
+
+class QStateSignatureTest(unittest.TestCase):
+    def setUp(self):
+        self.private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+        self.other_key = Ed25519PrivateKey.from_private_bytes(bytes(range(1, 33)))
+        public_key = self.private_key.public_key()
+        other_public_key = self.other_key.public_key()
+        self.keys = {key_id(public_key): public_key}
+        self.other_keys = {key_id(other_public_key): other_public_key}
+
+    def verify(self, token, **changes):
+        arguments = {
+            "keys": self.keys,
+            "now_s": 105,
+            "expected_subject": "spiffe://kil.local/workload/demo",
+            "expected_audience": "kil-v3-signed",
+            "expected_authority_class": "admin_action",
+            "expected_action_class": "consequential_admin",
+            "revoked_state_ids": frozenset(),
+        }
+        arguments.update(changes)
+        return verify_q_state(token, **arguments)
+
+    def test_issues_and_verifies_a_bound_compact_jws(self):
+        token = issue_q_state(claims(), self.private_key)
+        verified = self.verify(token)
+        self.assertEqual(verified.claims, claims())
+        self.assertEqual(verified.composite_state, claims().to_composite_state())
+        self.assertEqual(verified.key_id, key_id(self.private_key.public_key()))
+
+    def test_payload_or_signature_tampering_fails_closed(self):
+        token = issue_q_state(claims(), self.private_key)
+        parts = token.split(".")
+        parts[2] = ("A" if parts[2][0] != "A" else "B") + parts[2][1:]
+        with self.assertRaisesRegex(QStateVerificationError, "signature"):
+            self.verify(".".join(parts))
+
+    def test_unknown_verification_key_fails_closed(self):
+        token = issue_q_state(claims(), self.private_key)
+        with self.assertRaisesRegex(QStateVerificationError, "key"):
+            self.verify(token, keys=self.other_keys)
+
+    def test_time_and_revocation_checks_fail_closed(self):
+        token = issue_q_state(claims(), self.private_key)
+        cases = (
+            ({"now_s": 99}, "not yet valid"),
+            ({"now_s": 110}, "expired"),
+            ({"revoked_state_ids": frozenset({"q-v3a-1"})}, "revoked"),
+        )
+        for changes, reason in cases:
+            with self.subTest(reason=reason):
+                with self.assertRaisesRegex(QStateVerificationError, reason):
+                    self.verify(token, **changes)
+
+    def test_subject_audience_authority_and_action_bindings_fail_closed(self):
+        token = issue_q_state(claims(), self.private_key)
+        cases = (
+            ({"expected_subject": "spiffe://kil.local/workload/other"}, "subject"),
+            ({"expected_audience": "kil-v3-local"}, "audience"),
+            ({"expected_authority_class": "read"}, "authority class"),
+            ({"expected_action_class": "benign_read"}, "action class"),
+        )
+        for changes, reason in cases:
+            with self.subTest(reason=reason):
+                with self.assertRaisesRegex(QStateVerificationError, reason):
+                    self.verify(token, **changes)
 
 
 if __name__ == "__main__":
