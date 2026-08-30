@@ -2638,3 +2638,75 @@ Starting Colima, pulling images, and creating containers remain a later,
 separate runtime-mutation gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-055 — 2026-08-30 — V3B tool bootstrap materialized and content-locked
+
+**Input:** The founder directed the project to proceed to the next V3B gate.
+
+**Interpretation:** Execute V3B-1 Task 2 without broad host modification:
+implement the security-sensitive downloader and extractor test-first, install
+only the exact profile assets under the isolated worktree's ignored `.tools/`
+directory, and produce a locally verifiable content lock. This gate does not
+start Colima, pull container images, create a Kind cluster, or produce live
+enforcement evidence.
+
+**Decision status:** Confirmed implemented and locally verified. Fourteen new
+bootstrap tests were observed failing before implementation and now pass. The
+complete repository suite passes 157 tests. The explicit network gate installed
+and independently re-verified these identities:
+
+- Docker CLI 29.7.2, build `a7dcaa6`; archive SHA-256
+  `b8683ed19d1f06048a496f9b8429e2c71d0b088d475b7487c054ea3666c02a3c`;
+  executable SHA-256
+  `a078469d8b77683b81e1604ee35af488ef143a8a0230897f05f0839b2f42d1dd`;
+  archive attestation `locally_observed`.
+- Kind v0.32.0, Go 1.26.3, darwin/arm64; executable SHA-256
+  `dca67911095a110c2b5c36e26df6cac860c602033e456c0db47be498cdef1ebb`;
+  attestation `upstream_sidecar`.
+- kubectl v1.36.3, commit `0f29094e5b73085e3802ecc1298ecae13866bfe6`,
+  darwin/arm64; executable SHA-256
+  `fc8582acde13869a606730a79379d6515f30c68afcced0b5ac8789d5d002b7d6`;
+  attestation `upstream_sidecar`.
+
+The content lock binds profile SHA-256
+`7800ccef61346eaadabaec3b6f40f2e5bb70c299c61792313fe0068190e8f3ec`
+to the source URL, archive hash, executable hash, byte size, attestation class,
+and captured version output for every installed tool. A second preflight read
+the installed bytes and version output and matched the lock. Downloaded
+binaries and the local lock remain ignored and are not repository artifacts.
+
+**Rationale:** Exact profile admission, bounded reads, restricted redirects,
+safe tar inspection, publisher-checksum verification before atomic replacement,
+fixed executable modes, and command-local PATH usage prevent the bootstrap
+from becoming an uncontrolled supply-chain or host-configuration mechanism.
+The Docker static archive's official index provides no checksum sidecar, so its
+observed hash is recorded without claiming publisher attestation. No shell
+startup file or global Docker context was changed.
+
+**Affected artifacts:**
+
+- `.gitignore`
+- `Makefile`
+- `tools/bootstrap_v3b_tools.py`
+- `tests/test_v3b_tool_bootstrap.py`
+- `docs/superpowers/plans/2026-08-30-v3b1-toolchain-http-boundary.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- `.tools/locks/v3b-tools.json` (local, ignored evidence input)
+- `.tools/bin/docker` (local, ignored)
+- `.tools/bin/kind` (local, ignored)
+- `.tools/bin/kubectl` (local, ignored)
+
+**Unresolved questions:** Docker's publisher identity remains weaker than Kind
+and kubectl because no official sidecar is available. Envoy and Python base
+image tags still require registry-digest resolution. The HTTP authorization
+adapter, harmless target ledger, deterministic Envoy configuration, local
+container boundary proof, Kind/Calico topology, failure matrix, and repetition
+protocol remain unexecuted. Tool materialization is not live KIL validation.
+
+**Next gate:** Implement V3B-1 Task 3, the fixed-track raw HTTP authorization
+boundary, test-first. It must preserve the five-input semantic contract, keep
+track selection in read-only process configuration, delegate authorization to
+the existing immutable adapter, redact credential and signed state from logs,
+and fail closed with generic client responses.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

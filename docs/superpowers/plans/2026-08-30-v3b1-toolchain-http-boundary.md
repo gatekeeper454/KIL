@@ -182,7 +182,7 @@ git commit -m "Resolve the V3B stable toolchain profile"
 - Modify: `.gitignore`
 - Modify: `Makefile`
 
-- [ ] **Step 1: Write failing downloader-safety tests**
+- [x] **Step 1: Write failing downloader-safety tests**
 
 Tests must use in-memory byte streams and temporary directories; they must not
 access the network. Cover these exact behaviors:
@@ -204,7 +204,7 @@ class V3BToolBootstrapTest(unittest.TestCase):
             extract_docker_cli(archive_with_member("../escape"), destination)
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```bash
 PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_v3b_tool_bootstrap -v
@@ -212,7 +212,7 @@ PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_v3b_t
 
 Expected: import failure because `tools/bootstrap_v3b_tools.py` does not exist.
 
-- [ ] **Step 3: Implement bounded atomic downloads**
+- [x] **Step 3: Implement bounded atomic downloads**
 
 The tool must:
 
@@ -231,14 +231,14 @@ The tool must:
 Add `.tools/` to `.gitignore`. Add `make v3b-tools` using the selected Python
 and `make v3b-preflight` with `PATH=$(CURDIR)/.tools/bin:$(PATH)`.
 
-- [ ] **Step 4: Verify unit behavior before host/network mutation**
+- [x] **Step 4: Verify unit behavior before host/network mutation**
 
 ```bash
 PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_v3b_tool_bootstrap -v
 make validate PYTHON=/Users/mistorm/.local/bin/python3.12
 ```
 
-- [ ] **Step 5: Execute the explicit host/network gate**
+- [x] **Step 5: Execute the explicit host/network gate**
 
 After action approval, run:
 
@@ -254,7 +254,7 @@ local content lock. The Docker archive hash, which has no upstream sidecar in
 the official static index, is recorded explicitly as locally observed source
 content and may not be described as publisher-attested.
 
-- [ ] **Step 6: Commit Task 2 without committing downloaded binaries**
+- [x] **Step 6: Commit Task 2 without committing downloaded binaries**
 
 ```bash
 git add .gitignore Makefile tools/bootstrap_v3b_tools.py tests/test_v3b_tool_bootstrap.py

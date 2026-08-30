@@ -1,4 +1,4 @@
-.PHONY: help check-python test validate replay v3a-demo
+.PHONY: help check-python test validate replay v3a-demo v3b-tools v3b-preflight
 
 PYTHON ?= python3
 
@@ -7,6 +7,8 @@ help:
 	@echo "validate  Run all bootstrap checks"
 	@echo "replay    Emit a modeled historical bundle (requires OUTPUT and VERSION)"
 	@echo "v3a-demo  Emit the modeled V3A process bundle (requires OUTPUT and VERSION)"
+	@echo "v3b-tools Download and content-lock the isolated V3B toolchain"
+	@echo "v3b-preflight Verify installed V3B tools against the local content lock"
 
 check-python:
 	$(PYTHON) -c "import sys; sys.version_info >= (3, 11) or sys.exit(f'KIL requires Python >= 3.11; found {sys.version.split()[0]}')"
@@ -27,3 +29,9 @@ v3a-demo: check-python
 	@test -n "$(OUTPUT)" || (echo "OUTPUT is required" >&2; exit 2)
 	@test -n "$(VERSION)" || (echo "VERSION is required" >&2; exit 2)
 	PYTHONPATH=src $(PYTHON) tools/v3a_demo.py --output "$(OUTPUT)" --implementation-version "$(VERSION)"
+
+v3b-tools: check-python
+	PATH="$(CURDIR)/.tools/bin:$$PATH" PYTHONPATH=src $(PYTHON) tools/bootstrap_v3b_tools.py install
+
+v3b-preflight: check-python
+	PATH="$(CURDIR)/.tools/bin:$$PATH" PYTHONPATH=src $(PYTHON) tools/bootstrap_v3b_tools.py verify
