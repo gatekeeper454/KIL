@@ -105,6 +105,25 @@ CLI flag. The saved-config attestation still requires
 `nestedVirtualization: false` before any service container may deploy. Static
 verification remains 180 controller tests and 396 repository tests.
 
+The corrected zero-request lifecycle then passed from synchronized public main
+`6706859d265204e0a569ebb6817d187dc1728f9d` as run
+`v3b1-0374c771b23adcab64060cd8c854d12b72417ff8e4713d24e6f6a550e20bdbea`.
+No `run` command or request intent occurred. All nine Envoy, authorization, and
+target source legs terminated `copied`; every source and copied byte count was
+zero and every digest was the empty SHA-256. All 11 public `SHA256SUMS` entries
+verified. The manifest remains intentionally `run_complete=false`,
+`promotion_status=not_promoted`, and
+`intermediate_provisional_failure_local_boundary`; it does not claim an
+enforcement result. Teardown removed nine services, three transient validators,
+three networks, and only `kil-v3-lab` before publication. No active lifecycle
+state remains, and the foreign profile was host-verified after restoration as
+Running/containerd/arm64/4 CPU/4 GiB/20 GiB.
+
+This result accepts the zero-request lifecycle and evidence-freeze gate. The
+offline presenter correctly rejects the smoke because it is not an accepted
+local-boundary run; presenter acceptance remains an exit criterion for the one
+central proof.
+
 V3B-1 is limited to the local Envoy boundary. Full local-cluster transport
 validation remains V3B-2: the isolated Kind/Calico topology, approved failure
 matrix, target-side markers, and cluster-level measurements are still
@@ -121,11 +140,12 @@ and the complete approved specification is
 
 ## Next gate
 
-Publish and merge the exact-byte service-ledger export correction, then execute
-a fresh zero-request `preflight` / `up` / `down` smoke from clean synchronized
-main. Require all nine source legs to be copied and byte-bound, along with exact
-teardown and foreign-runtime restoration. A central request remains prohibited
-until that gate passes. V3B-2 and V3C remain separate later gates, and all V3A
-output remains explicitly modeled.
+Publish and merge the corrected zero-request smoke references. Then execute
+exactly one central V3B-1 `preflight` / `up` / `run` / `down` proof from clean
+synchronized main, with no retry after request intent. Require
+`permit / permit / deny`, HTTP `200 / 200 / 403`, target markers `1 / 1 / 0`,
+exact source joins and checksums, verified teardown, restored foreign runtime,
+and offline presenter acceptance. V3B-2 and V3C remain separate later gates,
+and all V3A output remains explicitly modeled.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

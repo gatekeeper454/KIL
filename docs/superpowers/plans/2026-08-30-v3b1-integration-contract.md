@@ -217,7 +217,7 @@ status after the KIL cycle.
 Use the exact committed implementation identity. Confirm no request intent,
 request send, authz decision, or target marker occurred.
 
-- [ ] **Step 3: Verify smoke evidence and exact absence**
+- [x] **Step 3: Verify smoke evidence and exact absence**
 
 Verify public checksums, nonpromotable classification, one bundle/archive,
 recorded object absence, dedicated profile absence, restored foreign profile,
@@ -248,6 +248,14 @@ creation: first at host Docker discovery, then at Colima's rejection of the
 explicit nested-virtualization false flag. Both journals were safely archived,
 the foreign runtime was restored, and no request occurred. The minimal Colima
 compatibility correction must merge before Task 6 is attempted again.
+
+Task 6 passed on corrected public main commit
+`6706859d265204e0a569ebb6817d187dc1728f9d`. Run
+`v3b1-0374c771b23adcab64060cd8c854d12b72417ff8e4713d24e6f6a550e20bdbea`
+recorded no request intent, nine copied and byte-bound empty source legs,
+verified checksums, exact teardown, and exact foreign-runtime restoration. Task
+7 is now authorized; this smoke itself remains incomplete, nonpromotable, and
+not an accepted enforcement result.
 
 ### Task 7: Execute one accepted local Envoy proof and presenter bundle
 
