@@ -829,13 +829,13 @@ git commit -m "Document the V3B-1 request driver boundary"
 - Modify after the run: `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
 - Modify live: ignored `artifacts/generated/v3b1-task6-live-status.md`
 
-- [ ] **Step 1: Push the implementation PR and require CI**
+- [x] **Step 1: Push the implementation PR and require CI**
 
 Push the feature branch, create a PR, require both GitHub bootstrap jobs and the
 local static gate to pass, resolve review findings, merge, fast-forward local
 `main`, and verify local/remote/GitHub main commit equality and a clean tree.
 
-- [ ] **Step 2: Record exact host state and run preflight**
+- [x] **Step 2: Record exact host state and run preflight**
 
 Read and record all Colima profiles without mutating them. Use the pinned PATH:
 
