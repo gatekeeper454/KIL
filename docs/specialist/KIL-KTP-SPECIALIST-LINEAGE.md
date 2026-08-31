@@ -6921,3 +6921,47 @@ approval of the written file. After approval, write the complete test-first
 implementation plan. The central `run` remains prohibited.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-128 — 2026-08-31 — Audience walkthrough distinguishes observed lifecycle, modeled outcome, and pending live enforcement
+
+**Input:** Show how the live demonstration works in a form that other people
+can understand.
+
+**Interpretation:** Provide a presenter-facing step-through of topology,
+readiness, request intent, ambient enforcement, comparative outcomes, evidence
+construction, and the current approval gate without implying that the central
+live enforcement request has already executed.
+
+**Decision status:** Confirmed explanatory asset. The walkthrough states that
+the request-free V3B-1 lifecycle is observed live, the `permit / permit / deny`
+comparison is currently reproduced by the modeled V3A process contract, and
+the authoritative V3B-1 enforcement result remains locked behind the v3
+foreign-resource snapshot gate.
+
+**Rationale:** A credible public demonstration must make the enforcement path
+and evidentiary boundary visible at the same time. The audience sees the fixed
+path `controller -> one-shot driver -> Envoy -> KIL authorization -> target or
+withhold`, the three comparison tracks, and the evidence pipeline without
+collapsing modeled, observed, and pending claims.
+
+**Affected artifacts:**
+
+- thread visualization `kil-live-demo-walkthrough.html`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The fragment rendered successfully, JavaScript syntax was
+validated, all seven controls updated their intended state, and the topology,
+outcome, evidence, and gate views were checked at 736-pixel and 360-pixel
+viewports with no console warnings, errors, or horizontal overflow.
+
+**Unresolved questions:** The written v3 snapshot specification still requires
+founder review. The walkthrough is not itself an evidence bundle and must not
+be presented as the accepted live result.
+
+**Next gate:** Obtain founder approval of
+`docs/superpowers/specs/2026-08-31-v3b1-foreign-resource-snapshot-design.md`,
+then write the test-first implementation plan. The central `run` remains
+prohibited until the merged v3 snapshot contract passes a fresh request-free
+publication gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
