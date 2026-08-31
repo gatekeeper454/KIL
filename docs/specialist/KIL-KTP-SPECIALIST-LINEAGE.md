@@ -5709,3 +5709,71 @@ drivers; make Envoy the sole dual-homed service with fixed frontend alias
 `envoy`; remove all host publication; and maintain exact inventory ownership.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-112 — 2026-08-31 — Split internal topology and phase-aware ownership recovery approved
+
+**Input:** Implement the Task 4 runtime topology rapidly but keep all work
+static and independently reviewed before any Docker or laboratory execution.
+
+**Interpretation:** The private 12-container/6-network projection must become
+exact runtime commands and attestations: three isolated frontend/backend pairs,
+Envoy as the sole dual-homed service, stopped one-shot drivers, no host
+publication, exact full-ID ownership, and recovery that remains safe at every
+possible frontend-attachment crash point.
+
+**Decision status:** Confirmed Task 4 complete after specification and repeated
+quality review. Commits `74e1a3da1da3c9d4f90022e9ce95a0421557cf0c`,
+`cb1e5ec2fb55d66852ed8429ffb85e3f92ec4ffd`,
+`5571d5cd0207da5c6f3f3db41be7d3ddad789d90`, and
+`67a1a79698d1e9346dfa4055688f5d8fea579910` implement six internal bridge
+segments; nine running authz/target/Envoy services; three stopped, stdin-open,
+mountless drivers; three transient validators; and zero host-published ports.
+Envoy starts on its backend and is attached by exact full IDs to its frontend
+under durable connect intent/completion with the fixed `envoy` alias.
+
+Review corrections added direct attestation of privilege, primary network,
+PID/IPC/UTS/user/cgroup namespaces for persistent and validator containers;
+pinned private cgroup namespaces; rejected malformed raw inspect shapes before
+normalization; closed alias upper bounds so only Envoy owns the reserved
+frontend alias; bound exact network full-ID-to-name membership; and expanded
+pure teardown to the exact 15-container/6-network owned inventory.
+
+The final recovery correction derives per-track `unstarted`, `pending`, or
+`complete` Envoy attachment state from durable journal events and recorded full
+IDs. Unstarted accepts backend-only and rejects unjournaled frontend
+attachment. Pending accepts exactly backend-only or the exact dual-homed shape.
+Complete requires exact dual-homing. The same phase object reaches load,
+state/runtime reverify, evidence freeze, stop, pre-removal reinspection, and
+network membership validation.
+
+**Rationale:** Runtime isolation is meaningful only when observed state, not
+command intent, proves the boundary. Phase-aware exact-ID recovery prevents
+both stranded owned objects and silent acceptance of mutations that were never
+durably journaled.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tools/v3b1_harness_contract.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final implementation sweep passed 105 focused lifecycle
+tests, 193 local-Envoy tests, and 437 repository tests plus compilation and diff
+hygiene. Independent quality re-review passed 83 focused recovery/contract
+tests and the full 437-test suite with no remaining Critical or Important
+finding. No Docker, Colima, network, or live laboratory runtime was invoked.
+
+**Unresolved questions:** The stopped drivers have not yet been started through
+attached control sessions. Readiness records, deterministic EOF cancellation,
+diagnostic-only lifecycle state, request sequencing, driver evidence, and both
+live gates remain unimplemented or unexecuted.
+
+**Next gate:** Execute Task 5 test-first: start all three exact stopped drivers
+through attached sessions, require all readiness records under one deadline,
+provide a request-free `readiness-only` lifecycle that sends EOF and proves
+zero request intent/HTTP bytes, and poison the lifecycle on malformed output or
+nonzero cancellation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

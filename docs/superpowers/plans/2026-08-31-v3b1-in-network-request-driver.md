@@ -437,7 +437,7 @@ git commit -m "Define the V3B-1 driver content identity"
 - Modify: `tools/v3b1_harness_contract.py`
 - Modify: `tests/test_v3b1_local_envoy.py`
 
-- [ ] **Step 1: Write RED command and attestation tests**
+- [x] **Step 1: Write RED command and attestation tests**
 
 Add exact tests requiring:
 
@@ -452,12 +452,12 @@ Add exact tests requiring:
 - `HostConfig.PortBindings == {}` and live published ports empty/null; and
 - no command contains `--publish`, `-p`, a host port, or a non-internal segment.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run the named topology and `RuntimeAttestationTest` cases. Expect failures on
 three networks, nine objects, running-only inspection, and host publication.
 
-- [ ] **Step 3: Implement runtime commands and exact topology attestation**
+- [x] **Step 3: Implement runtime commands and exact topology attestation**
 
 Create all backend segments first, then frontend segments. Start services on
 backend. Connect each Envoy to its frontend with one durable
@@ -470,13 +470,13 @@ from `NetworkSettings.Networks`. Make `_inspect_network()` validate segment and
 closed member-role sets. `up_complete` requires twelve persistent track objects,
 three validators, six networks, and no host publication.
 
-- [ ] **Step 4: Update state, inventory, and pure teardown builders**
+- [x] **Step 4: Update state, inventory, and pure teardown builders**
 
 Advance full-ID state validation, object counts, fixed-name parsing,
 `teardown_commands()`, and partial-up maxima to 15 containers and six networks.
 Keep source-attestation cardinality at exactly nine enforcement sources.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run `ControllerContractTest`, `RuntimeAttestationTest`, and teardown command
 tests, then compilation and diff hygiene.
