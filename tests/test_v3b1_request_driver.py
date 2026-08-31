@@ -1,6 +1,8 @@
 import json
+from http.client import BadStatusLine, HTTPResponse, IncompleteRead
 from io import BytesIO
 from pathlib import Path
+import socket
 import traceback
 import unittest
 from unittest.mock import patch
@@ -405,12 +407,14 @@ class _Response:
         body=b"",
         header_error=None,
         body_error=None,
+        declared_length=None,
     ):
         self.status = status
         self.decision_digest = decision_digest
         self.body = body
         self.header_error = header_error
         self.body_error = body_error
+        self.length = declared_length
         self.header_names = []
         self.read_sizes = []
 
@@ -426,7 +430,10 @@ class _Response:
         self.read_sizes.append(size)
         if self.body_error is not None:
             raise self.body_error
-        return self.body[:size]
+        result = self.body[:size]
+        if self.length is not None:
+            self.length -= len(result)
+        return result
 
 
 class _Connection:
@@ -478,6 +485,55 @@ class _Output(BytesIO):
         return super().flush()
 
 
+_NO_PROGRESS = object()
+
+
+class _ControlledOutput(_Output):
+    def __init__(
+        self,
+        *,
+        max_write=None,
+        short_after_first_flush=False,
+        invalid_progress=_NO_PROGRESS,
+        invalid_after_first_flush=False,
+        fail_flush_number=None,
+    ):
+        super().__init__()
+        self.max_write = max_write
+        self.short_after_first_flush = short_after_first_flush
+        self.invalid_progress = invalid_progress
+        self.invalid_after_first_flush = invalid_after_first_flush
+        self.fail_flush_number = fail_flush_number
+        self.write_sizes = []
+        self._invalid_used = False
+
+    def write(self, payload):
+        self.write_sizes.append(len(payload))
+        should_invalidate = (
+            self.invalid_progress is not _NO_PROGRESS and not self._invalid_used
+        )
+        if should_invalidate and (
+            not self.invalid_after_first_flush or self.flush_count >= 1
+        ):
+            self._invalid_used = True
+            return self.invalid_progress
+        should_shorten = self.max_write is not None and (
+            not self.short_after_first_flush or self.flush_count >= 1
+        )
+        amount = min(len(payload), self.max_write) if should_shorten else len(payload)
+        return super().write(payload[:amount])
+
+    def flush(self):
+        if self.fail_flush_number == self.flush_count + 1:
+            raise OSError("PRIVATE flush failure")
+        return super().flush()
+
+
+class _ReadForbidden(BytesIO):
+    def read(self, size=-1):
+        raise AssertionError("stdin must not be read after output failure")
+
+
 class _ReadGuard(BytesIO):
     def __init__(self, payload, output):
         super().__init__(payload)
@@ -503,8 +559,9 @@ class RequestDriverTest(unittest.TestCase):
         connection=None,
         clock_values=(10, 20, 30, 40),
         guarded_input=False,
+        output=None,
     ):
-        output = _Output()
+        output = _Output() if output is None else output
         stdin = (
             _ReadGuard(payload, output)
             if guarded_input
@@ -554,6 +611,61 @@ class RequestDriverTest(unittest.TestCase):
         self.assertEqual(connection.getresponse_count, 0)
         self.assertEqual(connection.close_count, 1)
 
+    def test_positive_short_writes_complete_and_flush_readiness_before_input(self):
+        output_stream = _ControlledOutput(max_write=7)
+        exit_code, output, stdin, connection, _ = self.run_driver(
+            b"",
+            clock_values=(10, 20),
+            guarded_input=True,
+            output=output_stream,
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(self.parsed_output(output)), 1)
+        self.assertGreater(len(output_stream.write_sizes), 1)
+        self.assertTrue(all(size > 0 for size in output_stream.write_sizes))
+        self.assertEqual(output_stream.flush_count, 1)
+        self.assertEqual(stdin.read_sizes, [driver_protocol.MAX_INSTRUCTION_BYTES + 1])
+        self.assertEqual(connection.requests, [])
+
+    def test_invalid_output_progress_fails_before_input_or_http(self):
+        for progress in (False, None, 0, -1, 10_000):
+            with self.subTest(progress=progress):
+                output_stream = _ControlledOutput(invalid_progress=progress)
+                connection = _Connection()
+                factory = _Factory(connection)
+                exit_code = execute_driver(
+                    track="signed_state_only",
+                    stdin=_ReadForbidden(),
+                    stdout=output_stream,
+                    connection_factory=factory,
+                    monotonic_ns=_Clock(10, 20),
+                )
+
+                self.assertEqual(exit_code, 1)
+                self.assertEqual(output_stream.getvalue(), b"")
+                self.assertEqual(output_stream.flush_count, 0)
+                self.assertEqual(connection.requests, [])
+                self.assertEqual(connection.getresponse_count, 0)
+                self.assertEqual(connection.close_count, 1)
+
+    def test_readiness_flush_failure_fails_before_input_or_http(self):
+        output_stream = _ControlledOutput(fail_flush_number=1)
+        connection = _Connection()
+        exit_code = execute_driver(
+            track="signed_state_only",
+            stdin=_ReadForbidden(),
+            stdout=output_stream,
+            connection_factory=_Factory(connection),
+            monotonic_ns=_Clock(10, 20),
+        )
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(len(self.parsed_output(output_stream.getvalue())), 1)
+        self.assertEqual(output_stream.flush_count, 0)
+        self.assertEqual(connection.requests, [])
+        self.assertEqual(connection.close_count, 1)
+
     def test_valid_instruction_reuses_retained_connection_once_and_emits_success(self):
         instruction = private_instruction()
         response = _Response(status=200, decision_digest=HEX_A, body=b"private-body")
@@ -601,6 +713,58 @@ class RequestDriverTest(unittest.TestCase):
         self.assertNotIn(instruction["headers"]["authorization"].encode(), output)
         self.assertNotIn(instruction["headers"]["x-kil-q-state"].encode(), output)
 
+    def test_result_positive_short_writes_still_emit_exactly_two_records(self):
+        output_stream = _ControlledOutput(
+            max_write=5,
+            short_after_first_flush=True,
+        )
+        exit_code, output, _, connection, _ = self.run_driver(
+            private_bytes(private_instruction()),
+            output=output_stream,
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(self.parsed_output(output)), 2)
+        self.assertGreater(len(output_stream.write_sizes), 2)
+        self.assertEqual(output_stream.flush_count, 2)
+        self.assertEqual(len(connection.requests), 1)
+        self.assertEqual(connection.close_count, 1)
+
+    def test_invalid_result_progress_is_nonzero_and_never_retries(self):
+        output_stream = _ControlledOutput(
+            invalid_progress=0,
+            invalid_after_first_flush=True,
+        )
+        exit_code, output, _, connection, factory = self.run_driver(
+            private_bytes(private_instruction()),
+            output=output_stream,
+        )
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(len(self.parsed_output(output)), 1)
+        self.assertEqual(output_stream.flush_count, 1)
+        self.assertEqual(len(factory.calls), 1)
+        self.assertEqual(connection.connect_count, 1)
+        self.assertEqual(len(connection.requests), 1)
+        self.assertEqual(connection.getresponse_count, 1)
+        self.assertEqual(connection.close_count, 1)
+
+    def test_result_flush_failure_is_nonzero_and_never_retries(self):
+        output_stream = _ControlledOutput(fail_flush_number=2)
+        exit_code, output, _, connection, factory = self.run_driver(
+            private_bytes(private_instruction()),
+            output=output_stream,
+        )
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(len(self.parsed_output(output)), 2)
+        self.assertEqual(output_stream.flush_count, 1)
+        self.assertEqual(len(factory.calls), 1)
+        self.assertEqual(connection.connect_count, 1)
+        self.assertEqual(len(connection.requests), 1)
+        self.assertEqual(connection.getresponse_count, 1)
+        self.assertEqual(connection.close_count, 1)
+
     def test_oversize_response_body_is_terminal_and_never_echoed(self):
         sentinel = b"PRIVATE_RESPONSE_SENTINEL"
         response = _Response(
@@ -632,6 +796,42 @@ class RequestDriverTest(unittest.TestCase):
         self.assertEqual(len(connection.requests), 1)
         self.assertEqual(connection.getresponse_count, 1)
         self.assertEqual(connection.close_count, 1)
+
+    def test_declared_content_length_premature_eof_is_response_body_failure(self):
+        client_socket, server_socket = socket.socketpair()
+        response = HTTPResponse(client_socket)
+        truncated = b"PRI"
+        try:
+            server_socket.sendall(
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Length: 10\r\n"
+                b"x-kil-decision-digest: " + HEX_A.encode() + b"\r\n\r\n" + truncated
+            )
+            server_socket.shutdown(socket.SHUT_WR)
+            response.begin()
+            connection = _Connection(response)
+
+            exit_code, output, _, connection, factory = self.run_driver(
+                private_bytes(private_instruction()), connection=connection
+            )
+
+            self.assertEqual(exit_code, 1)
+            result = self.parsed_output(output)[1]
+            self.assertEqual(result["status"], "transport_failure")
+            self.assertEqual(result["stage"], "response_body")
+            self.assertEqual(result["exception_class"], "OSError")
+            self.assertTrue(result["request_bytes_may_have_been_sent"])
+            self.assertEqual(response.length, 7)
+            self.assertNotIn(truncated, output)
+            self.assertEqual(len(factory.calls), 1)
+            self.assertEqual(connection.connect_count, 1)
+            self.assertEqual(len(connection.requests), 1)
+            self.assertEqual(connection.getresponse_count, 1)
+            self.assertEqual(connection.close_count, 1)
+        finally:
+            response.close()
+            client_socket.close()
+            server_socket.close()
 
     def test_unapproved_response_header_value_is_closed_and_never_echoed(self):
         sentinel = "PRIVATE_RESPONSE_HEADER_SENTINEL"
@@ -718,6 +918,22 @@ class RequestDriverTest(unittest.TestCase):
                 32,
                 "EPIPE",
             ),
+            (
+                "response_headers",
+                _Connection(response_error=BadStatusLine("PRIVATE status")),
+                "OSError",
+                None,
+                None,
+            ),
+            (
+                "response_body",
+                _Connection(
+                    _Response(body_error=IncompleteRead(b"PRIVATE partial", 7))
+                ),
+                "OSError",
+                None,
+                None,
+            ),
         )
 
         for stage, connection, exception_class, number, name in cases:
@@ -741,6 +957,29 @@ class RequestDriverTest(unittest.TestCase):
                 self.assertEqual(connection.connect_count, 1)
                 self.assertEqual(len(connection.requests), 1)
                 self.assertLessEqual(connection.getresponse_count, 1)
+                self.assertEqual(connection.close_count, 1)
+
+    def test_programming_faults_are_not_reported_as_transport_evidence(self):
+        cases = (
+            _Connection(request_error=RuntimeError("PRIVATE request fault")),
+            _Connection(response_error=ValueError("PRIVATE response fault")),
+            _Connection(
+                _Response(header_error=ValueError("PRIVATE header fault"))
+            ),
+            _Connection(_Response(body_error=RuntimeError("PRIVATE body fault"))),
+        )
+        for connection in cases:
+            with self.subTest(connection=connection):
+                output = _Output()
+                with self.assertRaises((RuntimeError, ValueError)):
+                    execute_driver(
+                        track="signed_state_only",
+                        stdin=BytesIO(private_bytes(private_instruction())),
+                        stdout=output,
+                        connection_factory=_Factory(connection),
+                        monotonic_ns=_Clock(10, 20, 30, 40),
+                    )
+                self.assertEqual(len(self.parsed_output(output.getvalue())), 1)
                 self.assertEqual(connection.close_count, 1)
 
     def test_main_accepts_only_fixed_arguments_and_uses_binary_streams_silently(self):

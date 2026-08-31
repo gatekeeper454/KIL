@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from http.client import HTTPConnection
+from http.client import HTTPConnection, HTTPException
 import sys
 import time
 from typing import BinaryIO, Callable, Sequence
@@ -11,6 +11,7 @@ from .v3b1_driver_protocol import (
     DRIVER_ENDPOINT,
     LINUX_ERRNO_NAMES,
     MAX_INSTRUCTION_BYTES,
+    MAX_RESULT_BYTES,
     MAX_RESPONSE_BODY_BYTES,
     DriverProtocolError,
     canonical_record,
@@ -23,6 +24,14 @@ from .v3b1_driver_protocol import (
 
 _ENDPOINT_ARGUMENT = "envoy:8080"
 _DECISION_DIGEST_HEADER = "x-kil-decision-digest"
+_OUTPUT_FAILURE = "driver canonical output failed"
+
+
+class DriverOutputError(OSError):
+    """Raised when a canonical record cannot be written exactly."""
+
+    def __init__(self) -> None:
+        super().__init__(_OUTPUT_FAILURE)
 
 
 def _validated_record(record: dict[str, object], track: str) -> dict[str, object]:
@@ -45,6 +54,31 @@ def readiness_record(
         },
         track,
     )
+
+
+def write_canonical_record(stdout: BinaryIO, record: dict[str, object]) -> None:
+    """Write and flush one bounded record despite legal positive short writes."""
+    payload = canonical_record(record)
+    if len(payload) > MAX_RESULT_BYTES:
+        raise DriverOutputError()
+    offset = 0
+    while offset < len(payload):
+        try:
+            progress = stdout.write(payload[offset:])
+        except OSError:
+            raise DriverOutputError() from None
+        remaining = len(payload) - offset
+        if (
+            type(progress) is not int
+            or progress <= 0
+            or progress > remaining
+        ):
+            raise DriverOutputError()
+        offset += progress
+    try:
+        stdout.flush()
+    except OSError:
+        raise DriverOutputError() from None
 
 
 def read_bounded_single_line(stdin: BinaryIO, limit: int) -> bytes | None:
@@ -131,10 +165,13 @@ def _closed_response_facts(response: object) -> tuple[int, str]:
     try:
         status = response.status
         digest = response.getheader(_DECISION_DIGEST_HEADER)
-        if type(status) is not int or status < 100 or status > 599:
-            raise OSError()
+    except AttributeError:
+        raise OSError() from None
+    if type(status) is not int or status < 100 or status > 599:
+        raise OSError()
+    try:
         require_sha256(digest)
-    except (AttributeError, DriverProtocolError, TypeError, ValueError):
+    except DriverProtocolError:
         raise OSError() from None
     return status, digest
 
@@ -156,7 +193,7 @@ def perform_one_request(
             body=b"",
             headers=instruction["headers"],
         )
-    except Exception as error:
+    except (OSError, HTTPException) as error:
         return _transport_failure(
             track=track,
             stage="request_send",
@@ -169,7 +206,7 @@ def perform_one_request(
     try:
         response = connection.getresponse()
         status, digest = _closed_response_facts(response)
-    except Exception as error:
+    except (OSError, HTTPException) as error:
         return _transport_failure(
             track=track,
             stage="response_headers",
@@ -183,7 +220,12 @@ def perform_one_request(
         body = response.read(MAX_RESPONSE_BODY_BYTES + 1)
         if type(body) is not bytes or len(body) > MAX_RESPONSE_BODY_BYTES:
             raise OSError()
-    except Exception as error:
+        remaining = getattr(response, "length", None)
+        if remaining is not None and (
+            type(remaining) is not int or remaining != 0
+        ):
+            raise OSError()
+    except (OSError, HTTPException) as error:
         return _transport_failure(
             track=track,
             stage="response_body",
@@ -236,16 +278,14 @@ def execute_driver(
         connection.connect()
         connection.auto_open = 0
         ready_monotonic_ns = monotonic_ns()
-        stdout.write(
-            canonical_record(
-                readiness_record(
-                    validated_track,
-                    connect_monotonic_ns,
-                    ready_monotonic_ns,
-                )
+        write_canonical_record(
+            stdout,
+            readiness_record(
+                validated_track,
+                connect_monotonic_ns,
+                ready_monotonic_ns,
             )
         )
-        stdout.flush()
         try:
             raw = read_bounded_single_line(stdin, MAX_INSTRUCTION_BYTES)
             if raw is None:
@@ -263,10 +303,9 @@ def execute_driver(
             connect_monotonic_ns=connect_monotonic_ns,
         )
         instruction = None
-        stdout.write(canonical_record(result))
-        stdout.flush()
+        write_canonical_record(stdout, result)
         return 0 if result["status"] == "complete" else 1
-    except (DriverProtocolError, OSError, TypeError, ValueError):
+    except (DriverProtocolError, OSError, HTTPException):
         return 1
     finally:
         if connection is not None:
