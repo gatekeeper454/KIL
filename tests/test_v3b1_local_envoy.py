@@ -1013,7 +1013,7 @@ class ControllerContractTest(unittest.TestCase):
 
     def test_docker_inventory_commands_return_closed_full_identity_rows(self):
         first_name = "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa"
-        network_name = "kil-v3b1-network-credential-policy-baseline-aaaaaaaaaaaa"
+        network_name = "kil-v3b1-backend-credential-policy-baseline-aaaaaaaaaaaa"
         runner = FakeRunner(
             [
                 CommandResult(
@@ -1101,7 +1101,7 @@ class ControllerContractTest(unittest.TestCase):
         }
         network = {
             "id": HEX_B,
-            "name": "kil-v3b1-network-credential-policy-baseline-bbbbbbbbbbbb",
+            "name": "kil-v3b1-backend-credential-policy-baseline-bbbbbbbbbbbb",
         }
         state = {
             "objects": [container],
@@ -1343,6 +1343,7 @@ class ControllerContractTest(unittest.TestCase):
                         for item in records
                     ),
                     kind,
+                    schema_version="kil.v3b1-integration-contract.v2",
                 )
 
             def inspect_container(identifier, *_args, **_kwargs):
@@ -1388,6 +1389,7 @@ class ControllerContractTest(unittest.TestCase):
                             if item != removed
                         ),
                         kind,
+                        schema_version="kil.v3b1-integration-contract.v2",
                     )
 
                 with mock.patch.object(
@@ -1497,8 +1499,13 @@ class ControllerContractTest(unittest.TestCase):
                     )
                     + "\n",
                     "container",
+                    schema_version="kil.v3b1-integration-contract.v2",
                 )
-                empty_networks = parse_inventory_rows("", "network")
+                empty_networks = parse_inventory_rows(
+                    "",
+                    "network",
+                    schema_version="kil.v3b1-integration-contract.v2",
+                )
 
                 def inventory(kind):
                     return containers if kind == "container" else empty_networks
@@ -1533,6 +1540,7 @@ class ControllerContractTest(unittest.TestCase):
                     )
                     + "\n",
                     "container",
+                    schema_version="kil.v3b1-integration-contract.v2",
                 )
                 with mock.patch.object(
                     controller,
@@ -1577,7 +1585,13 @@ class ControllerContractTest(unittest.TestCase):
                         controller,
                         "_docker_inventory",
                         side_effect=lambda kind: (
-                            parse_inventory_rows("", "container")
+                            parse_inventory_rows(
+                                "",
+                                "container",
+                                schema_version=(
+                                    "kil.v3b1-integration-contract.v2"
+                                ),
+                            )
                             if kind == "container"
                             else empty_networks
                         ),
@@ -2016,7 +2030,20 @@ class ControllerContractTest(unittest.TestCase):
         self.assertNotIn("gateway_port", canonical_json(identity))
         self.assertNotIn("container_name", canonical_json(identity))
         self.assertNotIn("run_id", canonical_json(identity))
-        self.assertEqual(len(value["containers"]), 9)
+        self.assertEqual(len(value["containers"]), 12)
+        self.assertEqual(len(value["networks"]), 6)
+        self.assertEqual(
+            {(item["track"], item["role"]) for item in value["containers"]},
+            {(track.value, role) for track in LiveTrack for role in (
+                "authz", "target", "envoy", "driver"
+            )},
+        )
+        self.assertEqual(
+            {(item["track"], item["segment"]) for item in value["networks"]},
+            {(track.value, segment) for track in LiveTrack for segment in (
+                "frontend", "backend"
+            )},
+        )
         different = create_run_manifest(
             PROFILE,
             profile_sha256=HEX_A,
@@ -2062,20 +2089,148 @@ class ControllerContractTest(unittest.TestCase):
     def test_runtime_names_labels_and_full_ids_do_not_change_content_digest(self):
         value = manifest()
         digest = value["content_identity_sha256"]
-        changed = json.loads(json.dumps(value))
-        changed["containers"][0]["name"] = "kil-v3b1-authz-runtime-only"
-        changed["networks"][0]["name"] = "kil-v3b1-backend-runtime-only"
-        changed["runtime_attestations"] = {
-            "container_full_ids": [HEX_A],
+        coherently_regenerated = json.loads(json.dumps(value))
+        projection = local_envoy_module._manifest_runtime_projection(
+            identity_sha256=digest,
+            kil_image_id=value["kil_image_id"],
+            envoy_image_digest=value["envoy_image_digest"],
+            driver_definition_sha256=(
+                value["content_identity"]["driver_definition_sha256"]
+            ),
+        )
+        coherently_regenerated["tracks"] = projection["tracks"]
+        coherently_regenerated["containers"] = projection["containers"]
+        coherently_regenerated["networks"] = projection["networks"]
+        local_envoy_module._validate_manifest(coherently_regenerated)
+        external_attestation = {
+            "container_full_ids": ["9" * 64],
             "labels": {"kil.v3b1.runtime": "changed"},
         }
 
         self.assertEqual(
             digest,
             sha256(
-                canonical_json(changed["content_identity"]).encode("utf-8")
+                canonical_json(coherently_regenerated["content_identity"]).encode(
+                    "utf-8"
+                )
             ).hexdigest(),
         )
+        self.assertNotIn("runtime_attestations", coherently_regenerated)
+        self.assertNotIn(
+            "9" * 64, canonical_json(coherently_regenerated["content_identity"])
+        )
+        self.assertEqual(external_attestation["container_full_ids"], ["9" * 64])
+
+        incoherent = json.loads(json.dumps(value))
+        incoherent["containers"][0]["name"] = "kil-v3b1-authz-runtime-only"
+        with self.assertRaises(ControllerError):
+            local_envoy_module._validate_manifest(incoherent)
+
+    def test_manifest_runtime_projection_rejects_detached_or_mismatched_bindings(self):
+        value = manifest()
+        cases = {}
+
+        detached_authz = json.loads(json.dumps(value))
+        detached_authz["tracks"][0]["authz_container"] = (
+            detached_authz["tracks"][1]["authz_container"]
+        )
+        cases["detached-authz"] = detached_authz
+
+        wrong_image = json.loads(json.dumps(value))
+        next(
+            item for item in wrong_image["containers"]
+            if item["role"] == "authz"
+        )["image"] = ENVOY_DIGEST
+        cases["role-image"] = wrong_image
+
+        wrong_envoy_image = json.loads(json.dumps(value))
+        next(
+            item for item in wrong_envoy_image["containers"]
+            if item["role"] == "envoy"
+        )["image"] = value["kil_image_id"]
+        cases["envoy-image"] = wrong_envoy_image
+
+        wrong_driver_image = json.loads(json.dumps(value))
+        next(
+            item for item in wrong_driver_image["containers"]
+            if item["role"] == "driver"
+        )["image"] = ENVOY_DIGEST
+        cases["driver-image"] = wrong_driver_image
+
+        wrong_path = json.loads(json.dumps(value))
+        wrong_path["tracks"][0]["decision_source"] = "detached/decisions.jsonl"
+        cases["source-path"] = wrong_path
+
+        wrong_target_path = json.loads(json.dumps(value))
+        wrong_target_path["tracks"][0]["target_source"] = (
+            "detached/target-markers.jsonl"
+        )
+        cases["target-source-path"] = wrong_target_path
+
+        wrong_envoy_path = json.loads(json.dumps(value))
+        wrong_envoy_path["tracks"][0]["envoy_source"] = (
+            "detached/envoy-access.jsonl"
+        )
+        cases["envoy-source-path"] = wrong_envoy_path
+
+        wrong_driver_reference = json.loads(json.dumps(value))
+        wrong_driver_reference["tracks"][0]["driver_definition_sha256"] = HEX_A
+        cases["driver-definition-reference"] = wrong_driver_reference
+
+        wrong_container_reference = json.loads(json.dumps(value))
+        next(
+            item for item in wrong_container_reference["containers"]
+            if item["role"] == "driver"
+        )["command_definition_sha256"] = HEX_A
+        cases["driver-command-reference"] = wrong_container_reference
+
+        wrong_suffix = json.loads(json.dumps(value))
+        wrong_suffix["containers"][0]["name"] = (
+            wrong_suffix["containers"][0]["name"][:-12] + "f" * 12
+        )
+        cases["name-suffix"] = wrong_suffix
+
+        wrong_network_suffix = json.loads(json.dumps(value))
+        wrong_network_suffix["networks"][0]["name"] = (
+            wrong_network_suffix["networks"][0]["name"][:-12] + "f" * 12
+        )
+        cases["network-name-suffix"] = wrong_network_suffix
+
+        detached_network = json.loads(json.dumps(value))
+        detached_network["tracks"][0]["frontend_network"] = (
+            detached_network["tracks"][1]["frontend_network"]
+        )
+        cases["detached-frontend-network"] = detached_network
+
+        duplicate_container = json.loads(json.dumps(value))
+        duplicate_container["containers"][1] = dict(
+            duplicate_container["containers"][0]
+        )
+        cases["duplicate-container"] = duplicate_container
+
+        duplicate_network = json.loads(json.dumps(value))
+        duplicate_network["networks"][1] = dict(duplicate_network["networks"][0])
+        cases["duplicate-network"] = duplicate_network
+
+        missing_container = json.loads(json.dumps(value))
+        missing_container["containers"].pop()
+        cases["missing-container"] = missing_container
+
+        extra_container = json.loads(json.dumps(value))
+        extra_container["containers"].append(dict(extra_container["containers"][0]))
+        cases["extra-container"] = extra_container
+
+        missing_network = json.loads(json.dumps(value))
+        missing_network["networks"].pop()
+        cases["missing-network"] = missing_network
+
+        extra_network = json.loads(json.dumps(value))
+        extra_network["networks"].append(dict(extra_network["networks"][0]))
+        cases["extra-network"] = extra_network
+
+        for label, changed in cases.items():
+            with self.subTest(label=label), self.assertRaises(ControllerError):
+                local_envoy_module._validate_manifest(changed)
 
     def test_private_manifest_dispatch_rejects_hybrid_schema_shapes(self):
         value = manifest()
@@ -2282,7 +2437,7 @@ class ControllerContractTest(unittest.TestCase):
                         run_networks[track["target_container"]],
                         run_networks[track["envoy_container"]],
                     },
-                    {track["network"]},
+                    {track["backend_network"]},
                 )
 
             copies = collection_commands(
@@ -4469,7 +4624,7 @@ class JournalRecoveryTest(unittest.TestCase):
                 elif phase == "network_remove":
                     details = {
                         "id": HEX_A,
-                        "name": "kil-v3b1-network-credential-policy-baseline-aaaaaaaaaaaa",
+                        "name": "kil-v3b1-backend-credential-policy-baseline-aaaaaaaaaaaa",
                     }
                 elif phase == "container_create":
                     details = {
@@ -4477,7 +4632,7 @@ class JournalRecoveryTest(unittest.TestCase):
                     }
                 elif phase == "network_create":
                     details = {
-                        "name": "kil-v3b1-network-credential-policy-baseline-aaaaaaaaaaaa"
+                        "name": "kil-v3b1-backend-credential-policy-baseline-aaaaaaaaaaaa"
                     }
                 journal_event(
                     journal,
@@ -7470,7 +7625,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                     },
                     "State": {"Running": False},
                     "NetworkSettings": {
-                        "Networks": {track_value["network"]: {}}
+                        "Networks": {track_value["backend_network"]: {}}
                     },
                     "Mounts": [
                         {
@@ -7671,7 +7826,7 @@ class RuntimeAttestationTest(unittest.TestCase):
 
             network = {
                 "Id": "a" * 64,
-                "Name": track_value["network"],
+                "Name": track_value["backend_network"],
                 "Driver": "bridge",
                 "Internal": True,
                 "Labels": labels,
@@ -7715,7 +7870,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                 "a" * 64, value, track.value
             )
 
-            self.assertEqual(inspected["name"], track_value["network"])
+            self.assertEqual(inspected["name"], track_value["backend_network"])
             self.assertEqual(len(runner.calls), 1)
             self.assertIn("{{json .}}", runner.calls[0][0])
 

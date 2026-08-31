@@ -40,6 +40,7 @@ except ModuleNotFoundError:  # Direct execution places ``tools`` on sys.path.
 try:
     from tools.v3b1_harness_contract import (
         ContractError as HarnessContractError,
+        DRIVER_TOPOLOGY_SCHEMA_VERSION,
         DockerInventory,
         DockerInventoryEntry,
         RequestFailureProvenance,
@@ -51,6 +52,7 @@ try:
 except ModuleNotFoundError:  # Direct execution places ``tools`` on sys.path.
     from v3b1_harness_contract import (  # type: ignore[no-redef]
         ContractError as HarnessContractError,
+        DRIVER_TOPOLOGY_SCHEMA_VERSION,
         DockerInventory,
         DockerInventoryEntry,
         RequestFailureProvenance,
@@ -487,13 +489,18 @@ def _validate_lifecycle_event_details(
                 kind,
                 str(details.get("id", "0" * 64)),
                 details["name"],  # type: ignore[arg-type]
+                DRIVER_TOPOLOGY_SCHEMA_VERSION,
             )
         except HarnessContractError as error:
             raise ControllerError("Docker creation identity is invalid") from error
         return
     if event_name in {"config_validate_intent", "config_validate_complete"}:
         try:
-            DockerInventoryEntry.from_mapping(details, "container")
+            DockerInventoryEntry.from_mapping(
+                details,
+                "container",
+                schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
         except HarnessContractError as error:
             raise ControllerError("validator execution identity is invalid") from error
         return
@@ -505,7 +512,9 @@ def _validate_lifecycle_event_details(
     }:
         kind = "container" if event_name.startswith("container_") else "network"
         try:
-            DockerInventoryEntry.from_mapping(details, kind)
+            DockerInventoryEntry.from_mapping(
+                details, kind, schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION
+            )
         except HarnessContractError as error:
             raise ControllerError("Docker removal identity is invalid") from error
         return
@@ -1013,7 +1022,9 @@ def _removal_transition(
     if kind not in {"container", "network"}:
         raise ControllerError("Docker removal kind is invalid")
     try:
-        expected = DockerInventoryEntry.from_mapping(identity, kind)
+        expected = DockerInventoryEntry.from_mapping(
+            identity, kind, schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION
+        )
     except HarnessContractError as error:
         raise ControllerError("Docker removal identity is invalid") from error
     intent_name = f"{kind}_remove_intent"
@@ -1027,7 +1038,9 @@ def _removal_transition(
             continue
         details = event.get("details")
         try:
-            observed = DockerInventoryEntry.from_mapping(details, kind)
+            observed = DockerInventoryEntry.from_mapping(
+                details, kind, schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION
+            )
         except HarnessContractError as error:
             raise ControllerError("Docker removal history is invalid") from error
         if observed != expected:
@@ -1055,7 +1068,12 @@ def _creation_transition(
         raise ControllerError("Docker creation kind is invalid")
     inventory_kind = "container" if kind == "validator" else kind
     try:
-        DockerInventoryEntry(inventory_kind, "0" * 64, name)
+        DockerInventoryEntry(
+            inventory_kind,
+            "0" * 64,
+            name,
+            DRIVER_TOPOLOGY_SCHEMA_VERSION,
+        )
     except HarnessContractError as error:
         raise ControllerError("Docker creation name is invalid") from error
     prefix = "validator_create" if kind == "validator" else f"{kind}_create"
@@ -1079,7 +1097,9 @@ def _creation_transition(
             raise ControllerError("Docker creation completion lacks its intent")
         try:
             object_id = DockerInventoryEntry.from_mapping(
-                {"id": details.get("id"), "name": name}, inventory_kind
+                {"id": details.get("id"), "name": name},
+                inventory_kind,
+                schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
             ).object_id
         except HarnessContractError as error:
             raise ControllerError("Docker creation identity is invalid") from error
@@ -2030,6 +2050,84 @@ def _manifest_identity(
     }
 
 
+def _manifest_runtime_projection(
+    *,
+    identity_sha256: str,
+    kil_image_id: str,
+    envoy_image_digest: str,
+    driver_definition_sha256: Sequence[Mapping[str, object]],
+) -> dict[str, list[dict[str, object]]]:
+    """Derive the private runtime projection after content identity exists."""
+    _require_sha256("runtime projection content identity", identity_sha256)
+    suffix = identity_sha256[:12]
+    driver_hashes = {
+        str(item.get("track")): _require_sha256(
+            "runtime projection driver definition", item.get("sha256")
+        )
+        for item in driver_definition_sha256
+        if type(item) is dict
+    }
+    if set(driver_hashes) != {track.value for track in _TRACKS}:
+        raise ControllerError("runtime projection driver definitions are incomplete")
+    networks: list[dict[str, object]] = []
+    tracks: list[dict[str, object]] = []
+    containers: list[dict[str, object]] = []
+    endpoint = {"transport": "tcp", "host": "envoy", "port": 8080}
+    for track in _TRACKS:
+        slug = _track_slug(track)
+        names = {
+            role: f"kil-v3b1-{role}-{slug}-{suffix}"
+            for role in ("authz", "target", "envoy", "driver")
+        }
+        network_names = {
+            segment: f"kil-v3b1-{segment}-{slug}-{suffix}"
+            for segment in ("frontend", "backend")
+        }
+        for segment in ("frontend", "backend"):
+            networks.append(
+                {
+                    "track": track.value,
+                    "segment": segment,
+                    "name": network_names[segment],
+                }
+            )
+        tracks.append(
+            {
+                "track": track.value,
+                "driver_endpoint": dict(endpoint),
+                "authz_container": names["authz"],
+                "target_container": names["target"],
+                "envoy_container": names["envoy"],
+                "driver_container": names["driver"],
+                "frontend_network": network_names["frontend"],
+                "backend_network": network_names["backend"],
+                "decision_source": f"{track.value}/decisions.jsonl",
+                "target_source": f"{track.value}/targets.jsonl",
+                "envoy_source": f"{track.value}/envoy.stdout.jsonl",
+                "driver_definition_sha256": driver_hashes[track.value],
+            }
+        )
+        for role in ("authz", "target", "envoy", "driver"):
+            containers.append(
+                {
+                    "name": names[role],
+                    "role": role,
+                    "track": track.value,
+                    "image": (
+                        envoy_image_digest if role == "envoy" else kil_image_id
+                    ),
+                    "command_definition_sha256": (
+                        driver_hashes[track.value] if role == "driver" else None
+                    ),
+                }
+            )
+    return {
+        "networks": networks,
+        "tracks": tracks,
+        "containers": containers,
+    }
+
+
 def create_run_manifest(
     profile: V3BProfile,
     *,
@@ -2098,44 +2196,12 @@ def create_run_manifest(
     )
     identity_sha256 = _digest_bytes(canonical_json(identity).encode("utf-8"))
     run_id = f"v3b1-{identity_sha256}"
-    suffix = identity_sha256[:12]
-    networks = []
-    tracks = []
-    containers = []
-    for track in _TRACKS:
-        slug = _track_slug(track)
-        names = {
-            role: f"kil-v3b1-{role}-{slug}-{suffix}"
-            for role in ("authz", "target", "envoy")
-        }
-        network = f"kil-v3b1-network-{slug}-{suffix}"
-        networks.append({"track": track.value, "name": network})
-        tracks.append(
-            {
-                "track": track.value,
-                "driver_endpoint": {
-                    "transport": "tcp",
-                    "host": "envoy",
-                    "port": 8080,
-                },
-                "authz_container": names["authz"],
-                "target_container": names["target"],
-                "envoy_container": names["envoy"],
-                "network": network,
-                "decision_source": f"{track.value}/decisions.jsonl",
-                "target_source": f"{track.value}/targets.jsonl",
-                "envoy_source": f"{track.value}/envoy.stdout.jsonl",
-            }
-        )
-        for role in ("authz", "target", "envoy"):
-            containers.append(
-                {
-                    "name": names[role],
-                    "role": role,
-                    "track": track.value,
-                    "image": kil_image_id if role != "envoy" else envoy_image_digest,
-                }
-            )
+    runtime = _manifest_runtime_projection(
+        identity_sha256=identity_sha256,
+        kil_image_id=kil_image_id,
+        envoy_image_digest=envoy_image_digest,
+        driver_definition_sha256=identity["driver_definition_sha256"],  # type: ignore[arg-type]
+    )
     return {
         "schema_version": MANIFEST_SCHEMA,
         "evidence_scope": EVIDENCE_SCOPE,
@@ -2155,9 +2221,9 @@ def create_run_manifest(
         "kil_archive_sha256": kil_archive_sha256,
         "segment_definitions": segments,
         "driver_definitions": drivers,
-        "networks": networks,
-        "tracks": tracks,
-        "containers": containers,
+        "networks": runtime["networks"],
+        "tracks": runtime["tracks"],
+        "containers": runtime["containers"],
         "teardown": {
             "status": "pending",
             "containers_removed": False,
@@ -2481,58 +2547,82 @@ def _validate_manifest_v2(value: object) -> dict[str, object]:
             raise ControllerError("manifest image ID is invalid")
     _require_sha256("kil_archive_sha256", value["kil_archive_sha256"])
 
-    expected_tracks = [track.value for track in _TRACKS]
-    tracks = value["tracks"]
-    track_fields = {
-        "track", "driver_endpoint", "authz_container", "target_container",
-        "envoy_container", "network", "decision_source", "target_source",
-        "envoy_source",
-    }
-    if (
-        type(tracks) is not list
-        or len(tracks) != 3
-        or [item.get("track") for item in tracks if type(item) is dict]
-        != expected_tracks
-        or any(type(item) is not dict or set(item) != track_fields for item in tracks)
-        or any(item["driver_endpoint"] != endpoint for item in tracks)
-    ):
-        raise ControllerError("manifest tracks are invalid")
-    networks = value["networks"]
-    if (
-        type(networks) is not list
-        or len(networks) != 3
-        or [item.get("track") for item in networks if type(item) is dict]
-        != expected_tracks
-        or any(
-            type(item) is not dict
-            or set(item) != {"track", "name"}
-            or not str(item["name"]).startswith("kil-v3b1-network-")
-            for item in networks
-        )
-    ):
-        raise ControllerError("manifest per-track networks are invalid")
-    network_by_track = {item["track"]: item["name"] for item in networks}
-    if any(item["network"] != network_by_track[item["track"]] for item in tracks):
-        raise ControllerError("manifest track network binding is invalid")
+    expected_runtime = _manifest_runtime_projection(
+        identity_sha256=digest,
+        kil_image_id=str(value["kil_image_id"]),
+        envoy_image_digest=str(value["envoy_image_digest"]),
+        driver_definition_sha256=expected_driver_hashes,
+    )
+
     containers = value["containers"]
-    if type(containers) is not list or len(containers) != 9:
+    if type(containers) is not list or len(containers) != 12:
         raise ControllerError("manifest containers are invalid")
-    names: list[object] = []
+    container_map: dict[tuple[object, object], dict[str, object]] = {}
     for item in containers:
-        if type(item) is not dict or set(item) != {"name", "role", "track", "image"}:
+        if type(item) is not dict or set(item) != {
+            "name", "role", "track", "image", "command_definition_sha256",
+        }:
             raise ControllerError("manifest container fields are invalid")
-        if not str(item["name"]).startswith("kil-v3b1-"):
-            raise ControllerError("manifest container name is invalid")
-        names.append(item["name"])
-    if len(set(names)) != 9:
-        raise ControllerError("manifest container names are not unique")
-    expected_role_tracks = {
-        (role, track.value)
-        for track in _TRACKS
-        for role in ("authz", "target", "envoy")
+        key = (item["track"], item["role"])
+        if key in container_map:
+            raise ControllerError("manifest container mapping is duplicated")
+        container_map[key] = item
+    expected_container_map = {
+        (item["track"], item["role"]): item
+        for item in expected_runtime["containers"]
     }
-    if {(item["role"], item["track"]) for item in containers} != expected_role_tracks:
-        raise ControllerError("manifest container roles/tracks are invalid")
+    if set(container_map) != set(expected_container_map):
+        raise ControllerError("manifest container mappings are incomplete")
+    for key, expected_container in expected_container_map.items():
+        if container_map[key] != expected_container:
+            raise ControllerError("manifest container binding is invalid")
+    container_names = [str(item["name"]) for item in containers]
+    if len(set(container_names)) != len(container_names):
+        raise ControllerError("manifest container names are not unique")
+
+    networks = value["networks"]
+    if type(networks) is not list or len(networks) != 6:
+        raise ControllerError("manifest networks are invalid")
+    network_map: dict[tuple[object, object], dict[str, object]] = {}
+    for item in networks:
+        if type(item) is not dict or set(item) != {"track", "segment", "name"}:
+            raise ControllerError("manifest network fields are invalid")
+        key = (item["track"], item["segment"])
+        if key in network_map:
+            raise ControllerError("manifest network mapping is duplicated")
+        network_map[key] = item
+    expected_network_map = {
+        (item["track"], item["segment"]): item
+        for item in expected_runtime["networks"]
+    }
+    if set(network_map) != set(expected_network_map):
+        raise ControllerError("manifest network mappings are incomplete")
+    for key, expected_network in expected_network_map.items():
+        if network_map[key] != expected_network:
+            raise ControllerError("manifest network binding is invalid")
+    network_names = [str(item["name"]) for item in networks]
+    if len(set(network_names)) != len(network_names):
+        raise ControllerError("manifest network names are not unique")
+
+    tracks = value["tracks"]
+    if type(tracks) is not list or len(tracks) != 3:
+        raise ControllerError("manifest tracks are invalid")
+    track_map: dict[object, dict[str, object]] = {}
+    for item in tracks:
+        if type(item) is not dict:
+            raise ControllerError("manifest track fields are invalid")
+        track = item.get("track")
+        if track in track_map:
+            raise ControllerError("manifest track mapping is duplicated")
+        track_map[track] = item
+    expected_track_map = {
+        item["track"]: item for item in expected_runtime["tracks"]
+    }
+    if set(track_map) != set(expected_track_map):
+        raise ControllerError("manifest track mappings are incomplete")
+    for track, expected_track in expected_track_map.items():
+        if track_map[track] != expected_track:
+            raise ControllerError("manifest track binding is invalid")
     teardown = value["teardown"]
     if type(teardown) is not dict or set(teardown) != {
         "status", "containers_removed", "network_removed", "profile_deleted",
@@ -2606,6 +2696,28 @@ def _track_manifest(manifest: Mapping[str, object], track: LiveTrack) -> dict[st
         if isinstance(item, dict) and item.get("track") == track.value:
             return item
     raise ControllerError(f"manifest omits track {track.value}")
+
+
+def _task3_service_containers(
+    manifest: Mapping[str, object],
+) -> list[dict[str, object]]:
+    """Return only the pre-Task-4 running service projection."""
+    return [
+        item
+        for item in manifest["containers"]  # type: ignore[union-attr]
+        if item["role"] in {"authz", "target", "envoy"}
+    ]
+
+
+def _task3_backend_networks(
+    manifest: Mapping[str, object],
+) -> list[dict[str, object]]:
+    """Return only the pre-Task-4 network creation projection."""
+    return [
+        item
+        for item in manifest["networks"]  # type: ignore[union-attr]
+        if item["segment"] == "backend"
+    ]
 
 
 def materialize_run_inputs(root: Path, manifest: dict[str, object]) -> MaterializedInputs:
@@ -2799,7 +2911,7 @@ def build_runtime_commands(
                 "1",
             ]
         )
-    for network in manifest["networks"]:  # type: ignore[union-attr]
+    for network in _task3_backend_networks(manifest):
         commands.append(
             [
                 *prefix,
@@ -2820,7 +2932,7 @@ def build_runtime_commands(
     for track in _TRACKS:
         track_root = runtime_root / track.value
         item = _track_manifest(manifest, track)
-        common_network = ["--network", str(item["network"])]
+        common_network = ["--network", str(item["backend_network"])]
         authz_name = str(item["authz_container"])
         target_name = str(item["target_container"])
         envoy_name = str(item["envoy_container"])
@@ -3015,7 +3127,7 @@ def _synthetic_state_object(
         "log_options": {"max-file": "1", "max-size": "1m"},
         "tmpfs": tmpfs,
         "mounts": [{"source": config_path, "destination": destination, "rw": False}],
-        "networks": [track_record["network"]],
+        "networks": [track_record["backend_network"]],
         "port_bindings": (
             {
                 "8080/tcp": [
@@ -3080,7 +3192,7 @@ def persist_active_state(
     if objects is None:
         objects = [
             _synthetic_state_object(manifest, item)
-            for item in manifest["containers"]  # type: ignore[union-attr]
+            for item in _task3_service_containers(manifest)
         ]
     if network_objects is None:
         network_objects = [
@@ -3090,7 +3202,7 @@ def persist_active_state(
                 "track": item["track"],
                 "labels": _object_labels(run_id, None, str(item["track"])),
             }
-            for item in manifest["networks"]  # type: ignore[union-attr]
+            for item in _task3_backend_networks(manifest)
         ]
     base: dict[str, object] = {
         "schema_version": STATE_SCHEMA,
@@ -3117,7 +3229,7 @@ def _validate_state_objects(
         raise ControllerError("active state Docker objects are invalid")
     expected = {
         item["name"]: item
-        for item in manifest["containers"]  # type: ignore[union-attr]
+        for item in _task3_service_containers(manifest)
     }
     seen = set()
     for item in objects:
@@ -3171,7 +3283,7 @@ def _validate_state_objects(
             "role": item["role"],
             "track": item["track"],
             "image_id": item["image_id"],
-            "network": track_record["network"],
+            "network": track_record["backend_network"],
             "config_path": item["config_path"],
             "config_sha256": item["config_sha256"],
             "gateway_port": (
@@ -3188,7 +3300,7 @@ def _validate_state_objects(
     networks = state.get("network_objects")
     expected_networks = {
         item["name"]: item
-        for item in manifest["networks"]  # type: ignore[union-attr]
+        for item in _task3_backend_networks(manifest)
     }
     if type(networks) is not list or len(networks) != 3:
         raise ControllerError("active state network objects are invalid")
@@ -7030,7 +7142,7 @@ class LocalEnvoyController:
             "role": role,
             "track": track,
             "image_id": expected_image_id,
-            "network": track_manifest["network"],
+            "network": track_manifest["backend_network"],
             "config_path": str(config),
             "config_sha256": _digest_file(config),
             "gateway_port": (
@@ -7087,7 +7199,7 @@ class LocalEnvoyController:
         labels = raw["Labels"]
         containers = raw["Containers"]
         expected_name = str(
-            _track_manifest(manifest, LiveTrack(track))["network"]
+            _track_manifest(manifest, LiveTrack(track))["backend_network"]
         )
         expected_labels = _object_labels(str(manifest["run_id"]), None, track)
         if (
@@ -7130,7 +7242,7 @@ class LocalEnvoyController:
             members.append(endpoint["Name"])
         expected_members = {
             str(item["name"])
-            for item in manifest["containers"]  # type: ignore[union-attr]
+            for item in _task3_service_containers(manifest)
             if item["track"] == track
         }
         if (
@@ -7232,7 +7344,7 @@ class LocalEnvoyController:
         while True:
             try:
                 objects = []
-                for item in manifest["containers"]:  # type: ignore[union-attr]
+                for item in _task3_service_containers(manifest):
                     objects.append(
                         self._inspect_container(
                             str(item["name"]),
@@ -7248,7 +7360,7 @@ class LocalEnvoyController:
                 time.sleep(0.25)
         networks = [
             self._inspect_network(str(item["name"]), manifest, str(item["track"]))
-            for item in manifest["networks"]  # type: ignore[union-attr]
+            for item in _task3_backend_networks(manifest)
         ]
         return objects, networks
 
@@ -7343,7 +7455,11 @@ class LocalEnvoyController:
             raise ControllerError("Docker inventory kind is invalid")
         result = self._execute(command, timeout_s=60, docker=True)
         try:
-            return parse_inventory_rows(result.stdout, kind)
+            return parse_inventory_rows(
+                result.stdout,
+                kind,
+                schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
         except (
             HarnessContractError,
             UnicodeError,
@@ -7366,15 +7482,33 @@ class LocalEnvoyController:
             if type(actual) is not dict or type(expected) is not dict:
                 raise HarnessContractError("Docker inventory mapping is invalid")
             actual_entries = tuple(
-                DockerInventoryEntry(kind, object_id, name)
+                DockerInventoryEntry(
+                    kind,
+                    object_id,
+                    name,
+                    DRIVER_TOPOLOGY_SCHEMA_VERSION,
+                )
                 for object_id, name in actual.items()
             )
             expected_entries = tuple(
-                DockerInventoryEntry(kind, object_id, name)
+                DockerInventoryEntry(
+                    kind,
+                    object_id,
+                    name,
+                    DRIVER_TOPOLOGY_SCHEMA_VERSION,
+                )
                 for object_id, name in expected.items()
             )
-            DockerInventory(kind, actual_entries)
-            DockerInventory(kind, expected_entries)
+            DockerInventory(
+                kind,
+                actual_entries,
+                DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
+            DockerInventory(
+                kind,
+                expected_entries,
+                DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
         except (
             HarnessContractError,
             UnicodeError,
@@ -7411,8 +7545,8 @@ class LocalEnvoyController:
             candidate_objects = bound["objects"]
             candidate_networks = bound["network_objects"]
         elif manifest is not None:
-            candidate_objects = manifest["containers"]
-            candidate_networks = manifest["networks"]
+            candidate_objects = _task3_service_containers(manifest)
+            candidate_networks = _task3_backend_networks(manifest)
         else:
             candidate_objects = []
             candidate_networks = []
@@ -7443,7 +7577,12 @@ class LocalEnvoyController:
             recorded_id = item.get("id")
             if type(recorded_id) is str:
                 try:
-                    DockerInventoryEntry(inventory_kind, recorded_id, name)
+                    DockerInventoryEntry(
+                        inventory_kind,
+                        recorded_id,
+                        name,
+                        DRIVER_TOPOLOGY_SCHEMA_VERSION,
+                    )
                 except HarnessContractError as error:
                     raise ControllerError(
                         "recorded Docker recovery identity is invalid"
