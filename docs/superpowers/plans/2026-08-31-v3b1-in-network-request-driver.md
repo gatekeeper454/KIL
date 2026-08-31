@@ -862,7 +862,7 @@ PATH="$PWD/.tools/bin:$PATH" PYTHONPATH=src .venv/bin/python tools/v3b1_local_en
 If a foreign profile must be paused, restore its exact prior status and
 resources after the lifecycle.
 
-- [ ] **Step 3: Execute the request-free sequence visibly**
+- [x] **Step 3: Execute the request-free sequence visibly**
 
 Update the ignored live board before every command, then run exactly:
 
@@ -874,13 +874,22 @@ PATH="$PWD/.tools/bin:$PATH" PYTHONPATH=src .venv/bin/python tools/v3b1_local_en
 
 Do not invoke `run` in this lifecycle.
 
-- [ ] **Step 4: Verify the request-free gate**
+- [x] **Step 4: Verify the request-free gate**
 
 Require all three readiness records, three durable cancellations, zero
 instructions, zero request intents, zero HTTP actions, nine observed/copied
 empty authoritative sources, valid nonpromotable checksums, twelve track and
 three validator containers absent, six networks absent, dedicated profile
-absent, no active state/poison/journal, and exact foreign-state restoration.
+absent, no active state/poison/journal, and preservation of the bound foreign
+context name plus a post-run resource tuple observation.
+
+Task 10 passed with the request-side and teardown conditions above. The public
+manifest durably binds the foreign context name as `default` before and after,
+and a post-run operator readback observed the stopped resource tuple. The exact
+resource tuple was not durably bound at both boundaries, so this execution does
+not provide cryptographic proof of exact tuple restoration. A future lifecycle
+must persist and bind both before- and after-resource snapshots to close that
+evidence gap.
 
 - [ ] **Step 5: Publish the public-safe gate record**
 
@@ -903,8 +912,12 @@ synchronize main before the central proof.
 
 - [ ] **Step 1: Reconfirm clean merged main and run preflight/up**
 
-Require the request-free record merged and synchronized. Record exact foreign
-runtime state and execute `preflight`, then `up` from that public commit.
+Require the request-free record merged and synchronized. Before- and after-resource
+snapshots must be implemented, tested, and merged as a durable
+controller and public-evidence contract. Synchronize that prerequisite commit
+locally. The central `run` remains prohibited until both publication gates are
+complete. Only then record the exact foreign runtime state through the durable
+before snapshot and execute `preflight`, then `up` from that public commit.
 
 - [ ] **Step 2: Invoke `run` once**
 
@@ -927,7 +940,9 @@ Require:
 - three exact canonical driver results;
 - nine complete Envoy/authz/target sources;
 - valid request/decision/target joins;
-- complete exact teardown and foreign-state restoration;
+- complete exact teardown;
+- an offline verifier proves exact equality of the durable before- and after-
+  resource snapshots for every pre-existing foreign profile;
 - all `SHA256SUMS` entries valid; and
 - offline `view --bundle` acceptance.
 

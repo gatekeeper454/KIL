@@ -23,10 +23,10 @@ commits `75161f0` and `48bd81a`: three one-shot request drivers communicate with
 three fixed Envoy `ext_authz` tracks over six internal networks without a host
 TCP publication. The Task 8 implementation checkpoint passed 466 non-runtime
 tests. The fresh Task 9 complete static gate passes 474 tests, including eight
-documentation tests. The latest merged complete static gate passes 480 tests.
-The current stopped-endpoint recovery candidate passes its 232-test controller
-suite and complete 484-test repository gate; publication is pending. This is
-implementation evidence, not live acceptance.
+documentation tests. The stopped-endpoint recovery correction merged through
+PR #16 after its
+232-test controller suite, complete 484-test repository gate, and both public
+CI jobs passed.
 
 Each track has a frontend configured only for its driver and Envoy, and a
 backend containing only Envoy, authorization service, and harmless target.
@@ -43,12 +43,22 @@ consequential path is `driver -> Envoy -> authorization -> target or withhold`.
 The driver is a laboratory transport witness, not KIL enforcement. The current
 evidence scope is `local_envoy_boundary`.
 
-No driver-era V3B-1 live gate has yet been accepted. The next gate is a
-request-free readiness cycle with no driver instruction or HTTP request and
-three clean driver cancellations. Only if that gate passes may the project run
-exactly one central local-Envoy proof, with no retry after request intent.
-Kind/Calico validation (V3B-2), repetition, and performance promotion (V3C)
-remain future work.
+The driver-era Task 10 request-free live gate passed from source
+`a46e8dc98a1af64ceadb5700e91c2f87840564fe` as run
+`v3b1-d2b26f6c8136dcd26a6e6727b9bb1381076a1e03b71a5a44df9b2b2ef9db6cf9`.
+It produced three exact readiness records and three clean cancellations, with
+zero driver instructions and zero HTTP requests. Evidence freeze persisted all
+nine zero-byte service legs; teardown removed all 15 exact containers and all
+six exact networks. The public manifest binds the foreign context name as
+`default` before and after the lifecycle, and a post-run readback observed its
+stopped resource tuple; the exact tuple was not durably bound at both ends.
+The central `run` was not executed and remains prohibited until the
+[Task 10 gate record](docs/lab/V3B1-TASK10-REQUEST-FREE-GATE.md) is reviewed,
+merged, and synchronized and a tested, merged evidence extension durably binds
+and verifies exact before/after resource snapshots. This is accepted request-
+free lifecycle evidence,
+not an enforcement result. Kind/Calico validation (V3B-2), repetition, and
+performance promotion (V3C) remain future work.
 
 Historical pre-driver records remain available for provenance. The rejected
 nine-service/three-network smoke ran from public source
@@ -143,8 +153,10 @@ The v2 public evidence contract publishes the exact canonical result from each
 driver under `raw/drivers/`, together with nine authoritative Envoy,
 authorization, and target sources. The verifier reconstructs and hashes those
 sources before joining the same request, decision, forwarding, and target facts.
-Until the pending live gates pass, these contracts are statically verified and
-must not be described as a validated enforcement result.
+The central local-Envoy enforcement gate remains pending. Until it passes,
+these contracts are statically verified and must not be described as a
+validated enforcement result. V3B-2 Kind/Calico validation remains a later
+gate.
 
 ## Historical replay
 

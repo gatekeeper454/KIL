@@ -107,12 +107,13 @@ containers and all six empty networks absent through full-ID inventories.
 
 ### Live status and historical boundary
 
-No live acceptance exists for the corrected request-driver topology. Earlier
-V3B-1 host-published cycles—including zero-request lifecycle work—remain
-development history for the superseded transport mechanism. They do not satisfy
-the current six-network topology, request-free attached-driver readiness,
-three-driver-result, or fifteen-container teardown contracts and therefore
-cannot be promoted as acceptance evidence for this implementation.
+The corrected request-driver topology now has accepted Task 10 request-free
+lifecycle evidence at the local Envoy boundary. Earlier V3B-1 host-published
+cycles—including zero-request lifecycle work—remain development history for
+the superseded transport mechanism. They do not satisfy the current six-network
+topology, request-free attached-driver readiness, three-driver-result, or
+fifteen-container teardown contracts and therefore cannot be promoted as
+acceptance evidence for this implementation.
 
 The first driver-era Task 10 attempt rejected Docker's closed null-network
 validator representation; the merged correction recovered that lifecycle
@@ -146,11 +147,36 @@ completes an already-effective pending stop without repeating it. No readiness
 instruction, request intent, HTTP action, or central `run` occurred in any
 rejected driver-era lifecycle.
 
-The immediate live gate is one `preflight` / `up` / `readiness` / `down` cycle.
-It must show no instructions, no HTTP requests, three clean cancellations,
-exact evidence preservation, exact 15-container/6-network teardown, and foreign
-runtime restoration. Only after that gate passes may one central local-Envoy
-`run` be attempted. No retry is allowed after request intent.
+PR #16 merged that correction as
+`a46e8dc98a1af64ceadb5700e91c2f87840564fe` after both required public CI
+jobs passed. Bounded recovery then completed the rejected lifecycle without a
+second stop, removed all 15 recorded containers and all six networks, verified
+the dedicated profile absent, published an integrity-checked nonpromotable
+failure bundle, and preserved the foreign `default` context name. A post-run
+readback observed its stopped resource tuple, but that exact tuple was not
+durably bound at both ends of the lifecycle.
+
+The fresh driver-era Task 10 request-free gate then passed from source
+`a46e8dc98a1af64ceadb5700e91c2f87840564fe` as run
+`v3b1-d2b26f6c8136dcd26a6e6727b9bb1381076a1e03b71a5a44df9b2b2ef9db6cf9`.
+All three tracks produced exact readiness records and three clean
+cancellations. The journal contains zero driver instructions, zero request
+intents, and zero HTTP requests. All nine service-source legs terminated and
+persisted exact zero-byte evidence. Teardown removed all 15 exact containers
+and all six exact networks, recorded zero survivors, verified the dedicated
+profile absent, and cleared active state/journal/poison. The public manifest
+binds the foreign context name as `default` before and after; a post-run
+readback observed `Stopped/containerd/aarch64/4 CPU/4 GiB/20 GiB`, but the
+exact resource tuple was not durably bound before and after. Every published
+checksum passed. The bound public-safe facts are recorded in
+[`V3B1-TASK10-REQUEST-FREE-GATE.md`](V3B1-TASK10-REQUEST-FREE-GATE.md).
+
+The central `run` was not executed and remains prohibited until that Task 10
+record is independently reviewed, merged through public CI, and synchronized,
+and an implementation that durably binds and verifies exact before/after
+foreign-resource snapshots is tested, merged, and synchronized. Only after both
+publication gates may exactly one central local-Envoy proof be attempted. No
+retry is allowed after request intent.
 
 V3B-1 remains limited to the local Envoy boundary. V3B-2 is the future isolated
 Kind/Calico topology; its NetworkPolicy behavior, cluster-level transport,
@@ -234,7 +260,8 @@ Within the retired pre-driver topology, this result accepted the zero-request
 lifecycle and evidence-freeze gate. The offline presenter correctly rejected
 the smoke because it was not an accepted local-boundary enforcement run. Those
 facts remain valid historical records, but they do not authorize or substitute
-for either pending driver-era live gate.
+for the now-passed driver-era Task 10 lifecycle gate or the still-pending
+central enforcement gate.
 
 ## Architecture
 
@@ -247,13 +274,9 @@ and the complete approved specification is
 
 ## Next gate
 
-First publish and merge the role-bound stopped-port correction, synchronize
-clean `main`, and use it only to complete bounded recovery and exact foreign-
-state restoration for the rejected lifecycle. Then execute one
-fresh request-free V3B-1 `preflight` / `up` / `readiness` / `down` cycle.
-Require all three readiness records, three
-clean cancellations, no instruction or HTTP request, complete exact teardown,
-and foreign-runtime restoration. If and only if that gate passes, execute one
+Publish and merge the Task 10 public-safe gate record, synchronize clean
+`main`, then implement, test, review, and merge durable exact before/after
+foreign-resource snapshot binding and verifier equality. Only then execute one
 central `preflight` / `up` / `run` / `down` proof with no retry after request
 intent. Its prospective acceptance criteria remain `permit / permit / deny`,
 HTTP `200 / 200 / 403`, target markers `1 / 1 / 0`, exact three-driver and
