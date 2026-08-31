@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
 import tempfile
 import unittest
@@ -1837,6 +1838,27 @@ class ControllerContractTest(unittest.TestCase):
         value = manifest()
 
         self.assertRegex(value["run_id"], r"^v3b1-[a-f0-9]{64}$")
+        identity = value["content_identity"]
+        self.assertEqual(
+            identity["docker_endpoint"],
+            {
+                "transport": "unix",
+                "logical_locator": "colima_profile_socket",
+                "profile": PROFILE.colima_profile,
+            },
+        )
+        self.assertEqual(
+            identity["execution_nonce_sha256"],
+            sha256(("0" * 64).encode("ascii")).hexdigest(),
+        )
+        self.assertEqual(value["execution_nonce"], "0" * 64)
+        self.assertNotIn("docker_host", canonical_json(identity))
+        self.assertNotIn("/Users/", canonical_json(identity))
+        self.assertNotIn("execution_nonce", identity)
+        self.assertEqual(
+            value["content_identity_sha256"],
+            sha256(canonical_json(identity).encode("utf-8")).hexdigest(),
+        )
         self.assertEqual(value["evidence_scope"], "local_envoy_boundary")
         self.assertEqual(value["envoy_image_digest"], ENVOY_DIGEST)
         self.assertEqual(value["kil_image_id"], KIL_IMAGE_ID)
@@ -1852,6 +1874,13 @@ class ControllerContractTest(unittest.TestCase):
             execution_nonce=HEX_B,
         )
         self.assertNotEqual(value["run_id"], different["run_id"])
+        same_logical_endpoint = manifest(
+            docker_host="unix:///private/alternate/colima.sock"
+        )
+        self.assertEqual(value["run_id"], same_logical_endpoint["run_id"])
+        self.assertNotEqual(
+            value["docker_host"], same_logical_endpoint["docker_host"]
+        )
         with self.assertRaisesRegex(ControllerError, "digest"):
             create_run_manifest(
                 PROFILE,
@@ -4524,11 +4553,14 @@ class TeardownContinuationTest(unittest.TestCase):
                     prepared[0]["details"]["intent_sequence"],
                     failure_intents[0]["sequence"],
                 )
+                self.assertNotIn(
+                    "authoritative_bundle_sha256", public_manifest
+                )
                 self.assertEqual(
-                    public_manifest["authoritative_bundle_sha256"],
-                    prepared[0]["details"]["authoritative_attestation"][
-                        "binding_sha256"
-                    ],
+                    public_manifest["public_commitment_sha256"],
+                    local_envoy_module._public_commitment_from_output(
+                        published, public_manifest
+                    ),
                 )
 
     def test_partial_up_down_retry_keeps_initial_rejection_and_cleans_exact_remainder(
@@ -6774,9 +6806,8 @@ class TeardownContinuationTest(unittest.TestCase):
             self.assertFalse(public_manifest["run_complete"])
             self.assertEqual(public_manifest["promotion_status"], "not_promoted")
             self.assertIn("failure", public_manifest["bundle_class"])
-            self.assertNotEqual(
-                public_manifest["authoritative_bundle_sha256"],
-                stale_authority["binding_sha256"],
+            self.assertNotIn(
+                "authoritative_bundle_sha256", public_manifest
             )
             self.assertEqual(
                 [command for command in controller.commands if "delete" in command],
@@ -6794,9 +6825,15 @@ class TeardownContinuationTest(unittest.TestCase):
             recovered_authority = completions[0]["details"][
                 "authoritative_attestation"
             ]
-            self.assertEqual(
-                public_manifest["authoritative_bundle_sha256"],
+            self.assertNotEqual(
+                public_manifest["public_commitment_sha256"],
                 recovered_authority["binding_sha256"],
+            )
+            self.assertEqual(
+                public_manifest["public_commitment_sha256"],
+                local_envoy_module._public_commitment_from_output(
+                    published, public_manifest
+                ),
             )
             self.assertEqual(
                 list(controller.evidence_root.iterdir()), [published]
@@ -7398,7 +7435,7 @@ def published_presenter_bundle(root, *, completed=True):
     return published
 
 
-def rewrite_public_bundle_hashes(bundle):
+def rewrite_public_bundle_hashes(bundle, *, repair_commitment=True):
     manifest_path = bundle / "manifest.json"
     manifest_path.chmod(0o600)
     public_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -7406,12 +7443,338 @@ def rewrite_public_bundle_hashes(bundle):
         public_manifest["artifact_sha256"][relative] = sha256(
             (bundle / relative).read_bytes()
         ).hexdigest()
+    if repair_commitment and "public_commitment_sha256" in public_manifest:
+        public_manifest["public_commitment_sha256"] = (
+            local_envoy_module._public_commitment_from_output(
+                bundle, public_manifest
+            )
+        )
     manifest_path.write_text(canonical_json(public_manifest) + "\n", encoding="utf-8")
     manifest_path.chmod(0o444)
     local_envoy_module._write_sums(bundle)
 
 
 class EvidenceBundleTest(unittest.TestCase):
+    def test_view_recomputes_safe_content_run_and_source_identity(self):
+        mutations = ("source_commit", "content_identity", "run_id")
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                published = published_presenter_bundle(Path(directory))
+                manifest_path = published / "manifest.json"
+                public_manifest = json.loads(
+                    manifest_path.read_text(encoding="utf-8")
+                )
+                if mutation == "source_commit":
+                    public_manifest["source_commit"] = "e" * 40
+                elif mutation == "content_identity":
+                    public_manifest["content_identity"]["source_commit"] = "e" * 40
+                    content_digest = sha256(
+                        canonical_json(
+                            public_manifest["content_identity"]
+                        ).encode("utf-8")
+                    ).hexdigest()
+                    public_manifest["content_identity_sha256"] = content_digest
+                    public_manifest["run_id"] = f"v3b1-{content_digest}"
+                else:
+                    public_manifest["run_id"] = f"v3b1-{HEX_A}"
+                decisions = [
+                    json.loads(line)
+                    for line in (published / "decisions.jsonl")
+                    .read_text(encoding="utf-8")
+                    .splitlines()
+                ]
+                joins = [
+                    json.loads(line)
+                    for line in (published / "joins.jsonl")
+                    .read_text(encoding="utf-8")
+                    .splitlines()
+                ]
+                summary = local_envoy_module._public_summary(
+                    public_manifest
+                ).encode("utf-8")
+                rewrites = [(published / "summary.md", summary)]
+                if mutation == "source_commit":
+                    rewrites.append(
+                        (
+                            published / "live.html",
+                            local_envoy_module._render_live_html(
+                                local_envoy_module._presenter_model(
+                                    public_manifest, decisions, joins
+                                )
+                            ),
+                        )
+                    )
+                for path, payload in rewrites:
+                    path.chmod(0o600)
+                    path.write_bytes(payload)
+                    path.chmod(0o444)
+                manifest_path.chmod(0o600)
+                manifest_path.write_text(
+                    canonical_json(public_manifest) + "\n", encoding="utf-8"
+                )
+                manifest_path.chmod(0o444)
+                rewrite_public_bundle_hashes(published)
+
+                with self.assertRaisesRegex(
+                    ControllerError, "content identity|run identity|source commit"
+                ):
+                    local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_rederives_every_public_record_after_repaired_hashes(self):
+        empty_relatives = (
+            "requests.jsonl",
+            "decisions.jsonl",
+            "envoy.jsonl",
+            "targets.jsonl",
+            "joins.jsonl",
+            "raw/decisions/credential_policy_baseline.jsonl",
+            "raw/decisions/signed_state_only.jsonl",
+            "raw/decisions/signed_plus_local_reduce.jsonl",
+        )
+        for relative in empty_relatives:
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as directory:
+                published = published_presenter_bundle(Path(directory))
+                path = published / relative
+                path.chmod(0o600)
+                path.write_bytes(b"")
+                path.chmod(0o444)
+                rewrite_public_bundle_hashes(published)
+
+                with self.assertRaises(ControllerError):
+                    local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_rejects_repaired_cross_binding_and_identity_substitutions(self):
+        for mutation in (
+            "upstream_attacker",
+            "source_commit",
+            "cross_track_order",
+            "digest_substitution",
+        ):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                published = published_presenter_bundle(Path(directory))
+
+                def records(relative):
+                    return [
+                        json.loads(line)
+                        for line in (published / relative)
+                        .read_text(encoding="utf-8")
+                        .splitlines()
+                    ]
+
+                def replace_records(relative, values):
+                    path = published / relative
+                    path.chmod(0o600)
+                    path.write_bytes(
+                        b"".join(
+                            (canonical_json(value) + "\n").encode("utf-8")
+                            for value in values
+                        )
+                    )
+                    path.chmod(0o444)
+
+                if mutation == "upstream_attacker":
+                    envoy = records("envoy.jsonl")
+                    joins = records("joins.jsonl")
+                    envoy[0]["upstream_host"] = "203.0.113.9:8080"
+                    joins[0]["upstream_host"] = "203.0.113.9:8080"
+                    replace_records("envoy.jsonl", envoy)
+                    replace_records("joins.jsonl", joins)
+                    manifest_path = published / "manifest.json"
+                    value = json.loads(
+                        manifest_path.read_text(encoding="utf-8")
+                    )
+                    track_envoy = [
+                        item
+                        for item in envoy
+                        if item["track"]
+                        == LiveTrack.CREDENTIAL_POLICY_BASELINE.value
+                    ]
+                    value["source_attestations"][0]["raw_envoy_sha256"] = (
+                        sha256(
+                            b"".join(
+                                (canonical_json(item) + "\n").encode("utf-8")
+                                for item in track_envoy
+                            )
+                        ).hexdigest()
+                    )
+                    manifest_path.chmod(0o600)
+                    manifest_path.write_text(
+                        canonical_json(value) + "\n", encoding="utf-8"
+                    )
+                    manifest_path.chmod(0o444)
+                elif mutation == "source_commit":
+                    manifest_path = published / "manifest.json"
+                    value = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    old_commit = value["source_commit"]
+                    value["source_commit"] = "e" * 40
+                    manifest_path.chmod(0o600)
+                    manifest_path.write_text(
+                        canonical_json(value) + "\n", encoding="utf-8"
+                    )
+                    manifest_path.chmod(0o444)
+                    live = published / "live.html"
+                    live.chmod(0o600)
+                    live.write_bytes(
+                        live.read_bytes().replace(
+                            old_commit.encode("ascii"), b"e" * 40
+                        )
+                    )
+                    live.chmod(0o444)
+                elif mutation == "cross_track_order":
+                    replace_records(
+                        "requests.jsonl", list(reversed(records("requests.jsonl")))
+                    )
+                else:
+                    replacement = "9" * 64
+                    requests = records("requests.jsonl")
+                    decisions = records("decisions.jsonl")
+                    envoy = records("envoy.jsonl")
+                    targets = records("targets.jsonl")
+                    joins = records("joins.jsonl")
+                    old_digest = joins[0]["decision_digest"]
+                    raw_relative = (
+                        "raw/decisions/credential_policy_baseline.jsonl"
+                    )
+                    raw = records(raw_relative)
+                    raw[0]["decision_digest"] = replacement
+                    requests[0]["client_decision_digest"] = replacement
+                    decisions[0]["decision_digest"] = replacement
+                    source = {
+                        "schema_version": decisions[0]["source_schema_version"],
+                        **{
+                            key: item
+                            for key, item in decisions[0].items()
+                            if key not in {
+                                "schema_version",
+                                "source_schema_version",
+                                "source_record_sha256",
+                                "run_id_provenance",
+                                "run_id",
+                            }
+                        },
+                    }
+                    decisions[0]["source_record_sha256"] = sha256(
+                        canonical_json(source).encode("utf-8")
+                    ).hexdigest()
+                    envoy[0]["decision_digest"] = replacement
+                    targets[0]["decision_digest"] = replacement
+                    for name in (
+                        "decision_digest",
+                        "envoy_decision_digest",
+                        "client_decision_digest",
+                    ):
+                        joins[0][name] = replacement
+                    replace_records("requests.jsonl", requests)
+                    replace_records("decisions.jsonl", decisions)
+                    replace_records("envoy.jsonl", envoy)
+                    replace_records("targets.jsonl", targets)
+                    replace_records("joins.jsonl", joins)
+                    replace_records(raw_relative, raw)
+                    live = published / "live.html"
+                    live.chmod(0o600)
+                    live.write_bytes(
+                        live.read_bytes().replace(
+                            old_digest.encode("ascii"), replacement.encode("ascii")
+                        )
+                    )
+                    live.chmod(0o444)
+                rewrite_public_bundle_hashes(
+                    published, repair_commitment=mutation != "source_commit"
+                )
+
+                with self.assertRaises(ControllerError):
+                    local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_rejects_directory_component_swap_after_enumeration(self):
+        for replacement_kind in ("symlink", "directory"):
+            with self.subTest(replacement_kind=replacement_kind), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                published = published_presenter_bundle(root)
+                decisions = published / "raw/decisions"
+                replacement = root / "replacement-decisions"
+                shutil.copytree(decisions, replacement)
+                original_reader = local_envoy_module._read_stable_public_file_at
+                swapped = False
+
+                def swap_component(
+                    directory_fd,
+                    name,
+                    *,
+                    maximum_bytes=64 * 1024 * 1024,
+                ):
+                    nonlocal swapped
+                    result = original_reader(
+                        directory_fd, name, maximum_bytes=maximum_bytes
+                    )
+                    if not swapped:
+                        swapped = True
+                        held = published / "raw/original-decisions"
+                        decisions.rename(held)
+                        if replacement_kind == "symlink":
+                            decisions.symlink_to(replacement, target_is_directory=True)
+                        else:
+                            shutil.copytree(replacement, decisions)
+                    return result
+
+                with mock.patch.object(
+                    local_envoy_module,
+                    "_read_stable_public_file_at",
+                    side_effect=swap_component,
+                ):
+                    with self.assertRaises(ControllerError):
+                        local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_totalizes_overlong_numeric_source_fields(self):
+        for mutation in ("envoy_service_time", "join_upstream_octet"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                published = published_presenter_bundle(Path(directory))
+                if mutation == "envoy_service_time":
+                    path = published / "envoy.jsonl"
+                    envoy = [
+                        json.loads(line)
+                        for line in path.read_text(encoding="utf-8").splitlines()
+                    ]
+                    envoy[0]["upstream_service_time"] = "9" * 5000
+                    path.chmod(0o600)
+                    path.write_bytes(
+                        b"".join(
+                            (canonical_json(item) + "\n").encode("utf-8")
+                            for item in envoy
+                        )
+                    )
+                    path.chmod(0o444)
+                    manifest_path = published / "manifest.json"
+                    value = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    value["source_attestations"][0]["raw_envoy_sha256"] = (
+                        sha256(
+                            (canonical_json(envoy[0]) + "\n").encode("utf-8")
+                        ).hexdigest()
+                    )
+                    manifest_path.chmod(0o600)
+                    manifest_path.write_text(
+                        canonical_json(value) + "\n", encoding="utf-8"
+                    )
+                    manifest_path.chmod(0o444)
+                else:
+                    path = published / "joins.jsonl"
+                    joins = [
+                        json.loads(line)
+                        for line in path.read_text(encoding="utf-8").splitlines()
+                    ]
+                    joins[0]["upstream_host"] = f"{'9' * 5000}.0.0.1:8080"
+                    path.chmod(0o600)
+                    path.write_bytes(
+                        b"".join(
+                            (canonical_json(item) + "\n").encode("utf-8")
+                            for item in joins
+                        )
+                    )
+                    path.chmod(0o444)
+                rewrite_public_bundle_hashes(published)
+
+                with self.assertRaises(ControllerError):
+                    local_envoy_module.verify_presenter_bundle(published)
+
     def test_public_manifest_and_final_sha_cover_live_exactly_once(self):
         with tempfile.TemporaryDirectory() as directory:
             published = published_presenter_bundle(Path(directory))
@@ -7427,6 +7790,33 @@ class EvidenceBundleTest(unittest.TestCase):
             self.assertEqual(
                 [line for line in checksum_lines if line.endswith("  live.html")],
                 [f"{live_digest}  live.html"],
+            )
+            self.assertEqual(
+                manifest_value["public_commitment_rule"],
+                "sha256_of_canonical_manifest_without_public_commitment_sha256_and_"
+                "all_public_file_sha256_except_manifest_and_SHA256SUMS",
+            )
+            projected = dict(manifest_value)
+            projected.pop("public_commitment_sha256")
+            committed_files = {
+                path.relative_to(published).as_posix(): sha256(
+                    path.read_bytes()
+                ).hexdigest()
+                for path in published.rglob("*")
+                if path.is_file()
+                and path.name not in {"manifest.json", "SHA256SUMS"}
+            }
+            expected_commitment = sha256(
+                canonical_json(
+                    {
+                        "schema_version": "kil.v3b1-public-commitment.v1",
+                        "manifest": projected,
+                        "file_sha256": dict(sorted(committed_files.items())),
+                    }
+                ).encode("utf-8")
+            ).hexdigest()
+            self.assertEqual(
+                manifest_value["public_commitment_sha256"], expected_commitment
             )
             verify_public_checksums(published)
 
@@ -7463,7 +7853,7 @@ class EvidenceBundleTest(unittest.TestCase):
             decisions_path.chmod(0o444)
             rewrite_public_bundle_hashes(published)
 
-            with self.assertRaisesRegex(ControllerError, "untrusted"):
+            with self.assertRaisesRegex(ControllerError, "untrusted|normalize"):
                 local_envoy_module.verify_presenter_bundle(published)
 
     def test_view_rejects_wrong_causal_reason_with_repaired_page_and_hashes(self):
@@ -7511,7 +7901,7 @@ class EvidenceBundleTest(unittest.TestCase):
             live.chmod(0o444)
             rewrite_public_bundle_hashes(published)
 
-            with self.assertRaisesRegex(ControllerError, "causal"):
+            with self.assertRaisesRegex(ControllerError, "causal|normalize"):
                 local_envoy_module.verify_presenter_bundle(published)
 
     def test_presenter_is_durable_before_sha256sums_is_written(self):
@@ -7646,23 +8036,32 @@ class EvidenceBundleTest(unittest.TestCase):
     def test_view_rejects_file_replacement_during_snapshot(self):
         with tempfile.TemporaryDirectory() as directory:
             published = published_presenter_bundle(Path(directory))
-            original_reader = local_envoy_module._read_stable_public_file
+            original_reader = local_envoy_module._read_stable_public_file_at
             replaced = False
 
-            def replacing_reader(path, *, maximum_bytes=64 * 1024 * 1024):
+            def replacing_reader(
+                directory_fd,
+                name,
+                *,
+                maximum_bytes=64 * 1024 * 1024,
+            ):
                 nonlocal replaced
-                result = original_reader(path, maximum_bytes=maximum_bytes)
-                if path.name == "live.html" and not replaced:
+                result = original_reader(
+                    directory_fd, name, maximum_bytes=maximum_bytes
+                )
+                if name == "live.html" and not replaced:
                     replaced = True
-                    local_envoy_module._write_file(path, result[0], 0o444)
+                    local_envoy_module._write_file(
+                        published / "live.html", result[0], 0o444
+                    )
                 return result
 
             with mock.patch.object(
                 local_envoy_module,
-                "_read_stable_public_file",
+                "_read_stable_public_file_at",
                 side_effect=replacing_reader,
             ):
-                with self.assertRaisesRegex(ControllerError, "changed after snapshot"):
+                with self.assertRaisesRegex(ControllerError, "changed.*snapshot"):
                     local_envoy_module.verify_presenter_bundle(published)
 
     def test_view_rejects_malformed_overlong_wrong_result_and_digest_jsonl(self):
@@ -7757,6 +8156,8 @@ class EvidenceBundleTest(unittest.TestCase):
             ("claim_exclusions", []),
             ("bundle_class", "validated_cluster_boundary"),
             ("run_complete", False),
+            ("content_identity_sha256", HEX_A),
+            ("run_id", f"v3b1-{HEX_A}"),
             ("teardown", {"status": "pending", "verified_before_publication": False}),
         )
         for field, replacement in mutations:
@@ -8456,6 +8857,14 @@ class EvidenceBundleTest(unittest.TestCase):
             self.assertNotIn("/Users/", encoded)
             self.assertNotIn("docker_host", public_manifest)
             self.assertEqual(
+                public_manifest["content_identity"],
+                value["content_identity"],
+            )
+            self.assertNotIn("docker_host", canonical_json(
+                public_manifest["content_identity"]
+            ))
+            self.assertNotIn("execution_nonce", public_manifest["content_identity"])
+            self.assertEqual(
                 public_manifest["bundle_class"],
                 "intermediate_provisional_local_boundary",
             )
@@ -8471,9 +8880,15 @@ class EvidenceBundleTest(unittest.TestCase):
                 public_manifest["artifact_hash_rule"],
                 "sha256_excludes_manifest_summary_and_SHA256SUMS",
             )
+            self.assertNotIn(
+                "authoritative_bundle_sha256", public_manifest
+            )
+            self.assertNotIn("private_manifest_sha256", public_manifest)
             self.assertEqual(
-                public_manifest["authoritative_bundle_sha256"],
-                authoritative["binding_sha256"],
+                public_manifest["public_commitment_sha256"],
+                local_envoy_module._public_commitment_from_output(
+                    published, public_manifest
+                ),
             )
             verify_public_checksums(published)
             with self.assertRaisesRegex(ControllerError, "clobber"):

@@ -4309,3 +4309,121 @@ smoke and single accepted proof run before public evidence publication and the
 offline backup.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-087 — 2026-08-30 — Offline presenter acceptance rederives complete public evidence
+
+**Input:** Close two Task 5b integrity gaps: the offline verifier must derive
+its result from every public record and source binding, and its filesystem
+snapshot must remain bound to the same directory components throughout the
+read. Replace the unrecomputable public copy of the private authoritative
+attestation with an explicitly recomputable, non-circular public commitment.
+
+**Interpretation:** Checksums and a deterministic page establish byte
+consistency but do not establish that requests, raw decisions, normalized
+decisions, Envoy observations, target markers, joins, and source attestations
+describe the same run. Likewise, `O_NOFOLLOW` on a leaf does not protect a
+parent directory component replaced after enumeration. Acceptance therefore
+requires one held directory-descriptor tree plus semantic rederivation from
+the bytes read through that tree.
+
+**Decision status:** Confirmed harness-only implementation complete, pending
+independent re-review and the final verification gate. `view` now opens and
+holds the bundle root, `raw`, and `raw/decisions` with
+`O_DIRECTORY|O_NOFOLLOW`; reads every bounded regular leaf relative to the
+held descriptor; and rechecks exact inventories plus file and directory
+device, inode, size, modification time, and change time before acceptance.
+Symlink and same-content directory replacement fail closed. From that single
+snapshot it parses every canonical public JSONL record in fixed track order,
+requires one raw decision per track, reproduces normalized decisions exactly,
+binds source-attestation counts and hashes to the raw decision, Envoy, and
+target bytes, checks immutable image and unique container identities, and
+reuses the controller's join derivation for the complete request-to-target
+relationship. Permitted upstreams must be canonical RFC1918 IPv4 endpoints on
+port 8080; denied traffic has no upstream. Run ID must equal the declared
+content-identity digest prefix, while source identity and all public metadata
+are covered by the public commitment.
+
+The public commitment algorithm is exactly SHA-256 over canonical JSON with
+schema `kil.v3b1-public-commitment.v1`, containing (1) the closed public
+manifest with `public_commitment_sha256` removed and (2) a sorted path-to-SHA256
+map for every authoritative public file except `manifest.json` and
+`SHA256SUMS`. Excluding the manifest's self-field and the checksum file removes
+circularity; including all remaining files covers the deterministic summary,
+presenter, public JSONL, and raw sources. The former public
+`authoritative_bundle_sha256` and `private_manifest_sha256` claims were removed
+because their private preimages were unavailable to an offline verifier.
+
+**Rationale:** Repaired local hashes must not turn an incomplete or
+cross-substituted record set into an accepted demonstration. Sharing the same
+join derivation used to construct evidence avoids a second, weaker semantic
+contract. Descriptor-relative traversal prevents validation from crossing a
+swapped directory boundary, and the public-only commitment makes the claimed
+bundle binding independently reproducible without exposing private host paths
+or lifecycle material.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The public commitment proves internal consistency,
+not publisher authenticity; external distribution still requires a trusted
+Git revision, release signature, or separately conveyed checksum. No live
+Docker, Colima, browser, KIL, Envoy, authz, or target operation was performed.
+
+**Next gate:** Independent Task 5b integrity re-review, then the committed
+zero-request smoke and single accepted proof run before publication and the
+verified offline backup.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-088 — 2026-08-30 — Public presenter rederives the safe run identity
+
+**Input:** Close the remaining Task 5b provenance gap by making the original
+run/content identity exactly recomputable from public evidence without
+publishing the host's private Docker socket path or raw execution nonce.
+
+**Interpretation:** Merely comparing `run_id` with a claimed digest does not
+prove that the digest binds the public source commit, fixed request and track
+identity, profile, build inputs, and immutable image pins. The run preimage
+must itself be safe to publish and must remain the one used by the harness to
+derive its run ID.
+
+**Decision status:** Confirmed harness-only implementation complete, pending
+independent re-review and the final verification gate. Content identity schema
+`kil.v3b1-content-identity.v2` replaces the raw Docker socket path with the
+closed logical endpoint `{transport: unix, logical_locator:
+colima_profile_socket, profile: kil-v3-lab}` and replaces the raw execution
+nonce with its SHA-256. The private run manifest retains the exact raw
+`docker_host` and `execution_nonce` as top-level runtime inputs; staging and
+freeze addressing consume that private top-level nonce. The public manifest
+now includes the exact safe content-identity preimage. `view` canonicalizes and
+hashes it, reconstructs `run_id`, and cross-checks source commit, request ID,
+fixed tracks and ports, profile/endpoint, platform, build hashes, image digests
+and IDs, and KIL archive digest against the other public fields.
+
+**Rationale:** A logical endpoint preserves the intended Colima-profile
+binding while avoiding personal absolute paths. Hashing the private nonce
+preserves per-execution uniqueness in the public run identity without
+disclosing the staging locator. Publishing the exact remaining preimage lets
+an offline verifier detect coherent source/run/content rewrites instead of
+trusting an opaque digest claim.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The recomputable public identity and commitment
+establish internal provenance consistency, not publisher authenticity;
+distribution still requires a trusted Git revision, release signature, or
+separately conveyed checksum. No live Docker, Colima, browser, KIL, Envoy,
+authz, or target operation was performed.
+
+**Next gate:** Independent Task 5b integrity re-review, then the committed
+zero-request smoke and single accepted proof run before publication and the
+verified offline backup.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

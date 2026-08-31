@@ -1881,11 +1881,8 @@ def _track_slug(track: LiveTrack) -> str:
 
 
 def _runtime_root(root: Path, manifest: Mapping[str, object]) -> Path:
-    identity = manifest.get("content_identity")
-    if type(identity) is not dict:
-        raise ControllerError("runtime staging identity is unavailable")
     execution_nonce = _require_sha256(
-        "runtime execution nonce", identity.get("execution_nonce")
+        "runtime execution nonce", manifest.get("execution_nonce")
     )
     return (
         root
@@ -1904,7 +1901,6 @@ def _manifest_identity(
     envoy_image_id: str,
     kil_image_id: str,
     kil_archive_sha256: str,
-    docker_host: str,
     source_commit: str,
     execution_nonce: str,
     dockerfile_sha256: str,
@@ -1912,13 +1908,17 @@ def _manifest_identity(
     build_context_sha256: str,
 ) -> dict[str, object]:
     return {
-        "schema_version": "kil.v3b1-content-identity.v1",
+        "schema_version": "kil.v3b1-content-identity.v2",
         "profile_sha256": profile_sha256,
         "colima_profile": profile.colima_profile,
-        "docker_host": docker_host,
+        "docker_endpoint": {
+            "transport": "unix",
+            "logical_locator": "colima_profile_socket",
+            "profile": profile.colima_profile,
+        },
         "platform": PLATFORM,
         "source_commit": source_commit,
-        "execution_nonce": execution_nonce,
+        "execution_nonce_sha256": _digest_bytes(execution_nonce.encode("ascii")),
         "dockerfile_sha256": dockerfile_sha256,
         "dockerignore_sha256": dockerignore_sha256,
         "build_context_sha256": build_context_sha256,
@@ -1985,7 +1985,6 @@ def create_run_manifest(
         envoy_image_id=envoy_image_id,
         kil_image_id=kil_image_id,
         kil_archive_sha256=kil_archive_sha256,
-        docker_host=docker_host,
         source_commit=source_commit,
         execution_nonce=execution_nonce,
         dockerfile_sha256=dockerfile_sha256,
@@ -2037,6 +2036,7 @@ def create_run_manifest(
         "request_id": REQUEST_ID,
         "colima_profile": profile.colima_profile,
         "docker_host": docker_host,
+        "execution_nonce": execution_nonce,
         "platform": PLATFORM,
         "source_commit": source_commit,
         "python_image_digest": python_image_digest,
@@ -2066,6 +2066,7 @@ def _validate_manifest(value: object) -> dict[str, object]:
         "request_id",
         "colima_profile",
         "docker_host",
+        "execution_nonce",
         "platform",
         "source_commit",
         "python_image_digest",
@@ -2087,10 +2088,10 @@ def _validate_manifest(value: object) -> dict[str, object]:
         "schema_version",
         "profile_sha256",
         "colima_profile",
-        "docker_host",
+        "docker_endpoint",
         "platform",
         "source_commit",
-        "execution_nonce",
+        "execution_nonce_sha256",
         "dockerfile_sha256",
         "dockerignore_sha256",
         "build_context_sha256",
@@ -2104,16 +2105,23 @@ def _validate_manifest(value: object) -> dict[str, object]:
     }
     if type(identity) is not dict or set(identity) != identity_fields:
         raise ControllerError("manifest content identity is invalid")
-    if identity["schema_version"] != "kil.v3b1-content-identity.v1":
+    if identity["schema_version"] != "kil.v3b1-content-identity.v2":
         raise ControllerError("manifest content identity schema is invalid")
     for name in (
         "profile_sha256",
-        "execution_nonce",
+        "execution_nonce_sha256",
         "dockerfile_sha256",
         "dockerignore_sha256",
         "build_context_sha256",
     ):
         _require_sha256(name, identity[name])
+    endpoint = identity["docker_endpoint"]
+    if endpoint != {
+        "transport": "unix",
+        "logical_locator": "colima_profile_socket",
+        "profile": LAB_IDENTITY,
+    }:
+        raise ControllerError("manifest logical Docker endpoint is invalid")
     digest = _digest_bytes(canonical_json(identity).encode("utf-8"))
     if value["content_identity_sha256"] != digest or value["run_id"] != f"v3b1-{digest}":
         raise ControllerError("manifest content address is invalid")
@@ -2122,7 +2130,6 @@ def _validate_manifest(value: object) -> dict[str, object]:
     for name in (
         "request_id",
         "colima_profile",
-        "docker_host",
         "platform",
         "source_commit",
         "python_image_digest",
@@ -2133,6 +2140,19 @@ def _validate_manifest(value: object) -> dict[str, object]:
     ):
         if value[name] != identity[name]:
             raise ControllerError(f"manifest {name} diverges from content identity")
+    execution_nonce = _require_sha256(
+        "manifest execution nonce", value["execution_nonce"]
+    )
+    if identity["execution_nonce_sha256"] != _digest_bytes(
+        execution_nonce.encode("ascii")
+    ):
+        raise ControllerError("manifest execution nonce diverges from content identity")
+    if identity["colima_profile"] != value["colima_profile"]:
+        raise ControllerError("manifest profile diverges from content identity")
+    if type(value["docker_host"]) is not str or not value["docker_host"].startswith(
+        "unix:///"
+    ):
+        raise ControllerError("manifest Docker host is invalid")
     if value["platform"] != PLATFORM:
         raise ControllerError("manifest platform is invalid")
     if type(value["source_commit"]) is not str or re.fullmatch(
@@ -3119,7 +3139,10 @@ def _envoy_closed(record: Mapping[str, object]) -> None:
     if any(type(record[name]) is not str for name in expected):
         raise ControllerError("Envoy record values are invalid")
     service_time = record["upstream_service_time"]
-    if service_time != "-" and re.fullmatch(r"0|[1-9][0-9]*", service_time) is None:
+    if service_time != "-" and (
+        len(service_time) > 20
+        or re.fullmatch(r"0|[1-9][0-9]*", service_time) is None
+    ):
         raise ControllerError("Envoy upstream service time is not canonical")
 
 
@@ -3152,8 +3175,8 @@ def _exact_digest(name: str, value: object) -> str:
     return value
 
 
-def join_evidence(
-    manifest: dict[str, object],
+def _join_evidence_records(
+    manifest: Mapping[str, object],
     requests: Sequence[Mapping[str, object]],
     decisions: Sequence[Mapping[str, object]],
     envoy: Sequence[Mapping[str, object]],
@@ -3161,8 +3184,7 @@ def join_evidence(
     *,
     require_all_tracks: bool = True,
 ) -> list[dict[str, object]]:
-    """Join closed records using manifest run, fixed track, and request ID."""
-    _validate_manifest(manifest)
+    """Join closed records using an already validated evidence identity."""
     request_index = _index_unique("request", requests)
     decision_index = _index_unique("decision", decisions)
     envoy_index = _index_unique("envoy", envoy)
@@ -3357,6 +3379,27 @@ def join_evidence(
     return joins
 
 
+def join_evidence(
+    manifest: dict[str, object],
+    requests: Sequence[Mapping[str, object]],
+    decisions: Sequence[Mapping[str, object]],
+    envoy: Sequence[Mapping[str, object]],
+    targets: Sequence[Mapping[str, object]],
+    *,
+    require_all_tracks: bool = True,
+) -> list[dict[str, object]]:
+    """Join closed records using manifest run, fixed track, and request ID."""
+    _validate_manifest(manifest)
+    return _join_evidence_records(
+        manifest,
+        requests,
+        decisions,
+        envoy,
+        targets,
+        require_all_tracks=require_all_tracks,
+    )
+
+
 def _jsonl_payload(records: Sequence[Mapping[str, object]]) -> bytes:
     return b"".join(_canonical_bytes(dict(record)) for record in records)
 
@@ -3425,6 +3468,11 @@ _PRESENTER_FORBIDDEN = (
     "Bearer ",
     "v3b1-lab-credential",
     "compact_jws",
+)
+_PUBLIC_COMMITMENT_SCHEMA = "kil.v3b1-public-commitment.v1"
+_PUBLIC_COMMITMENT_RULE = (
+    "sha256_of_canonical_manifest_without_public_commitment_sha256_and_"
+    "all_public_file_sha256_except_manifest_and_SHA256SUMS"
 )
 
 
@@ -3722,12 +3770,27 @@ def verify_public_checksums(output: Path) -> None:
         raise ControllerError("public checksum set is incomplete: unchecked file or omission")
 
 
-def _read_stable_public_file(
-    path: Path, *, maximum_bytes: int = 64 * 1024 * 1024
+def _snapshot_identity(value: os.stat_result) -> tuple[int, int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def _read_stable_public_file_at(
+    directory_fd: int,
+    name: str,
+    *,
+    maximum_bytes: int = 64 * 1024 * 1024,
 ) -> tuple[bytes, tuple[int, int, int, int, int]]:
+    if not name or "/" in name or name in {".", ".."}:
+        raise ControllerError("public evidence file name is invalid")
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
-        descriptor = os.open(path, flags)
+        descriptor = os.open(name, flags, dir_fd=directory_fd)
     except OSError as error:
         raise ControllerError("public evidence file is missing or unsafe") from error
     try:
@@ -3748,33 +3811,15 @@ def _read_stable_public_file(
     finally:
         os.close(descriptor)
     try:
-        current = os.stat(path, follow_symlinks=False)
+        current = os.stat(
+            name, dir_fd=directory_fd, follow_symlinks=False
+        )
     except OSError as error:
         raise ControllerError("public evidence file changed during snapshot") from error
-    identity = (
-        opened.st_dev,
-        opened.st_ino,
-        opened.st_size,
-        opened.st_mtime_ns,
-        opened.st_ctime_ns,
-    )
+    identity = _snapshot_identity(opened)
     if (
-        identity
-        != (
-            finished.st_dev,
-            finished.st_ino,
-            finished.st_size,
-            finished.st_mtime_ns,
-            finished.st_ctime_ns,
-        )
-        or identity
-        != (
-            current.st_dev,
-            current.st_ino,
-            current.st_size,
-            current.st_mtime_ns,
-            current.st_ctime_ns,
-        )
+        identity != _snapshot_identity(finished)
+        or identity != _snapshot_identity(current)
     ):
         raise ControllerError("public evidence file changed during snapshot")
     return b"".join(chunks), identity
@@ -3786,59 +3831,132 @@ def _public_bundle_snapshot(
     if output.is_symlink() or not output.is_dir():
         raise ControllerError("public evidence directory is missing or unsafe")
     expected = _authoritative_file_names()
-    actual: set[str] = set()
-    directories: set[str] = set()
-    for path in output.rglob("*"):
-        relative = path.relative_to(output).as_posix()
-        if path.is_symlink():
-            raise ControllerError("public evidence contains a symbolic link")
-        if path.is_file():
-            actual.add(relative)
-        elif path.is_dir():
-            directories.add(relative)
-        else:
-            raise ControllerError("public evidence contains an unsafe object")
-    if actual != expected or directories != {"raw", "raw/decisions"}:
-        raise ControllerError("public evidence artifact set is not closed")
-    payloads: dict[str, bytes] = {}
-    identities: dict[str, tuple[int, int, int, int, int]] = {}
-    for relative in sorted(expected):
-        maximum = 1024 * 1024 if relative in {"SHA256SUMS", "manifest.json", "live.html"} else 64 * 1024 * 1024
-        payloads[relative], identities[relative] = _read_stable_public_file(
-            output / relative, maximum_bytes=maximum
-        )
+    root_names = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
+    raw_decision_names = {f"{track.value}.jsonl" for track in _TRACKS}
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    root_fd = raw_fd = decisions_fd = -1
     try:
-        checksum_text = payloads["SHA256SUMS"].decode("ascii")
-    except UnicodeError as error:
-        raise ControllerError("public checksum file is not closed ASCII") from error
-    lines = checksum_text.splitlines()
-    recorded: list[str] = []
-    for line in lines:
-        if "  " not in line:
-            raise ControllerError("public checksum line is malformed")
-        digest, relative = line.split("  ", 1)
-        _require_sha256("public checksum", digest)
-        if relative not in expected or relative == "SHA256SUMS":
-            raise ControllerError("public checksum path is invalid")
-        if _digest_bytes(payloads[relative]) != digest:
-            raise ControllerError("public checksum mismatch")
-        recorded.append(relative)
-    if recorded != sorted(expected - {"SHA256SUMS"}):
-        raise ControllerError("public checksum set is incomplete or unsorted")
-    for relative, identity in identities.items():
         try:
-            current = os.stat(output / relative, follow_symlinks=False)
+            root_fd = os.open(output, directory_flags)
+            root_opened = os.fstat(root_fd)
+            raw_fd = os.open("raw", directory_flags, dir_fd=root_fd)
+            raw_opened = os.fstat(raw_fd)
+            decisions_fd = os.open(
+                "decisions", directory_flags, dir_fd=raw_fd
+            )
+            decisions_opened = os.fstat(decisions_fd)
         except OSError as error:
-            raise ControllerError("public evidence changed after snapshot") from error
-        if identity != (
-            current.st_dev,
-            current.st_ino,
-            current.st_size,
-            current.st_mtime_ns,
-            current.st_ctime_ns,
+            raise ControllerError(
+                "public evidence directory component is missing or unsafe"
+            ) from error
+        if not all(
+            stat.S_ISDIR(item.st_mode)
+            for item in (root_opened, raw_opened, decisions_opened)
         ):
-            raise ControllerError("public evidence changed after snapshot")
-    return payloads
+            raise ControllerError("public evidence component is not a directory")
+        root_identity = _snapshot_identity(root_opened)
+        raw_identity = _snapshot_identity(raw_opened)
+        decisions_identity = _snapshot_identity(decisions_opened)
+        if (
+            set(os.listdir(root_fd)) != root_names
+            or set(os.listdir(raw_fd)) != {"decisions"}
+            or set(os.listdir(decisions_fd)) != raw_decision_names
+        ):
+            raise ControllerError("public evidence artifact set is not closed")
+        if raw_identity != _snapshot_identity(
+            os.stat("raw", dir_fd=root_fd, follow_symlinks=False)
+        ) or decisions_identity != _snapshot_identity(
+            os.stat("decisions", dir_fd=raw_fd, follow_symlinks=False)
+        ):
+            raise ControllerError("public evidence directory identity is unstable")
+        payloads: dict[str, bytes] = {}
+        identities: dict[str, tuple[int, str, tuple[int, int, int, int, int]]] = {}
+        for relative in sorted(expected):
+            if relative.startswith("raw/decisions/"):
+                directory_fd = decisions_fd
+                name = relative.rsplit("/", 1)[1]
+            else:
+                directory_fd = root_fd
+                name = relative
+            maximum = (
+                1024 * 1024
+                if relative in {"SHA256SUMS", "manifest.json", "live.html"}
+                else 64 * 1024 * 1024
+            )
+            payloads[relative], identity = _read_stable_public_file_at(
+                directory_fd, name, maximum_bytes=maximum
+            )
+            identities[relative] = (directory_fd, name, identity)
+        try:
+            checksum_text = payloads["SHA256SUMS"].decode("ascii")
+        except UnicodeError as error:
+            raise ControllerError(
+                "public checksum file is not closed ASCII"
+            ) from error
+        recorded: list[str] = []
+        for line in checksum_text.splitlines():
+            if "  " not in line:
+                raise ControllerError("public checksum line is malformed")
+            digest, relative = line.split("  ", 1)
+            _require_sha256("public checksum", digest)
+            if relative not in expected or relative == "SHA256SUMS":
+                raise ControllerError("public checksum path is invalid")
+            if _digest_bytes(payloads[relative]) != digest:
+                raise ControllerError("public checksum mismatch")
+            recorded.append(relative)
+        if recorded != sorted(expected - {"SHA256SUMS"}):
+            raise ControllerError(
+                "public checksum set is incomplete or unsorted"
+            )
+        if (
+            root_identity != _snapshot_identity(os.fstat(root_fd))
+            or raw_identity != _snapshot_identity(os.fstat(raw_fd))
+            or decisions_identity != _snapshot_identity(os.fstat(decisions_fd))
+            or set(os.listdir(root_fd)) != root_names
+            or set(os.listdir(raw_fd)) != {"decisions"}
+            or set(os.listdir(decisions_fd)) != raw_decision_names
+        ):
+            raise ControllerError("public evidence inventory changed during snapshot")
+        try:
+            root_path = os.stat(output, follow_symlinks=False)
+            raw_path = os.stat("raw", dir_fd=root_fd, follow_symlinks=False)
+            decisions_path = os.stat(
+                "decisions", dir_fd=raw_fd, follow_symlinks=False
+            )
+        except OSError as error:
+            raise ControllerError(
+                "public evidence directory changed during snapshot"
+            ) from error
+        if (
+            root_identity != _snapshot_identity(root_path)
+            or raw_identity != _snapshot_identity(raw_path)
+            or decisions_identity != _snapshot_identity(decisions_path)
+        ):
+            raise ControllerError("public evidence directory changed during snapshot")
+        for directory_fd, name, identity in identities.values():
+            try:
+                current = os.stat(
+                    name, dir_fd=directory_fd, follow_symlinks=False
+                )
+            except OSError as error:
+                raise ControllerError(
+                    "public evidence changed after snapshot"
+                ) from error
+            if identity != _snapshot_identity(current):
+                raise ControllerError("public evidence changed after snapshot")
+        return payloads
+    except OSError as error:
+        raise ControllerError(
+            "public evidence changed during snapshot"
+        ) from error
+    finally:
+        for descriptor in (decisions_fd, raw_fd, root_fd):
+            if descriptor >= 0:
+                os.close(descriptor)
 
 
 def _validate_public_manifest(
@@ -3847,11 +3965,12 @@ def _validate_public_manifest(
     expected = {
         "schema_version", "run_id", "request_id", "evidence_scope",
         "bundle_class", "promotion_status", "run_complete", "platform",
-        "source_commit", "content_identity_sha256", "private_manifest_sha256",
+        "source_commit", "content_identity_sha256", "content_identity",
         "immutable_images", "build_inputs", "verified_tool_identities",
         "docker_engine_provenance", "global_context_attestation",
         "evidence_policy", "source_attestations", "artifact_hash_rule",
-        "artifact_sha256", "authoritative_bundle_sha256", "teardown",
+        "artifact_sha256", "public_commitment_rule",
+        "public_commitment_sha256", "teardown",
         "claim_exclusions",
     }
     if type(value) is not dict or set(value) != expected:
@@ -3870,11 +3989,50 @@ def _validate_public_manifest(
         or re.fullmatch(r"[a-f0-9]{40}", value["source_commit"]) is None
     ):
         raise ControllerError("public manifest is not an accepted local boundary run")
-    for name in (
-        "content_identity_sha256", "private_manifest_sha256",
-        "authoritative_bundle_sha256",
-    ):
+    for name in ("content_identity_sha256", "public_commitment_sha256"):
         _require_sha256(f"public manifest {name}", value[name])
+    identity = value["content_identity"]
+    identity_fields = {
+        "schema_version", "profile_sha256", "colima_profile",
+        "docker_endpoint", "platform", "source_commit",
+        "execution_nonce_sha256", "dockerfile_sha256",
+        "dockerignore_sha256", "build_context_sha256",
+        "python_image_digest", "envoy_image_digest", "envoy_image_id",
+        "kil_image_id", "kil_archive_sha256", "request_id", "tracks",
+    }
+    if type(identity) is not dict or set(identity) != identity_fields:
+        raise ControllerError("public content identity fields are not closed")
+    if identity["schema_version"] != "kil.v3b1-content-identity.v2":
+        raise ControllerError("public content identity schema is invalid")
+    for name in (
+        "profile_sha256", "execution_nonce_sha256", "dockerfile_sha256",
+        "dockerignore_sha256", "build_context_sha256",
+    ):
+        _require_sha256(f"public content identity {name}", identity[name])
+    if identity["docker_endpoint"] != {
+        "transport": "unix",
+        "logical_locator": "colima_profile_socket",
+        "profile": LAB_IDENTITY,
+    }:
+        raise ControllerError("public content identity endpoint is invalid")
+    if (
+        identity["colima_profile"] != LAB_IDENTITY
+        or identity["platform"] != value["platform"]
+        or identity["source_commit"] != value["source_commit"]
+        or identity["request_id"] != value["request_id"]
+        or identity["tracks"]
+        != [
+            {"track": track.value, "gateway_port": port}
+            for track, port in zip(_TRACKS, (18080, 18081, 18082), strict=True)
+        ]
+    ):
+        raise ControllerError("public content identity cross-binding is invalid")
+    identity_digest = _digest_bytes(canonical_json(identity).encode("utf-8"))
+    if (
+        value["content_identity_sha256"] != identity_digest
+        or value["run_id"] != f"v3b1-{identity_digest}"
+    ):
+        raise ControllerError("public run identity does not match content identity")
     immutable = value["immutable_images"]
     if type(immutable) is not dict or set(immutable) != {
         "python", "envoy_digest", "envoy_image_id", "kil_image_id",
@@ -3887,6 +4045,17 @@ def _validate_public_manifest(
         if type(immutable[name]) is not str or _IMAGE_ID.fullmatch(immutable[name]) is None:
             raise ControllerError("public image ID is invalid")
     _require_sha256("public KIL archive", immutable["kil_archive_sha256"])
+    if (
+        identity["python_image_digest"] != immutable["python"]
+        or identity["envoy_image_digest"] != immutable["envoy_digest"]
+        or any(
+            identity[name] != immutable[name]
+            for name in (
+                "envoy_image_id", "kil_image_id", "kil_archive_sha256",
+            )
+        )
+    ):
+        raise ControllerError("public content identity image pins diverge")
     build = value["build_inputs"]
     if type(build) is not dict or set(build) != {
         "dockerfile_sha256", "dockerignore_sha256", "build_context_sha256",
@@ -3895,6 +4064,8 @@ def _validate_public_manifest(
         raise ControllerError("public build inputs are not closed")
     for name in ("dockerfile_sha256", "dockerignore_sha256", "build_context_sha256"):
         _require_sha256(f"public build input {name}", build[name])
+        if identity[name] != build[name]:
+            raise ControllerError("public content identity build pins diverge")
     tools = value["verified_tool_identities"]
     engine = value["docker_engine_provenance"]
     if type(tools) is not dict or type(engine) is not dict:
@@ -3929,10 +4100,22 @@ def _validate_public_manifest(
         "production_performance", "network_policy_validation",
     ]:
         raise ControllerError("public claim exclusions are invalid")
+    if value["public_commitment_rule"] != _PUBLIC_COMMITMENT_RULE:
+        raise ControllerError("public commitment rule is invalid")
+    if value["public_commitment_sha256"] != _public_commitment_sha256(
+        value, payloads
+    ):
+        raise ControllerError("public commitment does not bind the snapshot")
     _reject_public_secrets(value)
 
 
 def _normalized_presenter_decision_closed(record: Mapping[str, object]) -> None:
+    _normalized_presenter_source(record)
+
+
+def _normalized_presenter_source(
+    record: Mapping[str, object],
+) -> dict[str, object]:
     if (
         record.get("schema_version") != "kil.v3b1-collected-decision.v1"
         or record.get("run_id_provenance") != "manifest_attested_enrichment"
@@ -3954,6 +4137,7 @@ def _normalized_presenter_decision_closed(record: Mapping[str, object]) -> None:
         canonical_json(source).encode("utf-8")
     ):
         raise ControllerError("presenter decision source digest is invalid")
+    return source
 
 
 def _presenter_join_closed(record: Mapping[str, object]) -> None:
@@ -3997,7 +4181,30 @@ def _presenter_join_closed(record: Mapping[str, object]) -> None:
             or record["upstream_service_time_ms"] < 0
         ):
             raise ControllerError("presenter permit join is invalid")
-        _presenter_safe_text("upstream host", record["upstream_host"])
+        upstream = _presenter_safe_text("upstream host", record["upstream_host"])
+        host, separator, port = upstream.rpartition(":")
+        octets = host.split(".")
+        if (
+            separator != ":"
+            or port != "8080"
+            or len(octets) != 4
+            or any(
+                not octet.isascii()
+                or not octet.isdigit()
+                or len(octet) > 3
+                or str(int(octet)) != octet
+                or not 0 <= int(octet) <= 255
+                for octet in octets
+            )
+        ):
+            raise ControllerError("presenter permit upstream is invalid")
+        address = tuple(int(octet) for octet in octets)
+        if not (
+            address[0] == 10
+            or (address[0] == 172 and 16 <= address[1] <= 31)
+            or (address[0] == 192 and address[1] == 168)
+        ):
+            raise ControllerError("presenter permit upstream is not internal")
     elif (
         record["http_status"] != 403
         or record["target_marker_count"] != 0
@@ -4005,6 +4212,109 @@ def _presenter_join_closed(record: Mapping[str, object]) -> None:
         or record["upstream_service_time_ms"] is not None
     ):
         raise ControllerError("presenter deny join is invalid")
+
+
+def _validate_presenter_records(
+    payloads: Mapping[str, bytes], manifest: Mapping[str, object]
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    requests = _parse_jsonl_bytes(
+        payloads["requests.jsonl"],
+        "presenter requests",
+        _request_closed,
+        allow_empty=False,
+    )
+    decisions = _parse_jsonl_bytes(
+        payloads["decisions.jsonl"],
+        "presenter decisions",
+        _normalized_presenter_decision_closed,
+        allow_empty=False,
+    )
+    envoy = _parse_jsonl_bytes(
+        payloads["envoy.jsonl"],
+        "presenter Envoy records",
+        _envoy_closed,
+        allow_empty=False,
+    )
+    targets = _parse_jsonl_bytes(
+        payloads["targets.jsonl"],
+        "presenter target records",
+        _target_closed,
+        allow_empty=False,
+    )
+    joins = _parse_jsonl_bytes(
+        payloads["joins.jsonl"],
+        "presenter joins",
+        _presenter_join_closed,
+        allow_empty=False,
+    )
+    fixed_order = tuple(track.value for track in _TRACKS)
+    target_order = fixed_order[:2]
+    for label, records, order in (
+        ("requests", requests, fixed_order),
+        ("decisions", decisions, fixed_order),
+        ("Envoy records", envoy, fixed_order),
+        ("target records", targets, target_order),
+        ("joins", joins, fixed_order),
+    ):
+        if tuple(item.get("track") for item in records) != order:
+            raise ControllerError(f"presenter {label} track order is invalid")
+    raw_decisions: list[dict[str, object]] = []
+    for track in _TRACKS:
+        relative = f"raw/decisions/{track.value}.jsonl"
+        records = _parse_jsonl_bytes(
+            payloads[relative],
+            f"presenter raw decisions {track.value}",
+            _decision_closed,
+            allow_empty=False,
+        )
+        if len(records) != 1 or records[0].get("track") != track.value:
+            raise ControllerError("presenter raw decision cardinality is invalid")
+        raw_decisions.extend(records)
+    normalized = _normalized_decision_records(manifest, raw_decisions)
+    if decisions != normalized or payloads["decisions.jsonl"] != _jsonl_payload(
+        normalized
+    ):
+        raise ControllerError("presenter decisions do not normalize raw sources")
+    sources = manifest["source_attestations"]
+    assert isinstance(sources, list)
+    seen_container_ids: set[str] = set()
+    immutable = manifest["immutable_images"]
+    assert isinstance(immutable, dict)
+    for track, attestation in zip(_TRACKS, sources, strict=True):
+        track_envoy = [item for item in envoy if item["track"] == track.value]
+        track_targets = [item for item in targets if item["track"] == track.value]
+        raw_relative = f"raw/decisions/{track.value}.jsonl"
+        observed = {
+            "raw_decisions_sha256": _digest_bytes(payloads[raw_relative]),
+            "raw_decision_count": 1,
+            "raw_envoy_sha256": _digest_bytes(_jsonl_payload(track_envoy)),
+            "raw_envoy_count": len(track_envoy),
+            "raw_targets_sha256": _digest_bytes(_jsonl_payload(track_targets)),
+            "raw_target_count": len(track_targets),
+        }
+        if any(attestation[name] != value for name, value in observed.items()):
+            raise ControllerError(
+                "presenter source attestation does not bind public source bytes"
+            )
+        if attestation["image_ids"] != {
+            "authz": immutable["kil_image_id"],
+            "target": immutable["kil_image_id"],
+            "envoy": immutable["envoy_image_id"],
+        }:
+            raise ControllerError("presenter source image identity is invalid")
+        container_ids = attestation["container_ids"]
+        assert isinstance(container_ids, dict)
+        if seen_container_ids.intersection(container_ids.values()):
+            raise ControllerError("presenter source container identity is reused")
+        seen_container_ids.update(container_ids.values())
+    derived_joins = _join_evidence_records(
+        manifest, requests, raw_decisions, envoy, targets
+    )
+    if joins != derived_joins or payloads["joins.jsonl"] != _jsonl_payload(
+        derived_joins
+    ):
+        raise ControllerError("presenter joins do not derive from public sources")
+    return decisions, joins
 
 
 def verify_presenter_bundle(output: Path) -> Path:
@@ -4023,23 +4333,7 @@ def verify_presenter_bundle(output: Path) -> Path:
     _validate_public_manifest(manifest, payloads)
     if payloads["summary.md"] != _public_summary(manifest).encode("utf-8"):
         raise ControllerError("public summary does not match accepted evidence")
-    decisions = _parse_jsonl_bytes(
-        payloads["decisions.jsonl"],
-        "presenter decisions",
-        _normalized_presenter_decision_closed,
-        allow_empty=False,
-    )
-    joins = _parse_jsonl_bytes(
-        payloads["joins.jsonl"],
-        "presenter joins",
-        _presenter_join_closed,
-        allow_empty=False,
-    )
-    fixed_order = tuple(track.value for track in _TRACKS)
-    if tuple(item["track"] for item in decisions) != fixed_order or tuple(
-        item["track"] for item in joins
-    ) != fixed_order:
-        raise ControllerError("presenter track order is invalid")
+    decisions, joins = _validate_presenter_records(payloads, manifest)
     expected = _render_live_html(_presenter_model(manifest, decisions, joins))
     if payloads["live.html"] != expected:
         raise ControllerError("public presenter does not match accepted evidence")
@@ -4056,6 +4350,40 @@ def _authoritative_file_names() -> set[str]:
         "SHA256SUMS",
         *{f"raw/decisions/{track.value}.jsonl" for track in _TRACKS},
     }
+
+
+def _public_commitment_sha256(
+    manifest: Mapping[str, object], payloads: Mapping[str, bytes]
+) -> str:
+    """Recompute the non-circular commitment for one public snapshot."""
+    file_names = _authoritative_file_names() - {
+        "manifest.json",
+        "SHA256SUMS",
+    }
+    if not file_names.issubset(payloads):
+        raise ControllerError("public commitment file set is incomplete")
+    projected_manifest = dict(manifest)
+    projected_manifest.pop("public_commitment_sha256", None)
+    commitment = {
+        "schema_version": _PUBLIC_COMMITMENT_SCHEMA,
+        "manifest": projected_manifest,
+        "file_sha256": {
+            relative: _digest_bytes(payloads[relative])
+            for relative in sorted(file_names)
+        },
+    }
+    return _digest_bytes(canonical_json(commitment).encode("utf-8"))
+
+
+def _public_commitment_from_output(
+    output: Path, manifest: Mapping[str, object]
+) -> str:
+    payloads = {
+        relative: (output / relative).read_bytes()
+        for relative in _authoritative_file_names()
+        if relative not in {"manifest.json", "SHA256SUMS"}
+    }
+    return _public_commitment_sha256(manifest, payloads)
 
 
 def _validate_authoritative_attestation(
@@ -4443,7 +4771,7 @@ def finalize_publication(
         "platform": PLATFORM,
         "source_commit": private_manifest["source_commit"],
         "content_identity_sha256": private_manifest["content_identity_sha256"],
-        "private_manifest_sha256": _digest_bytes(_canonical_bytes(private_manifest)),
+        "content_identity": dict(identity),
         "immutable_images": {
             "python": private_manifest["python_image_digest"],
             "envoy_digest": private_manifest["envoy_image_digest"],
@@ -4468,7 +4796,7 @@ def finalize_publication(
         "source_attestations": [dict(item) for item in source_attestations],
         "artifact_hash_rule": "sha256_excludes_manifest_summary_and_SHA256SUMS",
         "artifact_sha256": artifact_hashes,
-        "authoritative_bundle_sha256": authoritative["binding_sha256"],
+        "public_commitment_rule": _PUBLIC_COMMITMENT_RULE,
         "teardown": {
             "status": "complete",
             "verified_before_publication": True,
@@ -4503,10 +4831,20 @@ def finalize_publication(
     if publication_fault is not None:
         publication_fault("after_copy", staging)
     staging_manifest = staging / "manifest.json"
+    public_summary = _public_summary(public_manifest).encode("utf-8")
+    commitment_payloads = {
+        relative: (staging / relative).read_bytes()
+        for relative in _authoritative_file_names()
+        if relative not in {"manifest.json", "SHA256SUMS"}
+    }
+    commitment_payloads["summary.md"] = public_summary
+    public_manifest["public_commitment_sha256"] = _public_commitment_sha256(
+        public_manifest, commitment_payloads
+    )
     _write_file(staging_manifest, _canonical_bytes(public_manifest), 0o444)
     _write_file(
         staging / "summary.md",
-        _public_summary(public_manifest).encode("utf-8"),
+        public_summary,
         0o444,
     )
     if publication_fault is not None:
@@ -6361,10 +6699,7 @@ class LocalEnvoyController:
 
     @staticmethod
     def _freeze_epoch(manifest: Mapping[str, object]) -> tuple[str, str]:
-        identity = manifest.get("content_identity")
-        if type(identity) is not dict:
-            raise ControllerError("freeze manifest identity is unavailable")
-        execution_nonce = identity.get("execution_nonce")
+        execution_nonce = manifest.get("execution_nonce")
         _require_sha256("freeze execution_nonce", execution_nonce)
         epoch = _digest_bytes(
             canonical_json(
