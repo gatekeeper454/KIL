@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; style-src &#x27;unsafe-inline&#x27;; img-src &#x27;none&#x27;; font-src &#x27;none&#x27;; media-src &#x27;none&#x27;; object-src &#x27;none&#x27;; script-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; frame-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<title>KIL V3B-1 — Local Envoy Boundary</title>
+<style>
+:root { color-scheme: dark; }
+body { margin: 0; background: #07131f; color: #e2e8f0; }
+main { max-width: 1180px; margin: 0 auto; padding: 36px 24px 60px; }
+h1 { margin-bottom: 8px; }
+.badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.badge { border: 1px solid #38bdf8; border-radius: 999px; padding: 7px 11px; font-weight: 700; }
+.warning { border-color: #f59e0b; color: #fde68a; }
+.result { color: #a7f3d0; font-size: 28px; font-weight: 900; }
+.markers { color: #bae6fd; font-weight: 800; }
+.tracks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.track-card { border: 1px solid #334155; border-radius: 14px; padding: 16px; background: #0b1f33; overflow-wrap: anywhere; }
+.outcome { font-size: 24px; font-weight: 900; }
+dt { color: #94a3b8; margin-top: 8px; } dd { margin-left: 0; }
+.boundary, .incomplete { margin-top: 24px; border: 1px solid #f59e0b; padding: 16px; border-radius: 12px; }
+code { overflow-wrap: anywhere; }
+@media (max-width: 820px) { .tracks { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body><main>
+<h1>KIL V3B-1 — Local Envoy Boundary</h1>
+<div class="badges">
+<span class="badge">OBSERVED · LOCAL ENVOY AUTHORIZATION BOUNDARY</span>
+<span class="badge warning">INTERMEDIATE · NOT PROMOTED</span>
+<span class="badge">MODELED INPUTS · OBSERVED OUTPUTS</span>
+</div>
+<p>Run <code>v3b1-c9a2d4a8c27229a675a866d539b3aedd48475cbf99e75b2043a7f099b32af01d</code> · source <code>0000000000000000000000000000000000000000</code></p>
+<p class="result">PERMIT / PERMIT / DENY</p><p class="markers">TARGET MARKERS · 1 / 1 / 0</p><section class="tracks"><article class="track-card"><h2>credential_policy_baseline</h2><p class="outcome">PERMIT</p><dl><dt>HTTP</dt><dd>200</dd><dt>Target markers</dt><dd>1</dd><dt>Upstream</dt><dd>forwarded</dd><dt>Reason</dt><dd>baseline_permitted</dd><dt>Decision digest</dt><dd><code>1111111111111111111111111111111111111111111111111111111111111111</code></dd></dl></article><article class="track-card"><h2>signed_state_only</h2><p class="outcome">PERMIT</p><dl><dt>HTTP</dt><dd>200</dd><dt>Target markers</dt><dd>1</dd><dt>Upstream</dt><dd>forwarded</dd><dt>Reason</dt><dd>permitted</dd><dt>Decision digest</dt><dd><code>2222222222222222222222222222222222222222222222222222222222222222</code></dd></dl></article><article class="track-card"><h2>signed_plus_local_reduce</h2><p class="outcome">DENY</p><dl><dt>HTTP</dt><dd>403</dd><dt>Target markers</dt><dd>0</dd><dt>Upstream</dt><dd>withheld</dd><dt>Reason</dt><dd>insufficient_charge</dd><dt>Decision digest</dt><dd><code>3333333333333333333333333333333333333333333333333333333333333333</code></dd></dl></article></section>
+<section class="boundary">
+<strong>DERIVED PRESENTER · JSONL + manifest.json + SHA256SUMS CONTROL</strong>
+<p>VERIFY THE BUNDLE BEFORE PRESENTATION; THIS PAGE DOES NOT ATTEST TEARDOWN BY ITSELF.</p>
+<p>DOES NOT ESTABLISH KIND ORCHESTRATION, KUBERNETES NETWORKPOLICY, HISTORICAL INCIDENT PREVENTION, OR PRODUCTION PERFORMANCE.</p>
+</section>
+</main></body></html>

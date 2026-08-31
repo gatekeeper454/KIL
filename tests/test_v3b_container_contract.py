@@ -1,6 +1,14 @@
+from hashlib import sha256
 from pathlib import Path
 import shlex
+import tempfile
 import unittest
+
+from tools.v3b1_local_envoy import (
+    _BUILD_CONTEXT_FILES,
+    driver_bootstrap_sha256,
+    stage_build_context,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +31,8 @@ EXPECTED_CONTEXT_INPUTS = {
     "src/kil/live_authz.py",
     "src/kil/q_state.py",
     "src/kil/target_http.py",
+    "src/kil/v3b1_driver_protocol.py",
+    "src/kil/v3b1_request_driver.py",
 }
 
 EXPECTED_DOCKERIGNORE_LINES = [
@@ -40,6 +50,8 @@ EXPECTED_DOCKERIGNORE_LINES = [
     "!src/kil/live_authz.py",
     "!src/kil/q_state.py",
     "!src/kil/target_http.py",
+    "!src/kil/v3b1_driver_protocol.py",
+    "!src/kil/v3b1_request_driver.py",
     "!deploy/",
     "!deploy/kind/",
     "!deploy/kind/Dockerfile.v3b",
@@ -155,6 +167,24 @@ class V3BContainerContractTest(unittest.TestCase):
                 any(forbidden in source.lower() for source in sources),
                 f"build context COPY must exclude {forbidden}",
             )
+
+    def test_staged_context_attests_exact_driver_module_bytes_as_bootstrap(self):
+        expected_files = tuple(sorted(EXPECTED_CONTEXT_INPUTS | {
+            "deploy/kind/Dockerfile.v3b",
+            "deploy/kind/Dockerfile.v3b.dockerignore",
+        }))
+        self.assertEqual(tuple(sorted(_BUILD_CONTEXT_FILES)), expected_files)
+        with tempfile.TemporaryDirectory() as directory:
+            attestation = stage_build_context(ROOT, Path(directory) / "context")
+
+        expected = sha256(
+            (ROOT / "src/kil/v3b1_request_driver.py").read_bytes()
+        ).hexdigest()
+        self.assertEqual(driver_bootstrap_sha256(attestation), expected)
+        self.assertEqual(
+            attestation["file_sha256"]["src/kil/v3b1_request_driver.py"],
+            expected,
+        )
 
     def test_dockerfile_specific_ignore_is_a_closed_root_context_allowlist(self):
         lines = self.artifact_text(DOCKERIGNORE).splitlines()

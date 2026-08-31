@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from decimal import Decimal
 from hashlib import sha256
 from html import escape
-import http.client
 import json
 import os
 from pathlib import Path
@@ -29,32 +28,71 @@ from kil.canonical import canonical_json
 from kil.live_authz import LiveTrack
 from kil.q_state import QStateClaims, issue_q_state, key_id
 from kil.v3b_envoy import render_envoy_json
+from kil.v3b1_driver_protocol import (
+    DRIVER_RUNTIME_POLICY,
+    DriverProtocolError,
+    LINUX_ERRNO_NAMES,
+    canonical_record,
+    driver_definition,
+    parse_instruction as parse_driver_instruction,
+    parse_result as parse_driver_result,
+)
 from kil.v3b_preflight import EVIDENCE_SCOPE, LAB_IDENTITY, V3BProfile
 
 try:
+    from tools.v3b1_driver_transport import (
+        DriverProcessFactory,
+        DriverSession,
+        DriverTransportError,
+        SubprocessDriverProcessFactory,
+        attest_cancelled_exit,
+        cleanup_driver_process,
+        close_instruction_stream,
+        attest_driver_result_exit,
+        read_driver_result,
+        read_readiness_record,
+        remaining_seconds,
+        start_attached_driver,
+        write_instruction,
+    )
     from tools.bootstrap_v3b_tools import verify_content_lock
 except ModuleNotFoundError:  # Direct execution places ``tools`` on sys.path.
+    from v3b1_driver_transport import (  # type: ignore[no-redef]
+        DriverProcessFactory,
+        DriverSession,
+        DriverTransportError,
+        SubprocessDriverProcessFactory,
+        attest_cancelled_exit,
+        cleanup_driver_process,
+        close_instruction_stream,
+        attest_driver_result_exit,
+        read_driver_result,
+        read_readiness_record,
+        remaining_seconds,
+        start_attached_driver,
+        write_instruction,
+    )
     from bootstrap_v3b_tools import verify_content_lock
 
 try:
     from tools.v3b1_harness_contract import (
         ContractError as HarnessContractError,
+        DRIVER_TOPOLOGY_SCHEMA_VERSION,
         DockerInventory,
         DockerInventoryEntry,
         RequestFailureProvenance,
         SourceCollectionStatus,
-        normalize_transport_exception,
         parse_inventory_rows,
         reject_sensitive_material,
     )
 except ModuleNotFoundError:  # Direct execution places ``tools`` on sys.path.
     from v3b1_harness_contract import (  # type: ignore[no-redef]
         ContractError as HarnessContractError,
+        DRIVER_TOPOLOGY_SCHEMA_VERSION,
         DockerInventory,
         DockerInventoryEntry,
         RequestFailureProvenance,
         SourceCollectionStatus,
-        normalize_transport_exception,
         parse_inventory_rows,
         reject_sensitive_material,
     )
@@ -67,8 +105,9 @@ REQUEST_ID = "v3b1-central-request"
 AUTHORIZATION = "Bearer v3b1-lab-credential"
 SUBJECT = "spiffe://kil.local/workload/demo"
 PLATFORM = "linux/arm64"
-MANIFEST_SCHEMA = "kil.v3b1-manifest.v1"
-STATE_SCHEMA = "kil.v3b1-active-state.v1"
+LEGACY_MANIFEST_SCHEMA = "kil.v3b1-manifest.v1"
+MANIFEST_SCHEMA = "kil.v3b1-manifest.v2"
+STATE_SCHEMA = "kil.v3b1-active-state.v2"
 JOURNAL_SCHEMA = "kil.v3b1-lifecycle-journal.v1"
 READINESS_POISON_SCHEMA = "kil.v3b1-readiness-poison.v1"
 JOIN_SCHEMA = "kil.v3b1-join.v1"
@@ -100,15 +139,98 @@ _BUILD_CONTEXT_FILES = (
     "src/kil/live_authz.py",
     "src/kil/q_state.py",
     "src/kil/target_http.py",
+    "src/kil/v3b1_driver_protocol.py",
+    "src/kil/v3b1_request_driver.py",
 )
 RETRY_CONTROL_HEADERS = {
     "x-envoy-hedge-on-per-try-timeout": "false",
     "x-envoy-max-retries": "0",
 }
 _READINESS_DEADLINE_NS = 30_000_000_000
-_READINESS_CONNECT_TIMEOUT_S = 1.0
-_READINESS_ROUND_DELAY_S = 0.25
-REQUEST_TIMEOUT_S = 5.0
+_DRIVER_CLEANUP_DEADLINE_NS = 5_000_000_000
+_DRIVER_STATE_FORMAT = "{{.Id}} {{.State.Running}} {{.State.Status}}"
+_DRIVER_READINESS_FAILURE_CATEGORIES = {
+    "clock_failure",
+    "cleanup_ambiguous",
+    "cleanup_kill",
+    "cleanup_persistence",
+    "cleanup_pipe_close",
+    "cleanup_poll",
+    "cleanup_read_worker",
+    "cleanup_wait",
+    "cleanup_wait_timeout",
+    "container_stop",
+    "container_inspect",
+    "container_stop_verify",
+    "controller_persistence",
+    "deadline_expired",
+    "extra_stdout",
+    "invalid_command",
+    "invalid_identity",
+    "nonzero_exit",
+    "pipe_oversize",
+    "pipe_read",
+    "pipe_unavailable",
+    "process_poll",
+    "process_start",
+    "process_wait",
+    "process_wait_timeout",
+    "protocol_invalid",
+    "readiness_framing",
+    "stderr_present",
+    "stdin_close",
+    "stdin_close_ambiguous",
+    "stdout_eof",
+    "stdout_oversize",
+    "stdout_read",
+    "termination_ambiguous",
+}
+_DRIVER_READINESS_FAILURE_STAGES = {
+    "readiness_deadline",
+    "start_intent",
+    "process_start",
+    "start_complete",
+    "readiness_record",
+    "readiness_complete",
+    "cancel_signal",
+    "cancel_exit",
+    "readiness_set_complete",
+    "diagnostic_complete",
+}
+_DRIVER_READINESS_CONTROLLER_STAGES = {
+    "readiness_deadline",
+    "readiness_set_complete",
+    "diagnostic_complete",
+}
+_DRIVER_CLEANUP_OUTCOMES = {"already_exited", "terminated", "killed"}
+_TEARDOWN_SERVICE_ROLES = ("envoy", "authz", "target")
+_TEARDOWN_REMOVAL_ROLES = ("driver", "envoy", "authz", "target")
+
+
+@dataclass(frozen=True, slots=True)
+class _DriverCancellationOutcome:
+    track: LiveTrack
+    driver_id: str
+    status: str
+    category: str | None
+
+    def __post_init__(self) -> None:
+        _require_sha256("cancelled driver full ID", self.driver_id)
+        if self.status not in {
+            "clean_cancel",
+            "cleanup_complete",
+            "cleanup_failed",
+            "cleanup_ambiguous",
+        }:
+            raise ControllerError("driver cancellation outcome is invalid")
+        if (self.status in {"clean_cancel", "cleanup_complete"}) is not (
+            self.category is None
+        ):
+            raise ControllerError("driver cancellation category is invalid")
+        if self.category is not None and self.category not in (
+            _DRIVER_READINESS_FAILURE_CATEGORIES | {"cleanup_persistence"}
+        ):
+            raise ControllerError("driver cancellation failure is invalid")
 ADVERSARIAL_HEADERS = {
     "x-kil-decision-digest": "f" * 64,
     "x-kil-issuer": "https://attacker.invalid",
@@ -228,6 +350,7 @@ class PresenterModel:
     source_commit: str
     tracks: tuple[PresenterTrack, ...]
     complete: bool
+    driver_boundary: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -435,6 +558,30 @@ def _validate_lifecycle_event_details(
     details: Mapping[str, object],
     requests: Mapping[str, object] | None = None,
 ) -> None:
+    if event_name == "topology_absence_attested":
+        if set(details) != {
+            "container_count",
+            "network_count",
+            "container_identity_sha256",
+            "network_identity_sha256",
+            "survivor_containers",
+            "survivor_networks",
+        }:
+            raise ControllerError("topology absence fields are not closed")
+        if (
+            details["container_count"] != 15
+            or details["network_count"] != 6
+            or details["survivor_containers"] != []
+            or details["survivor_networks"] != []
+        ):
+            raise ControllerError("topology absence cardinality is invalid")
+        _require_sha256(
+            "topology container identity", details["container_identity_sha256"]
+        )
+        _require_sha256(
+            "topology network identity", details["network_identity_sha256"]
+        )
+        return
     if event_name == "partial_up_evidence_rejected":
         expected = {
             "reason_code",
@@ -450,9 +597,9 @@ def _validate_lifecycle_event_details(
             or details["up_complete_observed"] is not False
             or details["promotable"] is not False
             or type(details["container_count"]) is not int
-            or not 0 <= details["container_count"] <= 12
+            or not 0 <= details["container_count"] <= 15
             or type(details["network_count"]) is not int
-            or not 0 <= details["network_count"] <= 3
+            or not 0 <= details["network_count"] <= 6
         ):
             raise ControllerError("partial-up rejection provenance is invalid")
         _require_sha256(
@@ -483,13 +630,60 @@ def _validate_lifecycle_event_details(
                 kind,
                 str(details.get("id", "0" * 64)),
                 details["name"],  # type: ignore[arg-type]
+                DRIVER_TOPOLOGY_SCHEMA_VERSION,
             )
         except HarnessContractError as error:
             raise ControllerError("Docker creation identity is invalid") from error
         return
+    if event_name in {"network_connect_intent", "network_connect_complete"}:
+        expected = {
+            "container_id",
+            "container_name",
+            "network_id",
+            "network_name",
+            "alias",
+        }
+        if set(details) != expected or details.get("alias") != "envoy":
+            raise ControllerError("network connect fields are not closed")
+        try:
+            DockerInventoryEntry(
+                "container",
+                details["container_id"],  # type: ignore[arg-type]
+                details["container_name"],  # type: ignore[arg-type]
+                DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
+            DockerInventoryEntry(
+                "network",
+                details["network_id"],  # type: ignore[arg-type]
+                details["network_name"],  # type: ignore[arg-type]
+                DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
+        except HarnessContractError as error:
+            raise ControllerError("network connect identity is invalid") from error
+        container_match = re.fullmatch(
+            r"kil-v3b1-envoy-(?P<track>credential-policy-baseline|"
+            r"signed-state-only|signed-plus-local-reduce)-(?P<suffix>[a-f0-9]{12})",
+            str(details["container_name"]),
+        )
+        network_match = re.fullmatch(
+            r"kil-v3b1-frontend-(?P<track>credential-policy-baseline|"
+            r"signed-state-only|signed-plus-local-reduce)-(?P<suffix>[a-f0-9]{12})",
+            str(details["network_name"]),
+        )
+        if (
+            container_match is None
+            or network_match is None
+            or container_match.groupdict() != network_match.groupdict()
+        ):
+            raise ControllerError("network connect roles do not match")
+        return
     if event_name in {"config_validate_intent", "config_validate_complete"}:
         try:
-            DockerInventoryEntry.from_mapping(details, "container")
+            DockerInventoryEntry.from_mapping(
+                details,
+                "container",
+                schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
         except HarnessContractError as error:
             raise ControllerError("validator execution identity is invalid") from error
         return
@@ -501,7 +695,9 @@ def _validate_lifecycle_event_details(
     }:
         kind = "container" if event_name.startswith("container_") else "network"
         try:
-            DockerInventoryEntry.from_mapping(details, kind)
+            DockerInventoryEntry.from_mapping(
+                details, kind, schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION
+            )
         except HarnessContractError as error:
             raise ControllerError("Docker removal identity is invalid") from error
         return
@@ -589,6 +785,156 @@ def _validate_lifecycle_event_details(
             raise ControllerError("evidence freeze terminal count is invalid")
         if type(details["promotable"]) is not bool:
             raise ControllerError("evidence freeze promotability is invalid")
+        return
+    if event_name in {
+        "driver_start_intent",
+        "driver_start_complete",
+        "driver_readiness_complete",
+        "readiness_cancel_intent",
+        "readiness_cancel_complete",
+    }:
+        expected = {"readiness_nonce", "track", "driver_id"}
+        if event_name == "driver_readiness_complete":
+            expected.add("record_sha256")
+        if event_name == "readiness_cancel_complete":
+            expected.add("exit_code")
+        if set(details) != expected:
+            raise ControllerError("driver readiness event fields are not closed")
+        _require_sha256("driver readiness nonce", details["readiness_nonce"])
+        _require_sha256("driver full ID", details["driver_id"])
+        try:
+            LiveTrack(details["track"])
+        except (TypeError, ValueError) as error:
+            raise ControllerError("driver readiness track is invalid") from error
+        if event_name == "driver_readiness_complete":
+            _require_sha256("driver readiness record", details["record_sha256"])
+        if event_name == "readiness_cancel_complete" and details["exit_code"] != 0:
+            raise ControllerError("driver readiness cancellation exit is invalid")
+        return
+    if event_name in {
+        "driver_stop_intent",
+        "driver_stop_complete",
+        "driver_stop_failed",
+    }:
+        expected = {"readiness_nonce", "track", "driver_id"}
+        if event_name == "driver_stop_failed":
+            expected.add("category")
+        if set(details) != expected:
+            raise ControllerError("driver stop event fields are not closed")
+        _require_sha256("driver readiness nonce", details["readiness_nonce"])
+        _require_sha256("driver full ID", details["driver_id"])
+        try:
+            LiveTrack(details["track"])
+        except (TypeError, ValueError) as error:
+            raise ControllerError("driver stop track is invalid") from error
+        if (
+            event_name == "driver_stop_failed"
+            and details["category"]
+            not in {
+                "cleanup_persistence",
+                "container_inspect",
+                "container_stop",
+                "container_stop_verify",
+            }
+        ):
+            raise ControllerError("driver stop failure is invalid")
+        return
+    if event_name in {
+        "driver_cleanup_intent",
+        "driver_cleanup_complete",
+        "driver_cleanup_failed",
+    }:
+        expected = {"readiness_nonce", "track", "driver_id"}
+        if event_name == "driver_cleanup_complete":
+            expected |= {"outcome", "exit_code"}
+        elif event_name == "driver_cleanup_failed":
+            expected.add("category")
+        if set(details) != expected:
+            raise ControllerError("driver cleanup event fields are not closed")
+        _require_sha256("driver readiness nonce", details["readiness_nonce"])
+        _require_sha256("driver full ID", details["driver_id"])
+        try:
+            LiveTrack(details["track"])
+        except (TypeError, ValueError) as error:
+            raise ControllerError("driver cleanup track is invalid") from error
+        if event_name == "driver_cleanup_complete" and (
+            details["outcome"] not in _DRIVER_CLEANUP_OUTCOMES
+            or type(details["exit_code"]) is not int
+        ):
+            raise ControllerError("driver cleanup completion is invalid")
+        if event_name == "driver_cleanup_failed" and (
+            details["category"] not in _DRIVER_READINESS_FAILURE_CATEGORIES
+        ):
+            raise ControllerError("driver cleanup failure is invalid")
+        return
+    if event_name == "driver_readiness_set_complete":
+        if set(details) != {
+            "readiness_nonce",
+            "tracks",
+            "complete_monotonic_ns",
+        }:
+            raise ControllerError("driver readiness set fields are not closed")
+        _require_sha256("driver readiness nonce", details["readiness_nonce"])
+        if (
+            details["tracks"] != [track.value for track in _TRACKS]
+            or type(details["complete_monotonic_ns"]) is not int
+            or details["complete_monotonic_ns"] < 0
+        ):
+            raise ControllerError("driver readiness set completion is invalid")
+        return
+    if event_name == "readiness_diagnostic_complete":
+        if set(details) != {"readiness_nonce", "lifecycle_mode"}:
+            raise ControllerError("readiness diagnostic fields are not closed")
+        _require_sha256("driver readiness nonce", details["readiness_nonce"])
+        if details["lifecycle_mode"] != "diagnostic_only":
+            raise ControllerError("readiness diagnostic mode is invalid")
+        return
+    if event_name == "driver_readiness_failed":
+        if set(details) != {
+            "readiness_nonce",
+            "scope",
+            "track",
+            "driver_id",
+            "category",
+            "stage",
+        }:
+            raise ControllerError("driver readiness failure fields are not closed")
+        _require_sha256("driver readiness nonce", details["readiness_nonce"])
+        if details["scope"] == "driver":
+            _require_sha256("driver full ID", details["driver_id"])
+            try:
+                LiveTrack(details["track"])
+            except (TypeError, ValueError) as error:
+                raise ControllerError(
+                    "driver readiness failure track is invalid"
+                ) from error
+            if details["stage"] in _DRIVER_READINESS_CONTROLLER_STAGES:
+                raise ControllerError(
+                    "driver readiness failure stage is not driver-scoped"
+                )
+        elif details["scope"] == "controller":
+            if details["track"] is not None or details["driver_id"] is not None:
+                raise ControllerError(
+                    "controller readiness failure identity is not closed"
+                )
+            expected_category = (
+                "clock_failure"
+                if details["stage"] == "readiness_deadline"
+                else "controller_persistence"
+            )
+            if (
+                details["category"] != expected_category
+                or details["stage"] not in _DRIVER_READINESS_CONTROLLER_STAGES
+            ):
+                raise ControllerError(
+                    "controller readiness failure attribution is invalid"
+                )
+        else:
+            raise ControllerError("driver readiness failure scope is invalid")
+        if details["category"] not in _DRIVER_READINESS_FAILURE_CATEGORIES:
+            raise ControllerError("driver readiness failure category is invalid")
+        if details["stage"] not in _DRIVER_READINESS_FAILURE_STAGES:
+            raise ControllerError("driver readiness failure stage is invalid")
         return
     if event_name == "readiness_session_started":
         if set(details) != {"readiness_nonce"}:
@@ -679,10 +1025,11 @@ def _validate_lifecycle_event_details(
             intent_id = _require_sha256(
                 "request failure intent_id", details["intent_id"]
             )
+            provenance = details["provenance"]
             try:
-                RequestFailureProvenance.from_mapping(details["provenance"])
-            except HarnessContractError as error:
-                raise ControllerError("request failure provenance is invalid") from error
+                RequestFailureProvenance.from_mapping(provenance)
+            except HarnessContractError:
+                _validate_request_failure_provenance(provenance)
             if requests is not None:
                 request = requests.get(track.value)
                 if (
@@ -693,6 +1040,55 @@ def _validate_lifecycle_event_details(
                     raise ControllerError(
                         "request failure provenance does not bind its durable intent"
                     )
+        return
+    if event_name == "driver_instruction_write_intent":
+        if set(details) != {
+            "readiness_nonce",
+            "track",
+            "driver_id",
+            "intent_id",
+        }:
+            raise ControllerError("driver instruction intent fields are not closed")
+        _require_sha256("driver instruction readiness nonce", details["readiness_nonce"])
+        _require_sha256("driver instruction full ID", details["driver_id"])
+        _require_sha256("driver instruction request intent", details["intent_id"])
+        try:
+            LiveTrack(details["track"])
+        except (TypeError, ValueError) as error:
+            raise ControllerError("driver instruction track is invalid") from error
+        return
+    if event_name == "driver_result_persisted":
+        if set(details) != {
+            "driver_definition_sha256",
+            "readiness_nonce",
+            "track",
+            "driver_id",
+            "intent_id",
+            "result_sha256",
+        }:
+            raise ControllerError("driver result persistence fields are not closed")
+        for label, field in (
+            ("driver result readiness nonce", "readiness_nonce"),
+            ("driver result full ID", "driver_id"),
+            ("driver result request intent", "intent_id"),
+            ("driver result digest", "result_sha256"),
+            ("driver result definition", "driver_definition_sha256"),
+        ):
+            _require_sha256(label, details[field])
+        try:
+            LiveTrack(details["track"])
+        except (TypeError, ValueError) as error:
+            raise ControllerError("driver result track is invalid") from error
+        return
+    if event_name == "request_record_persisted":
+        if set(details) != {"track", "intent_id", "record_sha256"}:
+            raise ControllerError("request record persistence fields are not closed")
+        _require_sha256("request record intent", details["intent_id"])
+        _require_sha256("request record digest", details["record_sha256"])
+        try:
+            LiveTrack(details["track"])
+        except (TypeError, ValueError) as error:
+            raise ControllerError("request record persistence track is invalid") from error
         return
     if event_name == "request_send_intent":
         if set(details) != {"track", "intent_id"}:
@@ -760,13 +1156,20 @@ def _validate_lifecycle_history(
 ) -> tuple[str | None, bool]:
     current_readiness: str | None = None
     readiness_complete = False
+    readiness_session_terminal = True
     seen_readiness_nonces: set[str] = set()
     poisoned_readiness_nonces: set[str] = set()
     lifecycle_readiness_poisoned = False
+    driver_states: dict[str, tuple[str, str]] = {}
+    diagnostic_only = False
     replayed: dict[str, dict[str, object]] = {
         track.value: {"status": "not_attempted", "intent_id": None}
         for track in _TRACKS
     }
+    request_driver_stages: dict[str, str] = {
+        track.value: "not_attempted" for track in _TRACKS
+    }
+    request_driver_results: dict[str, Mapping[str, object]] = {}
     freeze_epoch: str | None = None
     freeze_intents: dict[tuple[str, str], Mapping[str, object]] = {}
     freeze_bytes: dict[tuple[str, str], Mapping[str, object]] = {}
@@ -776,6 +1179,7 @@ def _validate_lifecycle_history(
     creations: dict[tuple[str, str], str] = {}
     creation_ids: dict[tuple[str, str], str] = {}
     validations: dict[tuple[str, str], str] = {}
+    network_connections: dict[tuple[str, str], tuple[str, Mapping[str, object]]] = {}
     for event in events:
         event_name = event["event"]
         details = event["details"]
@@ -829,6 +1233,33 @@ def _validate_lifecycle_history(
                         "validator execution completion lacks its exact intent"
                     )
                 validations[key] = "complete"
+            continue
+        if event_name in {"network_connect_intent", "network_connect_complete"}:
+            key = (str(details["container_id"]), str(details["network_id"]))
+            if event_name.endswith("_intent"):
+                container_key = ("container", str(details["container_name"]))
+                network_key = ("network", str(details["network_name"]))
+                if (
+                    creations.get(container_key) != "complete"
+                    or creation_ids.get(container_key) != details["container_id"]
+                    or creations.get(network_key) != "complete"
+                    or creation_ids.get(network_key) != details["network_id"]
+                ):
+                    raise ControllerError(
+                        "network connect intent lacks exact created identities"
+                    )
+                if key in network_connections:
+                    raise ControllerError("network connect intent is duplicated")
+                network_connections[key] = ("pending", details)
+            else:
+                transition = network_connections.get(key)
+                if transition is None or transition[0] != "pending":
+                    raise ControllerError(
+                        "network connect completion lacks its exact intent"
+                    )
+                if dict(transition[1]) != dict(details):
+                    raise ControllerError("network connect completion identity changed")
+                network_connections[key] = ("complete", details)
             continue
         if event_name in {
             "container_remove_intent",
@@ -944,12 +1375,167 @@ def _validate_lifecycle_history(
                 raise ControllerError(
                     "lifecycle readiness is poisoned; teardown or manual recovery is required"
                 )
+            if diagnostic_only:
+                raise ControllerError(
+                    "readiness diagnostic is teardown-only; down is required"
+                )
+            if current_readiness is not None and not readiness_session_terminal:
+                raise ControllerError(
+                    "previous readiness session is incomplete; down is required"
+                )
             readiness_nonce = str(details["readiness_nonce"])
             if readiness_nonce in seen_readiness_nonces:
                 raise ControllerError("readiness session nonce reuse is forbidden")
             seen_readiness_nonces.add(readiness_nonce)
             current_readiness = readiness_nonce
             readiness_complete = False
+            readiness_session_terminal = False
+            driver_states = {}
+        elif event_name in {
+            "driver_start_intent",
+            "driver_start_complete",
+            "driver_readiness_complete",
+            "readiness_cancel_intent",
+            "readiness_cancel_complete",
+        }:
+            if (
+                current_readiness is None
+                or details["readiness_nonce"] != current_readiness
+                or current_readiness in poisoned_readiness_nonces
+            ):
+                raise ControllerError(
+                    "driver event does not bind the current readiness session"
+                )
+            track = str(details["track"])
+            driver_id = str(details["driver_id"])
+            state, recorded_id = driver_states.get(track, ("unstarted", driver_id))
+            if recorded_id != driver_id:
+                raise ControllerError("driver readiness identity changed")
+            expected_state = {
+                "driver_start_intent": "unstarted",
+                "driver_start_complete": "start_intent",
+                "driver_readiness_complete": "started",
+                "readiness_cancel_intent": {"started", "ready"},
+                "readiness_cancel_complete": "cancel_intent",
+            }[event_name]
+            if (
+                state not in expected_state
+                if isinstance(expected_state, set)
+                else state != expected_state
+            ):
+                raise ControllerError("driver readiness transition is invalid")
+            driver_states[track] = (
+                {
+                    "driver_start_intent": "start_intent",
+                    "driver_start_complete": "started",
+                    "driver_readiness_complete": "ready",
+                    "readiness_cancel_intent": "cancel_intent",
+                    "readiness_cancel_complete": "cancelled",
+                }[event_name],
+                driver_id,
+            )
+        elif event_name in {
+            "driver_stop_intent",
+            "driver_stop_complete",
+            "driver_stop_failed",
+            "driver_cleanup_intent",
+            "driver_cleanup_complete",
+            "driver_cleanup_failed",
+        }:
+            if (
+                current_readiness is None
+                or details["readiness_nonce"] != current_readiness
+            ):
+                raise ControllerError(
+                    "driver cleanup does not bind the current readiness session"
+                )
+            track = str(details["track"])
+            driver_id = str(details["driver_id"])
+            state, recorded_id = driver_states.get(track, ("unstarted", driver_id))
+            if recorded_id != driver_id or state == "unstarted":
+                raise ControllerError("driver cleanup identity changed")
+            allowed = {
+                "driver_stop_intent": {
+                    "start_intent",
+                    "started",
+                    "ready",
+                    "cancel_intent",
+                    "cancelled",
+                    "stop_failed",
+                    "cleaned",
+                    "cleanup_failed",
+                },
+                "driver_stop_complete": {"stop_intent"},
+                "driver_stop_failed": {"stop_intent"},
+                "driver_cleanup_intent": {
+                    "start_intent",
+                    "started",
+                    "ready",
+                    "cancel_intent",
+                    "cancelled",
+                    "stop_intent",
+                    "stop_complete",
+                    "stop_failed",
+                },
+                "driver_cleanup_complete": {"cleanup_intent"},
+                "driver_cleanup_failed": {"cleanup_intent"},
+            }[event_name]
+            if state not in allowed:
+                raise ControllerError("driver cleanup transition is invalid")
+            driver_states[track] = (
+                {
+                    "driver_stop_intent": "stop_intent",
+                    "driver_stop_complete": "stop_complete",
+                    "driver_stop_failed": "stop_failed",
+                    "driver_cleanup_intent": "cleanup_intent",
+                    "driver_cleanup_complete": "cleaned",
+                    "driver_cleanup_failed": "cleanup_failed",
+                }[event_name],
+                driver_id,
+            )
+        elif event_name == "driver_readiness_set_complete":
+            if (
+                current_readiness is None
+                or details["readiness_nonce"] != current_readiness
+                or set(driver_states) != {track.value for track in _TRACKS}
+                or any(state != "ready" for state, _ in driver_states.values())
+            ):
+                raise ControllerError("driver readiness set is incomplete")
+            readiness_complete = True
+        elif event_name == "readiness_diagnostic_complete":
+            if (
+                current_readiness is None
+                or details["readiness_nonce"] != current_readiness
+                or not readiness_complete
+                or set(driver_states) != {track.value for track in _TRACKS}
+                or any(state != "cancelled" for state, _ in driver_states.values())
+            ):
+                raise ControllerError("readiness diagnostic is incomplete")
+            diagnostic_only = True
+            readiness_complete = False
+            readiness_session_terminal = True
+        elif event_name == "driver_readiness_failed":
+            if (
+                current_readiness is None
+                or details["readiness_nonce"] != current_readiness
+            ):
+                raise ControllerError(
+                    "driver readiness failure does not bind the current session"
+                )
+            failed_state = (
+                driver_states.get(str(details["track"]))
+                if details["scope"] == "driver"
+                else None
+            )
+            if (
+                failed_state is not None
+                and failed_state[1] != details["driver_id"]
+            ):
+                raise ControllerError("driver readiness failure identity changed")
+            poisoned_readiness_nonces.add(current_readiness)
+            lifecycle_readiness_poisoned = True
+            readiness_complete = False
+            readiness_session_terminal = True
         elif event_name in {"readiness_connect_failed", "readiness_connect_complete"}:
             if (
                 current_readiness is None
@@ -961,6 +1547,8 @@ def _validate_lifecycle_history(
             if current_readiness in poisoned_readiness_nonces:
                 raise ControllerError("readiness session is permanently poisoned")
             readiness_complete = event_name == "readiness_connect_complete"
+            if event_name == "readiness_connect_complete":
+                readiness_session_terminal = True
         elif event_name == "connection_close_failed":
             if details["readiness_nonce"] != current_readiness:
                 raise ControllerError(
@@ -972,11 +1560,13 @@ def _validate_lifecycle_history(
             poisoned_readiness_nonces.add(current_readiness)
             lifecycle_readiness_poisoned = True
             readiness_complete = False
+            readiness_session_terminal = True
         elif event_name == "request_send_intent":
             if (
                 current_readiness is None
                 or current_readiness in poisoned_readiness_nonces
                 or not readiness_complete
+                or diagnostic_only
             ):
                 raise ControllerError(
                     "request intent lacks a complete current readiness set"
@@ -988,16 +1578,296 @@ def _validate_lifecycle_history(
                 "status": "intent_persisted",
                 "intent_id": details["intent_id"],
             }
+            request_driver_stages[track] = "request_intent"
+        elif event_name == "driver_instruction_write_intent":
+            track = str(details["track"])
+            driver_state = driver_states.get(track)
+            if (
+                current_readiness is None
+                or details["readiness_nonce"] != current_readiness
+                or not readiness_complete
+                or driver_state is None
+                or driver_state != ("ready", details["driver_id"])
+                or replayed[track]["status"] != "intent_persisted"
+                or replayed[track]["intent_id"] != details["intent_id"]
+                or request_driver_stages[track] != "request_intent"
+            ):
+                raise ControllerError("driver instruction intent lacks exact readiness/request binding")
+            request_driver_stages[track] = "instruction_intent"
+        elif event_name == "driver_result_persisted":
+            track = str(details["track"])
+            driver_state = driver_states.get(track)
+            if (
+                current_readiness is None
+                or details["readiness_nonce"] != current_readiness
+                or driver_state is None
+                or driver_state != ("ready", details["driver_id"])
+                or replayed[track]["status"] != "intent_persisted"
+                or replayed[track]["intent_id"] != details["intent_id"]
+                or request_driver_stages[track] != "instruction_intent"
+            ):
+                raise ControllerError("driver result lacks exact instruction binding")
+            request_driver_results[track] = details
+            request_driver_stages[track] = "result_persisted"
+        elif event_name == "request_record_persisted":
+            track = str(details["track"])
+            if (
+                replayed[track]["status"] != "intent_persisted"
+                or replayed[track]["intent_id"] != details["intent_id"]
+                or request_driver_stages[track] != "result_persisted"
+            ):
+                raise ControllerError("request record lacks exact driver-result binding")
+            request_driver_stages[track] = "request_persisted"
         elif event_name in {"request_send_complete", "request_send_failed"}:
             track = str(details["track"])
             if replayed[track]["status"] != "intent_persisted":
                 raise ControllerError("request completion transition is invalid")
+            if (
+                event_name == "request_send_complete"
+                and request_driver_stages[track]
+                not in {"request_intent", "request_persisted"}
+            ):
+                raise ControllerError("request completion lacks persisted request record")
+            provenance = details.get("provenance")
+            if (
+                event_name == "request_send_failed"
+                and type(provenance) is dict
+                and provenance.get("provenance_source")
+                == "linux_request_driver"
+            ):
+                persisted = request_driver_results.get(track)
+                if (
+                    persisted is None
+                    or provenance.get("track") != track
+                    or provenance.get("driver_full_id")
+                    != persisted.get("driver_id")
+                    or provenance.get("driver_result_sha256")
+                    != persisted.get("result_sha256")
+                    or provenance.get("driver_definition_sha256")
+                    != persisted.get("driver_definition_sha256")
+                ):
+                    raise ControllerError(
+                        "driver transport provenance lacks exact result binding"
+                    )
             replayed[track]["status"] = (
                 "completed" if event_name == "request_send_complete" else "failed"
             )
+            request_driver_stages[track] = replayed[track]["status"]
     if replayed != requests:
         raise ControllerError("request events do not bind lifecycle request state")
     return current_readiness, readiness_complete
+
+
+def _readiness_history_blocks_new_session(
+    events: Sequence[Mapping[str, object]],
+) -> bool:
+    """Recognize an incomplete or permanently terminal latest readiness session."""
+    current: str | None = None
+    terminal = True
+    blocked_terminal = False
+    for event in events:
+        event_name = event["event"]
+        details = event["details"]
+        assert isinstance(details, Mapping)
+        if event_name == "readiness_session_started":
+            current = str(details["readiness_nonce"])
+            terminal = False
+            blocked_terminal = False
+        elif current is not None and details.get("readiness_nonce") == current:
+            if event_name == "readiness_connect_complete":
+                terminal = True
+                blocked_terminal = False
+            elif event_name in {
+                "connection_close_failed",
+                "driver_readiness_failed",
+                "readiness_diagnostic_complete",
+            }:
+                terminal = True
+                blocked_terminal = True
+    return current is not None and (not terminal or blocked_terminal)
+
+
+def _driver_recovery_authority(
+    events: Sequence[Mapping[str, object]],
+    track: str,
+    driver_id: str,
+) -> dict[str, object]:
+    """Derive one driver's allowed recovery state from durable journal facts."""
+    try:
+        LiveTrack(track)
+    except (TypeError, ValueError) as error:
+        raise ControllerError("driver recovery track is invalid") from error
+    _require_sha256("driver recovery full ID", driver_id)
+    if type(events) not in {list, tuple}:
+        raise ControllerError("driver recovery events are invalid")
+
+    starts: list[Mapping[str, object]] = []
+    output_terminals: list[Mapping[str, object]] = []
+    stop_terminals: list[Mapping[str, object]] = []
+    process_cleanup_events: list[Mapping[str, object]] = []
+    results: list[Mapping[str, object]] = []
+    request_terminals: list[Mapping[str, object]] = []
+    for event in events:
+        if type(event) is not dict or type(event.get("details")) is not dict:
+            raise ControllerError("driver recovery event is invalid")
+        event_name = event.get("event")
+        details = event["details"]
+        assert isinstance(details, dict)
+        if details.get("track") != track:
+            continue
+        if event_name == "driver_start_intent":
+            starts.append(event)
+        elif event_name == "driver_result_persisted":
+            results.append(event)
+        elif event_name == "readiness_cancel_complete":
+            output_terminals.append(event)
+        elif event_name == "driver_stop_complete":
+            stop_terminals.append(event)
+        elif event_name == "driver_cleanup_complete":
+            process_cleanup_events.append(event)
+        elif event_name in {"request_send_complete", "request_send_failed"}:
+            request_terminals.append(event)
+
+    if len(starts) > 1:
+        raise ControllerError("driver start intent is duplicated")
+    identity_events = [
+        *starts,
+        *results,
+        *output_terminals,
+        *stop_terminals,
+        *process_cleanup_events,
+    ]
+    if any(
+        event["details"].get("driver_id") != driver_id
+        for event in identity_events
+    ):
+        raise ControllerError("driver recovery identity changed")
+    if not starts:
+        if results or output_terminals or stop_terminals or process_cleanup_events:
+            raise ControllerError("driver terminal event lacks its start intent")
+        return {
+            "phase": "pre_start",
+            "allowed_states": ("created",),
+            "request_eligible": True,
+            "terminal_source": None,
+        }
+
+    readiness_nonce = starts[0]["details"].get("readiness_nonce")
+    _require_sha256("driver recovery readiness nonce", readiness_nonce)
+    if any(
+        event["details"].get("readiness_nonce") != readiness_nonce
+        for event in identity_events
+    ):
+        raise ControllerError("driver recovery readiness identity changed")
+
+    if len(results) > 1 or len(output_terminals) > 1:
+        raise ControllerError("driver terminal evidence is duplicated")
+    result_terminal = False
+    terminal_event: Mapping[str, object] | None = None
+    if results:
+        result = results[0]
+        result_sequence = result.get("sequence")
+        result_intent = result["details"].get("intent_id")
+        terminal_event = next(
+            (
+                event
+                for event in request_terminals
+                if type(event.get("sequence")) is int
+                and type(result_sequence) is int
+                and event["sequence"] > result_sequence
+            ),
+            None,
+        )
+        result_terminal = (
+            terminal_event is not None
+            and type(result_intent) is str
+            and _HEX.fullmatch(result_intent) is not None
+            and (
+                terminal_event["event"] == "request_send_complete"
+                or (
+                    terminal_event["event"] == "request_send_failed"
+                    and type(terminal_event["details"].get("provenance")) is dict
+                    and terminal_event["details"]["provenance"].get(
+                        "provenance_source"
+                    )
+                    == "linux_request_driver"
+                    and terminal_event["details"]["provenance"].get(
+                        "driver_full_id"
+                    )
+                    == driver_id
+                    and terminal_event["details"]["provenance"].get(
+                        "driver_result_sha256"
+                    )
+                    == result["details"].get("result_sha256")
+                )
+            )
+        )
+    if result_terminal:
+        return {
+            "phase": "trusted_terminal",
+            "allowed_states": ("dead", "exited"),
+            "request_eligible": True,
+            "terminal_source": "bound_driver_result",
+        }
+    if output_terminals:
+        return {
+            "phase": "trusted_terminal",
+            "allowed_states": ("dead", "exited"),
+            "request_eligible": False,
+            "terminal_source": str(output_terminals[0]["event"]),
+        }
+    if stop_terminals:
+        return {
+            "phase": "teardown_quiesced",
+            "allowed_states": ("created", "dead", "exited"),
+            "request_eligible": False,
+            "terminal_source": str(stop_terminals[-1]["event"]),
+        }
+    return {
+        "phase": "ambiguous",
+        "allowed_states": ("created", "dead", "exited", "running"),
+        "request_eligible": False,
+        "terminal_source": None,
+    }
+
+
+def _driver_stop_transition(
+    events: Sequence[Mapping[str, object]],
+    track: str,
+    driver_id: str,
+) -> str:
+    """Replay the latest exact driver stop attempt without duplicating intent."""
+    _driver_recovery_authority(events, track, driver_id)
+    transition = "unstarted"
+    for event in events:
+        if type(event) is not dict or type(event.get("details")) is not dict:
+            raise ControllerError("driver stop history is invalid")
+        event_name = event.get("event")
+        if event_name not in {
+            "driver_stop_intent",
+            "driver_stop_complete",
+            "driver_stop_failed",
+        }:
+            continue
+        details = event["details"]
+        assert isinstance(details, dict)
+        if details.get("track") != track:
+            continue
+        if details.get("driver_id") != driver_id:
+            raise ControllerError("driver stop identity changed")
+        if event_name == "driver_stop_intent":
+            if transition not in {"unstarted", "failed"}:
+                raise ControllerError("driver stop intent is duplicated")
+            transition = "pending"
+        elif event_name == "driver_stop_complete":
+            if transition != "pending":
+                raise ControllerError("driver stop completion lacks its intent")
+            transition = "complete"
+        else:
+            if transition != "pending":
+                raise ControllerError("driver stop failure lacks its intent")
+            transition = "failed"
+    return transition
 
 
 def _removal_transition(
@@ -1009,7 +1879,9 @@ def _removal_transition(
     if kind not in {"container", "network"}:
         raise ControllerError("Docker removal kind is invalid")
     try:
-        expected = DockerInventoryEntry.from_mapping(identity, kind)
+        expected = DockerInventoryEntry.from_mapping(
+            identity, kind, schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION
+        )
     except HarnessContractError as error:
         raise ControllerError("Docker removal identity is invalid") from error
     intent_name = f"{kind}_remove_intent"
@@ -1023,7 +1895,9 @@ def _removal_transition(
             continue
         details = event.get("details")
         try:
-            observed = DockerInventoryEntry.from_mapping(details, kind)
+            observed = DockerInventoryEntry.from_mapping(
+                details, kind, schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION
+            )
         except HarnessContractError as error:
             raise ControllerError("Docker removal history is invalid") from error
         if observed != expected:
@@ -1051,7 +1925,12 @@ def _creation_transition(
         raise ControllerError("Docker creation kind is invalid")
     inventory_kind = "container" if kind == "validator" else kind
     try:
-        DockerInventoryEntry(inventory_kind, "0" * 64, name)
+        DockerInventoryEntry(
+            inventory_kind,
+            "0" * 64,
+            name,
+            DRIVER_TOPOLOGY_SCHEMA_VERSION,
+        )
     except HarnessContractError as error:
         raise ControllerError("Docker creation name is invalid") from error
     prefix = "validator_create" if kind == "validator" else f"{kind}_create"
@@ -1075,7 +1954,9 @@ def _creation_transition(
             raise ControllerError("Docker creation completion lacks its intent")
         try:
             object_id = DockerInventoryEntry.from_mapping(
-                {"id": details.get("id"), "name": name}, inventory_kind
+                {"id": details.get("id"), "name": name},
+                inventory_kind,
+                schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
             ).object_id
         except HarnessContractError as error:
             raise ControllerError("Docker creation identity is invalid") from error
@@ -1262,13 +2143,214 @@ def _bind_journal_manifest(
     return _persist_journal(journal_path, value)
 
 
+_DRIVER_CONTROL_STAGES = {
+    "instruction_write",
+    "stdout_read",
+    "process_wait",
+    "termination",
+}
+_DRIVER_WAIT_FAILURE_CATEGORIES = {
+    "clock_failure",
+    "deadline_expired",
+    "process_wait",
+    "process_wait_timeout",
+}
+
+
+def _driver_control_failure_stage(stage: str, error: Exception) -> str:
+    if stage != "process_wait":
+        return stage
+    if (
+        isinstance(error, DriverTransportError)
+        and error.category not in _DRIVER_WAIT_FAILURE_CATEGORIES
+    ):
+        return "termination"
+    return "process_wait"
+
+
+def _validate_driver_control_provenance(value: object) -> dict[str, object]:
+    expected = {
+        "attempt_count",
+        "failure_monotonic_ns",
+        "request_bytes_may_have_been_sent",
+        "retry_performed",
+        "stage",
+    }
+    if type(value) is not dict or set(value) != expected:
+        raise ControllerError("driver-control failure provenance is not closed")
+    if (
+        value["stage"] not in _DRIVER_CONTROL_STAGES
+        or type(value["failure_monotonic_ns"]) is not int
+        or value["failure_monotonic_ns"] < 0
+        or type(value["request_bytes_may_have_been_sent"]) is not bool
+        or value["attempt_count"] != 1
+        or value["retry_performed"] is not False
+        or (
+            value["stage"] != "instruction_write"
+            and value["request_bytes_may_have_been_sent"] is not True
+        )
+    ):
+        raise ControllerError("driver-control failure provenance is invalid")
+    return value
+
+
+def _validate_driver_transport_provenance(
+    value: object,
+) -> dict[str, object]:
+    expected = {
+        "attempt_count",
+        "connect_monotonic_ns",
+        "driver_definition_sha256",
+        "driver_full_id",
+        "driver_request_bytes_may_have_been_sent",
+        "driver_result_schema_version",
+        "driver_result_sha256",
+        "driver_status",
+        "errno",
+        "errno_name",
+        "exception_class",
+        "failure_monotonic_ns",
+        "provenance_source",
+        "request_bytes_may_have_been_sent",
+        "retry_performed",
+        "send_monotonic_ns",
+        "stage",
+        "track",
+    }
+    if type(value) is not dict or set(value) != expected:
+        raise ControllerError("driver transport provenance is not closed")
+    if (
+        value["provenance_source"] != "linux_request_driver"
+        or value["driver_result_schema_version"]
+        != "kil.v3b1-driver-result.v1"
+        or value["driver_status"] != "transport_failure"
+        or value["request_bytes_may_have_been_sent"] is not True
+    ):
+        raise ControllerError("driver transport provenance source is invalid")
+    _require_sha256("driver transport full ID", value["driver_full_id"])
+    _require_sha256(
+        "driver transport definition", value["driver_definition_sha256"]
+    )
+    _require_sha256("driver transport result", value["driver_result_sha256"])
+    source_result = {
+        "attempt_count": value["attempt_count"],
+        "connect_monotonic_ns": value["connect_monotonic_ns"],
+        "errno": value["errno"],
+        "errno_name": value["errno_name"],
+        "exception_class": value["exception_class"],
+        "failure_monotonic_ns": value["failure_monotonic_ns"],
+        "request_bytes_may_have_been_sent": value[
+            "driver_request_bytes_may_have_been_sent"
+        ],
+        "retry_performed": value["retry_performed"],
+        "schema_version": value["driver_result_schema_version"],
+        "send_monotonic_ns": value["send_monotonic_ns"],
+        "stage": value["stage"],
+        "status": value["driver_status"],
+        "track": value["track"],
+    }
+    try:
+        parsed = parse_driver_result(
+            canonical_record(source_result),
+            expected_track=str(value["track"]),
+        )
+    except (DriverProtocolError, TypeError, ValueError):
+        raise ControllerError("driver transport provenance is invalid") from None
+    number = parsed["errno"]
+    name = parsed["errno_name"]
+    if number is not None and LINUX_ERRNO_NAMES.get(number) != name:
+        raise ControllerError("driver transport provenance errno is invalid")
+    if _digest_bytes(canonical_record(source_result)) != value[
+        "driver_result_sha256"
+    ]:
+        raise ControllerError(
+            "driver transport provenance lacks exact result binding"
+        )
+    return value
+
+
+def _validate_request_failure_provenance(
+    value: object,
+) -> dict[str, object]:
+    if type(value) is dict and value.get("provenance_source") is not None:
+        return _validate_driver_transport_provenance(value)
+    return _validate_driver_control_provenance(value)
+
+
+def _driver_failure_result_from_provenance(
+    track: LiveTrack, provenance: object
+) -> dict[str, object]:
+    """Reconstruct the one canonical terminal result bound by journal provenance."""
+    if not isinstance(track, LiveTrack):
+        raise ControllerError("driver failure track is invalid")
+    validated = _validate_request_failure_provenance(provenance)
+    if validated.get("provenance_source") == "linux_request_driver":
+        if validated["track"] != track.value:
+            raise ControllerError("driver failure provenance track is invalid")
+        result = {
+            "attempt_count": validated["attempt_count"],
+            "connect_monotonic_ns": validated["connect_monotonic_ns"],
+            "errno": validated["errno"],
+            "errno_name": validated["errno_name"],
+            "exception_class": validated["exception_class"],
+            "failure_monotonic_ns": validated["failure_monotonic_ns"],
+            "request_bytes_may_have_been_sent": validated[
+                "driver_request_bytes_may_have_been_sent"
+            ],
+            "retry_performed": validated["retry_performed"],
+            "schema_version": validated["driver_result_schema_version"],
+            "send_monotonic_ns": validated["send_monotonic_ns"],
+            "stage": validated["stage"],
+            "status": validated["driver_status"],
+            "track": track.value,
+        }
+    else:
+        result = {
+            "attempt_count": validated["attempt_count"],
+            "failure_monotonic_ns": validated["failure_monotonic_ns"],
+            "request_bytes_may_have_been_sent": validated[
+                "request_bytes_may_have_been_sent"
+            ],
+            "retry_performed": validated["retry_performed"],
+            "schema_version": "kil.v3b1-driver-result.v1",
+            "stage": validated["stage"],
+            "status": "driver_control_failure",
+            "track": track.value,
+        }
+    payload = canonical_record(result)
+    try:
+        parsed = parse_driver_result(payload, expected_track=track.value)
+    except (DriverProtocolError, TypeError, ValueError, UnicodeError) as error:
+        raise ControllerError(
+            "driver failure provenance cannot reconstruct a closed result"
+        ) from error
+    if parsed != result:
+        raise ControllerError("driver failure result reconstruction is unstable")
+    return result
+
+
+def _driver_failure_journal_details(
+    track: LiveTrack,
+    intent_id: str,
+    provenance: Mapping[str, object],
+) -> dict[str, object]:
+    _require_sha256("driver failure request intent", intent_id)
+    _driver_failure_result_from_provenance(track, provenance)
+    return {
+        "track": track.value,
+        "record_sha256": None,
+        "intent_id": intent_id,
+        "provenance": dict(provenance),
+    }
+
+
 def _complete_request_attempt(
     journal_path: Path,
     track: LiveTrack,
     *,
     success: bool,
     record_sha256: str | None,
-    failure_provenance: RequestFailureProvenance | None = None,
+    failure_provenance: RequestFailureProvenance | Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     value = load_lifecycle_journal(journal_path)
     requests = value["requests"]
@@ -1281,10 +2363,15 @@ def _complete_request_attempt(
         raise ControllerError("request success/record SHA nullability mismatch")
     if success and failure_provenance is not None:
         raise ControllerError("successful request cannot carry failure provenance")
-    if failure_provenance is not None and not isinstance(
-        failure_provenance, RequestFailureProvenance
-    ):
-        raise ControllerError("request failure provenance is invalid")
+    if failure_provenance is not None:
+        if isinstance(failure_provenance, RequestFailureProvenance):
+            provenance_mapping = failure_provenance.to_mapping()
+        else:
+            provenance_mapping = _validate_request_failure_provenance(
+                failure_provenance
+            )
+    else:
+        provenance_mapping = None
     if record_sha256 is not None:
         _require_sha256("request record_sha256", record_sha256)
     request["status"] = "completed" if success else "failed"
@@ -1299,7 +2386,7 @@ def _complete_request_attempt(
         details.update(
             {
                 "intent_id": request["intent_id"],
-                "provenance": failure_provenance.to_mapping(),
+                "provenance": provenance_mapping,
             }
         )
     events.append(
@@ -1537,6 +2624,18 @@ def stage_build_context(repository_root: Path, staging_root: Path) -> dict[str, 
     return {"files": list(_BUILD_CONTEXT_FILES), "file_sha256": hashes, "context_sha256": context_sha}
 
 
+def driver_bootstrap_sha256(attestation: Mapping[str, object]) -> str:
+    """Return the exact staged request-driver module digest."""
+    if type(attestation) is not dict:
+        raise ControllerError("build-context attestation is invalid")
+    hashes = attestation.get("file_sha256")
+    if type(hashes) is not dict:
+        raise ControllerError("build-context file hashes are unavailable")
+    digest = hashes.get("src/kil/v3b1_request_driver.py")
+    _require_sha256("request-driver bootstrap", digest)
+    return digest
+
+
 def validate_image_architecture(value: Mapping[str, object]) -> None:
     if type(value) is not dict or set(value) != {"Os", "Architecture"}:
         raise ControllerError("image architecture inspection fields are not closed")
@@ -1584,12 +2683,16 @@ def validate_container_attestation(
         "id", "name", "image_id", "user", "readonly_rootfs", "cap_drop",
         "security_opt", "nano_cpus", "memory", "memory_swap", "pids_limit",
         "restart_policy", "stop_timeout", "log_driver", "log_options", "tmpfs",
-        "mounts", "networks", "port_bindings", "platform",
-        "entrypoint", "command", "environment",
+        "mounts", "networks", "network_aliases", "port_bindings",
+        "published_ports", "platform", "entrypoint", "command", "environment",
+        "state", "stdin_open", "tty", "healthcheck", "privileged",
+        "network_mode", "pid_mode", "ipc_mode", "uts_mode", "userns_mode",
+        "cgroupns_mode",
     }
     expected_fields = {
-        "name", "role", "track", "image_id", "network", "config_path",
-        "config_sha256", "gateway_port",
+        "name", "role", "track", "image_id", "networks", "config_path",
+        "config_sha256", "gateway_port", "required_aliases",
+        "driver_definition", "required_state", "primary_network",
     }
     if type(actual) is not dict or set(actual) != actual_fields:
         raise ControllerError("container attestation fields are not closed")
@@ -1612,32 +2715,77 @@ def validate_container_attestation(
         raise ControllerError("container CPU/memory/pids resource attestation failed")
     if actual["restart_policy"] != "no" or actual["stop_timeout"] != 10:
         raise ControllerError("container restart/stop policy attestation failed")
+    if actual["privileged"] is not False:
+        raise ControllerError("container privileged mode is forbidden")
+    if (
+        type(expected["primary_network"]) is not str
+        or not expected["primary_network"]
+        or type(actual["network_mode"]) is not str
+        or actual["network_mode"] != expected["primary_network"]
+    ):
+        raise ControllerError("container primary network mode attestation failed")
+    if any(
+        type(actual[field]) is not str or actual[field] != ""
+        for field in ("pid_mode", "ipc_mode", "uts_mode", "userns_mode")
+    ):
+        raise ControllerError("container host namespace mode is forbidden")
+    if actual["cgroupns_mode"] != "private":
+        raise ControllerError("container cgroup namespace mode is not private")
     if actual["log_driver"] != "json-file" or actual["log_options"] != {"max-file": "1", "max-size": "1m"}:
         raise ControllerError("container bounded log attestation failed")
+    role = expected["role"]
+    if role not in {"authz", "target", "envoy", "driver"}:
+        raise ControllerError("container role attestation is invalid")
     expected_tmpfs = {
         "/tmp": "rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700"
     }
-    if expected["role"] in {"authz", "target"}:
+    if role in {"authz", "target"}:
         expected_tmpfs["/evidence"] = "rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700"
     if actual["tmpfs"] != expected_tmpfs:
         raise ControllerError("container tmpfs attestation failed")
     mounts = actual["mounts"]
-    expected_destination = (
-        "/etc/envoy/envoy.json"
-        if expected["role"] == "envoy"
-        else f"/config/{expected['role']}.json"
-    )
-    if (
-        type(mounts) is not list
-        or len(mounts) != 1
-        or type(mounts[0]) is not dict
-        or mounts[0].get("source") != expected["config_path"]
-        or mounts[0].get("destination") != expected_destination
-        or mounts[0].get("rw") is not False
-    ):
-        raise ControllerError("container read-only config mount attestation failed")
-    if actual["networks"] != [expected["network"]]:
+    if role == "driver":
+        if mounts != [] or expected["config_path"] is not None or expected["config_sha256"] is not None:
+            raise ControllerError("driver must not have a config mount")
+    else:
+        expected_destination = (
+            "/etc/envoy/envoy.json"
+            if role == "envoy"
+            else f"/config/{role}.json"
+        )
+        if (
+            type(mounts) is not list
+            or len(mounts) != 1
+            or type(mounts[0]) is not dict
+            or mounts[0].get("source") != expected["config_path"]
+            or mounts[0].get("destination") != expected_destination
+            or mounts[0].get("rw") is not False
+        ):
+            raise ControllerError("container read-only config mount attestation failed")
+    if actual["networks"] != sorted(expected["networks"]):  # type: ignore[arg-type]
         raise ControllerError("container per-track network attestation failed")
+    aliases = actual["network_aliases"]
+    required_aliases = expected["required_aliases"]
+    if (
+        type(aliases) is not dict
+        or set(aliases) != set(actual["networks"])  # type: ignore[arg-type]
+        or type(required_aliases) is not dict
+        or set(required_aliases) != set(actual["networks"])  # type: ignore[arg-type]
+    ):
+        raise ControllerError("container network aliases are not closed")
+    for network, values in aliases.items():
+        required = required_aliases[network]
+        allowed = set(required) | {str(expected["name"]), str(actual["id"])[:12]}
+        if (
+            type(values) is not list
+            or any(type(value) is not str or not value for value in values)
+            or len(values) != len(set(values))
+            or type(required) is not list
+            or any(type(value) is not str or not value for value in required)
+            or not set(required).issubset(values)
+            or not set(values).issubset(allowed)
+        ):
+            raise ControllerError("container network aliases are invalid")
     if actual["platform"] != PLATFORM:
         raise ControllerError("container architecture attestation failed")
     environment = actual["environment"]
@@ -1648,33 +2796,170 @@ def validate_container_attestation(
         or len({item.split("=", 1)[0] for item in environment}) != len(environment)
     ):
         raise ControllerError("container environment attestation is invalid")
-    if expected["role"] == "authz":
-        expected_entrypoint = []
+    if role == "authz":
+        expected_entrypoint = ["python"]
         expected_command = [
-            "python", "-c", _AUTHZ_BOOTSTRAP, "--config", "/config/authz.json",
+            "-c", _AUTHZ_BOOTSTRAP, "--config", "/config/authz.json",
         ]
-    elif expected["role"] == "target":
-        expected_entrypoint = []
+    elif role == "target":
+        expected_entrypoint = ["python"]
         expected_command = [
-            "python", "-c", _TARGET_BOOTSTRAP, "--config", "/config/target.json",
+            "-c", _TARGET_BOOTSTRAP, "--config", "/config/target.json",
         ]
-    else:
+    elif role == "envoy":
         expected_entrypoint = ["/usr/local/bin/envoy"]
         expected_command = [
             "--config-path", "/etc/envoy/envoy.json", "--disable-hot-restart",
             "--concurrency", "1",
         ]
+    else:
+        expected_entrypoint = ["python"]
+        expected_command = [
+            "-m", "kil.v3b1_request_driver", "--track",
+            str(expected["track"]), "--endpoint", "envoy:8080",
+        ]
     if actual["entrypoint"] != expected_entrypoint or actual["command"] != expected_command:
         raise ControllerError("container executed process attestation failed")
-    gateway = expected["gateway_port"]
-    if gateway is None:
-        if actual["port_bindings"] != {}:
-            raise ControllerError("non-gateway container exposes a port")
-    elif actual["port_bindings"] != {
-        "8080/tcp": [{"HostIp": "127.0.0.1", "HostPort": str(gateway)}]
-    }:
-        raise ControllerError("gateway port binding is not localhost-only")
+    published_ports = actual["published_ports"]
+    live_ports_empty = published_ports is None or (
+        type(published_ports) is dict
+        and all(
+            type(port) is str and bindings in (None, [])
+            for port, bindings in published_ports.items()
+        )
+    )
+    if (
+        expected["gateway_port"] is not None
+        or actual["port_bindings"] != {}
+        or not live_ports_empty
+    ):
+        raise ControllerError("container host publication is forbidden")
+    required_state = expected["required_state"]
+    if required_state is not None and actual["state"] != required_state:
+        raise ControllerError("container lifecycle state attestation failed")
+    if actual["tty"] is not False:
+        raise ControllerError("container TTY attestation failed")
+    if role == "driver":
+        definition = expected["driver_definition"]
+        if (
+            type(definition) is not dict
+            or definition.get("track") != expected["track"]
+            or definition.get("image_id") != expected["image_id"]
+            or definition.get("endpoint") != {"host": "envoy", "port": 8080}
+            or definition.get("runtime_policy") != DRIVER_RUNTIME_POLICY
+            or expected["required_state"]
+            not in {"created", "running", "exited", "dead"}
+            or actual["state"] != expected["required_state"]
+            or actual["stdin_open"] is not True
+            or actual["healthcheck"] != "disabled"
+        ):
+            raise ControllerError("driver runtime definition attestation failed")
+    elif (
+        expected["driver_definition"] is not None
+        or actual["stdin_open"] is not False
+        or actual["healthcheck"] not in {None, "disabled", "configured"}
+    ):
+        raise ControllerError("service runtime definition attestation failed")
     return dict(actual)
+
+
+def _container_attestation_matches(
+    recorded: object,
+    current: object,
+    *,
+    allow_stopped: bool,
+    allowed_driver_states: set[str] | frozenset[str] | None = None,
+) -> bool:
+    """Compare an owned container while totalizing a controlled service stop."""
+    if current == recorded:
+        if (
+            type(recorded) is dict
+            and recorded.get("role") == "driver"
+            and allowed_driver_states is not None
+        ):
+            runtime = recorded.get("runtime_attestation")
+            return (
+                type(allowed_driver_states) in {set, frozenset}
+                and bool(allowed_driver_states)
+                and allowed_driver_states.issubset(
+                    {"created", "running", "exited", "dead"}
+                )
+                and type(runtime) is dict
+                and runtime.get("state") in allowed_driver_states
+            )
+        return True
+    if (
+        allow_stopped
+        and type(recorded) is dict
+        and type(current) is dict
+        and set(recorded) == set(current)
+        and recorded.get("role") == "driver"
+        and type(allowed_driver_states) in {set, frozenset}
+        and bool(allowed_driver_states)
+        and allowed_driver_states.issubset({"created", "running", "exited", "dead"})
+    ):
+        recorded_runtime = recorded.get("runtime_attestation")
+        current_runtime = current.get("runtime_attestation")
+        if (
+            type(recorded_runtime) is dict
+            and type(current_runtime) is dict
+            and set(recorded_runtime) == set(current_runtime)
+            and recorded_runtime.get("state")
+            in {"created", "running", "exited", "dead"}
+            and current_runtime.get("state") in allowed_driver_states
+            and {
+                key: value
+                for key, value in recorded.items()
+                if key != "runtime_attestation"
+            }
+            == {
+                key: value
+                for key, value in current.items()
+                if key != "runtime_attestation"
+            }
+            and {
+                key: value
+                for key, value in recorded_runtime.items()
+                if key != "state"
+            }
+            == {
+                key: value
+                for key, value in current_runtime.items()
+                if key != "state"
+            }
+        ):
+            return True
+    if (
+        not allow_stopped
+        or type(recorded) is not dict
+        or type(current) is not dict
+        or set(recorded) != set(current)
+        or recorded.get("role") == "driver"
+    ):
+        return False
+    recorded_runtime = recorded.get("runtime_attestation")
+    current_runtime = current.get("runtime_attestation")
+    if (
+        type(recorded_runtime) is not dict
+        or type(current_runtime) is not dict
+        or set(recorded_runtime) != set(current_runtime)
+        or recorded_runtime.get("state") != "running"
+        or current_runtime.get("state") not in {"exited", "dead"}
+    ):
+        return False
+    recorded_without_runtime = {
+        key: value for key, value in recorded.items() if key != "runtime_attestation"
+    }
+    current_without_runtime = {
+        key: value for key, value in current.items() if key != "runtime_attestation"
+    }
+    if recorded_without_runtime != current_without_runtime:
+        return False
+    return {
+        key: value for key, value in recorded_runtime.items() if key != "state"
+    } == {
+        key: value for key, value in current_runtime.items() if key != "state"
+    }
 
 
 def _normalize_inspected_tmpfs(value: object) -> dict[str, str]:
@@ -1921,6 +3206,45 @@ def _runtime_root(root: Path, manifest: Mapping[str, object]) -> Path:
     )
 
 
+def _segment_definitions() -> list[dict[str, object]]:
+    """Return the six canonical, name-independent internal segments."""
+    return [
+        {
+            "schema_version": "kil.v3b1-segment-definition.v1",
+            "track": track.value,
+            "segment": segment,
+            "internal": True,
+        }
+        for track in _TRACKS
+        for segment in ("frontend", "backend")
+    ]
+
+
+def _driver_definitions(
+    *,
+    kil_image_id: str,
+    bootstrap_sha256: str,
+    segment_definitions: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    """Return three definitions whose inputs never include runtime identity."""
+    frontend_by_track = {
+        str(item["track"]): _digest_bytes(_canonical_bytes(dict(item)))
+        for item in segment_definitions
+        if item.get("segment") == "frontend"
+    }
+    if set(frontend_by_track) != {track.value for track in _TRACKS}:
+        raise ControllerError("frontend segment definitions are incomplete")
+    return [
+        driver_definition(
+            track=track.value,
+            image_id=kil_image_id,
+            bootstrap_sha256=bootstrap_sha256,
+            frontend_segment_sha256=frontend_by_track[track.value],
+        )
+        for track in _TRACKS
+    ]
+
+
 def _manifest_identity(
     profile: V3BProfile,
     *,
@@ -1935,9 +3259,11 @@ def _manifest_identity(
     dockerfile_sha256: str,
     dockerignore_sha256: str,
     build_context_sha256: str,
+    segment_definitions: Sequence[Mapping[str, object]],
+    driver_definitions: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
     return {
-        "schema_version": "kil.v3b1-content-identity.v2",
+        "schema_version": "kil.v3b1-content-identity.v3",
         "profile_sha256": profile_sha256,
         "colima_profile": profile.colima_profile,
         "docker_endpoint": {
@@ -1957,10 +3283,97 @@ def _manifest_identity(
         "kil_image_id": kil_image_id,
         "kil_archive_sha256": kil_archive_sha256,
         "request_id": REQUEST_ID,
-        "tracks": [
-            {"track": track.value, "gateway_port": port}
-            for track, port in zip(_TRACKS, profile.gateway_ports, strict=True)
+        "driver_endpoint": {
+            "transport": "tcp",
+            "host": "envoy",
+            "port": 8080,
+        },
+        "segment_definitions": [dict(item) for item in segment_definitions],
+        "driver_definition_sha256": [
+            {
+                "track": item["track"],
+                "sha256": _digest_bytes(canonical_record(item)),
+            }
+            for item in driver_definitions
         ],
+    }
+
+
+def _manifest_runtime_projection(
+    *,
+    identity_sha256: str,
+    kil_image_id: str,
+    envoy_image_digest: str,
+    driver_definition_sha256: Sequence[Mapping[str, object]],
+) -> dict[str, list[dict[str, object]]]:
+    """Derive the private runtime projection after content identity exists."""
+    _require_sha256("runtime projection content identity", identity_sha256)
+    suffix = identity_sha256[:12]
+    driver_hashes = {
+        str(item.get("track")): _require_sha256(
+            "runtime projection driver definition", item.get("sha256")
+        )
+        for item in driver_definition_sha256
+        if type(item) is dict
+    }
+    if set(driver_hashes) != {track.value for track in _TRACKS}:
+        raise ControllerError("runtime projection driver definitions are incomplete")
+    networks: list[dict[str, object]] = []
+    tracks: list[dict[str, object]] = []
+    containers: list[dict[str, object]] = []
+    endpoint = {"transport": "tcp", "host": "envoy", "port": 8080}
+    for track in _TRACKS:
+        slug = _track_slug(track)
+        names = {
+            role: f"kil-v3b1-{role}-{slug}-{suffix}"
+            for role in ("authz", "target", "envoy", "driver")
+        }
+        network_names = {
+            segment: f"kil-v3b1-{segment}-{slug}-{suffix}"
+            for segment in ("frontend", "backend")
+        }
+        for segment in ("frontend", "backend"):
+            networks.append(
+                {
+                    "track": track.value,
+                    "segment": segment,
+                    "name": network_names[segment],
+                }
+            )
+        tracks.append(
+            {
+                "track": track.value,
+                "driver_endpoint": dict(endpoint),
+                "authz_container": names["authz"],
+                "target_container": names["target"],
+                "envoy_container": names["envoy"],
+                "driver_container": names["driver"],
+                "frontend_network": network_names["frontend"],
+                "backend_network": network_names["backend"],
+                "decision_source": f"{track.value}/decisions.jsonl",
+                "target_source": f"{track.value}/targets.jsonl",
+                "envoy_source": f"{track.value}/envoy.stdout.jsonl",
+                "driver_definition_sha256": driver_hashes[track.value],
+            }
+        )
+        for role in ("authz", "target", "envoy", "driver"):
+            containers.append(
+                {
+                    "name": names[role],
+                    "role": role,
+                    "track": track.value,
+                    "image": (
+                        envoy_image_digest if role == "envoy" else kil_image_id
+                    ),
+                    "command_definition_sha256": (
+                        driver_hashes[track.value] if role == "driver" else None
+                    ),
+                }
+            )
+    return {
+        "networks": networks,
+        "tracks": tracks,
+        "containers": containers,
     }
 
 
@@ -1973,6 +3386,7 @@ def create_run_manifest(
     envoy_image_id: str | None = None,
     kil_image_id: str,
     kil_archive_sha256: str,
+    driver_bootstrap_sha256: str,
     docker_host: str,
     source_commit: str = "0" * 40,
     source_clean: bool = True,
@@ -1994,6 +3408,7 @@ def create_run_manifest(
     if _IMAGE_ID.fullmatch(kil_image_id) is None:
         raise ControllerError("kil_image_id must be an immutable image ID")
     _require_sha256("kil_archive_sha256", kil_archive_sha256)
+    _require_sha256("driver_bootstrap_sha256", driver_bootstrap_sha256)
     if type(docker_host) is not str or not docker_host.startswith("unix:///"):
         raise ControllerError("docker_host must be an explicit Unix socket")
     if (
@@ -2006,6 +3421,12 @@ def create_run_manifest(
     _require_sha256("dockerfile_sha256", dockerfile_sha256)
     _require_sha256("dockerignore_sha256", dockerignore_sha256)
     _require_sha256("build_context_sha256", build_context_sha256)
+    segments = _segment_definitions()
+    drivers = _driver_definitions(
+        kil_image_id=kil_image_id,
+        bootstrap_sha256=driver_bootstrap_sha256,
+        segment_definitions=segments,
+    )
     identity = _manifest_identity(
         profile,
         profile_sha256=profile_sha256,
@@ -2019,43 +3440,17 @@ def create_run_manifest(
         dockerfile_sha256=dockerfile_sha256,
         dockerignore_sha256=dockerignore_sha256,
         build_context_sha256=build_context_sha256,
+        segment_definitions=segments,
+        driver_definitions=drivers,
     )
     identity_sha256 = _digest_bytes(canonical_json(identity).encode("utf-8"))
     run_id = f"v3b1-{identity_sha256}"
-    suffix = identity_sha256[:12]
-    networks = []
-    tracks = []
-    containers = []
-    for track, port in zip(_TRACKS, profile.gateway_ports, strict=True):
-        slug = _track_slug(track)
-        names = {
-            role: f"kil-v3b1-{role}-{slug}-{suffix}"
-            for role in ("authz", "target", "envoy")
-        }
-        network = f"kil-v3b1-network-{slug}-{suffix}"
-        networks.append({"track": track.value, "name": network})
-        tracks.append(
-            {
-                "track": track.value,
-                "gateway_port": port,
-                "authz_container": names["authz"],
-                "target_container": names["target"],
-                "envoy_container": names["envoy"],
-                "network": network,
-                "decision_source": f"{track.value}/decisions.jsonl",
-                "target_source": f"{track.value}/targets.jsonl",
-                "envoy_source": f"{track.value}/envoy.stdout.jsonl",
-            }
-        )
-        for role in ("authz", "target", "envoy"):
-            containers.append(
-                {
-                    "name": names[role],
-                    "role": role,
-                    "track": track.value,
-                    "image": kil_image_id if role != "envoy" else envoy_image_digest,
-                }
-            )
+    runtime = _manifest_runtime_projection(
+        identity_sha256=identity_sha256,
+        kil_image_id=kil_image_id,
+        envoy_image_digest=envoy_image_digest,
+        driver_definition_sha256=identity["driver_definition_sha256"],  # type: ignore[arg-type]
+    )
     return {
         "schema_version": MANIFEST_SCHEMA,
         "evidence_scope": EVIDENCE_SCOPE,
@@ -2073,9 +3468,11 @@ def create_run_manifest(
         "envoy_image_id": envoy_image_id,
         "kil_image_id": kil_image_id,
         "kil_archive_sha256": kil_archive_sha256,
-        "networks": networks,
-        "tracks": tracks,
-        "containers": containers,
+        "segment_definitions": segments,
+        "driver_definitions": drivers,
+        "networks": runtime["networks"],
+        "tracks": runtime["tracks"],
+        "containers": runtime["containers"],
         "teardown": {
             "status": "pending",
             "containers_removed": False,
@@ -2085,7 +3482,7 @@ def create_run_manifest(
     }
 
 
-def _validate_manifest(value: object) -> dict[str, object]:
+def _validate_manifest_v1(value: object) -> dict[str, object]:
     expected = {
         "schema_version",
         "evidence_scope",
@@ -2110,7 +3507,7 @@ def _validate_manifest(value: object) -> dict[str, object]:
     }
     if type(value) is not dict or set(value) != expected:
         raise ControllerError("manifest fields are not closed")
-    if value["schema_version"] != MANIFEST_SCHEMA or value["evidence_scope"] != EVIDENCE_SCOPE:
+    if value["schema_version"] != LEGACY_MANIFEST_SCHEMA or value["evidence_scope"] != EVIDENCE_SCOPE:
         raise ControllerError("manifest identity is invalid")
     identity = value["content_identity"]
     identity_fields = {
@@ -2284,6 +3681,228 @@ def _validate_manifest(value: object) -> dict[str, object]:
     return value
 
 
+def _validate_manifest_v2(value: object) -> dict[str, object]:
+    expected = {
+        "schema_version", "evidence_scope", "content_identity_sha256",
+        "content_identity", "run_id", "request_id", "colima_profile",
+        "docker_host", "execution_nonce", "platform", "source_commit",
+        "python_image_digest", "envoy_image_digest", "envoy_image_id",
+        "kil_image_id", "kil_archive_sha256", "segment_definitions",
+        "driver_definitions", "networks", "tracks", "containers", "teardown",
+    }
+    if type(value) is not dict or set(value) != expected:
+        raise ControllerError("manifest fields are not closed")
+    if (
+        value["schema_version"] != MANIFEST_SCHEMA
+        or value["evidence_scope"] != EVIDENCE_SCOPE
+    ):
+        raise ControllerError("manifest identity is invalid")
+
+    identity = value["content_identity"]
+    identity_fields = {
+        "schema_version", "profile_sha256", "colima_profile",
+        "docker_endpoint", "platform", "source_commit",
+        "execution_nonce_sha256", "dockerfile_sha256",
+        "dockerignore_sha256", "build_context_sha256",
+        "python_image_digest", "envoy_image_digest", "envoy_image_id",
+        "kil_image_id", "kil_archive_sha256", "request_id",
+        "driver_endpoint", "segment_definitions", "driver_definition_sha256",
+    }
+    if type(identity) is not dict or set(identity) != identity_fields:
+        raise ControllerError("manifest content identity is invalid")
+    if identity["schema_version"] != "kil.v3b1-content-identity.v3":
+        raise ControllerError("manifest content identity schema is invalid")
+    for name in (
+        "profile_sha256", "execution_nonce_sha256", "dockerfile_sha256",
+        "dockerignore_sha256", "build_context_sha256",
+    ):
+        _require_sha256(name, identity[name])
+    if identity["docker_endpoint"] != {
+        "transport": "unix",
+        "logical_locator": "colima_profile_socket",
+        "profile": LAB_IDENTITY,
+    }:
+        raise ControllerError("manifest logical Docker endpoint is invalid")
+    endpoint = {"transport": "tcp", "host": "envoy", "port": 8080}
+    if identity["driver_endpoint"] != endpoint:
+        raise ControllerError("manifest driver endpoint is invalid")
+
+    segments = value["segment_definitions"]
+    if segments != _segment_definitions() or identity["segment_definitions"] != segments:
+        raise ControllerError("manifest segment definitions are invalid")
+    drivers = value["driver_definitions"]
+    if type(drivers) is not list or len(drivers) != len(_TRACKS):
+        raise ControllerError("manifest driver definitions are invalid")
+    if any(type(item) is not dict for item in drivers):
+        raise ControllerError("manifest driver definitions are invalid")
+    bootstrap_values = {item.get("bootstrap_sha256") for item in drivers}
+    if len(bootstrap_values) != 1:
+        raise ControllerError("manifest driver bootstrap binding is invalid")
+    bootstrap_sha256 = next(iter(bootstrap_values))
+    _require_sha256("manifest driver bootstrap", bootstrap_sha256)
+    expected_drivers = _driver_definitions(
+        kil_image_id=str(value["kil_image_id"]),
+        bootstrap_sha256=bootstrap_sha256,
+        segment_definitions=segments,
+    )
+    if drivers != expected_drivers:
+        raise ControllerError("manifest driver definitions are invalid")
+    expected_driver_hashes = [
+        {
+            "track": item["track"],
+            "sha256": _digest_bytes(canonical_record(item)),
+        }
+        for item in drivers
+    ]
+    if identity["driver_definition_sha256"] != expected_driver_hashes:
+        raise ControllerError("manifest driver definition hashes are invalid")
+
+    digest = _digest_bytes(canonical_json(identity).encode("utf-8"))
+    if (
+        value["content_identity_sha256"] != digest
+        or value["run_id"] != f"v3b1-{digest}"
+    ):
+        raise ControllerError("manifest content address is invalid")
+    if value["request_id"] != REQUEST_ID or value["colima_profile"] != LAB_IDENTITY:
+        raise ControllerError("manifest fixed identifiers are invalid")
+    for name in (
+        "request_id", "colima_profile", "platform", "source_commit",
+        "python_image_digest", "envoy_image_digest", "envoy_image_id",
+        "kil_image_id", "kil_archive_sha256",
+    ):
+        if value[name] != identity[name]:
+            raise ControllerError(f"manifest {name} diverges from content identity")
+    execution_nonce = _require_sha256(
+        "manifest execution nonce", value["execution_nonce"]
+    )
+    if identity["execution_nonce_sha256"] != _digest_bytes(
+        execution_nonce.encode("ascii")
+    ):
+        raise ControllerError("manifest execution nonce diverges from content identity")
+    if type(value["docker_host"]) is not str or not value["docker_host"].startswith(
+        "unix:///"
+    ):
+        raise ControllerError("manifest Docker host is invalid")
+    if value["platform"] != PLATFORM:
+        raise ControllerError("manifest platform is invalid")
+    if type(value["source_commit"]) is not str or re.fullmatch(
+        r"[a-f0-9]{40}", value["source_commit"]
+    ) is None:
+        raise ControllerError("manifest source commit is invalid")
+    _require_digest_ref("python_image_digest", value["python_image_digest"])
+    _require_digest_ref("envoy_image_digest", value["envoy_image_digest"])
+    for name in ("envoy_image_id", "kil_image_id"):
+        if type(value[name]) is not str or _IMAGE_ID.fullmatch(value[name]) is None:
+            raise ControllerError("manifest image ID is invalid")
+    _require_sha256("kil_archive_sha256", value["kil_archive_sha256"])
+
+    expected_runtime = _manifest_runtime_projection(
+        identity_sha256=digest,
+        kil_image_id=str(value["kil_image_id"]),
+        envoy_image_digest=str(value["envoy_image_digest"]),
+        driver_definition_sha256=expected_driver_hashes,
+    )
+
+    containers = value["containers"]
+    if type(containers) is not list or len(containers) != 12:
+        raise ControllerError("manifest containers are invalid")
+    container_map: dict[tuple[object, object], dict[str, object]] = {}
+    for item in containers:
+        if type(item) is not dict or set(item) != {
+            "name", "role", "track", "image", "command_definition_sha256",
+        }:
+            raise ControllerError("manifest container fields are invalid")
+        key = (item["track"], item["role"])
+        if key in container_map:
+            raise ControllerError("manifest container mapping is duplicated")
+        container_map[key] = item
+    expected_container_map = {
+        (item["track"], item["role"]): item
+        for item in expected_runtime["containers"]
+    }
+    if set(container_map) != set(expected_container_map):
+        raise ControllerError("manifest container mappings are incomplete")
+    for key, expected_container in expected_container_map.items():
+        if container_map[key] != expected_container:
+            raise ControllerError("manifest container binding is invalid")
+    container_names = [str(item["name"]) for item in containers]
+    if len(set(container_names)) != len(container_names):
+        raise ControllerError("manifest container names are not unique")
+
+    networks = value["networks"]
+    if type(networks) is not list or len(networks) != 6:
+        raise ControllerError("manifest networks are invalid")
+    network_map: dict[tuple[object, object], dict[str, object]] = {}
+    for item in networks:
+        if type(item) is not dict or set(item) != {"track", "segment", "name"}:
+            raise ControllerError("manifest network fields are invalid")
+        key = (item["track"], item["segment"])
+        if key in network_map:
+            raise ControllerError("manifest network mapping is duplicated")
+        network_map[key] = item
+    expected_network_map = {
+        (item["track"], item["segment"]): item
+        for item in expected_runtime["networks"]
+    }
+    if set(network_map) != set(expected_network_map):
+        raise ControllerError("manifest network mappings are incomplete")
+    for key, expected_network in expected_network_map.items():
+        if network_map[key] != expected_network:
+            raise ControllerError("manifest network binding is invalid")
+    network_names = [str(item["name"]) for item in networks]
+    if len(set(network_names)) != len(network_names):
+        raise ControllerError("manifest network names are not unique")
+
+    tracks = value["tracks"]
+    if type(tracks) is not list or len(tracks) != 3:
+        raise ControllerError("manifest tracks are invalid")
+    track_map: dict[object, dict[str, object]] = {}
+    for item in tracks:
+        if type(item) is not dict:
+            raise ControllerError("manifest track fields are invalid")
+        track = item.get("track")
+        if track in track_map:
+            raise ControllerError("manifest track mapping is duplicated")
+        track_map[track] = item
+    expected_track_map = {
+        item["track"]: item for item in expected_runtime["tracks"]
+    }
+    if set(track_map) != set(expected_track_map):
+        raise ControllerError("manifest track mappings are incomplete")
+    for track, expected_track in expected_track_map.items():
+        if track_map[track] != expected_track:
+            raise ControllerError("manifest track binding is invalid")
+    teardown = value["teardown"]
+    if type(teardown) is not dict or set(teardown) != {
+        "status", "containers_removed", "network_removed", "profile_deleted",
+    }:
+        raise ControllerError("manifest teardown fields are invalid")
+    if teardown not in (
+        {
+            "status": "pending", "containers_removed": False,
+            "network_removed": False, "profile_deleted": False,
+        },
+        {
+            "status": "complete", "containers_removed": True,
+            "network_removed": True, "profile_deleted": True,
+        },
+    ):
+        raise ControllerError("manifest teardown state is invalid")
+    return value
+
+
+def _validate_manifest(value: object) -> dict[str, object]:
+    """Dispatch private manifests without accepting hybrid schema shapes."""
+    if type(value) is not dict:
+        raise ControllerError("manifest fields are not closed")
+    schema = value.get("schema_version")
+    if schema == LEGACY_MANIFEST_SCHEMA:
+        return _validate_manifest_v1(value)
+    if schema == MANIFEST_SCHEMA:
+        return _validate_manifest_v2(value)
+    raise ControllerError("manifest schema is invalid")
+
+
 def _claims(audience: str, issued_at_s: int) -> QStateClaims:
     return QStateClaims(
         schema_version="kil.q-state.v0",
@@ -2326,6 +3945,219 @@ def _track_manifest(manifest: Mapping[str, object], track: LiveTrack) -> dict[st
         if isinstance(item, dict) and item.get("track") == track.value:
             return item
     raise ControllerError(f"manifest omits track {track.value}")
+
+
+def _runtime_networks(
+    manifest: Mapping[str, object],
+) -> list[dict[str, object]]:
+    """Return the schema-bound network projection without hybrid inference."""
+    networks = manifest["networks"]  # type: ignore[assignment]
+    assert isinstance(networks, list)
+    return [dict(item) for item in networks]
+
+
+def _network_segment(item: Mapping[str, object]) -> str:
+    """Map legacy single networks to backend while preserving v2 segments."""
+    segment = item.get("segment", "backend")
+    if segment not in {"frontend", "backend"}:
+        raise ControllerError("runtime network segment is invalid")
+    return str(segment)
+
+
+def _network_member_identities(
+    objects: Sequence[Mapping[str, object]],
+    track: str,
+    segment: str,
+) -> dict[str, dict[str, str]]:
+    """Project exact full-ID/name/role ownership for one network segment."""
+    roles = (
+        {"envoy", "authz", "target"}
+        if segment == "backend"
+        else {"envoy", "driver"}
+        if segment == "frontend"
+        else None
+    )
+    if roles is None:
+        raise ControllerError("network member segment is invalid")
+    result: dict[str, dict[str, str]] = {}
+    names: set[str] = set()
+    for item in objects:
+        if item.get("track") != track or item.get("role") not in roles:
+            continue
+        object_id = item.get("id")
+        name = item.get("name")
+        role = item.get("role")
+        if (
+            type(object_id) is not str
+            or _HEX.fullmatch(object_id) is None
+            or type(name) is not str
+            or not name
+            or type(role) is not str
+            or object_id in result
+            or name in names
+        ):
+            raise ControllerError("network member ownership is invalid")
+        result[object_id] = {"name": name, "role": role}
+        names.add(name)
+    return result
+
+
+def _envoy_attachment_expectations(
+    events: Sequence[Mapping[str, object]],
+    manifest: Mapping[str, object],
+) -> dict[str, dict[str, object]]:
+    """Replay each Envoy/frontend attachment from exact durable identities."""
+    expectations: dict[str, dict[str, object]] = {}
+    by_container_name: dict[str, str] = {}
+    by_network_name: dict[str, str] = {}
+    for track in _TRACKS:
+        track_value = _track_manifest(manifest, track)
+        container_name = str(track_value["envoy_container"])
+        network_name = str(track_value["frontend_network"])
+        expectations[track.value] = {
+            "track": track.value,
+            "phase": "unstarted",
+            "container_id": None,
+            "container_name": container_name,
+            "network_id": None,
+            "network_name": network_name,
+            "alias": "envoy",
+        }
+        by_container_name[container_name] = track.value
+        by_network_name[network_name] = track.value
+    for event in events:
+        if type(event) is not dict:
+            raise ControllerError("Envoy attachment history is invalid")
+        event_name = event.get("event")
+        details = event.get("details")
+        if type(details) is not dict:
+            raise ControllerError("Envoy attachment history is invalid")
+        if event_name == "container_create_complete":
+            track = by_container_name.get(str(details.get("name")))
+            if track is not None:
+                object_id = details.get("id")
+                if type(object_id) is not str or _HEX.fullmatch(object_id) is None:
+                    raise ControllerError("Envoy attachment container ID is invalid")
+                expectations[track]["container_id"] = object_id
+        elif event_name == "network_create_complete":
+            track = by_network_name.get(str(details.get("name")))
+            if track is not None:
+                object_id = details.get("id")
+                if type(object_id) is not str or _HEX.fullmatch(object_id) is None:
+                    raise ControllerError("Envoy attachment network ID is invalid")
+                expectations[track]["network_id"] = object_id
+        elif event_name in {"network_connect_intent", "network_connect_complete"}:
+            container_track = by_container_name.get(
+                str(details.get("container_name"))
+            )
+            network_track = by_network_name.get(str(details.get("network_name")))
+            if container_track is None or container_track != network_track:
+                raise ControllerError("Envoy attachment crosses track identities")
+            expectation = expectations[container_track]
+            if (
+                details.get("alias") != "envoy"
+                or details.get("container_id") != expectation["container_id"]
+                or details.get("network_id") != expectation["network_id"]
+            ):
+                raise ControllerError("Envoy attachment durable identity changed")
+            required_phase = (
+                "unstarted"
+                if event_name == "network_connect_intent"
+                else "pending"
+            )
+            if expectation["phase"] != required_phase:
+                raise ControllerError("Envoy attachment phase transition is invalid")
+            expectation["phase"] = (
+                "pending"
+                if event_name == "network_connect_intent"
+                else "complete"
+            )
+    for expectation in expectations.values():
+        if expectation["phase"] != "unstarted" and (
+            expectation["container_id"] is None
+            or expectation["network_id"] is None
+        ):
+            raise ControllerError("Envoy attachment lacks exact durable identities")
+    return expectations
+
+
+def _validate_envoy_attachment_expectation(
+    value: Mapping[str, object],
+    manifest: Mapping[str, object],
+    track: str,
+) -> dict[str, object]:
+    fields = {
+        "track",
+        "phase",
+        "container_id",
+        "container_name",
+        "network_id",
+        "network_name",
+        "alias",
+    }
+    if type(value) is not dict or set(value) != fields:
+        raise ControllerError("Envoy attachment expectation is not closed")
+    track_value = _track_manifest(manifest, LiveTrack(track))
+    if (
+        value["track"] != track
+        or value["phase"] not in {"unstarted", "pending", "complete"}
+        or value["container_name"] != track_value["envoy_container"]
+        or value["network_name"] != track_value["frontend_network"]
+        or value["alias"] != "envoy"
+    ):
+        raise ControllerError("Envoy attachment expectation identity is invalid")
+    for field in ("container_id", "network_id"):
+        object_id = value[field]
+        if object_id is not None and (
+            type(object_id) is not str or _HEX.fullmatch(object_id) is None
+        ):
+            raise ControllerError("Envoy attachment expectation ID is invalid")
+    if value["phase"] != "unstarted" and (
+        value["container_id"] is None or value["network_id"] is None
+    ):
+        raise ControllerError("Envoy attachment expectation lacks its IDs")
+    return dict(value)
+
+
+def _network_member_identity_options(
+    objects: Sequence[Mapping[str, object]],
+    manifest: Mapping[str, object],
+    track: str,
+    segment: str,
+    attachment: Mapping[str, object],
+) -> tuple[dict[str, dict[str, str]], ...]:
+    exact = _network_member_identities(objects, track, segment)
+    if segment == "backend":
+        return (exact,)
+    if segment != "frontend":
+        raise ControllerError("network member segment is invalid")
+    expectation = _validate_envoy_attachment_expectation(
+        attachment, manifest, track
+    )
+    envoy_ids = [
+        object_id
+        for object_id, identity in exact.items()
+        if identity["role"] == "envoy"
+    ]
+    if len(envoy_ids) > 1:
+        raise ControllerError("frontend Envoy ownership is not unique")
+    base = {
+        object_id: identity
+        for object_id, identity in exact.items()
+        if identity["role"] != "envoy"
+    }
+    attached = dict(base)
+    if envoy_ids:
+        envoy_id = envoy_ids[0]
+        if expectation["container_id"] != envoy_id:
+            raise ControllerError("frontend Envoy ID is not journal-bound")
+        attached[envoy_id] = exact[envoy_id]
+    phase = expectation["phase"]
+    if phase == "unstarted":
+        return (base,)
+    if phase == "pending" and attached != base:
+        return (base, attached)
+    return (attached,)
 
 
 def materialize_run_inputs(root: Path, manifest: dict[str, object]) -> MaterializedInputs:
@@ -2437,6 +4269,7 @@ def _hardened_kil_options() -> list[str]:
         "--platform",
         PLATFORM,
         "--pull=never",
+        "--cgroupns=private",
         "--read-only",
         "--user",
         "65532:65532",
@@ -2474,7 +4307,7 @@ def build_runtime_commands(
     *,
     docker_binary: Path,
 ) -> list[list[str]]:
-    """Construct exact validator, network, and nine-service commands."""
+    """Construct validators, six internal segments, services, and drivers."""
     _validate_manifest(manifest)
     runtime_root = _runtime_root(root, manifest)
     prefix = _docker_prefix(
@@ -2494,6 +4327,7 @@ def build_runtime_commands(
                 "--platform",
                 PLATFORM,
                 "--pull=never",
+                "--cgroupns=private",
                 "--network",
                 "none",
                 "--read-only",
@@ -2519,28 +4353,31 @@ def build_runtime_commands(
                 "1",
             ]
         )
-    for network in manifest["networks"]:  # type: ignore[union-attr]
-        commands.append(
-            [
-                *prefix,
-                "network",
-                "create",
-                "--driver",
-                "bridge",
-                "--internal",
-                "--label",
-                f"kil.v3b1.run-id={manifest['run_id']}",
-                "--label",
-                "kil.v3b1.managed=true",
-                "--label",
-                f"kil.v3b1.track={network['track']}",
-                str(network["name"]),
-            ]
-        )
+    for segment in ("backend", "frontend"):
+        for network in _runtime_networks(manifest):
+            if _network_segment(network) != segment:
+                continue
+            commands.append(
+                [
+                    *prefix,
+                    "network",
+                    "create",
+                    "--driver",
+                    "bridge",
+                    "--internal",
+                    "--label",
+                    f"kil.v3b1.run-id={manifest['run_id']}",
+                    "--label",
+                    "kil.v3b1.managed=true",
+                    "--label",
+                    f"kil.v3b1.track={network['track']}",
+                    str(network["name"]),
+                ]
+            )
     for track in _TRACKS:
         track_root = runtime_root / track.value
         item = _track_manifest(manifest, track)
-        common_network = ["--network", str(item["network"])]
+        common_network = ["--network", str(item["backend_network"])]
         authz_name = str(item["authz_container"])
         target_name = str(item["target_container"])
         envoy_name = str(item["envoy_container"])
@@ -2558,8 +4395,9 @@ def build_runtime_commands(
                 *_hardened_kil_options(),
                 "--mount",
                 f"type=bind,src={track_root / 'authz.json'},dst=/config/authz.json,readonly",
-                str(manifest["kil_image_id"]),
+                "--entrypoint",
                 "python",
+                str(manifest["kil_image_id"]),
                 "-c",
                 _AUTHZ_BOOTSTRAP,
                 "--config",
@@ -2580,8 +4418,9 @@ def build_runtime_commands(
                 *_hardened_kil_options(),
                 "--mount",
                 f"type=bind,src={track_root / 'target.json'},dst=/config/target.json,readonly",
-                str(manifest["kil_image_id"]),
+                "--entrypoint",
                 "python",
+                str(manifest["kil_image_id"]),
                 "-c",
                 _TARGET_BOOTSTRAP,
                 "--config",
@@ -2602,6 +4441,7 @@ def build_runtime_commands(
                 "--platform",
                 PLATFORM,
                 "--pull=never",
+                "--cgroupns=private",
                 "--read-only",
                 "--user",
                 "65532:65532",
@@ -2628,8 +4468,6 @@ def build_runtime_commands(
                 "max-file=1",
                 "--tmpfs",
                 "/tmp:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700",
-                "--publish",
-                f"127.0.0.1:{item['gateway_port']}:8080/tcp",
                 "--mount",
                 f"type=bind,src={track_root / 'envoy.json'},dst=/etc/envoy/envoy.json,readonly",
                 "--entrypoint",
@@ -2642,7 +4480,78 @@ def build_runtime_commands(
                 "1",
             ]
         )
+        driver_name = str(item["driver_container"])
+        commands.append(
+            [
+                *prefix,
+                "create",
+                "--interactive",
+                "--no-healthcheck",
+                "--name",
+                driver_name,
+                "--network-alias",
+                driver_name,
+                "--network",
+                str(item["frontend_network"]),
+                *_labels(manifest, "driver", track),
+                "--platform",
+                PLATFORM,
+                "--pull=never",
+                "--cgroupns=private",
+                "--read-only",
+                "--user",
+                "65532:65532",
+                "--security-opt",
+                "no-new-privileges",
+                "--cap-drop",
+                "ALL",
+                "--cpus",
+                "0.50",
+                "--memory",
+                "256m",
+                "--memory-swap",
+                "256m",
+                "--pids-limit",
+                "128",
+                "--restart=no",
+                "--stop-timeout",
+                "10",
+                "--log-driver",
+                "json-file",
+                "--log-opt",
+                "max-size=1m",
+                "--log-opt",
+                "max-file=1",
+                "--tmpfs",
+                "/tmp:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700",
+                "--entrypoint",
+                "python",
+                str(manifest["kil_image_id"]),
+                "-m",
+                "kil.v3b1_request_driver",
+                "--track",
+                track.value,
+                "--endpoint",
+                "envoy:8080",
+            ]
+        )
     return commands
+
+
+def _network_connect_command(
+    docker_prefix: Sequence[str], details: Mapping[str, object]
+) -> list[str]:
+    """Build the closed full-ID Envoy-to-frontend network attachment command."""
+    _validate_lifecycle_event_details("network_connect_intent", details)
+    return [
+        *docker_prefix,
+        "network",
+        "connect",
+        "--alias",
+        "envoy",
+        str(details["network_id"]),
+        str(details["container_id"]),
+    ]
 
 
 def collection_commands(
@@ -2705,7 +4614,9 @@ def _synthetic_state_object(
     image_id = (
         manifest["envoy_image_id"] if role == "envoy" else manifest["kil_image_id"]
     )
-    config_path = f"/unavailable/{track}/{role}.json"
+    config_path = (
+        None if role == "driver" else f"/unavailable/{track}/{role}.json"
+    )
     track_record = next(
         record
         for record in manifest["tracks"]  # type: ignore[union-attr]
@@ -2714,9 +4625,33 @@ def _synthetic_state_object(
     tmpfs = {
         "/tmp": "rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700"
     }
-    if role != "envoy":
+    if role in {"authz", "target"}:
         tmpfs["/evidence"] = "rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700"
-    destination = "/etc/envoy/envoy.json" if role == "envoy" else f"/config/{role}.json"
+    destination = (
+        "/etc/envoy/envoy.json"
+        if role == "envoy"
+        else f"/config/{role}.json"
+    )
+    if role == "envoy":
+        networks = [
+            track_record["backend_network"],
+            track_record["frontend_network"],
+        ]
+    elif role == "driver":
+        networks = [track_record["frontend_network"]]
+    else:
+        networks = [
+            track_record.get("backend_network", track_record.get("network"))
+        ]
+    aliases = {
+        str(network): [
+            "envoy"
+            if role == "envoy" and network == track_record.get("frontend_network")
+            else name,
+            object_id[:12],
+        ]
+        for network in networks
+    }
     runtime = {
         "id": object_id,
         "name": name,
@@ -2734,22 +4669,17 @@ def _synthetic_state_object(
         "log_driver": "json-file",
         "log_options": {"max-file": "1", "max-size": "1m"},
         "tmpfs": tmpfs,
-        "mounts": [{"source": config_path, "destination": destination, "rw": False}],
-        "networks": [track_record["network"]],
-        "port_bindings": (
-            {
-                "8080/tcp": [
-                    {
-                        "HostIp": "127.0.0.1",
-                        "HostPort": str(track_record["gateway_port"]),
-                    }
-                ]
-            }
-            if role == "envoy"
-            else {}
+        "mounts": (
+            []
+            if role == "driver"
+            else [{"source": config_path, "destination": destination, "rw": False}]
         ),
+        "networks": sorted(str(network) for network in networks),
+        "network_aliases": aliases,
+        "port_bindings": {},
+        "published_ports": None,
         "platform": PLATFORM,
-        "entrypoint": ["/usr/local/bin/envoy"] if role == "envoy" else [],
+        "entrypoint": ["/usr/local/bin/envoy"] if role == "envoy" else ["python"],
         "command": (
             [
                 "--config-path", "/etc/envoy/envoy.json", "--disable-hot-restart",
@@ -2757,12 +4687,32 @@ def _synthetic_state_object(
             ]
             if role == "envoy"
             else [
-                "python", "-c",
+                "-m", "kil.v3b1_request_driver", "--track", track,
+                "--endpoint", "envoy:8080",
+            ]
+            if role == "driver"
+            else [
+                "-c",
                 _AUTHZ_BOOTSTRAP if role == "authz" else _TARGET_BOOTSTRAP,
                 "--config", f"/config/{role}.json",
             ]
         ),
         "environment": ["PATH=/usr/local/bin"],
+        "state": "created" if role == "driver" else "running",
+        "stdin_open": role == "driver",
+        "tty": False,
+        "healthcheck": "disabled" if role == "driver" else None,
+        "privileged": False,
+        "network_mode": str(
+            track_record["frontend_network"]
+            if role == "driver"
+            else track_record.get("backend_network", track_record.get("network"))
+        ),
+        "pid_mode": "",
+        "ipc_mode": "",
+        "uts_mode": "",
+        "userns_mode": "",
+        "cgroupns_mode": "private",
     }
     return {
         "name": name,
@@ -2773,7 +4723,7 @@ def _synthetic_state_object(
         "image_id": image_id,
         "image_reference": item["image"],
         "config_path": config_path,
-        "config_sha256": "0" * 64,
+        "config_sha256": None if role == "driver" else "0" * 64,
         "runtime_attestation": runtime,
     }
 
@@ -2806,9 +4756,10 @@ def persist_active_state(
                 "name": item["name"],
                 "id": _digest_bytes(str(item["name"]).encode("utf-8")),
                 "track": item["track"],
+                "segment": _network_segment(item),
                 "labels": _object_labels(run_id, None, str(item["track"])),
             }
-            for item in manifest["networks"]  # type: ignore[union-attr]
+            for item in _runtime_networks(manifest)
         ]
     base: dict[str, object] = {
         "schema_version": STATE_SCHEMA,
@@ -2831,7 +4782,7 @@ def _validate_state_objects(
     state: Mapping[str, object], manifest: Mapping[str, object]
 ) -> None:
     objects = state.get("objects")
-    if type(objects) is not list or len(objects) != 9:
+    if type(objects) is not list or len(objects) != 12:
         raise ControllerError("active state Docker objects are invalid")
     expected = {
         item["name"]: item
@@ -2872,7 +4823,10 @@ def _validate_state_objects(
         )
         if item["image_id"] != expected_image_id or item["image_reference"] != source["image"]:
             raise ControllerError("active state Docker image identity is invalid")
-        if (
+        if item["role"] == "driver":
+            if item["config_path"] is not None or item["config_sha256"] is not None:
+                raise ControllerError("active driver config attestation is invalid")
+        elif (
             type(item["config_path"]) is not str
             or not Path(item["config_path"]).is_absolute()
             or type(item["config_sha256"]) is not str
@@ -2884,15 +4838,52 @@ def _validate_state_objects(
             for record in manifest["tracks"]  # type: ignore[union-attr]
             if record["track"] == item["track"]
         )
+        if item["role"] == "envoy":
+            expected_networks = [
+                track_record["backend_network"],
+                track_record["frontend_network"],
+            ]
+        elif item["role"] == "driver":
+            expected_networks = [track_record["frontend_network"]]
+        else:
+            expected_networks = [
+                track_record.get("backend_network", track_record.get("network"))
+            ]
+        required_aliases = {
+            str(network): [
+                "envoy"
+                if item["role"] == "envoy"
+                and network == track_record.get("frontend_network")
+                else str(item["name"])
+            ]
+            for network in expected_networks
+        }
+        driver_definition_value = None
+        if item["role"] == "driver":
+            driver_definition_value = next(
+                definition
+                for definition in manifest["driver_definitions"]  # type: ignore[union-attr]
+                if definition["track"] == item["track"]
+            )
         expected_runtime = {
             "name": item["name"],
             "role": item["role"],
             "track": item["track"],
             "image_id": item["image_id"],
-            "network": track_record["network"],
+            "networks": sorted(str(network) for network in expected_networks),
             "config_path": item["config_path"],
             "config_sha256": item["config_sha256"],
-            "gateway_port": track_record["gateway_port"] if item["role"] == "envoy" else None,
+            "gateway_port": None,
+            "required_aliases": required_aliases,
+            "driver_definition": driver_definition_value,
+            "required_state": "created" if item["role"] == "driver" else "running",
+            "primary_network": str(
+                track_record["frontend_network"]
+                if item["role"] == "driver"
+                else track_record.get(
+                    "backend_network", track_record.get("network")
+                )
+            ),
         }
         runtime = validate_container_attestation(
             item["runtime_attestation"], expected_runtime
@@ -2902,24 +4893,34 @@ def _validate_state_objects(
     networks = state.get("network_objects")
     expected_networks = {
         item["name"]: item
-        for item in manifest["networks"]  # type: ignore[union-attr]
+        for item in _runtime_networks(manifest)
     }
-    if type(networks) is not list or len(networks) != 3:
+    if type(networks) is not list or len(networks) != 6:
         raise ControllerError("active state network objects are invalid")
+    seen_networks: set[object] = set()
     for network in networks:
-        if type(network) is not dict or set(network) != {"name", "id", "track", "labels"}:
+        if type(network) is not dict or set(network) != {
+            "name", "id", "track", "segment", "labels"
+        }:
             raise ControllerError("active state network object is invalid")
         if (
             network["name"] not in expected_networks
             or expected_networks[network["name"]]["track"] != network["track"]
+            or _network_segment(expected_networks[network["name"]])
+            != network["segment"]
             or type(network["id"]) is not str
             or _HEX.fullmatch(network["id"]) is None
         ):
             raise ControllerError("active state network identity is invalid")
+        if network["name"] in seen_networks:
+            raise ControllerError("active state network identity is duplicated")
+        seen_networks.add(network["name"])
         if network["labels"] != _object_labels(
             str(state["run_id"]), None, str(network["track"])
         ):
             raise ControllerError("active state network labels are invalid")
+    if seen_networks != set(expected_networks):
+        raise ControllerError("active state networks do not match manifest")
 
 
 def load_bound_active_state(state_path: Path) -> dict[str, object]:
@@ -2965,17 +4966,191 @@ def load_bound_active_state(state_path: Path) -> dict[str, object]:
     return state
 
 
+def _closed_teardown_validators(
+    validator_objects: Sequence[Mapping[str, object]],
+    manifest: Mapping[str, object],
+) -> list[Mapping[str, object]]:
+    """Validate exact retained validator identities without name discovery."""
+    if type(validator_objects) not in {list, tuple} or len(validator_objects) != 3:
+        raise ControllerError("exact validator teardown identities are unavailable")
+    expected_outer = {
+        "id", "name", "role", "track", "labels", "image_id",
+        "image_reference", "runtime_attestation",
+    }
+    expected_runtime = {
+        "privileged", "network_mode", "pid_mode", "ipc_mode", "uts_mode",
+        "userns_mode", "cgroupns_mode", "state", "entrypoint", "command",
+        "mounts", "networks", "port_bindings", "published_ports",
+    }
+    by_track: dict[str, Mapping[str, object]] = {}
+    ids: set[str] = set()
+    names: set[str] = set()
+    for record in validator_objects:
+        if type(record) is not dict or set(record) != expected_outer:
+            raise ControllerError("validator teardown identity is not closed")
+        track_value = record["track"]
+        if type(track_value) is not str:
+            raise ControllerError("validator teardown track is invalid")
+        try:
+            track = LiveTrack(track_value)
+        except ValueError as error:
+            raise ControllerError("validator teardown track is invalid") from error
+        expected_name = (
+            f"kil-v3b1-validate-{_track_slug(track)}-"
+            f"{str(manifest['content_identity_sha256'])[:12]}"
+        )
+        object_id = record["id"]
+        name = record["name"]
+        runtime = record["runtime_attestation"]
+        expected_labels = _object_labels(
+            str(manifest["run_id"]), "validator", track.value
+        )
+        if (
+            type(object_id) is not str
+            or _HEX.fullmatch(object_id) is None
+            or object_id in ids
+            or name != expected_name
+            or name in names
+            or record["role"] != "validator"
+            or record["labels"] != expected_labels
+            or record["image_id"] != manifest["envoy_image_id"]
+            or record["image_reference"] != manifest["envoy_image_digest"]
+            or type(runtime) is not dict
+            or set(runtime) != expected_runtime
+        ):
+            raise ControllerError("validator teardown identity is invalid")
+        mounts = runtime["mounts"]
+        published_ports = runtime["published_ports"]
+        published_ports_empty = published_ports is None or (
+            type(published_ports) is dict
+            and all(
+                type(port) is str and port and bindings in (None, [])
+                for port, bindings in published_ports.items()
+            )
+        )
+        if (
+            runtime["privileged"] is not False
+            or runtime["network_mode"] != "none"
+            or any(
+                type(runtime[field]) is not str or runtime[field] != ""
+                for field in ("pid_mode", "ipc_mode", "uts_mode", "userns_mode")
+            )
+            or runtime["cgroupns_mode"] != "private"
+            or runtime["state"] != "exited"
+            or runtime["entrypoint"] != ["/usr/local/bin/envoy"]
+            or runtime["command"] != [
+                "--mode", "validate", "--config-path", "/etc/envoy/envoy.json",
+                "--disable-hot-restart", "--concurrency", "1",
+            ]
+            or type(mounts) is not list
+            or len(mounts) != 1
+            or type(mounts[0]) is not dict
+            or set(mounts[0]) != {"source", "destination", "rw"}
+            or type(mounts[0]["source"]) is not str
+            or not Path(str(mounts[0]["source"])).is_absolute()
+            or mounts[0]["destination"] != "/etc/envoy/envoy.json"
+            or mounts[0]["rw"] is not False
+            or runtime["networks"] != {}
+            or runtime["port_bindings"] != {}
+            or not published_ports_empty
+        ):
+            raise ControllerError("validator teardown runtime identity is invalid")
+        ids.add(object_id)
+        names.add(str(name))
+        if track.value in by_track:
+            raise ControllerError("validator teardown track is duplicated")
+        by_track[track.value] = record
+    if set(by_track) != {track.value for track in _TRACKS}:
+        raise ControllerError("validator teardown track inventory is incomplete")
+    return [by_track[track.value] for track in _TRACKS]
+
+
+def _closed_teardown_driver_authorities(
+    objects: Sequence[Mapping[str, object]],
+    authorities: Mapping[str, Mapping[str, object]],
+) -> None:
+    """Require journal-derived proof that every pure-plan driver is quiescent."""
+    drivers = [item for item in objects if item.get("role") == "driver"]
+    tracks = {track.value for track in _TRACKS}
+    if (
+        type(authorities) is not dict
+        or set(authorities) != tracks
+        or len(drivers) != len(tracks)
+    ):
+        raise ControllerError("driver teardown authority set is incomplete")
+    expected_fields = {
+        "phase",
+        "allowed_states",
+        "request_eligible",
+        "terminal_source",
+        "driver_id",
+        "track",
+        "observed_state",
+    }
+    for driver in drivers:
+        track = str(driver.get("track"))
+        authority = authorities.get(track)
+        if type(authority) is not dict or set(authority) != expected_fields:
+            raise ControllerError("driver teardown authority is not closed")
+        if (
+            authority["track"] != track
+            or authority["driver_id"] != driver.get("id")
+            or type(authority["allowed_states"]) is not tuple
+            or authority["observed_state"] not in authority["allowed_states"]
+        ):
+            raise ControllerError("driver teardown authority identity changed")
+        phase = authority["phase"]
+        valid = False
+        if phase == "pre_start":
+            valid = authority == {
+                "phase": "pre_start",
+                "allowed_states": ("created",),
+                "request_eligible": True,
+                "terminal_source": None,
+                "driver_id": driver["id"],
+                "track": track,
+                "observed_state": "created",
+            }
+        elif phase == "trusted_terminal":
+            source = authority["terminal_source"]
+            eligible = authority["request_eligible"]
+            valid = (
+                authority["allowed_states"] == ("dead", "exited")
+                and authority["observed_state"] in {"dead", "exited"}
+                and (
+                    (source == "bound_driver_result" and eligible is True)
+                    or (source == "readiness_cancel_complete" and eligible is False)
+                )
+            )
+        elif phase == "teardown_quiesced":
+            valid = (
+                authority["allowed_states"] == ("created", "dead", "exited")
+                and authority["observed_state"] in {"created", "dead", "exited"}
+                and authority["request_eligible"] is False
+                and authority["terminal_source"] == "driver_stop_complete"
+            )
+        if not valid:
+            raise ControllerError(
+                "driver teardown phase does not prove container quiescence"
+            )
+
+
 def teardown_commands(
-    state: Mapping[str, object], *, docker_binary: Path
+    state: Mapping[str, object], *,
+    validator_objects: Sequence[Mapping[str, object]],
+    driver_authorities: Mapping[str, Mapping[str, object]],
+    docker_binary: Path,
 ) -> list[list[str]]:
-    """Construct exact ID-addressed cleanup; never discover deletion targets."""
+    """Plan exact cleanup only after journal-authoritative driver quiescence."""
     if state.get("profile_created") is not True:
         raise ControllerError("profile ownership is not proven")
     if state.get("colima_profile") != LAB_IDENTITY:
         raise ControllerError("profile ownership identity is invalid")
     manifest = state.get("manifest")
-    if isinstance(manifest, dict):
-        _validate_state_objects(state, manifest)
+    if type(manifest) is not dict:
+        raise ControllerError("validator teardown manifest is unavailable")
+    _validate_state_objects(state, manifest)
+    validators = _closed_teardown_validators(validator_objects, manifest)
     prefix = [
         str(docker_binary),
         "--config",
@@ -2984,20 +5159,26 @@ def teardown_commands(
         str(state["docker_host"]),
     ]
     objects = state.get("objects")
-    if type(objects) is not list or len(objects) != 9:
+    if type(objects) is not list or len(objects) != 12:
         raise ControllerError("exact teardown objects are unavailable")
-    ordered = [
-        item for role in ("envoy", "authz", "target")
+    _closed_teardown_driver_authorities(objects, driver_authorities)
+    running = [
+        item for role in _TEARDOWN_SERVICE_ROLES
         for item in objects
         if isinstance(item, dict) and item.get("role") == role
     ]
+    ordered = [
+        item for role in _TEARDOWN_REMOVAL_ROLES
+        for item in objects
+        if isinstance(item, dict) and item.get("role") == role
+    ] + list(validators)
     commands = [
         [*prefix, "stop", "--timeout", "10", str(item["id"])]
-        for item in ordered
+        for item in running
     ]
     commands.extend([*prefix, "rm", str(item["id"])] for item in ordered)
     networks = state.get("network_objects")
-    if type(networks) is not list or len(networks) != 3:
+    if type(networks) is not list or len(networks) != 6:
         raise ControllerError("exact teardown networks are unavailable")
     commands.extend(
         [*prefix, "network", "rm", str(network["id"])]
@@ -3047,7 +5228,7 @@ def _index_unique(
 
 
 def _request_closed(record: Mapping[str, object]) -> None:
-    expected = {
+    common = {
         "schema_version",
         "run_id",
         "request_id",
@@ -3067,9 +5248,19 @@ def _request_closed(record: Mapping[str, object]) -> None:
         "client_response_status",
         "client_decision_digest",
     }
+    v2 = {
+        "request_transport",
+        "driver_role",
+        "driver_full_id",
+        "driver_image_id",
+        "driver_definition_sha256",
+        "driver_result_sha256",
+    }
+    schema = record.get("schema_version")
+    expected = common if schema == "kil.v3b1-request.v1" else common | v2
     if set(record) != expected:
         raise ControllerError("request record fields are not closed")
-    if record["schema_version"] != "kil.v3b1-request.v1":
+    if schema not in {"kil.v3b1-request.v1", "kil.v3b1-request.v2"}:
         raise ControllerError("request record schema is invalid")
     if (
         type(record["run_id"]) is not str
@@ -3097,6 +5288,217 @@ def _request_closed(record: Mapping[str, object]) -> None:
         raise ControllerError("request adversarial header record is invalid")
     if record["send_monotonic_ns"] < 0 or record["receive_monotonic_ns"] < record["send_monotonic_ns"]:
         raise ControllerError("request monotonic timing is invalid")
+    if schema == "kil.v3b1-request.v2":
+        if (
+            record["request_transport"] != "in_network_request_driver"
+            or record["driver_role"] != "request_driver"
+        ):
+            raise ControllerError("request driver transport identity is invalid")
+        _require_sha256("request driver full ID", record["driver_full_id"])
+        if type(record["driver_image_id"]) is not str or _IMAGE_ID.fullmatch(
+            record["driver_image_id"]
+        ) is None:
+            raise ControllerError("request driver image ID is invalid")
+        _require_sha256(
+            "request driver definition", record["driver_definition_sha256"]
+        )
+        _require_sha256("request driver result", record["driver_result_sha256"])
+
+
+def _driver_failure_request_closed(record: Mapping[str, object]) -> None:
+    expected = {
+        "schema_version",
+        "run_id",
+        "request_id",
+        "track",
+        "request_transport",
+        "driver_role",
+        "driver_full_id",
+        "driver_image_id",
+        "driver_definition_sha256",
+        "driver_result_sha256",
+        "driver_status",
+        "intent_id",
+        "journal_sequence",
+        "journal_event_sha256",
+        "failure_provenance",
+    }
+    if (
+        set(record) != expected
+        or record.get("schema_version") != "kil.v3b1-request-failure.v1"
+        or record.get("request_transport") != "in_network_request_driver"
+        or record.get("driver_role") != "request_driver"
+        or type(record.get("run_id")) is not str
+        or type(record.get("request_id")) is not str
+    ):
+        raise ControllerError("driver failure request fields are not closed")
+    try:
+        track = LiveTrack(record["track"])
+    except (TypeError, ValueError) as error:
+        raise ControllerError("driver failure request track is invalid") from error
+    _require_sha256("driver failure full ID", record["driver_full_id"])
+    image_id = record["driver_image_id"]
+    if type(image_id) is not str or _IMAGE_ID.fullmatch(image_id) is None:
+        raise ControllerError("driver failure image ID is invalid")
+    _require_sha256(
+        "driver failure definition", record["driver_definition_sha256"]
+    )
+    _require_sha256("driver failure result", record["driver_result_sha256"])
+    intent_id = _require_sha256("driver failure intent", record["intent_id"])
+    journal_digest = _require_sha256(
+        "driver failure journal event", record["journal_event_sha256"]
+    )
+    journal_sequence = record["journal_sequence"]
+    if type(journal_sequence) is not int or journal_sequence < 1:
+        raise ControllerError("driver failure journal sequence is invalid")
+    provenance = record["failure_provenance"]
+    result = _driver_failure_result_from_provenance(track, provenance)
+    if record["driver_status"] != result["status"]:
+        raise ControllerError("driver failure request status is invalid")
+    result_payload = canonical_record(result)
+    if record["driver_result_sha256"] != _digest_bytes(result_payload):
+        raise ControllerError("driver failure request result binding is invalid")
+    assert isinstance(provenance, dict)
+    journal_details = _driver_failure_journal_details(
+        track, intent_id, provenance
+    )
+    journal_event = {
+        "sequence": journal_sequence,
+        "event": "request_send_failed",
+        "details": journal_details,
+    }
+    if journal_digest != _digest_bytes(canonical_record(journal_event)):
+        raise ControllerError("driver failure request journal binding is invalid")
+    if provenance.get("provenance_source") == "linux_request_driver" and (
+        record["driver_full_id"] != provenance["driver_full_id"]
+        or record["driver_definition_sha256"]
+        != provenance["driver_definition_sha256"]
+        or record["driver_result_sha256"] != provenance["driver_result_sha256"]
+    ):
+        raise ControllerError("driver transport request provenance diverges")
+    _reject_public_secrets(dict(record))
+
+
+def _failure_evidence_request_closed(record: Mapping[str, object]) -> None:
+    if record.get("schema_version") == "kil.v3b1-request-failure.v1":
+        _driver_failure_request_closed(record)
+        return
+    _request_closed(record)
+
+
+def _validate_driver_result_bindings(
+    payloads: Mapping[str, bytes],
+    manifest: Mapping[str, object],
+    requests: Sequence[Mapping[str, object]],
+    *,
+    completed: bool,
+) -> dict[str, dict[str, object]]:
+    """Reconstruct exact v2 driver sources and bind their normalized requests."""
+    generation = _bundle_generation(manifest.get("schema_version"))
+    if generation == 1:
+        if any(
+            request.get("schema_version") != "kil.v3b1-request.v1"
+            for request in requests
+        ):
+            raise ControllerError("legacy presenter request schema is invalid")
+        return {}
+    request_by_track = {str(request.get("track")): request for request in requests}
+    if len(request_by_track) != len(requests):
+        raise ControllerError("driver request track identity is duplicated")
+    allowed_request_schemas = {"kil.v3b1-request.v2"}
+    if not completed:
+        allowed_request_schemas.add("kil.v3b1-request-failure.v1")
+    if any(request.get("schema_version") not in allowed_request_schemas for request in requests):
+        raise ControllerError("driver presenter request generation is invalid")
+    identity = manifest.get("content_identity")
+    immutable = manifest.get("immutable_images")
+    if type(identity) is not dict:
+        raise ControllerError("driver presenter manifest identity is invalid")
+    kil_image_id = (
+        immutable.get("kil_image_id")
+        if type(immutable) is dict
+        else manifest.get("kil_image_id")
+    )
+    definition_values = identity.get("driver_definition_sha256")
+    if type(definition_values) is not list:
+        raise ControllerError("driver presenter definitions are invalid")
+    definition_by_track = {
+        str(item.get("track")): item.get("sha256")
+        for item in definition_values
+        if type(item) is dict
+    }
+    results: dict[str, dict[str, object]] = {}
+    driver_ids: set[str] = set()
+    for track in _TRACKS:
+        relative = f"raw/drivers/{track.value}.json"
+        if relative not in payloads:
+            raise ControllerError("driver result artifact set is incomplete")
+        payload = payloads[relative]
+        request = request_by_track.get(track.value)
+        if payload == b"":
+            if completed or request is not None:
+                raise ControllerError("commanded driver result must not be empty")
+            continue
+        try:
+            result = parse_driver_result(payload, expected_track=track.value)
+        except (DriverProtocolError, TypeError, ValueError, UnicodeError) as error:
+            raise ControllerError(
+                "driver result is not exact canonical public evidence"
+            ) from error
+        _reject_public_secrets(result)
+        if canonical_record(result) != payload:
+            raise ControllerError("driver result bytes are not canonical")
+        results[track.value] = result
+        if request is None:
+            raise ControllerError("commanded driver result lacks normalized request")
+        request_schema = request.get("schema_version")
+        if request_schema == "kil.v3b1-request-failure.v1":
+            _driver_failure_request_closed(request)
+        else:
+            _request_closed(request)
+        full_id = request["driver_full_id"]
+        if full_id in driver_ids:
+            raise ControllerError("driver full ID is reused across tracks")
+        driver_ids.add(str(full_id))
+        result_digest = _digest_bytes(payload)
+        if (
+            request["run_id"] != manifest.get("run_id")
+            or request["request_id"] != manifest.get("request_id")
+            or request["driver_image_id"] != kil_image_id
+            or request["driver_definition_sha256"]
+            != definition_by_track.get(track.value)
+            or request["driver_result_sha256"] != result_digest
+        ):
+            raise ControllerError("driver request identity or result binding is invalid")
+        if request_schema == "kil.v3b1-request-failure.v1":
+            expected_result = _driver_failure_result_from_provenance(
+                track, request["failure_provenance"]
+            )
+            if result != expected_result:
+                raise ControllerError(
+                    "driver failure result does not match journal projection"
+                )
+        else:
+            expected_projection = {
+                "attempt_count": request["attempt_count"],
+                "decision_digest": request["client_decision_digest"],
+                "receive_monotonic_ns": request["receive_monotonic_ns"],
+                "response_status": request["client_response_status"],
+                "retry_performed": request["retry_observed"],
+                "send_monotonic_ns": request["send_monotonic_ns"],
+                "status": "complete",
+                "track": request["track"],
+            }
+            if any(
+                result.get(name) != value
+                for name, value in expected_projection.items()
+            ):
+                raise ControllerError(
+                    "driver result normalized request projection is invalid"
+                )
+    if completed and set(results) != {track.value for track in _TRACKS}:
+        raise ControllerError("accepted bundle requires three driver results")
+    return results
 
 
 def _decision_closed(record: Mapping[str, object]) -> None:
@@ -3500,10 +5902,52 @@ _PRESENTER_FORBIDDEN = (
     "compact_jws",
 )
 _PUBLIC_COMMITMENT_SCHEMA = "kil.v3b1-public-commitment.v1"
+_PUBLIC_COMMITMENT_SCHEMA_V2 = "kil.v3b1-public-commitment.v2"
 _PUBLIC_COMMITMENT_RULE = (
     "sha256_of_canonical_manifest_without_public_commitment_sha256_and_"
     "all_public_file_sha256_except_manifest_and_SHA256SUMS"
 )
+_LEGACY_PUBLIC_MANIFEST_SCHEMA = "kil.v3b1-public-manifest.v1"
+_DRIVER_PUBLIC_MANIFEST_SCHEMA = "kil.v3b1-public-manifest.v2"
+_LEGACY_AUTHORITATIVE_BUNDLE_SCHEMA = "kil.v3b1-authoritative-bundle.v1"
+_DRIVER_AUTHORITATIVE_BUNDLE_SCHEMA = "kil.v3b1-authoritative-bundle.v2"
+
+
+def _bundle_generation(schema_version: object) -> int:
+    if schema_version in {
+        LEGACY_MANIFEST_SCHEMA,
+        _LEGACY_PUBLIC_MANIFEST_SCHEMA,
+    }:
+        return 1
+    if schema_version in {MANIFEST_SCHEMA, _DRIVER_PUBLIC_MANIFEST_SCHEMA}:
+        return 2
+    raise ControllerError("evidence manifest schema is invalid")
+
+
+def _driver_result_file_names() -> set[str]:
+    return {f"raw/drivers/{track.value}.json" for track in _TRACKS}
+
+
+def _authoritative_file_names(schema_version: object) -> set[str]:
+    names = {
+        *_EVIDENCE_FILES,
+        "SHA256SUMS",
+        *{f"raw/decisions/{track.value}.jsonl" for track in _TRACKS},
+    }
+    if _bundle_generation(schema_version) == 2:
+        names.update(_driver_result_file_names())
+    return names
+
+
+def _manifest_schema_from_output(output: Path) -> str:
+    path = output / "manifest.json"
+    if path.is_symlink() or not path.is_file():
+        raise ControllerError("evidence manifest is missing or unsafe")
+    value = _load_json_bytes(path.read_bytes(), "evidence manifest")
+    schema = value.get("schema_version")
+    _bundle_generation(schema)
+    assert isinstance(schema, str)
+    return schema
 
 
 def _presenter_safe_text(label: str, value: object) -> str:
@@ -3535,7 +5979,13 @@ def _presenter_model(
         raise ControllerError("presenter source commit is invalid")
     if not joins:
         return PresenterModel(
-            run_id, request_id, evidence_scope, source_commit, (), False
+            run_id,
+            request_id,
+            evidence_scope,
+            source_commit,
+            (),
+            False,
+            _bundle_generation(manifest.get("schema_version")) == 2,
         )
     decisions_by_track = {
         str(item.get("track")): item for item in decisions
@@ -3635,7 +6085,13 @@ def _presenter_model(
     ):
         raise ControllerError("presenter causal reasons are not the fixed proof")
     return PresenterModel(
-        run_id, request_id, evidence_scope, source_commit, tuple(tracks), True
+        run_id,
+        request_id,
+        evidence_scope,
+        source_commit,
+        tuple(tracks),
+        True,
+        _bundle_generation(manifest.get("schema_version")) == 2,
     )
 
 
@@ -3671,6 +6127,17 @@ def _render_live_html(model: PresenterModel) -> bytes:
             "<section class=\"incomplete\"><h2>INCOMPLETE · NOT PRESENTABLE</h2>"
             "<p>No partial outcome is represented by this derived page.</p></section>"
         )
+    driver_boundary = ""
+    if model.driver_boundary:
+        driver_boundary = """
+<section class="boundary driver-boundary">
+<h2>In-network request path</h2>
+<p><strong>request driver -&gt; Envoy -&gt; authorization -&gt; target or withhold</strong></p>
+<p>No host publication</p>
+<p>The driver is a laboratory transport witness, not KIL enforcement</p>
+<p>Evidence scope: local_envoy_boundary</p>
+</section>
+"""
     html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -3706,7 +6173,7 @@ code {{ overflow-wrap: anywhere; }}
 </div>
 <p>Run <code>{run_id}</code> · source <code>{source_commit}</code></p>
 {result}
-<section class="boundary">
+{driver_boundary}<section class="boundary">
 <strong>DERIVED PRESENTER · JSONL + manifest.json + SHA256SUMS CONTROL</strong>
 <p>VERIFY THE BUNDLE BEFORE PRESENTATION; THIS PAGE DOES NOT ATTEST TEARDOWN BY ITSELF.</p>
 <p>DOES NOT ESTABLISH KIND ORCHESTRATION, KUBERNETES NETWORKPOLICY, HISTORICAL INCIDENT PREVENTION, OR PRODUCTION PERFORMANCE.</p>
@@ -3723,10 +6190,13 @@ code {{ overflow-wrap: anywhere; }}
 
 
 def _write_sums(output: Path) -> None:
-    paths = [output / name for name in _EVIDENCE_FILES]
-    raw_root = output / "raw/decisions"
-    if raw_root.is_dir():
-        paths.extend(sorted(raw_root.glob("*.jsonl")))
+    schema = _manifest_schema_from_output(output)
+    paths = [
+        output / relative
+        for relative in sorted(
+            _authoritative_file_names(schema) - {"SHA256SUMS"}
+        )
+    ]
     lines = []
     for path in sorted(paths, key=lambda item: item.relative_to(output).as_posix()):
         if not path.is_file() or path.is_symlink():
@@ -3865,54 +6335,89 @@ def _public_bundle_snapshot(
 ) -> object:
     if output.is_symlink() or not output.is_dir():
         raise ControllerError("public evidence directory is missing or unsafe")
-    expected = _authoritative_file_names()
-    root_names = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
     raw_decision_names = {f"{track.value}.jsonl" for track in _TRACKS}
+    raw_driver_names = {f"{track.value}.json" for track in _TRACKS}
     directory_flags = (
         os.O_RDONLY
         | getattr(os, "O_DIRECTORY", 0)
         | getattr(os, "O_NOFOLLOW", 0)
     )
-    root_fd = raw_fd = decisions_fd = -1
+    root_fd = raw_fd = decisions_fd = drivers_fd = -1
     try:
         try:
             root_fd = os.open(output, directory_flags)
             root_opened = os.fstat(root_fd)
+            manifest_payload, manifest_identity = _read_stable_public_file_at(
+                root_fd, "manifest.json", maximum_bytes=1024 * 1024
+            )
+            manifest_value = _load_json_bytes(
+                manifest_payload, "public manifest"
+            )
+            schema = manifest_value.get("schema_version")
+            generation = _bundle_generation(schema)
+            expected = _authoritative_file_names(schema)
+            root_names = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
             raw_fd = os.open("raw", directory_flags, dir_fd=root_fd)
             raw_opened = os.fstat(raw_fd)
             decisions_fd = os.open(
                 "decisions", directory_flags, dir_fd=raw_fd
             )
             decisions_opened = os.fstat(decisions_fd)
+            if generation == 2:
+                drivers_fd = os.open(
+                    "drivers", directory_flags, dir_fd=raw_fd
+                )
+                drivers_opened = os.fstat(drivers_fd)
+            else:
+                drivers_opened = None
         except OSError as error:
             raise ControllerError(
                 "public evidence directory component is missing or unsafe"
             ) from error
-        if not all(
-            stat.S_ISDIR(item.st_mode)
-            for item in (root_opened, raw_opened, decisions_opened)
-        ):
+        directory_stats = [root_opened, raw_opened, decisions_opened]
+        if drivers_opened is not None:
+            directory_stats.append(drivers_opened)
+        if not all(stat.S_ISDIR(item.st_mode) for item in directory_stats):
             raise ControllerError("public evidence component is not a directory")
         root_identity = _snapshot_identity(root_opened)
         raw_identity = _snapshot_identity(raw_opened)
         decisions_identity = _snapshot_identity(decisions_opened)
+        drivers_identity = (
+            None
+            if drivers_opened is None
+            else _snapshot_identity(drivers_opened)
+        )
+        expected_raw_names = {"decisions"} | (
+            {"drivers"} if generation == 2 else set()
+        )
         if (
             set(os.listdir(root_fd)) != root_names
-            or set(os.listdir(raw_fd)) != {"decisions"}
+            or set(os.listdir(raw_fd)) != expected_raw_names
             or set(os.listdir(decisions_fd)) != raw_decision_names
+            or generation == 2
+            and set(os.listdir(drivers_fd)) != raw_driver_names
         ):
             raise ControllerError("public evidence artifact set is not closed")
         if raw_identity != _snapshot_identity(
             os.stat("raw", dir_fd=root_fd, follow_symlinks=False)
         ) or decisions_identity != _snapshot_identity(
             os.stat("decisions", dir_fd=raw_fd, follow_symlinks=False)
+        ) or generation == 2 and drivers_identity != _snapshot_identity(
+            os.stat("drivers", dir_fd=raw_fd, follow_symlinks=False)
         ):
             raise ControllerError("public evidence directory identity is unstable")
-        payloads: dict[str, bytes] = {}
-        identities: dict[str, tuple[int, str, tuple[int, int, int, int, int]]] = {}
+        payloads: dict[str, bytes] = {"manifest.json": manifest_payload}
+        identities: dict[
+            str, tuple[int, str, tuple[int, int, int, int, int]]
+        ] = {"manifest.json": (root_fd, "manifest.json", manifest_identity)}
         for relative in sorted(expected):
+            if relative == "manifest.json":
+                continue
             if relative.startswith("raw/decisions/"):
                 directory_fd = decisions_fd
+                name = relative.rsplit("/", 1)[1]
+            elif relative.startswith("raw/drivers/"):
+                directory_fd = drivers_fd
                 name = relative.rsplit("/", 1)[1]
             else:
                 directory_fd = root_fd
@@ -3951,9 +6456,13 @@ def _public_bundle_snapshot(
             root_identity != _snapshot_identity(os.fstat(root_fd))
             or raw_identity != _snapshot_identity(os.fstat(raw_fd))
             or decisions_identity != _snapshot_identity(os.fstat(decisions_fd))
+            or generation == 2
+            and drivers_identity != _snapshot_identity(os.fstat(drivers_fd))
             or set(os.listdir(root_fd)) != root_names
-            or set(os.listdir(raw_fd)) != {"decisions"}
+            or set(os.listdir(raw_fd)) != expected_raw_names
             or set(os.listdir(decisions_fd)) != raw_decision_names
+            or generation == 2
+            and set(os.listdir(drivers_fd)) != raw_driver_names
         ):
             raise ControllerError("public evidence inventory changed during snapshot")
         try:
@@ -3961,6 +6470,11 @@ def _public_bundle_snapshot(
             raw_path = os.stat("raw", dir_fd=root_fd, follow_symlinks=False)
             decisions_path = os.stat(
                 "decisions", dir_fd=raw_fd, follow_symlinks=False
+            )
+            drivers_path = (
+                None
+                if generation == 1
+                else os.stat("drivers", dir_fd=raw_fd, follow_symlinks=False)
             )
         except OSError as error:
             raise ControllerError(
@@ -3970,6 +6484,8 @@ def _public_bundle_snapshot(
             root_identity != _snapshot_identity(root_path)
             or raw_identity != _snapshot_identity(raw_path)
             or decisions_identity != _snapshot_identity(decisions_path)
+            or generation == 2
+            and drivers_identity != _snapshot_identity(drivers_path)
         ):
             raise ControllerError("public evidence directory changed during snapshot")
         for directory_fd, name, identity in identities.values():
@@ -3989,9 +6505,13 @@ def _public_bundle_snapshot(
                 or raw_identity != _snapshot_identity(os.fstat(raw_fd))
                 or decisions_identity
                 != _snapshot_identity(os.fstat(decisions_fd))
+                or generation == 2
+                and drivers_identity != _snapshot_identity(os.fstat(drivers_fd))
                 or set(os.listdir(root_fd)) != root_names
-                or set(os.listdir(raw_fd)) != {"decisions"}
+                or set(os.listdir(raw_fd)) != expected_raw_names
                 or set(os.listdir(decisions_fd)) != raw_decision_names
+                or generation == 2
+                and set(os.listdir(drivers_fd)) != raw_driver_names
             ):
                 raise ControllerError(
                     f"public evidence inventory changed {stage}"
@@ -4007,6 +6527,8 @@ def _public_bundle_snapshot(
                     os.stat("raw", dir_fd=root_fd, follow_symlinks=False)
                 ) or decisions_identity != _snapshot_identity(
                     os.stat("decisions", dir_fd=raw_fd, follow_symlinks=False)
+                ) or generation == 2 and drivers_identity != _snapshot_identity(
+                    os.stat("drivers", dir_fd=raw_fd, follow_symlinks=False)
                 ):
                     raise ControllerError(
                         f"public evidence directory identity changed {stage}"
@@ -4039,16 +6561,17 @@ def _public_bundle_snapshot(
             "public evidence changed during snapshot"
         ) from error
     finally:
-        for descriptor in (decisions_fd, raw_fd, root_fd):
+        for descriptor in (drivers_fd, decisions_fd, raw_fd, root_fd):
             if descriptor >= 0:
                 os.close(descriptor)
 
 
-def _validate_public_manifest(
+def _validate_public_manifest_v1(
     value: Mapping[str, object],
     payloads: Mapping[str, bytes],
     *,
     completed: bool = True,
+    file_schema_version: str = _LEGACY_PUBLIC_MANIFEST_SCHEMA,
 ) -> None:
     _reject_public_secrets(value)
     expected = {
@@ -4194,7 +6717,7 @@ def _validate_public_manifest(
     if value["artifact_hash_rule"] != "sha256_excludes_manifest_summary_and_SHA256SUMS":
         raise ControllerError("public artifact hash rule is invalid")
     hashes = value["artifact_sha256"]
-    hash_names = _authoritative_file_names() - {
+    hash_names = _authoritative_file_names(file_schema_version) - {
         "manifest.json", "summary.md", "SHA256SUMS"
     }
     if type(hashes) is not dict or set(hashes) != hash_names:
@@ -4217,6 +6740,134 @@ def _validate_public_manifest(
         value, payloads
     ):
         raise ControllerError("public commitment does not bind the snapshot")
+
+
+def _validate_public_manifest_v2(
+    value: Mapping[str, object],
+    payloads: Mapping[str, bytes],
+    *,
+    completed: bool = True,
+) -> None:
+    """Validate the driver-era public manifest without widening v1."""
+    if type(value) is not dict or value.get("schema_version") != (
+        "kil.v3b1-public-manifest.v2"
+    ):
+        raise ControllerError("public manifest schema is invalid")
+    identity = value.get("content_identity")
+    identity_fields = {
+        "schema_version", "profile_sha256", "colima_profile",
+        "docker_endpoint", "platform", "source_commit",
+        "execution_nonce_sha256", "dockerfile_sha256",
+        "dockerignore_sha256", "build_context_sha256",
+        "python_image_digest", "envoy_image_digest", "envoy_image_id",
+        "kil_image_id", "kil_archive_sha256", "request_id",
+        "driver_endpoint", "segment_definitions", "driver_definition_sha256",
+    }
+    if type(identity) is not dict or set(identity) != identity_fields:
+        raise ControllerError("public content identity fields are not closed")
+    if identity["schema_version"] != "kil.v3b1-content-identity.v3":
+        raise ControllerError("public content identity schema is invalid")
+    for name in (
+        "profile_sha256", "execution_nonce_sha256", "dockerfile_sha256",
+        "dockerignore_sha256", "build_context_sha256",
+    ):
+        _require_sha256(f"public content identity {name}", identity[name])
+    if identity["docker_endpoint"] != {
+        "transport": "unix",
+        "logical_locator": "colima_profile_socket",
+        "profile": LAB_IDENTITY,
+    }:
+        raise ControllerError("public content identity endpoint is invalid")
+    if identity["driver_endpoint"] != {
+        "transport": "tcp", "host": "envoy", "port": 8080,
+    }:
+        raise ControllerError("public driver endpoint is invalid")
+    if identity["segment_definitions"] != _segment_definitions():
+        raise ControllerError("public segment definitions are invalid")
+    hashes = identity["driver_definition_sha256"]
+    if (
+        type(hashes) is not list
+        or len(hashes) != len(_TRACKS)
+        or [item.get("track") for item in hashes if type(item) is dict]
+        != [track.value for track in _TRACKS]
+        or any(
+            type(item) is not dict
+            or set(item) != {"track", "sha256"}
+            for item in hashes
+        )
+    ):
+        raise ControllerError("public driver definition hashes are invalid")
+    for item in hashes:
+        _require_sha256("public driver definition", item["sha256"])
+    if (
+        identity["colima_profile"] != LAB_IDENTITY
+        or identity["platform"] != value.get("platform")
+        or identity["source_commit"] != value.get("source_commit")
+        or identity["request_id"] != value.get("request_id")
+    ):
+        raise ControllerError("public content identity cross-binding is invalid")
+    identity_digest = _digest_bytes(canonical_json(identity).encode("utf-8"))
+    if (
+        value.get("content_identity_sha256") != identity_digest
+        or value.get("run_id") != f"v3b1-{identity_digest}"
+    ):
+        raise ControllerError("public run identity does not match content identity")
+
+    # Reuse the unchanged v1 validator for every common closed field by
+    # projecting only the version-specific identity and commitment inputs.
+    projected = dict(value)
+    projected["schema_version"] = "kil.v3b1-public-manifest.v1"
+    legacy_identity = {
+        key: identity[key]
+        for key in (
+            "profile_sha256", "colima_profile", "docker_endpoint", "platform",
+            "source_commit", "execution_nonce_sha256", "dockerfile_sha256",
+            "dockerignore_sha256", "build_context_sha256",
+            "python_image_digest", "envoy_image_digest", "envoy_image_id",
+            "kil_image_id", "kil_archive_sha256", "request_id",
+        )
+    }
+    legacy_identity["schema_version"] = "kil.v3b1-content-identity.v2"
+    legacy_identity["tracks"] = [
+        {"track": track.value, "gateway_port": port}
+        for track, port in zip(_TRACKS, _TRACK_PORTS.values(), strict=True)
+    ]
+    legacy_digest = _digest_bytes(canonical_json(legacy_identity).encode("utf-8"))
+    projected["content_identity"] = legacy_identity
+    projected["content_identity_sha256"] = legacy_digest
+    projected["run_id"] = f"v3b1-{legacy_digest}"
+    projected["public_commitment_sha256"] = _public_commitment_sha256(
+        projected, payloads
+    )
+    _validate_public_manifest_v1(
+        projected,
+        payloads,
+        completed=completed,
+        file_schema_version=_DRIVER_PUBLIC_MANIFEST_SCHEMA,
+    )
+    if value.get("public_commitment_sha256") != _public_commitment_sha256(
+        value, payloads
+    ):
+        raise ControllerError("public commitment does not bind the snapshot")
+
+
+def _validate_public_manifest(
+    value: Mapping[str, object],
+    payloads: Mapping[str, bytes],
+    *,
+    completed: bool = True,
+) -> None:
+    """Dispatch public manifests with no legacy/new field union."""
+    if type(value) is not dict:
+        raise ControllerError("public manifest fields are not closed")
+    schema = value.get("schema_version")
+    if schema == "kil.v3b1-public-manifest.v1":
+        _validate_public_manifest_v1(value, payloads, completed=completed)
+        return
+    if schema == "kil.v3b1-public-manifest.v2":
+        _validate_public_manifest_v2(value, payloads, completed=completed)
+        return
+    raise ControllerError("public manifest schema is invalid")
 
 
 def _normalized_presenter_decision_closed(record: Mapping[str, object]) -> None:
@@ -4333,6 +6984,9 @@ def _validate_presenter_records(
         _request_closed,
         allow_empty=False,
     )
+    _validate_driver_result_bindings(
+        payloads, manifest, requests, completed=True
+    )
     decisions = _parse_jsonl_bytes(
         payloads["decisions.jsonl"],
         "presenter decisions",
@@ -4434,8 +7088,11 @@ def _validate_failure_presenter_records(
     requests = _parse_jsonl_bytes(
         payloads["requests.jsonl"],
         "failure presenter requests",
-        _request_closed,
+        _failure_evidence_request_closed,
         allow_empty=True,
+    )
+    _validate_driver_result_bindings(
+        payloads, manifest, requests, completed=False
     )
     decisions = _parse_jsonl_bytes(
         payloads["decisions.jsonl"],
@@ -4615,23 +7272,14 @@ def _verify_failure_presenter_bundle(
     return result
 
 
-_AUTHORITATIVE_BUNDLE_SCHEMA = "kil.v3b1-authoritative-bundle.v1"
 _FAILURE_BUNDLE_REPLACEMENT = "deterministic_empty_failure_v1"
-
-
-def _authoritative_file_names() -> set[str]:
-    return {
-        *_EVIDENCE_FILES,
-        "SHA256SUMS",
-        *{f"raw/decisions/{track.value}.jsonl" for track in _TRACKS},
-    }
 
 
 def _public_commitment_sha256(
     manifest: Mapping[str, object], payloads: Mapping[str, bytes]
 ) -> str:
     """Recompute the non-circular commitment for one public snapshot."""
-    file_names = _authoritative_file_names() - {
+    file_names = _authoritative_file_names(manifest.get("schema_version")) - {
         "manifest.json",
         "SHA256SUMS",
     }
@@ -4639,8 +7287,15 @@ def _public_commitment_sha256(
         raise ControllerError("public commitment file set is incomplete")
     projected_manifest = dict(manifest)
     projected_manifest.pop("public_commitment_sha256", None)
+    public_schema = manifest.get("schema_version")
+    if public_schema == "kil.v3b1-public-manifest.v1":
+        commitment_schema = _PUBLIC_COMMITMENT_SCHEMA
+    elif public_schema == "kil.v3b1-public-manifest.v2":
+        commitment_schema = _PUBLIC_COMMITMENT_SCHEMA_V2
+    else:
+        raise ControllerError("public commitment manifest schema is invalid")
     commitment = {
-        "schema_version": _PUBLIC_COMMITMENT_SCHEMA,
+        "schema_version": commitment_schema,
         "manifest": projected_manifest,
         "file_sha256": {
             relative: _digest_bytes(payloads[relative])
@@ -4655,7 +7310,7 @@ def _public_commitment_from_output(
 ) -> str:
     payloads = {
         relative: (output / relative).read_bytes()
-        for relative in _authoritative_file_names()
+        for relative in _authoritative_file_names(manifest.get("schema_version"))
         if relative not in {"manifest.json", "SHA256SUMS"}
     }
     return _public_commitment_sha256(manifest, payloads)
@@ -4668,10 +7323,17 @@ def _validate_authoritative_attestation(
         "schema_version", "file_sha256", "binding_sha256",
     }:
         raise ControllerError("authoritative bundle attestation fields are not closed")
-    if value["schema_version"] != _AUTHORITATIVE_BUNDLE_SCHEMA:
+    schema = value["schema_version"]
+    if schema == _LEGACY_AUTHORITATIVE_BUNDLE_SCHEMA:
+        manifest_schema = LEGACY_MANIFEST_SCHEMA
+    elif schema == _DRIVER_AUTHORITATIVE_BUNDLE_SCHEMA:
+        manifest_schema = MANIFEST_SCHEMA
+    else:
         raise ControllerError("authoritative bundle attestation schema is invalid")
     hashes = value["file_sha256"]
-    if type(hashes) is not dict or set(hashes) != _authoritative_file_names():
+    if type(hashes) is not dict or set(hashes) != _authoritative_file_names(
+        manifest_schema
+    ):
         raise ControllerError("authoritative bundle attestation file set is not closed")
     for relative, digest in hashes.items():
         if type(relative) is not str:
@@ -4679,7 +7341,7 @@ def _validate_authoritative_attestation(
         _require_sha256("authoritative artifact sha256", digest)
     _require_sha256("authoritative binding_sha256", value["binding_sha256"])
     bound = {
-        "schema_version": _AUTHORITATIVE_BUNDLE_SCHEMA,
+        "schema_version": schema,
         "file_sha256": dict(hashes),
     }
     expected_binding = _digest_bytes(canonical_json(bound).encode("utf-8"))
@@ -4690,13 +7352,19 @@ def _validate_authoritative_attestation(
 
 def authoritative_bundle_attestation(output: Path) -> dict[str, object]:
     """Bind every byte in one closed, checksummed provisional bundle."""
+    manifest_schema = _manifest_schema_from_output(output)
+    authority_schema = (
+        _LEGACY_AUTHORITATIVE_BUNDLE_SCHEMA
+        if _bundle_generation(manifest_schema) == 1
+        else _DRIVER_AUTHORITATIVE_BUNDLE_SCHEMA
+    )
     verify_public_checksums(output)
     hashes = {
         relative: _digest_file(output / relative)
-        for relative in sorted(_authoritative_file_names())
+        for relative in sorted(_authoritative_file_names(manifest_schema))
     }
     bound: dict[str, object] = {
-        "schema_version": _AUTHORITATIVE_BUNDLE_SCHEMA,
+        "schema_version": authority_schema,
         "file_sha256": hashes,
     }
     bound["binding_sha256"] = _digest_bytes(
@@ -4832,6 +7500,14 @@ def _publication_recovery_contract(
         or intent["completed"] is not completed
     ):
         raise ControllerError("durable publication intent identity/class is invalid")
+    authority_hashes = authority["file_sha256"]
+    assert isinstance(authority_hashes, dict)
+    if set(authority_hashes) != _authoritative_file_names(
+        private_manifest.get("schema_version")
+    ):
+        raise ControllerError(
+            "durable publication authority generation diverges from manifest"
+        )
     return completed, source_attestations, authority
 
 
@@ -4853,7 +7529,19 @@ def _verify_recovered_publication(
     authority = _validate_authoritative_attestation(authoritative_attestation)
     authority_hashes = authority["file_sha256"]
     assert isinstance(authority_hashes, dict)
-    invariant_names = _authoritative_file_names() - {
+    private_schema = private_manifest.get("schema_version")
+    private_generation = _bundle_generation(private_schema)
+    expected_public_schema = (
+        _LEGACY_PUBLIC_MANIFEST_SCHEMA
+        if private_generation == 1
+        else _DRIVER_PUBLIC_MANIFEST_SCHEMA
+    )
+    expected_authority_names = _authoritative_file_names(private_schema)
+    if set(authority_hashes) != expected_authority_names:
+        raise ControllerError(
+            "recovered publication authority generation is mixed"
+        )
+    invariant_names = expected_authority_names - {
         "manifest.json",
         "summary.md",
         "SHA256SUMS",
@@ -4863,6 +7551,10 @@ def _verify_recovered_publication(
         public_manifest = _validate_presenter_snapshot(
             payloads, completed=completed
         )
+        if public_manifest.get("schema_version") != expected_public_schema:
+            raise ControllerError(
+                "recovered public/private manifest generation diverges"
+            )
         expected_private_projection = {
             "run_id": private_manifest["run_id"],
             "request_id": private_manifest["request_id"],
@@ -5027,7 +7719,11 @@ def _validate_global_context(label: str, value: object) -> str:
 
 
 def _validate_provisional_tree(output: Path, *, completed: bool) -> None:
-    expected = _authoritative_file_names()
+    manifest = _load_json_bytes(
+        (output / "manifest.json").read_bytes(), "provisional manifest"
+    )
+    schema = manifest.get("schema_version")
+    expected = _authoritative_file_names(schema)
     actual = set()
     for path in output.rglob("*"):
         if path.is_symlink():
@@ -5051,6 +7747,31 @@ def _validate_provisional_tree(output: Path, *, completed: bool) -> None:
             raise ControllerError("provisional raw decision track is invalid")
     if not completed and (output / "joins.jsonl").read_bytes() != b"":
         raise ControllerError("incomplete provisional joins must be empty")
+
+
+def _validate_provisional_driver_bindings(
+    output: Path, *, completed: bool
+) -> None:
+    manifest = _load_json_bytes(
+        (output / "manifest.json").read_bytes(), "provisional manifest"
+    )
+    if _bundle_generation(manifest.get("schema_version")) == 1:
+        return
+    requests = _parse_jsonl_bytes(
+        (output / "requests.jsonl").read_bytes(),
+        "provisional requests",
+        _request_closed if completed else _failure_evidence_request_closed,
+        allow_empty=not completed,
+    )
+    _validate_driver_result_bindings(
+        {
+            relative: (output / relative).read_bytes()
+            for relative in _driver_result_file_names()
+        },
+        manifest,
+        requests,
+        completed=completed,
+    )
 
 
 def _validate_source_attestations(
@@ -5309,6 +8030,17 @@ def finalize_publication(
 ) -> Path:
     """Finalize privately, then atomically rename one immutable public bundle."""
     _validate_manifest(private_manifest)
+    private_schema = private_manifest.get("schema_version")
+    generation = _bundle_generation(private_schema)
+    public_schema = (
+        _LEGACY_PUBLIC_MANIFEST_SCHEMA
+        if generation == 1
+        else _DRIVER_PUBLIC_MANIFEST_SCHEMA
+    )
+    private_file_names = _authoritative_file_names(private_schema)
+    public_file_names = _authoritative_file_names(public_schema)
+    if private_file_names != public_file_names:
+        raise ControllerError("private/public evidence generations diverge")
     safety_root = (
         repository_root.resolve()
         if repository_root is not None
@@ -5351,10 +8083,16 @@ def finalize_publication(
     authoritative = _reattest_authoritative_bundle(
         provisional, authoritative_attestation
     )
+    _validate_provisional_driver_bindings(provisional, completed=completed)
     _validate_source_attestation_bindings(
         provisional, source_attestations, private_manifest
     )
     artifact_hashes = _artifact_hash_map(provisional)
+    expected_artifact_names = private_file_names - {
+        "manifest.json", "summary.md", "SHA256SUMS",
+    }
+    if set(artifact_hashes) != expected_artifact_names:
+        raise ControllerError("provisional artifact generation is mixed")
     bundle_class = (
         "intermediate_provisional_local_boundary"
         if completed
@@ -5363,7 +8101,7 @@ def finalize_publication(
     identity = private_manifest["content_identity"]
     assert isinstance(identity, dict)
     public_manifest: dict[str, object] = {
-        "schema_version": "kil.v3b1-public-manifest.v1",
+        "schema_version": public_schema,
         "run_id": private_manifest["run_id"],
         "request_id": private_manifest["request_id"],
         "evidence_scope": EVIDENCE_SCOPE,
@@ -5430,13 +8168,14 @@ def finalize_publication(
     shutil.copytree(provisional, staging, symlinks=True)
     _validate_provisional_tree(staging, completed=completed)
     _reattest_authoritative_bundle(staging, authoritative)
+    _validate_provisional_driver_bindings(staging, completed=completed)
     if publication_fault is not None:
         publication_fault("after_copy", staging)
     staging_manifest = staging / "manifest.json"
     public_summary = _public_summary(public_manifest).encode("utf-8")
     commitment_payloads = {
         relative: (staging / relative).read_bytes()
-        for relative in _authoritative_file_names()
+        for relative in public_file_names
         if relative not in {"manifest.json", "SHA256SUMS"}
     }
     commitment_payloads["summary.md"] = public_summary
@@ -5637,6 +8376,435 @@ def finalize_publication(
                 os.close(descriptor)
 
 
+_PRIVATE_DIRECTORY_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_DIRECTORY", 0)
+    | getattr(os, "O_NOFOLLOW", 0)
+)
+
+
+@dataclass(slots=True)
+class _PrivateEvidenceTransaction:
+    parent_path: Path
+    evidence_root: Path
+    output: Path
+    parent_fd: int
+    root_fd: int
+    run_fd: int
+    parent_identity: tuple[int, int]
+    root_identity: tuple[int, int]
+    run_identity: tuple[int, int]
+    output_existed: bool
+    raw_fd: int = -1
+    decisions_fd: int = -1
+    drivers_fd: int = -1
+    raw_identity: tuple[int, int] | None = None
+    decisions_identity: tuple[int, int] | None = None
+    drivers_identity: tuple[int, int] | None = None
+
+    def close(self) -> None:
+        for name in ("drivers_fd", "decisions_fd", "raw_fd", "run_fd", "root_fd", "parent_fd"):
+            descriptor = getattr(self, name)
+            if descriptor >= 0:
+                os.close(descriptor)
+                setattr(self, name, -1)
+
+
+def _private_directory_names(descriptor: int, label: str) -> set[str]:
+    try:
+        return set(os.listdir(descriptor))
+    except OSError as error:
+        raise ControllerError(f"{label} inventory is unavailable or unsafe") from error
+
+
+def _open_or_create_private_directory_at(
+    parent_fd: int,
+    name: str,
+    label: str,
+) -> tuple[int, tuple[int, int], bool]:
+    if not name or "/" in name or name in {".", ".."}:
+        raise ControllerError(f"{label} name is invalid")
+    existed = True
+    try:
+        current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        existed = False
+        try:
+            os.mkdir(name, mode=0o700, dir_fd=parent_fd)
+            os.fsync(parent_fd)
+        except OSError as error:
+            raise ControllerError(f"{label} could not be safely created") from error
+    except OSError as error:
+        raise ControllerError(f"{label} is unavailable or unsafe") from error
+    else:
+        if not stat.S_ISDIR(current.st_mode):
+            raise ControllerError(f"{label} is not a safe directory")
+    descriptor = -1
+    try:
+        descriptor = os.open(name, _PRIVATE_DIRECTORY_FLAGS, dir_fd=parent_fd)
+        opened = os.fstat(descriptor)
+        current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError as error:
+        if descriptor >= 0:
+            os.close(descriptor)
+        raise ControllerError(f"{label} changed during creation") from error
+    identity = _directory_object_identity(opened)
+    if (
+        not stat.S_ISDIR(opened.st_mode)
+        or not stat.S_ISDIR(current.st_mode)
+        or identity != _directory_object_identity(current)
+    ):
+        os.close(descriptor)
+        raise ControllerError(f"{label} identity is unstable")
+    return descriptor, identity, existed
+
+
+def _prepare_private_evidence_output(
+    evidence_root: Path, run_id: str
+) -> _PrivateEvidenceTransaction:
+    evidence_root = Path(os.path.abspath(evidence_root))
+    parent_path = evidence_root.parent
+    parent_fd = root_fd = run_fd = -1
+    try:
+        parent_fd, parent_identity = _open_verified_directory(
+            parent_path, "private evidence parent"
+        )
+        root_fd, root_identity, _ = _open_or_create_private_directory_at(
+            parent_fd, evidence_root.name, "private evidence root"
+        )
+        run_fd, run_identity, output_existed = _open_or_create_private_directory_at(
+            root_fd, run_id, "private evidence run directory"
+        )
+        return _PrivateEvidenceTransaction(
+            parent_path,
+            evidence_root,
+            evidence_root / run_id,
+            parent_fd,
+            root_fd,
+            run_fd,
+            parent_identity,
+            root_identity,
+            run_identity,
+            output_existed,
+        )
+    except BaseException:
+        for descriptor in (run_fd, root_fd, parent_fd):
+            if descriptor >= 0:
+                os.close(descriptor)
+        raise
+
+
+def _prepare_private_evidence_raw_directories(
+    transaction: _PrivateEvidenceTransaction, *, include_drivers: bool
+) -> None:
+    raw_fd = decisions_fd = drivers_fd = -1
+    try:
+        raw_fd, raw_identity, _ = _open_or_create_private_directory_at(
+            transaction.run_fd, "raw", "private evidence raw directory"
+        )
+        decisions_fd, decisions_identity, _ = _open_or_create_private_directory_at(
+            raw_fd, "decisions", "private evidence decision directory"
+        )
+        if include_drivers:
+            drivers_fd, drivers_identity, _ = _open_or_create_private_directory_at(
+                raw_fd, "drivers", "private evidence driver directory"
+            )
+        else:
+            drivers_identity = None
+        transaction.raw_fd = raw_fd
+        transaction.decisions_fd = decisions_fd
+        transaction.drivers_fd = drivers_fd
+        transaction.raw_identity = raw_identity
+        transaction.decisions_identity = decisions_identity
+        transaction.drivers_identity = drivers_identity
+        raw_fd = decisions_fd = drivers_fd = -1
+        expected_raw = {"decisions"} | ({"drivers"} if include_drivers else set())
+        if _private_directory_names(
+            transaction.raw_fd, "private evidence raw directory"
+        ) != expected_raw:
+            raise ControllerError("private evidence raw directory is not closed")
+        decision_names = {f"{track.value}.jsonl" for track in _TRACKS}
+        if not _private_directory_names(
+            transaction.decisions_fd, "private evidence decision directory"
+        ).issubset(decision_names):
+            raise ControllerError("private evidence decision directory is not closed")
+        if include_drivers:
+            driver_names = {f"{track.value}.json" for track in _TRACKS}
+            if not _private_directory_names(
+                transaction.drivers_fd, "private evidence driver directory"
+            ).issubset(driver_names):
+                raise ControllerError("private evidence driver directory is not closed")
+    except BaseException:
+        for descriptor in (drivers_fd, decisions_fd, raw_fd):
+            if descriptor >= 0:
+                os.close(descriptor)
+        raise
+
+
+def _require_private_directory_identity_at(
+    parent_fd: int,
+    name: str,
+    descriptor: int,
+    identity: tuple[int, int],
+    label: str,
+) -> None:
+    try:
+        opened = os.fstat(descriptor)
+        current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError as error:
+        raise ControllerError(f"{label} changed during evidence transaction") from error
+    if (
+        not stat.S_ISDIR(opened.st_mode)
+        or not stat.S_ISDIR(current.st_mode)
+        or identity != _directory_object_identity(opened)
+        or identity != _directory_object_identity(current)
+    ):
+        raise ControllerError(f"{label} identity changed during evidence transaction")
+
+
+def _require_private_evidence_tree(transaction: _PrivateEvidenceTransaction) -> None:
+    _require_directory_identity(
+        transaction.parent_fd,
+        transaction.parent_path,
+        transaction.parent_identity,
+        "private evidence parent",
+    )
+    _require_private_directory_identity_at(
+        transaction.parent_fd,
+        transaction.evidence_root.name,
+        transaction.root_fd,
+        transaction.root_identity,
+        "private evidence root",
+    )
+    _require_private_directory_identity_at(
+        transaction.root_fd,
+        transaction.output.name,
+        transaction.run_fd,
+        transaction.run_identity,
+        "private evidence run directory",
+    )
+    if transaction.raw_fd >= 0:
+        assert transaction.raw_identity is not None
+        assert transaction.decisions_identity is not None
+        _require_private_directory_identity_at(
+            transaction.run_fd,
+            "raw",
+            transaction.raw_fd,
+            transaction.raw_identity,
+            "private evidence raw directory",
+        )
+        _require_private_directory_identity_at(
+            transaction.raw_fd,
+            "decisions",
+            transaction.decisions_fd,
+            transaction.decisions_identity,
+            "private evidence decision directory",
+        )
+    if transaction.drivers_fd >= 0:
+        assert transaction.drivers_identity is not None
+        _require_private_directory_identity_at(
+            transaction.raw_fd,
+            "drivers",
+            transaction.drivers_fd,
+            transaction.drivers_identity,
+            "private evidence driver directory",
+        )
+
+
+def _private_file_location(
+    transaction: _PrivateEvidenceTransaction, relative: str
+) -> tuple[int, str]:
+    parts = relative.split("/")
+    if len(parts) == 1:
+        descriptor = transaction.run_fd
+        name = parts[0]
+    elif len(parts) == 3 and parts[:2] == ["raw", "decisions"]:
+        descriptor = transaction.decisions_fd
+        name = parts[2]
+    elif len(parts) == 3 and parts[:2] == ["raw", "drivers"]:
+        descriptor = transaction.drivers_fd
+        name = parts[2]
+    else:
+        raise ControllerError("private evidence relative path is invalid")
+    if descriptor < 0 or not name or name in {".", ".."} or "/" in name:
+        raise ControllerError("private evidence file location is unavailable")
+    return descriptor, name
+
+
+def _read_private_file_at(
+    directory_fd: int,
+    name: str,
+    *,
+    maximum_bytes: int = 64 * 1024 * 1024,
+) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = -1
+    try:
+        descriptor = os.open(name, flags, dir_fd=directory_fd)
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or opened.st_size > maximum_bytes:
+            raise ControllerError("private evidence file is not a bounded regular file")
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(descriptor, min(1024 * 1024, maximum_bytes + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > maximum_bytes:
+                raise ControllerError("private evidence file exceeds its byte bound")
+        finished = os.fstat(descriptor)
+        current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except OSError as error:
+        raise ControllerError("private evidence file is missing or unsafe") from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    identity = _snapshot_identity(opened)
+    if (
+        identity != _snapshot_identity(finished)
+        or identity != _snapshot_identity(current)
+    ):
+        raise ControllerError("private evidence file changed during snapshot")
+    return b"".join(chunks)
+
+
+def _private_file_exists_at(directory_fd: int, name: str) -> bool:
+    try:
+        current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise ControllerError("private evidence file inventory is unsafe") from error
+    if not stat.S_ISREG(current.st_mode):
+        raise ControllerError("private evidence file inventory is unsafe")
+    return True
+
+
+def _write_private_file_at(
+    directory_fd: int,
+    name: str,
+    payload: bytes,
+    mode: int = 0o600,
+) -> None:
+    if type(payload) is not bytes or not name or "/" in name or name in {".", ".."}:
+        raise ControllerError("private evidence leaf write is invalid")
+    _private_file_exists_at(directory_fd, name)
+    temporary_name: str | None = None
+    temporary_fd = -1
+    try:
+        for _ in range(100):
+            candidate = f".{name}.{secrets.token_hex(16)}"
+            try:
+                temporary_fd = os.open(
+                    candidate,
+                    os.O_WRONLY
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    mode,
+                    dir_fd=directory_fd,
+                )
+            except FileExistsError:
+                continue
+            temporary_name = candidate
+            break
+        if temporary_name is None or temporary_fd < 0:
+            raise ControllerError("private evidence temporary names are exhausted")
+        offset = 0
+        while offset < len(payload):
+            written = os.write(temporary_fd, payload[offset:])
+            if written <= 0:
+                raise OSError("private evidence write made no progress")
+            offset += written
+        os.fsync(temporary_fd)
+        os.fchmod(temporary_fd, mode)
+        os.fsync(temporary_fd)
+        os.close(temporary_fd)
+        temporary_fd = -1
+        os.rename(
+            temporary_name,
+            name,
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+        )
+        temporary_name = None
+        os.fsync(directory_fd)
+        current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(current.st_mode)
+            or stat.S_IMODE(current.st_mode) != mode
+            or _read_private_file_at(directory_fd, name) != payload
+        ):
+            raise ControllerError("private evidence leaf write did not persist exactly")
+    except OSError as error:
+        raise ControllerError("private evidence leaf write failed safely") from error
+    finally:
+        if temporary_fd >= 0:
+            os.close(temporary_fd)
+        if temporary_name is not None:
+            try:
+                os.unlink(temporary_name, dir_fd=directory_fd)
+                os.fsync(directory_fd)
+            except FileNotFoundError:
+                pass
+
+
+def _write_private_file(
+    transaction: _PrivateEvidenceTransaction,
+    relative: str,
+    payload: bytes,
+    mode: int = 0o600,
+) -> None:
+    descriptor, name = _private_file_location(transaction, relative)
+    _write_private_file_at(descriptor, name, payload, mode)
+
+
+def _private_checksum_payload(
+    transaction: _PrivateEvidenceTransaction, schema_version: object
+) -> bytes:
+    lines = []
+    for relative in sorted(
+        _authoritative_file_names(schema_version) - {"SHA256SUMS"}
+    ):
+        descriptor, name = _private_file_location(transaction, relative)
+        payload = _read_private_file_at(descriptor, name)
+        lines.append(f"{_digest_bytes(payload)}  {relative}\n")
+    return "".join(lines).encode("ascii")
+
+
+def _write_and_verify_private_sums(
+    transaction: _PrivateEvidenceTransaction, schema_version: object
+) -> None:
+    expected = _private_checksum_payload(transaction, schema_version)
+    _write_private_file(transaction, "SHA256SUMS", expected, 0o444)
+    if _read_private_file_at(transaction.run_fd, "SHA256SUMS") != expected:
+        raise ControllerError("private evidence checksum mismatch")
+
+
+def _require_private_bundle_inventory(
+    transaction: _PrivateEvidenceTransaction, schema_version: object
+) -> None:
+    generation = _bundle_generation(schema_version)
+    if _private_directory_names(
+        transaction.run_fd, "private evidence run directory"
+    ) != set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}:
+        raise ControllerError("private evidence artifact set is not closed")
+    if _private_directory_names(
+        transaction.raw_fd, "private evidence raw directory"
+    ) != {"decisions"} | ({"drivers"} if generation == 2 else set()):
+        raise ControllerError("private evidence raw artifact set is not closed")
+    if _private_directory_names(
+        transaction.decisions_fd, "private evidence decision directory"
+    ) != {f"{track.value}.jsonl" for track in _TRACKS}:
+        raise ControllerError("private evidence decision artifact set is not closed")
+    if generation == 2 and _private_directory_names(
+        transaction.drivers_fd, "private evidence driver directory"
+    ) != {f"{track.value}.json" for track in _TRACKS}:
+        raise ControllerError("private evidence driver artifact set is not closed")
+
+
 def write_evidence_bundle(
     evidence_root: Path,
     manifest: dict[str, object],
@@ -5647,58 +8815,143 @@ def write_evidence_bundle(
     targets: Sequence[Mapping[str, object]],
     joins: Sequence[Mapping[str, object]],
     raw_decisions: Mapping[LiveTrack, bytes] | None = None,
+    raw_driver_results: Mapping[LiveTrack, bytes] | None = None,
     resume_attested: bool = False,
+    private_evidence_fault: Callable[[str, Path], None] | None = None,
 ) -> Path:
     """Rebuild the exact public bundle from verified source records."""
     _validate_manifest(manifest)
-    output = evidence_root / str(manifest["run_id"])
-    if output.exists() and any(output.iterdir()) and not resume_attested:
-        raise ControllerError("evidence run already exists; attested resume required")
-    output.mkdir(parents=True, exist_ok=True)
-    allowed = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
-    unexpected = {item.name for item in output.iterdir()} - allowed
-    if unexpected:
-        raise ControllerError(f"evidence directory contains unexpected files: {sorted(unexpected)}")
-    raw_root = output / "raw/decisions"
-    raw_root.mkdir(parents=True, exist_ok=True)
-    if raw_decisions is None:
-        raw_decisions = {
-            track: _jsonl_payload(
-                [record for record in decisions if record.get("track") == track.value]
-            )
-            for track in _TRACKS
-        }
-    if set(raw_decisions) != set(_TRACKS):
-        raise ControllerError("raw decision sources must cover the three fixed tracks")
-    for track in _TRACKS:
-        payload = raw_decisions[track]
-        parsed = _parse_jsonl_bytes(
-            payload,
-            f"raw decisions for {track.value}",
-            _decision_closed,
-            allow_empty=False,
+    generation = _bundle_generation(manifest.get("schema_version"))
+    transaction = _prepare_private_evidence_output(
+        evidence_root, str(manifest["run_id"])
+    )
+    try:
+        initial_names = _private_directory_names(
+            transaction.run_fd, "private evidence run directory"
         )
-        if any(record["track"] != track.value for record in parsed):
-            raise ControllerError("raw decision source track does not match fixed file")
-        _write_file(raw_root / f"{track.value}.jsonl", payload, 0o444)
-    normalized_decisions = _normalized_decision_records(manifest, decisions)
-    _write_file(output / "requests.jsonl", _jsonl_payload(requests), 0o444)
-    _write_file(
-        output / "decisions.jsonl", _jsonl_payload(normalized_decisions), 0o444
-    )
-    _write_file(output / "envoy.jsonl", _jsonl_payload(envoy), 0o444)
-    _write_file(output / "targets.jsonl", _jsonl_payload(targets), 0o444)
-    _write_file(output / "joins.jsonl", _jsonl_payload(joins), 0o444)
-    _write_file(output / "manifest.json", _canonical_bytes(manifest), 0o444)
-    _write_file(output / "summary.md", _summary(manifest, joins).encode("utf-8"), 0o444)
-    _write_file(
-        output / "live.html",
-        _render_live_html(_presenter_model(manifest, normalized_decisions, joins)),
-        0o444,
-    )
-    _write_sums(output)
-    _verify_sums(output)
-    return output
+        if (
+            transaction.output_existed
+            and initial_names
+            and not resume_attested
+        ):
+            raise ControllerError(
+                "evidence run already exists; attested resume required"
+            )
+        allowed = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
+        unexpected = initial_names - allowed
+        if unexpected:
+            raise ControllerError(
+                f"evidence directory contains unexpected files: {sorted(unexpected)}"
+            )
+        _prepare_private_evidence_raw_directories(
+            transaction, include_drivers=generation == 2
+        )
+        if private_evidence_fault is not None:
+            private_evidence_fault("after_prepare", transaction.output)
+        _require_private_evidence_tree(transaction)
+        if raw_decisions is None:
+            raw_decisions = {
+                track: _jsonl_payload(
+                    [
+                        record
+                        for record in decisions
+                        if record.get("track") == track.value
+                    ]
+                )
+                for track in _TRACKS
+            }
+        if set(raw_decisions) != set(_TRACKS):
+            raise ControllerError(
+                "raw decision sources must cover the three fixed tracks"
+            )
+        for track in _TRACKS:
+            payload = raw_decisions[track]
+            parsed = _parse_jsonl_bytes(
+                payload,
+                f"raw decisions for {track.value}",
+                _decision_closed,
+                allow_empty=False,
+            )
+            if any(record["track"] != track.value for record in parsed):
+                raise ControllerError(
+                    "raw decision source track does not match fixed file"
+                )
+            _write_private_file(
+                transaction,
+                f"raw/decisions/{track.value}.jsonl",
+                payload,
+                0o444,
+            )
+        if generation == 2:
+            if (
+                type(raw_driver_results) is not dict
+                or set(raw_driver_results) != set(_TRACKS)
+            ):
+                raise ControllerError(
+                    "v2 driver results must cover the three fixed tracks"
+                )
+            driver_payloads: dict[str, bytes] = {}
+            for track in _TRACKS:
+                payload = raw_driver_results[track]
+                if type(payload) is not bytes:
+                    raise ControllerError("driver result source must be exact bytes")
+                relative = f"raw/drivers/{track.value}.json"
+                driver_payloads[relative] = payload
+                _write_private_file(transaction, relative, payload, 0o444)
+            _validate_driver_result_bindings(
+                driver_payloads,
+                manifest,
+                requests,
+                completed=True,
+            )
+        elif raw_driver_results is not None:
+            raise ControllerError("legacy evidence cannot contain driver results")
+        normalized_decisions = _normalized_decision_records(manifest, decisions)
+        _write_private_file(
+            transaction, "requests.jsonl", _jsonl_payload(requests), 0o444
+        )
+        _write_private_file(
+            transaction,
+            "decisions.jsonl",
+            _jsonl_payload(normalized_decisions),
+            0o444,
+        )
+        _write_private_file(
+            transaction, "envoy.jsonl", _jsonl_payload(envoy), 0o444
+        )
+        _write_private_file(
+            transaction, "targets.jsonl", _jsonl_payload(targets), 0o444
+        )
+        _write_private_file(
+            transaction, "joins.jsonl", _jsonl_payload(joins), 0o444
+        )
+        _write_private_file(
+            transaction, "manifest.json", _canonical_bytes(manifest), 0o444
+        )
+        _write_private_file(
+            transaction,
+            "summary.md",
+            _summary(manifest, joins).encode("utf-8"),
+            0o444,
+        )
+        _write_private_file(
+            transaction,
+            "live.html",
+            _render_live_html(
+                _presenter_model(manifest, normalized_decisions, joins)
+            ),
+            0o444,
+        )
+        _write_and_verify_private_sums(
+            transaction, manifest["schema_version"]
+        )
+        _require_private_bundle_inventory(
+            transaction, manifest["schema_version"]
+        )
+        _require_private_evidence_tree(transaction)
+        return transaction.output
+    finally:
+        transaction.close()
 
 
 def _normalized_decision_records(
@@ -5729,79 +8982,136 @@ def _prepare_failure_provisional(
     *,
     requests: Sequence[Mapping[str, object]] | None = None,
     raw_decisions: Mapping[LiveTrack, bytes] | None = None,
+    raw_driver_results: Mapping[LiveTrack, bytes] | None = None,
     envoy: Sequence[Mapping[str, object]] | None = None,
     targets: Sequence[Mapping[str, object]] | None = None,
     reset: bool = False,
+    private_evidence_fault: Callable[[str, Path], None] | None = None,
 ) -> Path:
     """Preserve an incomplete lifecycle without representing it as promotable proof."""
     _validate_manifest(manifest)
-    output = provisional_root / str(manifest["run_id"])
-    output.mkdir(parents=True, exist_ok=True)
-    allowed = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
-    unexpected = {item.name for item in output.iterdir()} - allowed
-    if unexpected:
-        raise ControllerError("failure provisional contains unexpected files")
-    raw_root = output / "raw/decisions"
-    raw_root.mkdir(parents=True, exist_ok=True)
-    if raw_decisions is not None and set(raw_decisions) != set(_TRACKS):
-        raise ControllerError("failure raw decisions do not cover fixed tracks")
-    parsed_decisions: list[dict[str, object]] = []
-    for track in _TRACKS:
-        path = raw_root / f"{track.value}.jsonl"
-        if raw_decisions is not None:
-            payload = raw_decisions[track]
-            parsed = _parse_jsonl_bytes(
-                payload,
-                f"failure raw decisions {track.value}",
-                _decision_closed,
-                allow_empty=True,
+    generation = _bundle_generation(manifest.get("schema_version"))
+    transaction = _prepare_private_evidence_output(
+        provisional_root, str(manifest["run_id"])
+    )
+    try:
+        allowed = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
+        unexpected = _private_directory_names(
+            transaction.run_fd, "failure provisional"
+        ) - allowed
+        if unexpected:
+            raise ControllerError("failure provisional contains unexpected files")
+        _prepare_private_evidence_raw_directories(
+            transaction, include_drivers=generation == 2
+        )
+        if private_evidence_fault is not None:
+            private_evidence_fault("after_prepare", transaction.output)
+        _require_private_evidence_tree(transaction)
+        if raw_decisions is not None and set(raw_decisions) != set(_TRACKS):
+            raise ControllerError("failure raw decisions do not cover fixed tracks")
+        parsed_decisions: list[dict[str, object]] = []
+        for track in _TRACKS:
+            name = f"{track.value}.jsonl"
+            if raw_decisions is not None:
+                payload = raw_decisions[track]
+                parsed = _parse_jsonl_bytes(
+                    payload,
+                    f"failure raw decisions {track.value}",
+                    _decision_closed,
+                    allow_empty=True,
+                )
+                if any(record["track"] != track.value for record in parsed):
+                    raise ControllerError("failure raw decision track is invalid")
+                parsed_decisions.extend(parsed)
+                _write_private_file_at(
+                    transaction.decisions_fd, name, payload, 0o444
+                )
+            elif reset or not _private_file_exists_at(
+                transaction.decisions_fd, name
+            ):
+                _write_private_file_at(
+                    transaction.decisions_fd, name, b"", 0o444
+                )
+        if generation == 2:
+            if (
+                type(raw_driver_results) is not dict
+                or set(raw_driver_results) != set(_TRACKS)
+            ):
+                raise ControllerError(
+                    "failure v2 driver results must cover fixed tracks"
+                )
+            driver_payloads: dict[str, bytes] = {}
+            for track in _TRACKS:
+                payload = raw_driver_results[track]
+                if type(payload) is not bytes:
+                    raise ControllerError(
+                        "failure driver result must be exact bytes"
+                    )
+                relative = f"raw/drivers/{track.value}.json"
+                driver_payloads[relative] = payload
+                _write_private_file(transaction, relative, payload, 0o444)
+            _validate_driver_result_bindings(
+                driver_payloads,
+                manifest,
+                requests or [],
+                completed=False,
             )
-            if any(record["track"] != track.value for record in parsed):
-                raise ControllerError("failure raw decision track is invalid")
-            parsed_decisions.extend(parsed)
-            _write_file(path, payload, 0o444)
-        elif reset or not path.exists():
-            _write_file(path, b"", 0o444)
-    supplied = {
-        "requests.jsonl": requests,
-        "decisions.jsonl": (
+        elif raw_driver_results is not None:
+            raise ControllerError(
+                "legacy failure evidence cannot contain driver results"
+            )
+        supplied = {
+            "requests.jsonl": requests,
+            "decisions.jsonl": (
+                _normalized_decision_records(manifest, parsed_decisions)
+                if raw_decisions is not None
+                else None
+            ),
+            "envoy.jsonl": envoy,
+            "targets.jsonl": targets,
+            "joins.jsonl": None,
+        }
+        for name, records in supplied.items():
+            if records is not None:
+                _write_private_file_at(
+                    transaction.run_fd, name, _jsonl_payload(records), 0o444
+                )
+            elif reset or not _private_file_exists_at(transaction.run_fd, name):
+                _write_private_file_at(transaction.run_fd, name, b"", 0o444)
+        _write_private_file(
+            transaction, "manifest.json", _canonical_bytes(manifest), 0o444
+        )
+        _write_private_file(
+            transaction,
+            "summary.md",
+            (
+                "# KIL V3B-1 incomplete private lifecycle evidence\n\n"
+                "This provisional bundle is non-promotable and awaits verified teardown.\n\n"
+                f"{_KTP_CITATION}"
+            ).encode("utf-8"),
+            0o444,
+        )
+        normalized = (
             _normalized_decision_records(manifest, parsed_decisions)
-            if raw_decisions is not None
-            else None
-        ),
-        "envoy.jsonl": envoy,
-        "targets.jsonl": targets,
-        "joins.jsonl": None,
-    }
-    for name, records in supplied.items():
-        path = output / name
-        if records is not None:
-            _write_file(path, _jsonl_payload(records), 0o444)
-        elif reset or not path.exists():
-            _write_file(path, b"", 0o444)
-    _write_file(output / "manifest.json", _canonical_bytes(manifest), 0o444)
-    _write_file(
-        output / "summary.md",
-        (
-            "# KIL V3B-1 incomplete private lifecycle evidence\n\n"
-            "This provisional bundle is non-promotable and awaits verified teardown.\n\n"
-            f"{_KTP_CITATION}"
-        ).encode("utf-8"),
-        0o444,
-    )
-    normalized = (
-        _normalized_decision_records(manifest, parsed_decisions)
-        if parsed_decisions
-        else []
-    )
-    _write_file(
-        output / "live.html",
-        _render_live_html(_presenter_model(manifest, normalized, [])),
-        0o444,
-    )
-    _write_sums(output)
-    _verify_sums(output)
-    return output
+            if parsed_decisions
+            else []
+        )
+        _write_private_file(
+            transaction,
+            "live.html",
+            _render_live_html(_presenter_model(manifest, normalized, [])),
+            0o444,
+        )
+        _write_and_verify_private_sums(
+            transaction, manifest["schema_version"]
+        )
+        _require_private_bundle_inventory(
+            transaction, manifest["schema_version"]
+        )
+        _require_private_evidence_tree(transaction)
+        return transaction.output
+    finally:
+        transaction.close()
 
 
 def finalize_teardown_evidence(output: Path, run_id: str) -> None:
@@ -5861,9 +9171,8 @@ class LocalEnvoyController:
         home: Path | None = None,
         port_probe: Callable[[int], bool] = _default_port_probe,
         tool_verifier: Callable[[], object] | None = None,
-        connection_factory: Callable[..., object] | None = None,
+        driver_process_factory: DriverProcessFactory | None = None,
         monotonic_ns: Callable[[], int] | None = None,
-        sleeper: Callable[[float], None] | None = None,
         publication_fault: Callable[[str, Path], None] | None = None,
     ) -> None:
         self.root = root.resolve()
@@ -5889,13 +9198,7 @@ class LocalEnvoyController:
         )
         self.port_probe = port_probe
         self.tool_verifier = tool_verifier or self._verify_tool_lock
-        self.connection_factory = (
-            http.client.HTTPConnection
-            if connection_factory is None
-            else connection_factory
-        )
         self.monotonic_ns = time.monotonic_ns if monotonic_ns is None else monotonic_ns
-        self.sleeper = time.sleep if sleeper is None else sleeper
         self.publication_fault = publication_fault
         self.command_env = {
             "HOME": str(self.home),
@@ -5904,6 +9207,18 @@ class LocalEnvoyController:
             "PATH": os.environ.get("PATH", os.defpath),
         }
         self.docker_env = {**self.command_env, "DOCKER_BUILDKIT": "0"}
+        self.driver_process_factory = (
+            SubprocessDriverProcessFactory(
+                cwd=self.root,
+                env={
+                    **self.docker_env,
+                    "DOCKER_CONFIG": str(self.docker_config),
+                    "DOCKER_HOST": self.docker_host,
+                },
+            )
+            if driver_process_factory is None
+            else driver_process_factory
+        )
 
     def _execute(
         self,
@@ -6049,7 +9364,7 @@ class LocalEnvoyController:
         ]
 
     def validate_ports(self) -> None:
-        for port in self.profile.gateway_ports:
+        for port in _TRACK_PORTS.values():
             if self.port_probe(port):
                 raise ControllerError(f"gateway port {port} is occupied")
 
@@ -6067,7 +9382,7 @@ class LocalEnvoyController:
         self.validate_ports()
         return {
             "profiles": profiles,
-            "ports": self.profile.gateway_ports,
+            "ports": tuple(_TRACK_PORTS.values()),
             "tool_identities": _tool_identity_projection(tools),
         }
 
@@ -6159,7 +9474,10 @@ class LocalEnvoyController:
             raise ControllerError("readiness poison sentinel is not canonical")
         _require_sha256("readiness poison execution nonce", value["execution_nonce"])
         _require_sha256("readiness poison readiness nonce", value["readiness_nonce"])
-        if value["reason_category"] != "connection_close_ambiguous":
+        if value["reason_category"] not in {
+            "connection_close_ambiguous",
+            "driver_readiness_failed",
+        }:
             raise ControllerError("readiness poison reason category is invalid")
         if value["binding_sha256"] != _journal_binding(value):
             raise ControllerError("readiness poison sentinel binding does not match")
@@ -6181,6 +9499,56 @@ class LocalEnvoyController:
             raise ControllerError(
                 "readiness is poisoned; teardown or manual recovery is required"
             )
+        journal = load_lifecycle_journal(self.journal_path)
+        events = journal["events"]
+        assert isinstance(events, list)
+        if _readiness_history_blocks_new_session(events):
+            raise ControllerError(
+                "readiness lifecycle is incomplete or poisoned; down is required"
+            )
+
+    def _persist_readiness_poison_independent(
+        self,
+        *,
+        execution_nonce: str,
+        readiness_nonce: str,
+        reason_category: str,
+    ) -> None:
+        """Persist the poison sentinel without depending on later journal writes."""
+        _require_sha256("readiness poison execution nonce", execution_nonce)
+        _require_sha256("readiness poison readiness nonce", readiness_nonce)
+        if reason_category not in {
+            "connection_close_ambiguous",
+            "driver_readiness_failed",
+        }:
+            raise ControllerError("readiness poison reason category is invalid")
+        unsigned = {
+            "schema_version": READINESS_POISON_SCHEMA,
+            "execution_nonce": execution_nonce,
+            "readiness_nonce": readiness_nonce,
+            "reason_category": reason_category,
+        }
+        value = {**unsigned, "binding_sha256": _journal_binding(unsigned)}
+        expected = _canonical_bytes(value)
+        path = self.readiness_poison_path
+        _require_contained(path, self.private_root, "readiness poison sentinel")
+        if path.exists():
+            if (
+                path.is_symlink()
+                or not path.is_file()
+                or (path.stat().st_mode & 0o7777) != 0o600
+                or path.read_bytes() != expected
+            ):
+                raise ControllerError("readiness poison sentinel would be clobbered")
+            return
+        _write_file(path, expected, 0o600)
+        if (
+            path.is_symlink()
+            or not path.is_file()
+            or (path.stat().st_mode & 0o7777) != 0o600
+            or path.read_bytes() != expected
+        ):
+            raise ControllerError("readiness poison sentinel write was not durable")
 
     def _persist_readiness_poison(
         self,
@@ -6189,7 +9557,10 @@ class LocalEnvoyController:
         reason_category: str,
     ) -> None:
         _require_sha256("readiness poison readiness nonce", readiness_nonce)
-        if reason_category != "connection_close_ambiguous":
+        if reason_category not in {
+            "connection_close_ambiguous",
+            "driver_readiness_failed",
+        }:
             raise ControllerError("readiness poison reason category is invalid")
         journal = load_lifecycle_journal(self.journal_path)
         events = journal["events"]
@@ -6199,29 +9570,12 @@ class LocalEnvoyController:
         )
         if current_readiness != readiness_nonce:
             raise ControllerError("readiness poison session is not current")
-        unsigned = {
-            "schema_version": READINESS_POISON_SCHEMA,
-            "execution_nonce": journal["execution_nonce"],
-            "readiness_nonce": readiness_nonce,
-            "reason_category": reason_category,
-        }
-        value = {**unsigned, "binding_sha256": _journal_binding(unsigned)}
-        existing = self._load_readiness_poison()
-        if existing is not None:
-            if existing != value:
-                raise ControllerError("readiness poison sentinel would be clobbered")
-            return
-        _require_contained(
-            self.readiness_poison_path,
-            self.private_root,
-            "readiness poison sentinel",
+        self._persist_readiness_poison_independent(
+            execution_nonce=str(journal["execution_nonce"]),
+            readiness_nonce=readiness_nonce,
+            reason_category=reason_category,
         )
-        _write_file(
-            self.readiness_poison_path,
-            _canonical_bytes(value),
-            0o600,
-        )
-        if self._load_readiness_poison() != value:
+        if self._load_readiness_poison() is None:
             raise ControllerError("readiness poison sentinel write was not durable")
 
     def _clear_readiness_poison(self, execution_nonce: str) -> None:
@@ -6473,7 +9827,11 @@ class LocalEnvoyController:
         track: str,
         *,
         require_running: bool = True,
+        envoy_attachment: Mapping[str, object] | None = None,
+        allowed_driver_states: set[str] | frozenset[str] | None = None,
     ) -> dict[str, object]:
+        if role not in {"authz", "target", "envoy", "driver"}:
+            raise ControllerError("container role inspection is invalid")
         output = self._execute(
             self.docker_command(
                 "inspect",
@@ -6499,15 +9857,62 @@ class LocalEnvoyController:
             state_value = raw["State"]
             network_settings = raw["NetworkSettings"]
             mounts_value = raw["Mounts"]
-            assert isinstance(config_value, dict)
-            assert isinstance(host, dict)
-            assert isinstance(state_value, dict)
-            assert isinstance(network_settings, dict)
-            assert isinstance(mounts_value, list)
+            assert type(config_value) is dict
+            assert type(host) is dict
+            assert type(state_value) is dict
+            assert type(network_settings) is dict
+            assert type(mounts_value) is list
+            assert all(type(item) is dict for item in mounts_value)
             image_reference = config_value["Image"]
             labels = config_value["Labels"]
+            entrypoint = config_value["Entrypoint"]
+            command = config_value["Cmd"]
+            running_value = state_value["Running"]
+            state_status = state_value["Status"]
+            raw_networks = network_settings["Networks"]
+            published_ports = network_settings["Ports"]
+            privileged = host["Privileged"]
+            network_mode = host["NetworkMode"]
+            pid_mode = host["PidMode"]
+            ipc_mode = host["IpcMode"]
+            uts_mode = host["UTSMode"]
+            userns_mode = host["UsernsMode"]
+            cgroupns_mode = host["CgroupnsMode"]
+            port_bindings = host["PortBindings"]
         except (KeyError, TypeError, AssertionError) as error:
             raise ControllerError("container inspection required fields are missing") from error
+        if (
+            type(running_value) is not bool
+            or type(state_status) is not str
+            or not state_status
+            or type(entrypoint) is not list
+            or not entrypoint
+            or any(type(item) is not str or not item for item in entrypoint)
+            or type(command) is not list
+            or not command
+            or any(type(item) is not str or not item for item in command)
+            or type(raw_networks) is not dict
+            or type(port_bindings) is not dict
+            or not (
+                published_ports is None
+                or (
+                    type(published_ports) is dict
+                    and all(
+                        type(port) is str
+                        and port
+                        and (
+                            bindings is None
+                            or (
+                                type(bindings) is list
+                                and all(type(binding) is dict for binding in bindings)
+                            )
+                        )
+                        for port, bindings in published_ports.items()
+                    )
+                )
+            )
+        ):
+            raise ControllerError("container inspection process/state/port fields are invalid")
         expected_labels = _object_labels(str(manifest["run_id"]), role, track)
         track_manifest = _track_manifest(manifest, LiveTrack(track))
         expected_name = str(track_manifest[f"{role}_container"])
@@ -6515,12 +9920,37 @@ class LocalEnvoyController:
         health = (
             health_value.get("Status") if isinstance(health_value, dict) else "none"
         )
+        running = running_value is True
+        driver_states = (
+            {"created"}
+            if allowed_driver_states is None
+            else set(allowed_driver_states)
+        )
+        if role != "driver" and allowed_driver_states is not None:
+            raise ControllerError("driver lifecycle states applied to a service")
+        if (
+            role == "driver"
+            and (
+                not driver_states
+                or not driver_states.issubset(
+                    {"created", "running", "exited", "dead"}
+                )
+            )
+        ):
+            raise ControllerError("driver lifecycle state authority is invalid")
         if (
             type(object_id) is not str
             or _HEX.fullmatch(object_id) is None
             or name != f"/{expected_name}"
-            or (require_running and state_value.get("Running") is not True)
-            or (require_running and role != "envoy" and health != "healthy")
+            or (require_running and role != "driver" and not running)
+            or (
+                role == "driver"
+                and (
+                    state_status not in driver_states
+                    or running != (state_status == "running")
+                )
+            )
+            or (require_running and role not in {"envoy", "driver"} and health != "healthy")
             or (require_running and role == "envoy" and health not in {"healthy", "none"})
         ):
             raise ControllerError("container ID/name/label/running attestation failed")
@@ -6557,19 +9987,31 @@ class LocalEnvoyController:
         _validate_container_labels(
             labels, image_config.get("Labels"), expected_labels
         )
-        config = self._config_path(manifest, role, track)
-        if (
-            config.is_symlink()
-            or not config.is_file()
-            or config.stat().st_mode & 0o222
-        ):
-            raise ControllerError("container config is not fixed read-only input")
+        config: Path | None = None
+        if role != "driver":
+            config = self._config_path(manifest, role, track)
+            if (
+                config.is_symlink()
+                or not config.is_file()
+                or config.stat().st_mode & 0o222
+            ):
+                raise ControllerError("container config is not fixed read-only input")
         security = host.get("SecurityOpt") or []
         if security == ["no-new-privileges:true"]:
             security = ["no-new-privileges"]
-        raw_networks = network_settings.get("Networks")
-        if type(raw_networks) is not dict:
-            raise ControllerError("container network inspection is invalid")
+        network_aliases: dict[str, list[str]] = {}
+        for network_name, endpoint in raw_networks.items():
+            if type(network_name) is not str or type(endpoint) is not dict:
+                raise ControllerError("container network inspection is invalid")
+            if "Aliases" not in endpoint:
+                raise ControllerError("container network aliases are missing")
+            aliases = endpoint["Aliases"]
+            if (
+                type(aliases) is not list
+                or any(type(alias) is not str or not alias for alias in aliases)
+            ):
+                raise ControllerError("container network aliases are invalid")
+            network_aliases[network_name] = list(aliases)
         raw_log = host.get("LogConfig")
         if type(raw_log) is not dict:
             raise ControllerError("container log inspection is invalid")
@@ -6599,24 +10041,117 @@ class LocalEnvoyController:
                     "rw": item.get("RW"),
                 }
                 for item in mounts_value
-                if isinstance(item, dict)
             ],
             "networks": sorted(raw_networks),
-            "port_bindings": host.get("PortBindings") or {},
+            "network_aliases": {
+                name: network_aliases[name] for name in sorted(network_aliases)
+            },
+            "port_bindings": port_bindings,
+            "published_ports": published_ports,
             "platform": PLATFORM,
-            "entrypoint": config_value.get("Entrypoint") or [],
-            "command": config_value.get("Cmd") or [],
+            "entrypoint": entrypoint,
+            "command": command,
             "environment": config_value.get("Env") or [],
+            "state": state_status,
+            "stdin_open": config_value.get("OpenStdin", False),
+            "tty": config_value.get("Tty", False),
+            "healthcheck": (
+                "disabled"
+                if config_value.get("Healthcheck") == {"Test": ["NONE"]}
+                else None
+                if config_value.get("Healthcheck") is None
+                else "configured"
+            ),
+            "privileged": privileged,
+            "network_mode": network_mode,
+            "pid_mode": pid_mode,
+            "ipc_mode": "" if ipc_mode == "private" else ipc_mode,
+            "uts_mode": uts_mode,
+            "userns_mode": userns_mode,
+            "cgroupns_mode": cgroupns_mode,
         }
+        if role == "envoy":
+            if envoy_attachment is None:
+                raise ControllerError("Envoy attachment expectation is required")
+            attachment = _validate_envoy_attachment_expectation(
+                envoy_attachment, manifest, track
+            )
+            if attachment["container_id"] != object_id:
+                raise ControllerError("Envoy attachment container ID changed")
+            backend_networks = [str(track_manifest["backend_network"])]
+            dual_networks = [
+                str(track_manifest["backend_network"]),
+                str(track_manifest["frontend_network"]),
+            ]
+            network_options = (
+                [backend_networks]
+                if attachment["phase"] == "unstarted"
+                else [backend_networks, dual_networks]
+                if attachment["phase"] == "pending"
+                else [dual_networks]
+            )
+            matching_options = [
+                option
+                for option in network_options
+                if sorted(option) == actual["networks"]
+            ]
+            if len(matching_options) != 1:
+                raise ControllerError(
+                    "Envoy attachment network shape is not journal-authorized"
+                )
+            expected_networks = matching_options[0]
+        elif role == "driver":
+            expected_networks = [str(track_manifest["frontend_network"])]
+        else:
+            expected_networks = [
+                str(track_manifest.get("backend_network", track_manifest.get("network")))
+            ]
+        required_aliases = {
+            network: [
+                "envoy"
+                if role == "envoy" and network == track_manifest.get("frontend_network")
+                else expected_name
+            ]
+            for network in expected_networks
+        }
+        driver_definition_value: dict[str, object] | None = None
+        if role == "driver":
+            definitions = manifest.get("driver_definitions")
+            if type(definitions) is not list:
+                raise ControllerError("driver definition is unavailable")
+            driver_definition_value = next(
+                (
+                    dict(item)
+                    for item in definitions
+                    if type(item) is dict and item.get("track") == track
+                ),
+                None,
+            )
+            if driver_definition_value is None:
+                raise ControllerError("driver definition is unavailable")
         expected = {
             "name": expected_name,
             "role": role,
             "track": track,
             "image_id": expected_image_id,
-            "network": track_manifest["network"],
-            "config_path": str(config),
-            "config_sha256": _digest_file(config),
-            "gateway_port": track_manifest["gateway_port"] if role == "envoy" else None,
+            "networks": sorted(expected_networks),
+            "config_path": None if config is None else str(config),
+            "config_sha256": None if config is None else _digest_file(config),
+            "gateway_port": None,
+            "required_aliases": required_aliases,
+            "driver_definition": driver_definition_value,
+            "required_state": (
+                state_status
+                if role == "driver"
+                else "running" if require_running else None
+            ),
+            "primary_network": str(
+                track_manifest["frontend_network"]
+                if role == "driver"
+                else track_manifest.get(
+                    "backend_network", track_manifest.get("network")
+                )
+            ),
         }
         validate_container_attestation(actual, expected)
         return {
@@ -6627,8 +10162,10 @@ class LocalEnvoyController:
             "labels": expected_labels,
             "image_id": image_id,
             "image_reference": image_reference,
-            "config_path": str(config),
-            "config_sha256": _digest_bytes(config.read_bytes()),
+            "config_path": None if config is None else str(config),
+            "config_sha256": (
+                None if config is None else _digest_bytes(config.read_bytes())
+            ),
             "runtime_attestation": actual,
         }
 
@@ -6638,9 +10175,17 @@ class LocalEnvoyController:
         manifest: Mapping[str, object],
         track: str,
         *,
+        segment: str = "backend",
+        expected_members: Mapping[str, Mapping[str, str]],
+        allowed_member_options: Sequence[
+            Mapping[str, Mapping[str, str]]
+        ] | None = None,
+        envoy_attachment: Mapping[str, object] | None = None,
         require_complete_membership: bool = True,
         require_empty_membership: bool = False,
     ) -> dict[str, object]:
+        if segment not in {"backend", "frontend"}:
+            raise ControllerError("network segment inspection is invalid")
         raw_output = self._execute(
             self.docker_command(
                 "network",
@@ -6665,8 +10210,13 @@ class LocalEnvoyController:
         internal = raw["Internal"]
         labels = raw["Labels"]
         containers = raw["Containers"]
+        track_value = _track_manifest(manifest, LiveTrack(track))
         expected_name = str(
-            _track_manifest(manifest, LiveTrack(track))["network"]
+            track_value[
+                f"{segment}_network"
+                if f"{segment}_network" in track_value
+                else "network"
+            ]
         )
         expected_labels = _object_labels(str(manifest["run_id"]), None, track)
         if (
@@ -6689,6 +10239,14 @@ class LocalEnvoyController:
             raise ControllerError(
                 "network identity/label/internal type attestation failed"
             )
+        if segment == "frontend":
+            if envoy_attachment is None:
+                raise ControllerError("Envoy attachment expectation is required")
+            attachment = _validate_envoy_attachment_expectation(
+                envoy_attachment, manifest, track
+            )
+            if attachment["network_id"] != object_id:
+                raise ControllerError("Envoy attachment frontend network ID changed")
         if type(containers) is not dict:
             raise ControllerError("network membership shape is invalid")
         endpoint_fields = {
@@ -6707,19 +10265,97 @@ class LocalEnvoyController:
             ):
                 raise ControllerError("network membership shape is invalid")
             members.append(endpoint["Name"])
-        expected_members = {
-            str(item["name"])
-            for item in manifest["containers"]  # type: ignore[union-attr]
-            if item["track"] == track
+        expected_roles = (
+            {"envoy", "authz", "target"}
+            if segment == "backend"
+            else {"envoy", "driver"}
+        )
+        if type(expected_members) is not dict:
+            raise ControllerError("expected network membership is invalid")
+        def validate_expected(
+            candidate: Mapping[str, Mapping[str, str]],
+        ) -> tuple[dict[str, str], set[str]]:
+            if type(candidate) is not dict:
+                raise ControllerError("expected network membership is invalid")
+            pairs: dict[str, str] = {}
+            names: set[str] = set()
+            roles: set[str] = set()
+            for container_id, identity in candidate.items():
+                if (
+                    type(container_id) is not str
+                    or _HEX.fullmatch(container_id) is None
+                    or type(identity) is not dict
+                    or set(identity) != {"name", "role"}
+                    or type(identity["name"]) is not str
+                    or type(identity["role"]) is not str
+                    or identity["role"] not in expected_roles
+                    or identity["name"]
+                    != str(track_value[f"{identity['role']}_container"])
+                    or identity["name"] in names
+                ):
+                    raise ControllerError(
+                        "expected network member identity is invalid"
+                    )
+                pairs[container_id] = identity["name"]
+                names.add(identity["name"])
+                roles.add(identity["role"])
+            return pairs, roles
+
+        expected_pairs, expected_member_roles = validate_expected(
+            expected_members
+        )
+        allowed_pairs: list[dict[str, str]] | None = None
+        if allowed_member_options is not None:
+            if (
+                type(allowed_member_options) not in {list, tuple}
+                or not 1 <= len(allowed_member_options) <= 2
+            ):
+                raise ControllerError("allowed network membership is invalid")
+            allowed_pairs = [
+                validate_expected(option)[0]
+                for option in allowed_member_options
+            ]
+            if expected_pairs != allowed_pairs[0] or len(
+                {canonical_json(option) for option in allowed_pairs}
+            ) != len(allowed_pairs):
+                raise ControllerError("allowed network membership is not closed")
+        actual_pairs = {
+            container_id: endpoint["Name"]
+            for container_id, endpoint in containers.items()
         }
         if (
-            not set(members).issubset(expected_members)
-            or len(members) != len(set(members))
-            or (require_complete_membership and set(members) != expected_members)
+            len(members) != len(set(members))
+            or (
+                allowed_pairs is not None
+                and actual_pairs not in allowed_pairs
+            )
+            or (
+                allowed_pairs is None
+                and any(
+                    expected_pairs.get(container_id) != member_name
+                    for container_id, member_name in actual_pairs.items()
+                )
+            )
+            or (
+                allowed_pairs is None
+                and require_complete_membership
+                and (
+                    actual_pairs != expected_pairs
+                    or expected_member_roles != expected_roles
+                )
+            )
             or (require_empty_membership and members)
         ):
-            raise ControllerError("cross-track or incomplete network membership")
-        return {"name": name, "id": object_id, "track": track, "labels": labels}
+            raise ControllerError(
+                f"cross-track or incomplete {segment} network membership"
+            )
+        return {
+            "name": name,
+            "id": object_id,
+            "track": track,
+            "segment": segment,
+            "labels": labels,
+        }
 
     def _inspect_validation_container(
         self, identifier: str, manifest: Mapping[str, object], track: LiveTrack
@@ -6733,35 +10369,107 @@ class LocalEnvoyController:
             raw = json.loads(raw_output, object_pairs_hook=_closed_object)
         except (json.JSONDecodeError, ControllerError) as error:
             raise ControllerError("Envoy validator inspection is not closed JSON") from error
-        if type(raw) is not dict or type(raw.get("Config")) is not dict or type(raw.get("HostConfig")) is not dict:
+        if type(raw) is not dict:
             raise ControllerError("Envoy validator inspection fields are invalid")
-        config = raw["Config"]
-        host = raw["HostConfig"]
-        assert isinstance(config, dict) and isinstance(host, dict)
+        try:
+            object_id = raw["Id"]
+            object_name = raw["Name"]
+            image_id = raw["Image"]
+            config = raw["Config"]
+            host = raw["HostConfig"]
+            state = raw["State"]
+            network_settings = raw["NetworkSettings"]
+            mounts = raw["Mounts"]
+            assert type(config) is dict
+            assert type(host) is dict
+            assert type(state) is dict
+            assert type(network_settings) is dict
+            assert type(mounts) is list
+            assert all(type(item) is dict for item in mounts)
+            image_reference = config["Image"]
+            actual_labels = config["Labels"]
+            user = config["User"]
+            entrypoint = config["Entrypoint"]
+            command = config["Cmd"]
+            privileged = host["Privileged"]
+            readonly_rootfs = host["ReadonlyRootfs"]
+            auto_remove = host["AutoRemove"]
+            cap_drop = host["CapDrop"]
+            security_value = host["SecurityOpt"]
+            network_mode = host["NetworkMode"]
+            pid_mode = host["PidMode"]
+            ipc_mode = host["IpcMode"]
+            uts_mode = host["UTSMode"]
+            userns_mode = host["UsernsMode"]
+            cgroupns_mode = host["CgroupnsMode"]
+            port_bindings = host["PortBindings"]
+            running = state["Running"]
+            state_status = state["Status"]
+            networks = network_settings["Networks"]
+            published_ports = network_settings["Ports"]
+        except (KeyError, TypeError, AssertionError) as error:
+            raise ControllerError(
+                "Envoy validator inspection required fields are invalid"
+            ) from error
         name = f"kil-v3b1-validate-{_track_slug(track)}-{str(manifest['content_identity_sha256'])[:12]}"
         labels = _object_labels(str(manifest["run_id"]), "validator", track.value)
-        security = host.get("SecurityOpt") or []
+        security = security_value
         if security == ["no-new-privileges:true"]:
             security = ["no-new-privileges"]
+        normalized_mounts = [
+            {
+                "source": item.get("Source"),
+                "destination": item.get("Destination"),
+                "rw": item.get("RW"),
+            }
+            for item in mounts
+        ]
+        live_ports_empty = published_ports is None or (
+            type(published_ports) is dict
+            and all(
+                type(port) is str and port and bindings in (None, [])
+                for port, bindings in published_ports.items()
+            )
+        )
         if (
-            type(raw.get("Id")) is not str
-            or _HEX.fullmatch(str(raw["Id"])) is None
-            or raw["Id"] != identifier
-            or raw.get("Name") != f"/{name}"
-            or raw.get("Image") != manifest["envoy_image_id"]
-            or config.get("Image") != manifest["envoy_image_digest"]
-            or config.get("User") != "65532:65532"
-            or config.get("Entrypoint") != ["/usr/local/bin/envoy"]
-            or config.get("Cmd") != [
+            type(object_id) is not str
+            or _HEX.fullmatch(object_id) is None
+            or object_id != identifier
+            or object_name != f"/{name}"
+            or image_id != manifest["envoy_image_id"]
+            or image_reference != manifest["envoy_image_digest"]
+            or user != "65532:65532"
+            or entrypoint != ["/usr/local/bin/envoy"]
+            or command != [
                 "--mode", "validate", "--config-path", "/etc/envoy/envoy.json",
                 "--disable-hot-restart", "--concurrency", "1",
             ]
-            or host.get("ReadonlyRootfs") is not True
-            or host.get("AutoRemove") is not False
-            or host.get("CapDrop") != ["ALL"]
+            or privileged is not False
+            or readonly_rootfs is not True
+            or auto_remove is not False
+            or cap_drop != ["ALL"]
             or security != ["no-new-privileges"]
-            or host.get("NetworkMode") != "none"
-            or (host.get("PortBindings") or {}) != {}
+            or network_mode != "none"
+            or type(pid_mode) is not str
+            or pid_mode != ""
+            or type(ipc_mode) is not str
+            or ipc_mode not in {"", "private"}
+            or type(uts_mode) is not str
+            or uts_mode != ""
+            or type(userns_mode) is not str
+            or userns_mode != ""
+            or cgroupns_mode != "private"
+            or port_bindings != {}
+            or running is not False
+            or state_status != "exited"
+            or type(networks) is not dict
+            or networks != {}
+            or not live_ports_empty
+            or len(normalized_mounts) != 1
+            or type(normalized_mounts[0]["source"]) is not str
+            or not Path(str(normalized_mounts[0]["source"])).is_absolute()
+            or normalized_mounts[0]["destination"] != "/etc/envoy/envoy.json"
+            or normalized_mounts[0]["rw"] is not False
         ):
             raise ControllerError("Envoy validator immutable/sandbox attestation failed")
         image_inspection = self._execute(
@@ -6792,32 +10500,59 @@ class LocalEnvoyController:
                 "Envoy validator immutable image attestation failed"
             ) from error
         _validate_container_labels(
-            config.get("Labels"), image_config.get("Labels"), labels
+            actual_labels, image_config.get("Labels"), labels
         )
+        runtime_attestation = {
+            "privileged": privileged,
+            "network_mode": network_mode,
+            "pid_mode": pid_mode,
+            "ipc_mode": "" if ipc_mode == "private" else ipc_mode,
+            "uts_mode": uts_mode,
+            "userns_mode": userns_mode,
+            "cgroupns_mode": cgroupns_mode,
+            "state": state_status,
+            "entrypoint": entrypoint,
+            "command": command,
+            "mounts": normalized_mounts,
+            "networks": networks,
+            "port_bindings": port_bindings,
+            "published_ports": published_ports,
+        }
         return {
-            "id": raw["Id"],
+            "id": object_id,
             "name": name,
             "role": "validator",
             "track": track.value,
             "labels": labels,
             "image_id": manifest["envoy_image_id"],
             "image_reference": manifest["envoy_image_digest"],
+            "runtime_attestation": runtime_attestation,
         }
 
     def _attest_runtime(
         self, manifest: dict[str, object]
     ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        journal = load_lifecycle_journal(self.journal_path)
+        events = journal["events"]
+        assert isinstance(events, list)
+        envoy_attachments = _envoy_attachment_expectations(events, manifest)
         deadline = time.monotonic() + 60
         while True:
             try:
                 objects = []
-                for item in manifest["containers"]:  # type: ignore[union-attr]
+                for item in manifest["containers"]:
                     objects.append(
                         self._inspect_container(
                             str(item["name"]),
                             manifest,
                             str(item["role"]),
                             str(item["track"]),
+                            require_running=item["role"] != "driver",
+                            envoy_attachment=(
+                                envoy_attachments[str(item["track"])]
+                                if item["role"] == "envoy"
+                                else None
+                            ),
                         )
                     )
                 break
@@ -6825,10 +10560,32 @@ class LocalEnvoyController:
                 if time.monotonic() >= deadline:
                     raise
                 time.sleep(0.25)
-        networks = [
-            self._inspect_network(str(item["name"]), manifest, str(item["track"]))
-            for item in manifest["networks"]  # type: ignore[union-attr]
-        ]
+        networks = []
+        for item in _runtime_networks(manifest):
+            track = str(item["track"])
+            segment = _network_segment(item)
+            member_options = _network_member_identity_options(
+                objects,
+                manifest,
+                track,
+                segment,
+                envoy_attachments[track],
+            )
+            networks.append(
+                self._inspect_network(
+                    str(item["name"]),
+                    manifest,
+                    track,
+                    segment=segment,
+                    expected_members=member_options[0],
+                    allowed_member_options=member_options,
+                    envoy_attachment=(
+                        envoy_attachments[track]
+                        if segment == "frontend"
+                        else None
+                    ),
+                )
+            )
         return objects, networks
 
     def _run_validator_command(
@@ -6922,7 +10679,11 @@ class LocalEnvoyController:
             raise ControllerError("Docker inventory kind is invalid")
         result = self._execute(command, timeout_s=60, docker=True)
         try:
-            return parse_inventory_rows(result.stdout, kind)
+            return parse_inventory_rows(
+                result.stdout,
+                kind,
+                schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
         except (
             HarnessContractError,
             UnicodeError,
@@ -6945,15 +10706,33 @@ class LocalEnvoyController:
             if type(actual) is not dict or type(expected) is not dict:
                 raise HarnessContractError("Docker inventory mapping is invalid")
             actual_entries = tuple(
-                DockerInventoryEntry(kind, object_id, name)
+                DockerInventoryEntry(
+                    kind,
+                    object_id,
+                    name,
+                    DRIVER_TOPOLOGY_SCHEMA_VERSION,
+                )
                 for object_id, name in actual.items()
             )
             expected_entries = tuple(
-                DockerInventoryEntry(kind, object_id, name)
+                DockerInventoryEntry(
+                    kind,
+                    object_id,
+                    name,
+                    DRIVER_TOPOLOGY_SCHEMA_VERSION,
+                )
                 for object_id, name in expected.items()
             )
-            DockerInventory(kind, actual_entries)
-            DockerInventory(kind, expected_entries)
+            DockerInventory(
+                kind,
+                actual_entries,
+                DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
+            DockerInventory(
+                kind,
+                expected_entries,
+                DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
         except (
             HarnessContractError,
             UnicodeError,
@@ -6991,12 +10770,17 @@ class LocalEnvoyController:
             candidate_networks = bound["network_objects"]
         elif manifest is not None:
             candidate_objects = manifest["containers"]
-            candidate_networks = manifest["networks"]
+            candidate_networks = _runtime_networks(manifest)
         else:
             candidate_objects = []
             candidate_networks = []
         events = journal["events"]
         assert isinstance(events, list)
+        envoy_attachments = (
+            _envoy_attachment_expectations(events, manifest)
+            if manifest is not None
+            else {}
+        )
         container_inventory = self._inventory_mapping(
             self._docker_inventory("container")
         )
@@ -7022,7 +10806,12 @@ class LocalEnvoyController:
             recorded_id = item.get("id")
             if type(recorded_id) is str:
                 try:
-                    DockerInventoryEntry(inventory_kind, recorded_id, name)
+                    DockerInventoryEntry(
+                        inventory_kind,
+                        recorded_id,
+                        name,
+                        DRIVER_TOPOLOGY_SCHEMA_VERSION,
+                    )
                 except HarnessContractError as error:
                     raise ControllerError(
                         "recorded Docker recovery identity is invalid"
@@ -7083,14 +10872,37 @@ class LocalEnvoyController:
                 if resolved is None:
                     continue
                 identifier, _ = resolved
+                allowed_driver_states = None
+                if item["role"] == "driver":
+                    authority = _driver_recovery_authority(
+                        events, str(item["track"]), identifier
+                    )
+                    allowed_driver_states = set(
+                        authority["allowed_states"]  # type: ignore[arg-type]
+                    )
+                inspect_kwargs: dict[str, object] = {
+                    "require_running": False,
+                    "envoy_attachment": (
+                        envoy_attachments[str(item["track"])]
+                        if item["role"] == "envoy"
+                        else None
+                    ),
+                }
+                if allowed_driver_states is not None:
+                    inspect_kwargs["allowed_driver_states"] = allowed_driver_states
                 current = self._inspect_container(
                     identifier,
                     manifest,
                     str(item["role"]),
                     str(item["track"]),
-                    require_running=False,
+                    **inspect_kwargs,
                 )
-                if "id" in item and current != item:
+                if "id" in item and not _container_attestation_matches(
+                    item,
+                    current,
+                    allow_stopped=True,
+                    allowed_driver_states=allowed_driver_states,
+                ):
                     raise ControllerError("recorded container attestation changed during recovery")
                 objects.append(current)
         networks: list[dict[str, object]] = []
@@ -7105,10 +10917,27 @@ class LocalEnvoyController:
                 if resolved is None:
                     continue
                 identifier, _ = resolved
+                segment = str(item.get("segment", "backend"))
+                track = str(item["track"])
+                member_options = _network_member_identity_options(
+                    objects,
+                    manifest,
+                    track,
+                    segment,
+                    envoy_attachments[track],
+                )
                 current = self._inspect_network(
                     identifier,
                     manifest,
-                    str(item["track"]),
+                    track,
+                    segment=segment,
+                    expected_members=member_options[0],
+                    allowed_member_options=member_options,
+                    envoy_attachment=(
+                        envoy_attachments[track]
+                        if segment == "frontend"
+                        else None
+                    ),
                     require_complete_membership=False,
                 )
                 if "id" in item and current != item:
@@ -7161,6 +10990,7 @@ class LocalEnvoyController:
             "objects": objects,
             "transient_objects": transient_objects,
             "network_objects": networks,
+            "envoy_attachments": envoy_attachments,
             "profile_created": journal["profile_created"],
             "colima_profile": LAB_IDENTITY,
             "docker_host": self.docker_host,
@@ -7205,7 +11035,7 @@ class LocalEnvoyController:
             "preflight_complete",
             {
                 "tool_identities": preflight["tool_identities"],
-                "ports": list(self.profile.gateway_ports),
+                "ports": list(_TRACK_PORTS.values()),
                 "dedicated_profile_absent": True,
             },
         )
@@ -7303,6 +11133,9 @@ class LocalEnvoyController:
             envoy_image_id=envoy_image_id,
             kil_image_id=kil_image_id,
             kil_archive_sha256=archive_sha,
+            driver_bootstrap_sha256=driver_bootstrap_sha256(
+                self._build_context_attestation
+            ),
             docker_host=self.docker_host,
             source_commit=source_commit,
             source_clean=True,
@@ -7358,6 +11191,10 @@ class LocalEnvoyController:
                 event = "container_create"
                 name = command[command.index("--name") + 1]
                 details = {"name": name}
+            elif "create" in command and "kil.v3b1.role=driver" in command:
+                event = "container_create"
+                name = command[command.index("--name") + 1]
+                details = {"name": name}
             else:
                 raise ControllerError("runtime creation command is unclassified")
             journal_event(self.journal_path, f"{event}_intent", details)
@@ -7371,6 +11208,37 @@ class LocalEnvoyController:
                 created_ids[str(details["name"])] = object_id
             journal_event(
                 self.journal_path, f"{event}_complete", completed_details
+            )
+        for track in _TRACKS:
+            track_value = _track_manifest(manifest, track)
+            envoy_name = str(track_value["envoy_container"])
+            network_name = str(track_value["frontend_network"])
+            try:
+                connect_details = {
+                    "container_id": created_ids[envoy_name],
+                    "container_name": envoy_name,
+                    "network_id": created_ids[network_name],
+                    "network_name": network_name,
+                    "alias": "envoy",
+                }
+            except KeyError as error:
+                raise ControllerError(
+                    "network connect lacks an exact created identity"
+                ) from error
+            journal_event(
+                self.journal_path,
+                "network_connect_intent",
+                connect_details,
+            )
+            self._execute(
+                _network_connect_command(self.docker_command(), connect_details),
+                timeout_s=60,
+                docker=True,
+            )
+            journal_event(
+                self.journal_path,
+                "network_connect_complete",
+                connect_details,
             )
         objects, networks = self._attest_runtime(manifest)
         attested_ids = {
@@ -7408,18 +11276,80 @@ class LocalEnvoyController:
         state = load_bound_active_state(self.state_path)
         manifest = state["manifest"]
         assert isinstance(manifest, dict)
+        journal = load_lifecycle_journal(self.journal_path)
+        events = journal["events"]
+        assert isinstance(events, list)
+        envoy_attachments = _envoy_attachment_expectations(events, manifest)
+        if any(
+            attachment["phase"] != "complete"
+            for attachment in envoy_attachments.values()
+        ):
+            raise ControllerError("active runtime lacks complete Envoy attachments")
         for record in state["objects"]:  # type: ignore[union-attr]
+            driver_authority = None
+            allowed_driver_states = None
+            if record["role"] == "driver":
+                driver_authority = _driver_recovery_authority(
+                    events, str(record["track"]), str(record["id"])
+                )
+                if driver_authority["phase"] == "pre_start":
+                    allowed_driver_states = {"created"}
+                elif driver_authority["request_eligible"] is True:
+                    allowed_driver_states = {"exited"}
+                else:
+                    raise ControllerError(
+                        "driver start is ambiguous or teardown-only; down is required"
+                    )
+            inspect_kwargs: dict[str, object] = {
+                "require_running": record["role"] != "driver",
+                "envoy_attachment": (
+                    envoy_attachments[str(record["track"])]
+                    if record["role"] == "envoy"
+                    else None
+                ),
+            }
+            if allowed_driver_states is not None:
+                inspect_kwargs["allowed_driver_states"] = allowed_driver_states
             current = self._inspect_container(
                 str(record["id"]),
                 manifest,
                 str(record["role"]),
                 str(record["track"]),
+                **inspect_kwargs,
             )
-            if current != record:
+            if record["role"] == "driver":
+                current_matches = _container_attestation_matches(
+                    record,
+                    current,
+                    allow_stopped=True,
+                    allowed_driver_states=allowed_driver_states,
+                )
+            else:
+                current_matches = current == record
+            if not current_matches:
                 raise ControllerError("recorded container attestation changed")
         for record in state["network_objects"]:  # type: ignore[union-attr]
+            track = str(record["track"])
+            segment = str(record.get("segment", "backend"))
+            member_options = _network_member_identity_options(
+                state["objects"],  # type: ignore[arg-type]
+                manifest,
+                track,
+                segment,
+                envoy_attachments[track],
+            )
             current = self._inspect_network(
-                str(record["id"]), manifest, str(record["track"])
+                str(record["id"]),
+                manifest,
+                track,
+                segment=segment,
+                expected_members=member_options[0],
+                allowed_member_options=member_options,
+                envoy_attachment=(
+                    envoy_attachments[track]
+                    if segment == "frontend"
+                    else None
+                ),
             )
             if current != record:
                 raise ControllerError("recorded network attestation changed")
@@ -7436,6 +11366,222 @@ class LocalEnvoyController:
             records, load_lifecycle_journal(self.journal_path), require_all=True
         )
         return records
+
+    def _failure_request_records(
+        self, manifest: Mapping[str, object]
+    ) -> list[dict[str, object]]:
+        """Normalize durable request outcomes for nonpromotable evidence."""
+        journal = load_lifecycle_journal(self.journal_path)
+        requests_state = journal["requests"]
+        events = journal["events"]
+        assert isinstance(requests_state, dict)
+        assert isinstance(events, list)
+        runtime_path = _runtime_root(self.root, manifest) / "requests.jsonl"
+        if not runtime_path.is_symlink() and runtime_path.is_file():
+            successful = _parse_jsonl_bytes(
+                runtime_path.read_bytes(),
+                "partial normalized requests",
+                _request_closed,
+                allow_empty=True,
+            )
+        elif all(
+            isinstance(request, dict) and request.get("status") == "completed"
+            for request in requests_state.values()
+        ):
+            successful = self._request_records(manifest)
+        else:
+            successful = []
+        successful_by_track = {
+            str(record["track"]): record for record in successful
+        }
+        if len(successful_by_track) != len(successful):
+            raise ControllerError("partial normalized request tracks are duplicated")
+        identity = manifest.get("content_identity")
+        if type(identity) is not dict:
+            raise ControllerError("failure request manifest identity is invalid")
+        definitions = identity.get("driver_definition_sha256")
+        if type(definitions) is not list:
+            raise ControllerError("failure request driver definitions are invalid")
+        definition_by_track = {
+            str(item.get("track")): item.get("sha256")
+            for item in definitions
+            if type(item) is dict
+        }
+        normalized: list[dict[str, object]] = []
+        for track in _TRACKS:
+            state = requests_state[track.value]
+            assert isinstance(state, dict)
+            status = state.get("status")
+            if status == "not_attempted":
+                if track.value in successful_by_track:
+                    raise ControllerError(
+                        "uncommanded request has a normalized record"
+                    )
+                continue
+            if status == "completed":
+                record = successful_by_track.get(track.value)
+                if record is None:
+                    raise ControllerError(
+                        "completed request lacks its exact normalized record"
+                    )
+                normalized.append(record)
+                continue
+            if status == "intent_persisted":
+                raise ControllerError(
+                    "commanded request lacks terminal closed provenance"
+                )
+            if status != "failed":
+                raise ControllerError("durable request state is invalid")
+            matches = [
+                event
+                for event in events
+                if event.get("event") == "request_send_failed"
+                and isinstance(event.get("details"), dict)
+                and event["details"].get("track") == track.value
+            ]
+            if len(matches) != 1:
+                raise ControllerError(
+                    "commanded failure lacks one durable terminal event"
+                )
+            details = matches[0]["details"]
+            assert isinstance(details, dict)
+            if set(details) != {
+                "track", "record_sha256", "intent_id", "provenance",
+            }:
+                raise ControllerError(
+                    "commanded failure lacks closed reconstruction provenance"
+                )
+            intent_id = _require_sha256(
+                "failure request intent", details["intent_id"]
+            )
+            provenance = _validate_request_failure_provenance(
+                details["provenance"]
+            )
+            result = _driver_failure_result_from_provenance(track, provenance)
+            result_payload = canonical_record(result)
+            instruction_intents = [
+                event
+                for event in events
+                if event.get("event") == "driver_instruction_write_intent"
+                and isinstance(event.get("details"), dict)
+                and event["details"].get("track") == track.value
+                and event["details"].get("intent_id") == intent_id
+            ]
+            if len(instruction_intents) > 1:
+                raise ControllerError("driver instruction intent is duplicated")
+            if instruction_intents:
+                driver_id = instruction_intents[0]["details"]["driver_id"]
+            else:
+                if (
+                    result.get("stage") != "instruction_write"
+                    or result.get("request_bytes_may_have_been_sent") is not False
+                ):
+                    raise ControllerError(
+                        "driver failure stage lacks its instruction intent"
+                    )
+                readiness = [
+                    event
+                    for event in events
+                    if event.get("event") == "driver_readiness_complete"
+                    and isinstance(event.get("details"), dict)
+                    and event["details"].get("track") == track.value
+                    and event["sequence"] < matches[0]["sequence"]
+                ]
+                if not readiness:
+                    raise ControllerError(
+                        "commanded failure lacks durable driver identity"
+                    )
+                driver_id = readiness[-1]["details"]["driver_id"]
+            definition_sha = definition_by_track.get(track.value)
+            _require_sha256("failure request definition", definition_sha)
+            journal_details = _driver_failure_journal_details(
+                track, intent_id, provenance
+            )
+            record = {
+                "schema_version": "kil.v3b1-request-failure.v1",
+                "run_id": manifest["run_id"],
+                "request_id": manifest["request_id"],
+                "track": track.value,
+                "request_transport": "in_network_request_driver",
+                "driver_role": "request_driver",
+                "driver_full_id": driver_id,
+                "driver_image_id": manifest["kil_image_id"],
+                "driver_definition_sha256": definition_sha,
+                "driver_result_sha256": _digest_bytes(result_payload),
+                "driver_status": result["status"],
+                "intent_id": intent_id,
+                "journal_sequence": matches[0]["sequence"],
+                "journal_event_sha256": _digest_bytes(
+                    canonical_record(matches[0])
+                ),
+                "failure_provenance": dict(provenance),
+            }
+            _driver_failure_request_closed(record)
+            normalized.append(record)
+        if set(successful_by_track) - {
+            str(record["track"])
+            for record in normalized
+            if record.get("schema_version") == "kil.v3b1-request.v2"
+        }:
+            raise ControllerError("normalized request is not durably completed")
+        completed_records = [
+            record
+            for record in normalized
+            if record.get("schema_version") == "kil.v3b1-request.v2"
+        ]
+        if completed_records:
+            validate_request_journal(
+                completed_records, journal, require_all=False
+            )
+        return normalized
+
+    def _private_driver_result_sources(
+        self, manifest: Mapping[str, object]
+    ) -> dict[LiveTrack, bytes]:
+        normalized = {
+            str(record["track"]): record
+            for record in self._failure_request_records(manifest)
+        }
+        root = self.private_root / "driver-results" / str(manifest["run_id"])
+        _require_contained(root, self.private_root, "private driver result root")
+        results: dict[LiveTrack, bytes] = {}
+        for track in _TRACKS:
+            path = root / f"{track.value}.json"
+            _require_contained(path, root, "private driver result")
+            request = normalized.get(track.value)
+            if path.is_symlink():
+                raise ControllerError("private driver result is unsafe")
+            if not path.exists():
+                if request is None:
+                    results[track] = b""
+                    continue
+                if request.get("schema_version") != (
+                    "kil.v3b1-request-failure.v1"
+                ):
+                    raise ControllerError(
+                        "commanded driver result is missing without failure provenance"
+                    )
+                result = _driver_failure_result_from_provenance(
+                    track, request["failure_provenance"]
+                )
+                results[track] = canonical_record(result)
+                continue
+            if not path.is_file():
+                raise ControllerError("private driver result is unsafe")
+            payload = path.read_bytes()
+            if len(payload) > 8 * 1024:
+                raise ControllerError("private driver result exceeds its bound")
+            if request is None:
+                raise ControllerError(
+                    "uncommanded track has a private driver result"
+                )
+            expected_digest = request["driver_result_sha256"]
+            if _digest_bytes(payload) != expected_digest:
+                raise ControllerError(
+                    "private driver result diverges from durable command state"
+                )
+            results[track] = payload
+        return results
 
     @staticmethod
     def _freeze_epoch(manifest: Mapping[str, object]) -> tuple[str, str]:
@@ -7720,14 +11866,27 @@ class LocalEnvoyController:
         if path.is_symlink() or path.exists():
             raise ControllerError("unfinished source path requires recovery handling")
         try:
+            envoy_attachment = None
+            if item["role"] == "envoy":
+                journal = load_lifecycle_journal(self.journal_path)
+                events = journal["events"]
+                assert isinstance(events, list)
+                envoy_attachment = _envoy_attachment_expectations(
+                    events, manifest
+                )[track.value]
             current = self._inspect_container(
                 str(item["id"]),
                 manifest,
                 str(item["role"]),
                 track.value,
                 require_running=source != "envoy_access",
+                envoy_attachment=envoy_attachment,
             )
-            if current != item:
+            if not _container_attestation_matches(
+                item,
+                current,
+                allow_stopped=source == "envoy_access",
+            ):
                 raise ControllerError("source container identity changed before freeze")
         except (ControllerError, OSError, UnicodeError):
             return SourceCollectionStatus(
@@ -8139,6 +12298,8 @@ class LocalEnvoyController:
         self,
         item: Mapping[str, object],
         manifest: dict[str, object],
+        *,
+        envoy_attachment: Mapping[str, object] | None = None,
     ) -> None:
         if item["role"] == "validator":
             current = self._inspect_validation_container(
@@ -8151,8 +12312,17 @@ class LocalEnvoyController:
                 str(item["role"]),
                 str(item["track"]),
                 require_running=False,
+                envoy_attachment=(
+                    envoy_attachment if item["role"] == "envoy" else None
+                ),
             )
-        if current != item:
+        if item["role"] == "validator":
+            current_matches = current == item
+        else:
+            current_matches = _container_attestation_matches(
+                item, current, allow_stopped=True
+            )
+        if not current_matches:
             raise ControllerError("container changed before exact stop")
         running = self._execute(
             self.docker_command(
@@ -8201,14 +12371,108 @@ class LocalEnvoyController:
                     str(item["role"]),
                     str(item["track"]),
                     require_running=False,
+                    envoy_attachment=(
+                        envoy_attachment if item["role"] == "envoy" else None
+                    ),
                 )
-            if after != item:
+            if item["role"] == "validator":
+                after_matches = after == item
+            else:
+                after_matches = _container_attestation_matches(
+                    item, after, allow_stopped=True
+                )
+            if not after_matches:
                 raise ControllerError("container changed after exact stop")
             journal_event(
                 self.journal_path,
                 "container_stop_complete",
                 {"id": item["id"], "name": item["name"]},
             )
+
+    def _quiesce_driver_for_teardown(
+        self,
+        item: Mapping[str, object],
+        manifest: dict[str, object],
+    ) -> dict[str, object]:
+        """Make one exact started driver nonrunning without ever starting it."""
+        if item.get("role") != "driver":
+            raise ControllerError("driver teardown received a non-driver")
+        track = str(item.get("track"))
+        driver_id = str(item.get("id"))
+        journal = load_lifecycle_journal(self.journal_path)
+        events = journal["events"]
+        assert isinstance(events, list)
+        authority = _driver_recovery_authority(events, track, driver_id)
+        observed_state = item.get("runtime_attestation", {}).get("state")
+        if observed_state not in authority["allowed_states"]:
+            raise ControllerError("driver state is outside journal recovery authority")
+        if authority["phase"] == "pre_start":
+            if observed_state != "created":
+                raise ControllerError("unstarted driver is not exactly created")
+            return authority
+        if authority["phase"] in {"trusted_terminal", "teardown_quiesced"}:
+            if observed_state not in {"created", "exited", "dead"}:
+                raise ControllerError("terminal driver unexpectedly remains running")
+            return authority
+
+        starts = [
+            event
+            for event in events
+            if event.get("event") == "driver_start_intent"
+            and isinstance(event.get("details"), dict)
+            and event["details"].get("track") == track
+        ]
+        if len(starts) != 1:
+            raise ControllerError("driver teardown lacks one exact start intent")
+        readiness_nonce = starts[0]["details"].get("readiness_nonce")
+        _require_sha256("driver teardown readiness nonce", readiness_nonce)
+        identity = {
+            "readiness_nonce": readiness_nonce,
+            "track": track,
+            "driver_id": driver_id,
+        }
+        transition = _driver_stop_transition(events, track, driver_id)
+        if transition == "complete":
+            if observed_state == "running":
+                raise ControllerError("completed driver stop is running")
+            return _driver_recovery_authority(events, track, driver_id)
+        if transition in {"unstarted", "failed"}:
+            journal_event(self.journal_path, "driver_stop_intent", identity)
+        if observed_state == "running":
+            try:
+                self._execute(
+                    self.docker_command("stop", "--timeout", "10", driver_id),
+                    timeout_s=30,
+                    docker=True,
+                )
+            except Exception:
+                journal_event(
+                    self.journal_path,
+                    "driver_stop_failed",
+                    {**identity, "category": "container_stop"},
+                )
+                raise
+        current = self._inspect_container(
+            driver_id,
+            manifest,
+            "driver",
+            track,
+            require_running=False,
+            allowed_driver_states={"created", "exited", "dead"},
+        )
+        if not _container_attestation_matches(
+            item,
+            current,
+            allow_stopped=True,
+            allowed_driver_states={"created", "exited", "dead"},
+        ):
+            raise ControllerError("driver changed during exact teardown stop")
+        journal_event(self.journal_path, "driver_stop_complete", identity)
+        return _driver_recovery_authority(
+            load_lifecycle_journal(self.journal_path)["events"],  # type: ignore[arg-type]
+            track,
+            driver_id,
+        )
 
     def _freeze_before_service_teardown(
         self,
@@ -8217,13 +12481,23 @@ class LocalEnvoyController:
         *,
         attempted_complete: bool,
         transient_objects: Sequence[Mapping[str, object]],
+        envoy_attachments: Mapping[str, Mapping[str, object]] | None = None,
     ) -> EvidenceFreezeResult:
         objects = state["objects"]
         if type(objects) is not list:
             raise ControllerError("runtime object state is invalid")
+        if envoy_attachments is None:
+            journal = load_lifecycle_journal(self.journal_path)
+            events = journal["events"]
+            assert isinstance(events, list)
+            envoy_attachments = _envoy_attachment_expectations(events, manifest)
         for item in objects:
             if item["role"] == "envoy":
-                self._stop_and_attest_container(item, manifest)
+                self._stop_and_attest_container(
+                    item,
+                    manifest,
+                    envoy_attachment=envoy_attachments[str(item["track"])],
+                )
         freeze = self._freeze_sources(
             state, manifest, attempted_complete=attempted_complete
         )
@@ -8335,6 +12609,7 @@ class LocalEnvoyController:
         )
         state, manifest = self._load_and_reverify()
         requests = self._request_records(manifest)
+        raw_driver_results = self._private_driver_result_sources(manifest)
         raw, envoy, targets = self._copy_sources(
             state, manifest, f"collect-{time.monotonic_ns()}"
         )
@@ -8358,6 +12633,7 @@ class LocalEnvoyController:
             targets=targets,
             joins=joins,
             raw_decisions=raw,
+            raw_driver_results=raw_driver_results,
             resume_attested=True,
         )
         authoritative = authoritative_bundle_attestation(output)
@@ -8382,283 +12658,884 @@ class LocalEnvoyController:
         return value
 
     @staticmethod
-    def _close_connections(
-        connections: Mapping[LiveTrack, object],
-    ) -> list[dict[str, str]]:
-        failures: list[dict[str, str]] = []
-        for track, connection in connections.items():
-            try:
-                connection.close()  # type: ignore[attr-defined]
-            except Exception:
-                failures.append({"track": track.value, "category": "close_raised"})
-                continue
-            try:
-                if hasattr(connection, "closed"):
-                    confirmed = connection.closed is True  # type: ignore[attr-defined]
-                elif hasattr(connection, "sock"):
-                    confirmed = connection.sock is None  # type: ignore[attr-defined]
-                else:
-                    confirmed = False
-            except Exception:
-                confirmed = False
-            if not confirmed:
-                failures.append(
-                    {"track": track.value, "category": "close_unconfirmed"}
-                )
-        return failures
+    def _driver_identity_details(
+        session: DriverSession,
+        readiness_nonce: str,
+    ) -> dict[str, object]:
+        return {
+            "readiness_nonce": readiness_nonce,
+            "track": session.track,
+            "driver_id": session.full_id,
+        }
 
-    def _record_close_failures(
+    def _inspect_driver_cleanup_running(self, full_id: str) -> bool:
+        """Read one exact driver ID's closed running state for failure cleanup."""
+        _require_sha256("driver cleanup full ID", full_id)
+        result = self._execute(
+            self.docker_command(
+                "inspect",
+                "--format",
+                _DRIVER_STATE_FORMAT,
+                full_id,
+            ),
+            timeout_s=5,
+            docker=True,
+        )
+        fields = result.stdout.strip().split()
+        if len(fields) != 3 or fields[0] != full_id:
+            raise ControllerError("driver container state inspection is ambiguous")
+        running_text, status = fields[1], fields[2]
+        if running_text == "true" and status == "running":
+            return True
+        if running_text == "false" and status in {"created", "exited", "dead"}:
+            return False
+        raise ControllerError("driver container state inspection is ambiguous")
+
+    def _fail_driver_readiness_sessions(
         self,
         *,
+        execution_nonce: str,
         readiness_nonce: str,
-        stage: str,
-        primary_failure: str | None,
-        failures: list[dict[str, str]],
+        deadline_ns: int,
+        sessions: Mapping[LiveTrack, DriverSession],
+        active_identity: tuple[str, LiveTrack | None, str | None, str],
+        error: Exception,
+        primary: tuple[
+            str, LiveTrack | None, str | None, str, DriverTransportError
+        ]
+        | None = None,
+        cancellation_intents: set[LiveTrack] | None = None,
+        cancellation_attempts: set[LiveTrack] | None = None,
+        cancellation_completions: set[LiveTrack] | None = None,
     ) -> None:
+        """Poison, cancel, and clean one failed attached-driver readiness set."""
+        intents = cancellation_intents if cancellation_intents is not None else set()
+        attempts = cancellation_attempts if cancellation_attempts is not None else set()
+        completions = (
+            cancellation_completions
+            if cancellation_completions is not None
+            else set()
+        )
+        if primary is None:
+            if isinstance(error, DriverTransportError):
+                primary_error = error
+            elif active_identity[3] == "readiness_deadline":
+                primary_error = DriverTransportError("clock_failure")
+            else:
+                primary_error = DriverTransportError("controller_persistence")
+            primary = (
+                active_identity[0],
+                active_identity[1],
+                active_identity[2],
+                active_identity[3],
+                primary_error,
+            )
+        failed_scope, failed_track, failed_id, failed_stage, primary_error = primary
+        category = primary_error.category
+        try:
+            self._persist_readiness_poison_independent(
+                execution_nonce=execution_nonce,
+                readiness_nonce=readiness_nonce,
+                reason_category="driver_readiness_failed",
+            )
+        except Exception:
+            pass
+        for track, session in sessions.items():
+            if track in intents:
+                continue
+            try:
+                journal_event(
+                    self.journal_path,
+                    "readiness_cancel_intent",
+                    self._driver_identity_details(session, readiness_nonce),
+                )
+                intents.add(track)
+            except Exception:
+                pass
+            try:
+                close_instruction_stream(session)
+            except Exception:
+                pass
+        for track, session in sessions.items():
+            if track in attempts or track in completions:
+                continue
+            attempts.add(track)
+            try:
+                exit_code = attest_cancelled_exit(
+                    session,
+                    deadline_ns=deadline_ns,
+                    monotonic_ns=self.monotonic_ns,
+                )
+            except Exception:
+                continue
+            if track not in intents:
+                continue
+            try:
+                journal_event(
+                    self.journal_path,
+                    "readiness_cancel_complete",
+                    {
+                        **self._driver_identity_details(session, readiness_nonce),
+                        "exit_code": exit_code,
+                    },
+                )
+                completions.add(track)
+            except Exception:
+                pass
+        for session in sessions.values():
+            identity = self._driver_identity_details(session, readiness_nonce)
+            container_category: str | None = None
+            try:
+                running = self._inspect_driver_cleanup_running(session.full_id)
+            except Exception:
+                running = None
+                container_category = "container_inspect"
+            if running is True:
+                try:
+                    journal_event(self.journal_path, "driver_stop_intent", identity)
+                except Exception:
+                    container_category = "cleanup_persistence"
+                else:
+                    stop_deadline_ns = (
+                        time.monotonic_ns() + _DRIVER_CLEANUP_DEADLINE_NS
+                    )
+                    try:
+                        self._execute(
+                            self.docker_command(
+                                "stop", "--timeout", "1", session.full_id
+                            ),
+                            timeout_s=min(
+                                5.0,
+                                remaining_seconds(
+                                    stop_deadline_ns, time.monotonic_ns
+                                ),
+                            ),
+                            docker=True,
+                        )
+                    except Exception:
+                        container_category = "container_stop"
+                    if container_category is None:
+                        try:
+                            still_running = self._inspect_driver_cleanup_running(
+                                session.full_id
+                            )
+                        except Exception:
+                            container_category = "container_inspect"
+                        else:
+                            if still_running:
+                                container_category = "container_stop_verify"
+                    try:
+                        journal_event(
+                            self.journal_path,
+                            (
+                                "driver_stop_complete"
+                                if container_category is None
+                                else "driver_stop_failed"
+                            ),
+                            (
+                                identity
+                                if container_category is None
+                                else {**identity, "category": container_category}
+                            ),
+                        )
+                    except Exception:
+                        container_category = "cleanup_persistence"
+            cleanup_intent = False
+            try:
+                journal_event(self.journal_path, "driver_cleanup_intent", identity)
+                cleanup_intent = True
+            except Exception:
+                pass
+            cleanup = None
+            process_category: str | None = None
+            try:
+                cleanup = cleanup_driver_process(
+                    session,
+                    deadline_ns=time.monotonic_ns()
+                    + _DRIVER_CLEANUP_DEADLINE_NS,
+                    monotonic_ns=time.monotonic_ns,
+                )
+            except Exception as cleanup_error:
+                process_category = (
+                    cleanup_error.category
+                    if isinstance(cleanup_error, DriverTransportError)
+                    and cleanup_error.category in _DRIVER_READINESS_FAILURE_CATEGORIES
+                    else "protocol_invalid"
+                )
+            cleanup_category = container_category or process_category
+            if not cleanup_intent:
+                cleanup_category = cleanup_category or "cleanup_persistence"
+            if cleanup_intent:
+                try:
+                    if cleanup_category is None and cleanup is not None:
+                        journal_event(
+                            self.journal_path,
+                            "driver_cleanup_complete",
+                            {
+                                **identity,
+                                "outcome": cleanup.outcome,
+                                "exit_code": cleanup.exit_code,
+                            },
+                        )
+                    else:
+                        journal_event(
+                            self.journal_path,
+                            "driver_cleanup_failed",
+                            {
+                                **identity,
+                                "category": cleanup_category or "protocol_invalid",
+                            },
+                        )
+                except Exception:
+                    pass
+        if category not in _DRIVER_READINESS_FAILURE_CATEGORIES:
+            category = "protocol_invalid"
         try:
             journal_event(
                 self.journal_path,
-                "connection_close_failed",
+                "driver_readiness_failed",
                 {
                     "readiness_nonce": readiness_nonce,
-                    "stage": stage,
-                    "primary_failure": primary_failure,
-                    "failures": failures,
+                    "scope": failed_scope,
+                    "track": (
+                        failed_track.value if failed_track is not None else None
+                    ),
+                    "driver_id": failed_id,
+                    "category": category,
+                    "stage": failed_stage,
                 },
             )
-        except Exception as journal_error:
-            try:
-                self._persist_readiness_poison(
-                    readiness_nonce=readiness_nonce,
-                    reason_category="connection_close_ambiguous",
-                )
-            except Exception as poison_error:
-                raise ControllerError(
-                    "independent readiness poison persistence failed"
-                ) from poison_error
-            raise journal_error
+        except Exception:
+            pass
+        raise ControllerError(
+            "driver readiness failed closed; down is required"
+        ) from None
 
-    @staticmethod
-    def _reset_request_timeouts(
-        connections: Mapping[LiveTrack, object],
-    ) -> None:
-        reset_failed = False
-        for connection in connections.values():
-            try:
-                socket_object = connection.sock  # type: ignore[attr-defined]
-                settimeout = socket_object.settimeout
-                if not callable(settimeout):
-                    raise TypeError("socket settimeout is not callable")
-                settimeout(REQUEST_TIMEOUT_S)
-            except Exception:
-                reset_failed = True
-        if reset_failed:
+    def readiness(self) -> dict[str, object]:
+        """Run the request-free attached-driver readiness diagnostic once."""
+        self._assert_no_readiness_poison()
+        state, _ = self._load_and_reverify()
+        journal = load_lifecycle_journal(self.journal_path)
+        execution_nonce = str(journal["execution_nonce"])
+        _require_sha256("driver readiness execution nonce", execution_nonce)
+        events = journal["events"]
+        assert isinstance(events, list)
+        if any(
+            event["event"] in {
+                "driver_start_intent",
+                "driver_start_complete",
+                "driver_readiness_set_complete",
+                "readiness_diagnostic_complete",
+            }
+            for event in events
+        ):
             raise ControllerError(
-                "retained gateway request timeout reset failed"
-            ) from None
-
-    def _readiness_failure_event(
-        self,
-        *,
-        track: LiveTrack,
-        port: int,
-        round_number: int,
-        connect_ns: int,
-        failure_ns: int,
-        error: BaseException,
-        readiness_nonce: str,
-    ) -> None:
-        try:
-            exception_class, error_number, error_name = normalize_transport_exception(
-                error
+                "driver readiness was already started; down is required"
             )
-        except HarnessContractError as contract_error:
-            raise ControllerError("readiness transport failure is not closed") from contract_error
+        if any(
+            request["status"] != "not_attempted"
+            for request in journal["requests"].values()
+        ):
+            raise ControllerError("driver readiness requires unattempted requests")
+        drivers = {
+            str(item["track"]): item
+            for item in state["objects"]  # type: ignore[union-attr]
+            if item["role"] == "driver"
+        }
+        if set(drivers) != {track.value for track in _TRACKS}:
+            raise ControllerError("exact driver readiness identities are unavailable")
+
+        readiness_nonce = secrets.token_hex(32)
         journal_event(
             self.journal_path,
-            "readiness_connect_failed",
-            {
-                "readiness_nonce": readiness_nonce,
-                "track": track.value,
-                "host": "127.0.0.1",
-                "port": port,
-                "round": round_number,
-                "connect_monotonic_ns": connect_ns,
-                "failure_monotonic_ns": failure_ns,
-                "exception_class": exception_class,
-                "errno": error_number,
-                "errno_name": error_name,
-                "request_bytes_may_have_been_sent": False,
-            },
+            "readiness_session_started",
+            {"readiness_nonce": readiness_nonce},
+        )
+        deadline_ns = 0
+        sessions: dict[LiveTrack, DriverSession] = {}
+        cancellation_intents: set[LiveTrack] = set()
+        cancellation_attempts: set[LiveTrack] = set()
+        cancellation_completions: set[LiveTrack] = set()
+        primary: tuple[
+            str, LiveTrack | None, str | None, str, DriverTransportError
+        ] | None = None
+        active_identity: tuple[str, LiveTrack | None, str | None, str] = (
+            "controller",
+            None,
+            None,
+            "readiness_deadline",
         )
 
-    def _connect_ready_gateways(
-        self,
-        readiness_nonce: str,
-    ) -> tuple[dict[LiveTrack, object], dict[LiveTrack, int]]:
-        self._assert_no_readiness_poison()
-        _require_sha256("readiness_nonce", readiness_nonce)
-        start_ns = self._monotonic_now()
-        deadline_ns = start_ns + _READINESS_DEADLINE_NS
-        round_number = 0
-        while True:
-            round_number += 1
-            connections: dict[LiveTrack, object] = {}
-            connect_times: dict[LiveTrack, int] = {}
-            ownership_transferred = False
-            close_primary_failure = "request_processing"
-            sleep_s: float | None = None
-            try:
-                failure: tuple[
-                    LiveTrack, int, int, int, BaseException
-                ] | None = None
-                for track, port in zip(
-                    _TRACKS, self.profile.gateway_ports, strict=True
-                ):
-                    connect_ns = self._monotonic_now()
-                    remaining_ns = deadline_ns - connect_ns
-                    if remaining_ns <= 0:
-                        failure = (
-                            track,
-                            port,
-                            connect_ns,
-                            connect_ns,
-                            TimeoutError("gateway readiness deadline expired"),
-                        )
-                        break
-                    timeout_s = min(
-                        _READINESS_CONNECT_TIMEOUT_S,
-                        remaining_ns / 1_000_000_000,
+        try:
+            deadline_ns = self._monotonic_now() + _READINESS_DEADLINE_NS
+            for track in _TRACKS:
+                record = drivers[track.value]
+                full_id = str(record["id"])
+                identity = {
+                    "readiness_nonce": readiness_nonce,
+                    "track": track.value,
+                    "driver_id": full_id,
+                }
+                active_identity = ("driver", track, full_id, "start_intent")
+                journal_event(self.journal_path, "driver_start_intent", identity)
+                active_identity = ("driver", track, full_id, "process_start")
+                session = start_attached_driver(
+                    self.driver_process_factory,
+                    docker_binary=str(self.docker_binary),
+                    track=track.value,
+                    full_id=full_id,
+                )
+                sessions[track] = session
+                active_identity = ("driver", track, full_id, "start_complete")
+                journal_event(self.journal_path, "driver_start_complete", identity)
+
+            for track in _TRACKS:
+                session = sessions[track]
+                active_identity = (
+                    "driver", track, session.full_id, "readiness_record"
+                )
+                try:
+                    payload = read_readiness_record(
+                        session,
+                        deadline_ns=deadline_ns,
+                        monotonic_ns=self.monotonic_ns,
                     )
-                    try:
-                        connection = self.connection_factory(
-                            "127.0.0.1", port, timeout=timeout_s
+                    readiness_record = parse_driver_result(
+                        payload, expected_track=track.value
+                    )
+                    if (
+                        readiness_record.get("schema_version")
+                        != "kil.v3b1-driver-readiness.v1"
+                        or readiness_record.get("status") != "ready"
+                    ):
+                        raise DriverProtocolError(
+                            "driver readiness schema/status is invalid"
                         )
-                        connections[track] = connection
-                        connection.connect()  # type: ignore[attr-defined]
-                    except (OSError, http.client.HTTPException) as error:
-                        failure = (
+                except DriverProtocolError:
+                    if primary is None:
+                        primary = (
+                            "driver",
                             track,
-                            port,
-                            connect_ns,
-                            self._monotonic_now(),
+                            session.full_id,
+                            "readiness_record",
+                            DriverTransportError("protocol_invalid"),
+                        )
+                    continue
+                except DriverTransportError as error:
+                    if primary is None:
+                        primary = (
+                            "driver",
+                            track,
+                            session.full_id,
+                            "readiness_record",
                             error,
                         )
-                        break
-                    connected_ns = self._monotonic_now()
-                    if connected_ns >= deadline_ns:
-                        failure = (
+                    continue
+                active_identity = (
+                    "driver", track, session.full_id, "readiness_complete"
+                )
+                journal_event(
+                    self.journal_path,
+                    "driver_readiness_complete",
+                    {
+                        **self._driver_identity_details(session, readiness_nonce),
+                        "record_sha256": _digest_bytes(payload),
+                    },
+                )
+
+            if primary is not None:
+                raise primary[4]
+            active_identity = (
+                "controller", None, None, "readiness_set_complete"
+            )
+            journal_event(
+                self.journal_path,
+                "driver_readiness_set_complete",
+                {
+                    "readiness_nonce": readiness_nonce,
+                    "tracks": [track.value for track in _TRACKS],
+                    "complete_monotonic_ns": self._monotonic_now(),
+                },
+            )
+
+            for track in _TRACKS:
+                session = sessions[track]
+                active_identity = (
+                    "driver", track, session.full_id, "cancel_signal"
+                )
+                journal_event(
+                    self.journal_path,
+                    "readiness_cancel_intent",
+                    self._driver_identity_details(session, readiness_nonce),
+                )
+                cancellation_intents.add(track)
+                try:
+                    close_instruction_stream(session)
+                except DriverTransportError as error:
+                    if primary is None:
+                        primary = (
+                            "driver",
                             track,
-                            port,
-                            connect_ns,
-                            connected_ns,
-                            TimeoutError("gateway readiness deadline expired"),
+                            session.full_id,
+                            "cancel_signal",
+                            error,
                         )
-                        break
-                    connect_times[track] = connected_ns
-                if failure is None:
-                    ready_ns = self._monotonic_now()
-                    journal_event(
-                        self.journal_path,
-                        "readiness_connect_complete",
-                        {
-                            "readiness_nonce": readiness_nonce,
-                            "round": round_number,
-                            "host": "127.0.0.1",
-                            "tracks": [track.value for track in _TRACKS],
-                            "ports": list(self.profile.gateway_ports),
-                            "ready_monotonic_ns": ready_ns,
-                        },
+
+            for track in _TRACKS:
+                session = sessions[track]
+                active_identity = (
+                    "driver", track, session.full_id, "cancel_exit"
+                )
+                cancellation_attempts.add(track)
+                try:
+                    exit_code = attest_cancelled_exit(
+                        session,
+                        deadline_ns=deadline_ns,
+                        monotonic_ns=self.monotonic_ns,
                     )
-                    ownership_transferred = True
-                    return connections, connect_times
-
-                close_primary_failure = "readiness_connect_failed"
-                track, port, connect_ns, failure_ns, error = failure
-                self._readiness_failure_event(
-                    track=track,
-                    port=port,
-                    round_number=round_number,
-                    connect_ns=connect_ns,
-                    failure_ns=failure_ns,
-                    error=error,
-                    readiness_nonce=readiness_nonce,
+                except DriverTransportError as error:
+                    if primary is None:
+                        primary = (
+                            "driver",
+                            track,
+                            session.full_id,
+                            "cancel_exit",
+                            error,
+                        )
+                    continue
+                journal_event(
+                    self.journal_path,
+                    "readiness_cancel_complete",
+                    {
+                        **self._driver_identity_details(session, readiness_nonce),
+                        "exit_code": exit_code,
+                    },
                 )
-                if failure_ns >= deadline_ns:
-                    raise ControllerError(
-                        "gateway TCP readiness deadline expired"
-                    ) from None
-                sleep_s = min(
-                    _READINESS_ROUND_DELAY_S,
-                    (deadline_ns - failure_ns) / 1_000_000_000,
-                )
-                if sleep_s <= 0:
-                    raise ControllerError("gateway TCP readiness deadline expired")
-            finally:
-                if not ownership_transferred:
-                    active_error = sys.exc_info()[1]
-                    close_failures = self._close_connections(connections)
-                    if close_failures:
-                        try:
-                            self._record_close_failures(
-                                readiness_nonce=readiness_nonce,
-                                stage="readiness_round",
-                                primary_failure=close_primary_failure,
-                                failures=close_failures,
-                            )
-                        except Exception:
-                            if active_error is None:
-                                raise
-                        if active_error is None:
-                            raise ControllerError(
-                                "gateway readiness failed and connection closure "
-                                "is ambiguous"
-                            ) from None
-            assert sleep_s is not None
-            self.sleeper(sleep_s)
+                cancellation_completions.add(track)
 
-    def _request_failure_provenance(
+            if primary is not None:
+                raise primary[4]
+            active_identity = (
+                "controller", None, None, "diagnostic_complete"
+            )
+            journal_event(
+                self.journal_path,
+                "readiness_diagnostic_complete",
+                {
+                    "readiness_nonce": readiness_nonce,
+                    "lifecycle_mode": "diagnostic_only",
+                },
+            )
+            return {
+                "status": "diagnostic_only",
+                "readiness_nonce": readiness_nonce,
+                "ready_tracks": [track.value for track in _TRACKS],
+            }
+        except Exception as error:
+            self._fail_driver_readiness_sessions(
+                execution_nonce=execution_nonce,
+                readiness_nonce=readiness_nonce,
+                deadline_ns=deadline_ns,
+                sessions=sessions,
+                active_identity=active_identity,
+                error=error,
+                primary=primary,
+                cancellation_intents=cancellation_intents,
+                cancellation_attempts=cancellation_attempts,
+                cancellation_completions=cancellation_completions,
+            )
+            raise AssertionError("unreachable")
+
+    def _start_ready_driver_set(
+        self,
+        state: Mapping[str, object],
+    ) -> tuple[str, int, dict[LiveTrack, DriverSession]]:
+        objects = state.get("objects")
+        if type(objects) is not list:
+            raise ControllerError("exact driver readiness identities are unavailable")
+        drivers = {
+            str(item["track"]): item
+            for item in objects
+            if type(item) is dict and item.get("role") == "driver"
+        }
+        if set(drivers) != {track.value for track in _TRACKS}:
+            raise ControllerError("exact driver readiness identities are unavailable")
+        journal = load_lifecycle_journal(self.journal_path)
+        journal_events = journal["events"]
+        assert isinstance(journal_events, list)
+        if any(
+            event["event"] == "driver_start_intent"
+            for event in journal_events
+        ):
+            raise ControllerError(
+                "driver start was already attempted; down is required"
+            )
+        execution_nonce = str(journal["execution_nonce"])
+        _require_sha256("driver readiness execution nonce", execution_nonce)
+        readiness_nonce = secrets.token_hex(32)
+        journal_event(
+            self.journal_path,
+            "readiness_session_started",
+            {"readiness_nonce": readiness_nonce},
+        )
+        deadline_ns = 0
+        sessions: dict[LiveTrack, DriverSession] = {}
+        primary: tuple[
+            str, LiveTrack | None, str | None, str, DriverTransportError
+        ] | None = None
+        active_identity: tuple[str, LiveTrack | None, str | None, str] = (
+            "controller",
+            None,
+            None,
+            "readiness_deadline",
+        )
+        try:
+            deadline_ns = self._monotonic_now() + _READINESS_DEADLINE_NS
+            for track in _TRACKS:
+                full_id = str(drivers[track.value]["id"])
+                identity = {
+                    "readiness_nonce": readiness_nonce,
+                    "track": track.value,
+                    "driver_id": full_id,
+                }
+                active_identity = ("driver", track, full_id, "start_intent")
+                journal_event(self.journal_path, "driver_start_intent", identity)
+                active_identity = ("driver", track, full_id, "process_start")
+                session = start_attached_driver(
+                    self.driver_process_factory,
+                    docker_binary=str(self.docker_binary),
+                    track=track.value,
+                    full_id=full_id,
+                )
+                sessions[track] = session
+                active_identity = ("driver", track, full_id, "start_complete")
+                journal_event(self.journal_path, "driver_start_complete", identity)
+            for track in _TRACKS:
+                session = sessions[track]
+                active_identity = (
+                    "driver", track, session.full_id, "readiness_record"
+                )
+                try:
+                    payload = read_readiness_record(
+                        session,
+                        deadline_ns=deadline_ns,
+                        monotonic_ns=self.monotonic_ns,
+                    )
+                    record = parse_driver_result(payload, expected_track=track.value)
+                    if (
+                        record.get("schema_version")
+                        != "kil.v3b1-driver-readiness.v1"
+                        or record.get("status") != "ready"
+                    ):
+                        raise DriverProtocolError(
+                            "driver readiness schema/status is invalid"
+                        )
+                except DriverProtocolError:
+                    if primary is None:
+                        primary = (
+                            "driver",
+                            track,
+                            session.full_id,
+                            "readiness_record",
+                            DriverTransportError("protocol_invalid"),
+                        )
+                    continue
+                except DriverTransportError as error:
+                    if primary is None:
+                        primary = (
+                            "driver",
+                            track,
+                            session.full_id,
+                            "readiness_record",
+                            error,
+                        )
+                    continue
+                active_identity = (
+                    "driver", track, session.full_id, "readiness_complete"
+                )
+                journal_event(
+                    self.journal_path,
+                    "driver_readiness_complete",
+                    {
+                        **self._driver_identity_details(session, readiness_nonce),
+                        "record_sha256": _digest_bytes(payload),
+                    },
+                )
+            if primary is not None:
+                raise primary[4]
+            active_identity = (
+                "controller", None, None, "readiness_set_complete"
+            )
+            journal_event(
+                self.journal_path,
+                "driver_readiness_set_complete",
+                {
+                    "readiness_nonce": readiness_nonce,
+                    "tracks": [track.value for track in _TRACKS],
+                    "complete_monotonic_ns": self._monotonic_now(),
+                },
+            )
+            return readiness_nonce, deadline_ns, sessions
+        except Exception as error:
+            self._fail_driver_readiness_sessions(
+                execution_nonce=execution_nonce,
+                readiness_nonce=readiness_nonce,
+                deadline_ns=deadline_ns,
+                sessions=sessions,
+                active_identity=active_identity,
+                error=error,
+                primary=primary,
+            )
+            raise AssertionError("unreachable")
+
+    def _poison_request_driver_session(
         self,
         *,
-        stage: str,
-        error: BaseException,
-        connect_ns: int,
-        send_ns: int,
-    ) -> RequestFailureProvenance:
+        execution_nonce: str,
+        readiness_nonce: str,
+    ) -> None:
         try:
-            exception_class, error_number, error_name = normalize_transport_exception(
-                error
+            self._persist_readiness_poison_independent(
+                execution_nonce=execution_nonce,
+                readiness_nonce=readiness_nonce,
+                reason_category="driver_readiness_failed",
             )
-            return RequestFailureProvenance(
-                stage=stage,
-                exception_class=exception_class,
-                errno=error_number,
-                errno_name=error_name,
-                connect_monotonic_ns=connect_ns,
-                send_monotonic_ns=send_ns,
-                failure_monotonic_ns=self._monotonic_now(),
-                request_bytes_may_have_been_sent=True,
-                attempt_count=1,
-                retry_performed=False,
-            )
-        except HarnessContractError as contract_error:
-            raise ControllerError("request failure provenance is not closed") from contract_error
+        except Exception:
+            pass
 
-    def _record_transport_failure(
+    def _cleanup_request_driver(self, session: DriverSession) -> None:
+        try:
+            cleanup_driver_process(
+                session,
+                deadline_ns=time.monotonic_ns() + _DRIVER_CLEANUP_DEADLINE_NS,
+                monotonic_ns=time.monotonic_ns,
+            )
+        except Exception:
+            pass
+
+    @staticmethod
+    def _driver_cleanup_failure_category(error: Exception) -> str:
+        if (
+            isinstance(error, DriverTransportError)
+            and error.category in _DRIVER_READINESS_FAILURE_CATEGORIES
+        ):
+            return error.category
+        return "protocol_invalid"
+
+    def _recover_uncommanded_driver(
         self,
         *,
         track: LiveTrack,
-        stage: str,
-        error: BaseException,
-        connect_ns: int,
-        send_ns: int,
-    ) -> None:
-        provenance = self._request_failure_provenance(
-            stage=stage,
-            error=error,
-            connect_ns=connect_ns,
-            send_ns=send_ns,
+        session: DriverSession,
+        identity: Mapping[str, object],
+        observed_cleanup_error: Exception | None = None,
+    ) -> _DriverCancellationOutcome:
+        """Physically clean and durably close one ambiguous cancellation."""
+        cleanup_intent = False
+        try:
+            journal_event(self.journal_path, "driver_cleanup_intent", identity)
+            cleanup_intent = True
+        except Exception:
+            pass
+
+        cleanup = None
+        cleanup_category = (
+            None
+            if observed_cleanup_error is None
+            else self._driver_cleanup_failure_category(observed_cleanup_error)
         )
+        if observed_cleanup_error is None:
+            try:
+                cleanup = cleanup_driver_process(
+                    session,
+                    deadline_ns=(
+                        time.monotonic_ns() + _DRIVER_CLEANUP_DEADLINE_NS
+                    ),
+                    monotonic_ns=time.monotonic_ns,
+                )
+            except Exception as error:
+                cleanup_category = self._driver_cleanup_failure_category(error)
+
+        if not cleanup_intent:
+            try:
+                journal_event(self.journal_path, "driver_cleanup_intent", identity)
+                cleanup_intent = True
+            except Exception:
+                return _DriverCancellationOutcome(
+                    track=track,
+                    driver_id=session.full_id,
+                    status="cleanup_ambiguous",
+                    category="cleanup_persistence",
+                )
+
+        if cleanup_category is None and cleanup is not None:
+            event_name = "driver_cleanup_complete"
+            details = {
+                **identity,
+                "outcome": cleanup.outcome,
+                "exit_code": cleanup.exit_code,
+            }
+            outcome = _DriverCancellationOutcome(
+                track=track,
+                driver_id=session.full_id,
+                status="cleanup_complete",
+                category=None,
+            )
+        else:
+            event_name = "driver_cleanup_failed"
+            details = {
+                **identity,
+                "category": cleanup_category or "protocol_invalid",
+            }
+            outcome = _DriverCancellationOutcome(
+                track=track,
+                driver_id=session.full_id,
+                status="cleanup_failed",
+                category=cleanup_category or "protocol_invalid",
+            )
+        try:
+            journal_event(self.journal_path, event_name, details)
+            return outcome
+        except Exception:
+            fallback = {**identity, "category": "cleanup_persistence"}
+            try:
+                journal_event(
+                    self.journal_path,
+                    "driver_cleanup_failed",
+                    fallback,
+                )
+            except Exception:
+                return _DriverCancellationOutcome(
+                    track=track,
+                    driver_id=session.full_id,
+                    status="cleanup_ambiguous",
+                    category="cleanup_persistence",
+                )
+            return _DriverCancellationOutcome(
+                track=track,
+                driver_id=session.full_id,
+                status="cleanup_failed",
+                category="cleanup_persistence",
+            )
+
+    def _cancel_uncommanded_drivers(
+        self,
+        *,
+        first_track: LiveTrack,
+        readiness_nonce: str,
+        sessions: Mapping[LiveTrack, DriverSession],
+    ) -> tuple[_DriverCancellationOutcome, ...]:
+        cancel = False
+        selected: list[tuple[LiveTrack, DriverSession, dict[str, object]]] = []
+        signal_failures: dict[LiveTrack, Exception] = {}
+        for track in _TRACKS:
+            if track is first_track:
+                cancel = True
+            if not cancel:
+                continue
+            session = sessions[track]
+            identity = self._driver_identity_details(session, readiness_nonce)
+            selected.append((track, session, identity))
+            try:
+                journal_event(self.journal_path, "readiness_cancel_intent", identity)
+            except Exception as error:
+                signal_failures[track] = error
+            try:
+                close_instruction_stream(session)
+            except Exception as error:
+                signal_failures.setdefault(track, error)
+
+        outcomes: list[_DriverCancellationOutcome] = []
+        for track, session, identity in selected:
+            if track in signal_failures:
+                outcomes.append(
+                    self._recover_uncommanded_driver(
+                        track=track,
+                        session=session,
+                        identity=identity,
+                    )
+                )
+                continue
+            try:
+                exit_code = attest_cancelled_exit(
+                    session,
+                    deadline_ns=(
+                        time.monotonic_ns() + _DRIVER_CLEANUP_DEADLINE_NS
+                    ),
+                    monotonic_ns=time.monotonic_ns,
+                )
+                journal_event(
+                    self.journal_path,
+                    "readiness_cancel_complete",
+                    {**identity, "exit_code": exit_code},
+                )
+            except Exception:
+                outcomes.append(
+                    self._recover_uncommanded_driver(
+                        track=track,
+                        session=session,
+                        identity=identity,
+                    )
+                )
+                continue
+            try:
+                cleanup_driver_process(
+                    session,
+                    deadline_ns=(
+                        time.monotonic_ns() + _DRIVER_CLEANUP_DEADLINE_NS
+                    ),
+                    monotonic_ns=time.monotonic_ns,
+                )
+            except Exception as error:
+                outcomes.append(
+                    self._recover_uncommanded_driver(
+                        track=track,
+                        session=session,
+                        identity=identity,
+                        observed_cleanup_error=error,
+                    )
+                )
+                continue
+            outcomes.append(
+                _DriverCancellationOutcome(
+                    track=track,
+                    driver_id=session.full_id,
+                    status="clean_cancel",
+                    category=None,
+                )
+            )
+        return tuple(outcomes)
+
+    def _record_driver_control_failure(
+        self,
+        track: LiveTrack,
+        *,
+        manifest: Mapping[str, object],
+        stage: str,
+        request_bytes_may_have_been_sent: bool,
+    ) -> None:
+        provenance = {
+            "stage": stage,
+            "failure_monotonic_ns": self._monotonic_now(),
+            "request_bytes_may_have_been_sent": request_bytes_may_have_been_sent,
+            "attempt_count": 1,
+            "retry_performed": False,
+        }
+        result = _driver_failure_result_from_provenance(track, provenance)
+        raw_root = (
+            self.private_root / "driver-results" / str(manifest["run_id"])
+        )
+        _require_contained(raw_root, self.private_root, "private driver result root")
+        try:
+            _write_file(
+                raw_root / f"{track.value}.json",
+                canonical_record(result),
+                0o600,
+            )
+        except (ControllerError, OSError):
+            # The closed journal provenance remains sufficient to reconstruct
+            # the identical bytes if the private result write is the failure.
+            pass
         _complete_request_attempt(
             self.journal_path,
             track,
@@ -8669,46 +13546,101 @@ class LocalEnvoyController:
 
     def run(self) -> Path:
         self._assert_no_readiness_poison()
+        current = load_lifecycle_journal(self.journal_path)
+        current_events = current["events"]
+        assert isinstance(current_events, list)
+        if any(
+            event["event"] == "driver_start_intent"
+            for event in current_events
+        ):
+            raise ControllerError(
+                "driver start was already attempted; down is required"
+            )
+        if any(
+            event["event"] == "readiness_diagnostic_complete"
+            for event in current_events
+        ):
+            raise ControllerError(
+                "readiness diagnostic is teardown-only; down is required"
+            )
         state, manifest = self._load_and_reverify()
         runtime_root = _runtime_root(self.root, manifest)
         request_path = runtime_root / "requests.jsonl"
         if request_path.exists():
             raise ControllerError("central request was already attempted")
         journal = load_lifecycle_journal(self.journal_path)
-        if journal["manifest_sha256"] != _digest_file(Path(str(state["manifest_path"]))):
+        if journal["manifest_sha256"] != _digest_file(
+            Path(str(state["manifest_path"]))
+        ):
             raise ControllerError("request lifecycle journal does not bind active manifest")
         if any(
             request["status"] != "not_attempted"
             for request in journal["requests"].values()
         ):
             raise ControllerError("central request was already attempted; replay is forbidden")
-        readiness_nonce = secrets.token_hex(32)
-        journal_event(
-            self.journal_path,
-            "readiness_session_started",
-            {"readiness_nonce": readiness_nonce},
-        )
-        connections, connect_times = self._connect_ready_gateways(readiness_nonce)
-        primary_failure: str | None = None
+
+        execution_nonce = str(journal["execution_nonce"])
+        _require_sha256("request execution nonce", execution_nonce)
+        readiness_nonce, deadline_ns, sessions = self._start_ready_driver_set(state)
+        active_track = _TRACKS[0]
+        active_stage = "instruction_write"
+        instruction_delivery_started = False
+        driver_terminal = False
+        transport_provenance: Mapping[str, object] | None = None
+        q_state: str | None = None
+        headers: dict[str, str] = {}
+        instruction_payload = b""
         try:
-            self._reset_request_timeouts(connections)
             private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
             records: list[dict[str, object]] = []
             comparison = {
                 "method": "POST",
                 "path": "/consequential/admin",
-                "authorization_sha256": _digest_bytes(AUTHORIZATION.encode("utf-8")),
+                "authorization_sha256": _digest_bytes(
+                    AUTHORIZATION.encode("utf-8")
+                ),
                 "adversarial_headers": dict(ADVERSARIAL_HEADERS),
                 "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
             }
             comparison_sha = comparison_facts_sha256(comparison)
-            for track, port in zip(_TRACKS, self.profile.gateway_ports, strict=True):
+            objects = {
+                (str(item["track"]), str(item["role"])): item
+                for item in state["objects"]  # type: ignore[index]
+                if type(item) is dict
+            }
+            definitions = {
+                str(item["track"]): item
+                for item in manifest["driver_definitions"]  # type: ignore[index]
+                if type(item) is dict
+            }
+
+            for track in _TRACKS:
+                active_track = track
+                active_stage = "instruction_write"
+                instruction_delivery_started = False
+                driver_terminal = False
+                transport_provenance = None
+                session = sessions[track]
                 issued = int(time.time())
                 q_state = None
                 if track is LiveTrack.SIGNED_STATE_ONLY:
-                    q_state = issue_q_state(_claims("kil-v3-signed", issued), private_key)
+                    q_state = issue_q_state(
+                        _claims("kil-v3-signed", issued), private_key
+                    )
                 elif track is LiveTrack.SIGNED_PLUS_LOCAL_REDUCE:
-                    q_state = issue_q_state(_claims("kil-v3-local", issued), private_key)
+                    q_state = issue_q_state(
+                        _claims("kil-v3-local", issued), private_key
+                    )
+                if q_state is not None and int(time.time()) >= issued + 10:
+                    raise ControllerError(
+                        "signed-state request validity expired before intent"
+                    )
+
+                intent = claim_request_attempt(
+                    self.journal_path,
+                    track,
+                    readiness_nonce=readiness_nonce,
+                )
                 headers = {
                     "authorization": AUTHORIZATION,
                     "x-request-id": str(manifest["request_id"]),
@@ -8718,98 +13650,137 @@ class LocalEnvoyController:
                 }
                 if q_state is not None:
                     headers["x-kil-q-state"] = q_state
-                if q_state is not None and int(time.time()) >= issued + 10:
-                    raise ControllerError("signed-state request validity expired before send")
-                claim_request_attempt(
-                    self.journal_path,
-                    track,
-                    readiness_nonce=readiness_nonce,
+                instruction = {
+                    "schema_version": "kil.v3b1-driver-instruction.v1",
+                    "track": track.value,
+                    "method": "POST",
+                    "path": "/consequential/admin",
+                    "body_byte_count": 0,
+                    "headers": headers,
+                }
+                instruction_payload = canonical_record(instruction)
+                parse_driver_instruction(
+                    instruction_payload, expected_track=track.value
                 )
-                connection = connections[track]
-                send_ns = self._monotonic_now()
-                try:
-                    connection.request(  # type: ignore[attr-defined]
-                        "POST", "/consequential/admin", body=b"", headers=headers
+                q_state_sha256 = (
+                    None
+                    if q_state is None
+                    else _digest_bytes(q_state.encode("utf-8"))
+                )
+                identity = {
+                    **self._driver_identity_details(session, readiness_nonce),
+                    "intent_id": intent["intent_id"],
+                }
+                journal_event(
+                    self.journal_path,
+                    "driver_instruction_write_intent",
+                    identity,
+                )
+                instruction_delivery_started = True
+                write_instruction(
+                    session,
+                    instruction_payload,
+                    deadline_ns=deadline_ns,
+                    monotonic_ns=self.monotonic_ns,
+                )
+                instruction = None
+                instruction_payload = b""
+                headers = {}
+                q_state = None
+                active_stage = "stdout_read"
+                raw_result = read_driver_result(
+                    session,
+                    deadline_ns=deadline_ns,
+                    monotonic_ns=self.monotonic_ns,
+                )
+                result = parse_driver_result(
+                    raw_result, expected_track=track.value
+                )
+                if result["schema_version"] != "kil.v3b1-driver-result.v1":
+                    raise DriverProtocolError(
+                        "terminal driver result schema is invalid"
                     )
-                except (OSError, http.client.HTTPException) as error:
-                    primary_failure = "request_send"
-                    self._record_transport_failure(
-                        track=track,
-                        stage="request_send",
-                        error=error,
-                        connect_ns=connect_times[track],
-                        send_ns=send_ns,
-                    )
+                active_stage = "process_wait"
+                expected_exit = 0 if result["status"] == "complete" else 1
+                attest_driver_result_exit(
+                    session,
+                    expected_exit_code=expected_exit,
+                    deadline_ns=deadline_ns,
+                    monotonic_ns=self.monotonic_ns,
+                )
+                driver_terminal = True
+                active_stage = "termination"
+                cleanup_driver_process(
+                    session,
+                    deadline_ns=time.monotonic_ns()
+                    + _DRIVER_CLEANUP_DEADLINE_NS,
+                    monotonic_ns=time.monotonic_ns,
+                )
+
+                result_sha = _digest_bytes(raw_result)
+                definition = definitions[track.value]
+                definition_sha = _digest_bytes(canonical_record(definition))
+                raw_root = (
+                    self.private_root
+                    / "driver-results"
+                    / str(manifest["run_id"])
+                )
+                _require_contained(
+                    raw_root, self.private_root, "private driver result root"
+                )
+                raw_path = raw_root / f"{track.value}.json"
+                _write_file(raw_path, raw_result, 0o600)
+                journal_event(
+                    self.journal_path,
+                    "driver_result_persisted",
+                    {
+                        **identity,
+                        "driver_definition_sha256": definition_sha,
+                        "result_sha256": result_sha,
+                    },
+                )
+
+                if result["status"] == "transport_failure":
+                    transport_provenance = {
+                        "attempt_count": result["attempt_count"],
+                        "connect_monotonic_ns": result["connect_monotonic_ns"],
+                        "driver_definition_sha256": definition_sha,
+                        "driver_full_id": session.full_id,
+                        "driver_request_bytes_may_have_been_sent": result[
+                            "request_bytes_may_have_been_sent"
+                        ],
+                        "driver_result_schema_version": result["schema_version"],
+                        "driver_result_sha256": result_sha,
+                        "driver_status": result["status"],
+                        "errno": result["errno"],
+                        "errno_name": result["errno_name"],
+                        "exception_class": result["exception_class"],
+                        "failure_monotonic_ns": result["failure_monotonic_ns"],
+                        "provenance_source": "linux_request_driver",
+                        "request_bytes_may_have_been_sent": True,
+                        "retry_performed": result["retry_performed"],
+                        "send_monotonic_ns": result["send_monotonic_ns"],
+                        "stage": result["stage"],
+                        "track": track.value,
+                    }
+                    _validate_driver_transport_provenance(transport_provenance)
                     raise ControllerError(
-                        "central request failed during request_send without retry"
-                    ) from None
-                try:
-                    response = connection.getresponse()  # type: ignore[attr-defined]
-                except (OSError, http.client.HTTPException) as error:
-                    primary_failure = "response_headers"
-                    self._record_transport_failure(
-                        track=track,
-                        stage="response_headers",
-                        error=error,
-                        connect_ns=connect_times[track],
-                        send_ns=send_ns,
+                        "driver reported terminal transport failure"
                     )
-                    raise ControllerError(
-                        "central request failed during response_headers without retry"
-                    ) from None
-                try:
-                    response.read(4096)
-                except (OSError, http.client.HTTPException) as error:
-                    primary_failure = "response_body"
-                    self._record_transport_failure(
-                        track=track,
-                        stage="response_body",
-                        error=error,
-                        connect_ns=connect_times[track],
-                        send_ns=send_ns,
-                    )
-                    raise ControllerError(
-                        "central request failed during response_body without retry"
-                    ) from None
-                receive_ns = self._monotonic_now()
-                if q_state is not None and int(time.time()) >= issued + 10:
-                    _complete_request_attempt(
-                        self.journal_path,
-                        track,
-                        success=False,
-                        record_sha256=None,
-                    )
-                    raise ControllerError(
-                        "signed-state request missed its 10-second validity window"
-                    )
-                client_digest = response.getheader("x-kil-decision-digest")
-                if response.status in {200, 403}:
-                    client_digest = _exact_digest(
-                        "client response decision digest", client_digest
-                    )
-                elif response.status >= 500:
-                    if client_digest is not None:
-                        _complete_request_attempt(
-                            self.journal_path,
-                            track,
-                            success=False,
-                            record_sha256=None,
-                        )
-                        raise ControllerError(
-                            "authz 5xx exposed a forbidden client digest"
-                        )
-                else:
-                    _complete_request_attempt(
-                        self.journal_path,
-                        track,
-                        success=False,
-                        record_sha256=None,
-                    )
-                    raise ControllerError(
-                        "client received an unapproved response status"
-                    )
+                if result["status"] != "complete":
+                    raise ControllerError("driver result status is terminal")
+
+                expected_status = (
+                    403
+                    if track is LiveTrack.SIGNED_PLUS_LOCAL_REDUCE
+                    else 200
+                )
+                if result["response_status"] != expected_status:
+                    raise ControllerError("driver response status is invalid")
+
+                driver_object = objects[(track.value, "driver")]
                 record = {
-                    "schema_version": "kil.v3b1-request.v1",
+                    "schema_version": "kil.v3b1-request.v2",
                     "run_id": manifest["run_id"],
                     "request_id": manifest["request_id"],
                     "track": track.value,
@@ -8819,52 +13790,113 @@ class LocalEnvoyController:
                     "retry_observed": False,
                     "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
                     "authorization_sha256": comparison["authorization_sha256"],
-                    "q_state_present": q_state is not None,
-                    "q_state_sha256": (
-                        None
-                        if q_state is None
-                        else _digest_bytes(q_state.encode("utf-8"))
+                    "q_state_present": (
+                        track is not LiveTrack.CREDENTIAL_POLICY_BASELINE
                     ),
+                    "q_state_sha256": q_state_sha256,
                     "adversarial_headers": dict(ADVERSARIAL_HEADERS),
                     "comparison_facts_sha256": comparison_sha,
-                    "send_monotonic_ns": send_ns,
-                    "receive_monotonic_ns": receive_ns,
-                    "client_response_status": response.status,
-                    "client_decision_digest": client_digest,
+                    "send_monotonic_ns": result["send_monotonic_ns"],
+                    "receive_monotonic_ns": result["receive_monotonic_ns"],
+                    "client_response_status": result["response_status"],
+                    "client_decision_digest": result["decision_digest"],
+                    "request_transport": "in_network_request_driver",
+                    "driver_role": "request_driver",
+                    "driver_full_id": session.full_id,
+                    "driver_image_id": driver_object["image_id"],
+                    "driver_definition_sha256": definition_sha,
+                    "driver_result_sha256": result_sha,
                 }
                 _request_closed(record)
                 records.append(record)
                 _write_file(request_path, _jsonl_payload(records), 0o444)
+                record_sha = _digest_bytes(_canonical_bytes(record))
+                journal_event(
+                    self.journal_path,
+                    "request_record_persisted",
+                    {
+                        "track": track.value,
+                        "intent_id": intent["intent_id"],
+                        "record_sha256": record_sha,
+                    },
+                )
                 _complete_request_attempt(
                     self.journal_path,
                     track,
                     success=True,
-                    record_sha256=_digest_bytes(_canonical_bytes(record)),
+                    record_sha256=record_sha,
                 )
-        finally:
-            close_failures = self._close_connections(connections)
-            if close_failures:
-                if primary_failure is None and any(
-                    request["status"] == "intent_persisted"
-                    for request in load_lifecycle_journal(self.journal_path)[
-                        "requests"
-                    ].values()
-                ):
-                    primary_failure = "request_processing"
-                self._record_close_failures(
+        except Exception as request_error:
+            instruction_payload = b""
+            headers = {}
+            q_state = None
+            failure_stage = _driver_control_failure_stage(
+                active_stage, request_error
+            )
+            self._poison_request_driver_session(
+                execution_nonce=execution_nonce,
+                readiness_nonce=readiness_nonce,
+            )
+            request_status = None
+            try:
+                failed_journal = load_lifecycle_journal(self.journal_path)
+                failed_requests = failed_journal["requests"]
+                assert isinstance(failed_requests, dict)
+                failed_request = failed_requests[active_track.value]
+                assert isinstance(failed_request, dict)
+                request_status = failed_request["status"]
+            except Exception:
+                request_status = None
+            if request_status == "intent_persisted":
+                try:
+                    if transport_provenance is not None:
+                        _complete_request_attempt(
+                            self.journal_path,
+                            active_track,
+                            success=False,
+                            record_sha256=None,
+                            failure_provenance=transport_provenance,
+                        )
+                    else:
+                        self._record_driver_control_failure(
+                            active_track,
+                            manifest=manifest,
+                            stage=failure_stage,
+                            request_bytes_may_have_been_sent=(
+                                instruction_delivery_started
+                            ),
+                        )
+                except Exception:
+                    pass
+            current_index = _TRACKS.index(active_track)
+            if instruction_delivery_started or driver_terminal:
+                self._cleanup_request_driver(sessions[active_track])
+                cancel_index = current_index + 1
+            else:
+                cancel_index = current_index
+            if cancel_index < len(_TRACKS):
+                cancellation_outcomes = self._cancel_uncommanded_drivers(
+                    first_track=_TRACKS[cancel_index],
                     readiness_nonce=readiness_nonce,
-                    stage="request_finalization",
-                    primary_failure=primary_failure,
-                    failures=close_failures,
+                    sessions=sessions,
                 )
-                if primary_failure is None:
-                    raise ControllerError(
-                        "central request connection closure is ambiguous"
-                    ) from None
-                raise ControllerError(
-                    f"central request failed during {primary_failure}; "
-                    "connection closure is ambiguous"
-                ) from None
+                expected_cancellations = _TRACKS[cancel_index:]
+                if (
+                    tuple(item.track for item in cancellation_outcomes)
+                    != expected_cancellations
+                    or any(
+                        item.status
+                        not in {"clean_cancel", "cleanup_complete"}
+                        for item in cancellation_outcomes
+                    )
+                ):
+                    self._poison_request_driver_session(
+                        execution_nonce=execution_nonce,
+                        readiness_nonce=readiness_nonce,
+                    )
+            raise ControllerError(
+                "driver request failed terminally; teardown is required"
+            ) from None
         return self.collect()
 
     def _assert_only_recorded_managed(
@@ -8894,6 +13926,111 @@ class LocalEnvoyController:
             "container", containers, expected_containers
         )
         self._require_exact_inventory("network", networks, expected_networks)
+
+    def _complete_topology_absence_details(
+        self, manifest: Mapping[str, object]
+    ) -> dict[str, object]:
+        """Reconstruct the exact fifteen/six identity commitment."""
+        events = load_lifecycle_journal(self.journal_path)["events"]
+        assert isinstance(events, list)
+        containers: list[dict[str, str]] = []
+        for item in manifest["containers"]:  # type: ignore[index]
+            name = str(item["name"])
+            transition, object_id = _creation_transition(
+                events, "container", name
+            )
+            if transition != "complete" or object_id is None:
+                raise ControllerError("complete lifecycle lacks container identity")
+            containers.append({"id": object_id, "name": name})
+        for track in _TRACKS:
+            name = (
+                f"kil-v3b1-validate-{_track_slug(track)}-"
+                f"{str(manifest['content_identity_sha256'])[:12]}"
+            )
+            transition, object_id = _creation_transition(
+                events, "validator", name
+            )
+            if transition != "complete" or object_id is None:
+                raise ControllerError("complete lifecycle lacks validator identity")
+            containers.append({"id": object_id, "name": name})
+        networks: list[dict[str, str]] = []
+        for item in manifest["networks"]:  # type: ignore[index]
+            name = str(item["name"])
+            transition, object_id = _creation_transition(events, "network", name)
+            if transition != "complete" or object_id is None:
+                raise ControllerError("complete lifecycle lacks network identity")
+            networks.append({"id": object_id, "name": name})
+        if len(containers) != 15 or len(networks) != 6:
+            raise ControllerError("complete topology identity count is invalid")
+        for label, identities in (
+            ("container", containers),
+            ("network", networks),
+        ):
+            if len({item["id"] for item in identities}) != len(identities):
+                raise ControllerError(
+                    f"complete topology {label} identity is duplicated"
+                )
+            if len({item["name"] for item in identities}) != len(identities):
+                raise ControllerError(
+                    f"complete topology {label} name is duplicated"
+                )
+        for identity in containers:
+            if _removal_transition(events, "container", identity) != "complete":
+                raise ControllerError("complete topology container is not absent")
+        for identity in networks:
+            if _removal_transition(events, "network", identity) != "complete":
+                raise ControllerError("complete topology network is not absent")
+        return {
+            "container_count": 15,
+            "network_count": 6,
+            "container_identity_sha256": _digest_bytes(
+                canonical_json(
+                    sorted(containers, key=lambda item: (item["name"], item["id"]))
+                ).encode("utf-8")
+            ),
+            "network_identity_sha256": _digest_bytes(
+                canonical_json(
+                    sorted(networks, key=lambda item: (item["name"], item["id"]))
+                ).encode("utf-8")
+            ),
+            "survivor_containers": [],
+            "survivor_networks": [],
+        }
+
+    def _attest_complete_topology_absence(
+        self, manifest: Mapping[str, object]
+    ) -> None:
+        """Bind the exact fifteen/six owned identities to final empty inventories."""
+        details = self._complete_topology_absence_details(manifest)
+        events = load_lifecycle_journal(self.journal_path)["events"]
+        assert isinstance(events, list)
+        recorded = [
+            event
+            for event in events
+            if event.get("event") == "topology_absence_attested"
+        ]
+        if recorded:
+            if len(recorded) != 1 or recorded[0]["details"] != details:
+                raise ControllerError("topology absence attestation changed")
+            return
+        journal_event(self.journal_path, "topology_absence_attested", details)
+
+    def _require_complete_topology_absence(
+        self, manifest: Mapping[str, object]
+    ) -> None:
+        """Refuse publication unless its exact full-topology absence is durable."""
+        expected = self._complete_topology_absence_details(manifest)
+        events = load_lifecycle_journal(self.journal_path)["events"]
+        assert isinstance(events, list)
+        recorded = [
+            event
+            for event in events
+            if event.get("event") == "topology_absence_attested"
+        ]
+        if len(recorded) != 1 or recorded[0].get("details") != expected:
+            raise ControllerError(
+                "complete topology absence proof is required before publication"
+            )
 
     def _prepare_teardown_evidence(
         self,
@@ -8928,6 +14065,7 @@ class LocalEnvoyController:
             }
             copied_envoy: list[dict[str, object]] = []
             copied_targets: list[dict[str, object]] = []
+            copied_driver_results = self._private_driver_result_sources(manifest)
             completed = freeze.complete
             if completed:
                 if set(copied_raw) != set(_TRACKS):
@@ -8972,6 +14110,7 @@ class LocalEnvoyController:
                     targets=copied_targets,
                     joins=joins,
                     raw_decisions=copied_raw,
+                    raw_driver_results=copied_driver_results,
                     resume_attested=True,
                 )
                 if {
@@ -8988,24 +14127,7 @@ class LocalEnvoyController:
                 if (output / "targets.jsonl").read_bytes() != _jsonl_payload(copied_targets):
                     raise ControllerError("stopped-container target byte comparison failed")
             else:
-                partial_requests: list[dict[str, object]] | None = None
-                request_path = _runtime_root(self.root, manifest) / "requests.jsonl"
-                partial_requests = (
-                    _parse_jsonl_bytes(
-                        request_path.read_bytes(),
-                        "incomplete central requests",
-                        _request_closed,
-                        allow_empty=True,
-                    )
-                    if request_path.is_file() and not request_path.is_symlink()
-                    else []
-                )
-                if partial_requests:
-                    validate_request_journal(
-                        partial_requests,
-                        load_lifecycle_journal(self.journal_path),
-                        require_all=False,
-                    )
+                partial_requests = self._failure_request_records(manifest)
                 failure_raw_decisions = {
                     track: (
                         raw[(track.value, "authz_decisions")]
@@ -9045,6 +14167,7 @@ class LocalEnvoyController:
                     manifest,
                     requests=partial_requests,
                     raw_decisions=failure_raw_decisions,
+                    raw_driver_results=copied_driver_results,
                     envoy=failure_envoy,
                     targets=failure_targets,
                     reset=True,
@@ -9052,13 +14175,16 @@ class LocalEnvoyController:
             source_attestations: list[dict[str, object]] = []
             if completed:
                 by_track_role = {
-                    (item["track"], item["role"]): item for item in objects
+                    (item["track"], item["role"]): item
+                    for item in objects
+                    if item["role"] in {"authz", "target", "envoy"}
                 }
                 if len(by_track_role) != 9:
                     bound_state = load_bound_active_state(self.state_path)
                     by_track_role = {
                         (item["track"], item["role"]): item
                         for item in bound_state["objects"]
+                        if item["role"] in {"authz", "target", "envoy"}
                     }
                 for track in _TRACKS:
                     target_records = [
@@ -9119,6 +14245,46 @@ class LocalEnvoyController:
             )
             return None, [], False, reason
 
+    def _close_stranded_request_intents(
+        self, manifest: Mapping[str, object]
+    ) -> bool:
+        """Close crash-stranded intents conservatively without any replay."""
+        journal = load_lifecycle_journal(self.journal_path)
+        requests = journal["requests"]
+        events = journal["events"]
+        assert isinstance(requests, dict)
+        assert isinstance(events, list)
+        recovered = False
+        for track in _TRACKS:
+            request = requests[track.value]
+            assert isinstance(request, dict)
+            if request["status"] != "intent_persisted":
+                continue
+            intent_id = request["intent_id"]
+            instruction_intents = [
+                event
+                for event in events
+                if event.get("event") == "driver_instruction_write_intent"
+                and isinstance(event.get("details"), dict)
+                and event["details"].get("track") == track.value
+                and event["details"].get("intent_id") == intent_id
+            ]
+            if len(instruction_intents) > 1:
+                raise ControllerError("stranded driver instruction intent is duplicated")
+            self._record_driver_control_failure(
+                track,
+                manifest=manifest,
+                stage=("termination" if instruction_intents else "instruction_write"),
+                request_bytes_may_have_been_sent=bool(instruction_intents),
+            )
+            recovered = True
+            journal = load_lifecycle_journal(self.journal_path)
+            requests = journal["requests"]
+            events = journal["events"]
+            assert isinstance(requests, dict)
+            assert isinstance(events, list)
+        return recovered
+
     def down(self) -> Path:
         journal = load_lifecycle_journal(self.journal_path)
         listed = self._execute(["colima", "list", "--json"], timeout_s=30)
@@ -9176,6 +14342,8 @@ class LocalEnvoyController:
             )
             _validate_manifest(manifest)
             published = self.evidence_root / str(manifest["run_id"])
+            if any(event["event"] == "up_complete" for event in events):
+                self._require_complete_topology_absence(manifest)
 
             def complete_publication(public_manifest_sha256: str) -> None:
                 _require_sha256(
@@ -9240,7 +14408,13 @@ class LocalEnvoyController:
                     )
                     if prepared is None:
                         provisional = _prepare_failure_provisional(
-                            self._private_provisional_root(), manifest, reset=True
+                            self._private_provisional_root(),
+                            manifest,
+                            requests=self._failure_request_records(manifest),
+                            raw_driver_results=self._private_driver_result_sources(
+                                manifest
+                            ),
+                            reset=True,
                         )
                         authoritative = authoritative_bundle_attestation(
                             provisional
@@ -9465,14 +14639,30 @@ class LocalEnvoyController:
         assert isinstance(objects, list)
         transient_objects = state.get("transient_objects", [])
         assert isinstance(transient_objects, list)
-        ordered = list(transient_objects) + [
+        drivers = [item for item in objects if item["role"] == "driver"]
+        running_ordered = [
             item
-            for role in ("envoy", "authz", "target")
+            for role in _TEARDOWN_SERVICE_ROLES
             for item in objects
             if item["role"] == role
-        ]
+        ] + list(transient_objects)
+        ordered = [
+            item
+            for role in _TEARDOWN_REMOVAL_ROLES
+            for item in objects
+            if item["role"] == role
+        ] + list(transient_objects)
         lifecycle_events = journal["events"]
         assert isinstance(lifecycle_events, list)
+        envoy_attachments = _envoy_attachment_expectations(
+            lifecycle_events, manifest
+        )
+        recorded_attachments = state.get("envoy_attachments")
+        if (
+            recorded_attachments is not None
+            and recorded_attachments != envoy_attachments
+        ):
+            raise ControllerError("recovered Envoy attachment state changed")
         up_complete_observed = any(
             event["event"] == "up_complete" for event in lifecycle_events
         )
@@ -9485,6 +14675,15 @@ class LocalEnvoyController:
             up_complete_observed and partial_rejections
         ):
             raise ControllerError("partial-up evidence status is contradictory")
+        stranded_request_recovered = self._close_stranded_request_intents(
+            manifest
+        )
+        driver_authorities = {
+            str(item["track"]): self._quiesce_driver_for_teardown(
+                item, manifest
+            )
+            for item in drivers
+        }
         failure_details: dict[str, object] | None = None
         failure_intent_sequence: int | None = None
         if not up_complete_observed:
@@ -9548,19 +14747,32 @@ class LocalEnvoyController:
                         "partial-up failure replacement provenance changed"
                     )
                 failure_intent_sequence = int(failure_intent["sequence"])
-            for item in ordered:
-                self._stop_and_attest_container(item, manifest)
+            for item in running_ordered:
+                self._stop_and_attest_container(
+                    item,
+                    manifest,
+                    envoy_attachment=(
+                        envoy_attachments[str(item["track"])]
+                        if item["role"] == "envoy"
+                        else None
+                    ),
+                )
         else:
-            requests_state = journal["requests"]
+            current_journal = load_lifecycle_journal(self.journal_path)
+            requests_state = current_journal["requests"]
             assert isinstance(requests_state, dict)
             attempted_complete = all(
                 item["status"] == "completed" for item in requests_state.values()
+            ) and not stranded_request_recovered and all(
+                authority["request_eligible"] is True
+                for authority in driver_authorities.values()
             )
             freeze = self._freeze_before_service_teardown(
                 state,
                 manifest,
                 attempted_complete=attempted_complete,
                 transient_objects=transient_objects,
+                envoy_attachments=envoy_attachments,
             )
             output, source_attestations, completed, evidence_rejection = (
                 self._prepare_teardown_evidence(
@@ -9571,20 +14783,50 @@ class LocalEnvoyController:
         remaining_containers = list(ordered)
         remaining_networks = list(state["network_objects"])
         for item in ordered:
-            current = (
-                self._inspect_validation_container(
+            allowed_driver_states = None
+            if item["role"] == "driver":
+                current_events = load_lifecycle_journal(
+                    self.journal_path
+                )["events"]
+                assert isinstance(current_events, list)
+                authority = _driver_recovery_authority(
+                    current_events, str(item["track"]), str(item["id"])
+                )
+                allowed_driver_states = set(
+                    authority["allowed_states"]  # type: ignore[arg-type]
+                )
+            if item["role"] == "validator":
+                current = self._inspect_validation_container(
                     str(item["id"]), manifest, LiveTrack(str(item["track"]))
                 )
-                if item["role"] == "validator"
-                else self._inspect_container(
+            else:
+                inspect_kwargs: dict[str, object] = {
+                    "require_running": False,
+                    "envoy_attachment": (
+                        envoy_attachments[str(item["track"])]
+                        if item["role"] == "envoy"
+                        else None
+                    ),
+                }
+                if allowed_driver_states is not None:
+                    inspect_kwargs["allowed_driver_states"] = allowed_driver_states
+                current = self._inspect_container(
                     str(item["id"]),
                     manifest,
                     str(item["role"]),
                     str(item["track"]),
-                    require_running=False,
+                    **inspect_kwargs,
                 )
-            )
-            if current != item:
+            if item["role"] == "validator":
+                current_matches = current == item
+            else:
+                current_matches = _container_attestation_matches(
+                    item,
+                    current,
+                    allow_stopped=True,
+                    allowed_driver_states=allowed_driver_states,
+                )
+            if not current_matches:
                 raise ControllerError("container changed before exact removal")
             identity = {"id": item["id"], "name": item["name"]}
             transition = _removal_transition(
@@ -9628,6 +14870,33 @@ class LocalEnvoyController:
                 "container_remove_complete",
                 identity,
             )
+            if item["role"] == "driver":
+                frontend = next(
+                    network
+                    for network in remaining_networks
+                    if network["track"] == item["track"]
+                    and network.get("segment") == "frontend"
+                )
+                remaining_objects = [
+                    record
+                    for record in remaining_containers
+                    if record["role"] != "validator"
+                ]
+                members = _network_member_identities(
+                    remaining_objects,
+                    str(item["track"]),
+                    "frontend",
+                )
+                self._inspect_network(
+                    str(frontend["id"]),
+                    manifest,
+                    str(item["track"]),
+                    segment="frontend",
+                    expected_members=members,
+                    allowed_member_options=(members,),
+                    envoy_attachment=envoy_attachments[str(item["track"])],
+                    require_complete_membership=False,
+                )
         networks = state["network_objects"]
         assert isinstance(networks, list)
         for item in networks:
@@ -9635,6 +14904,14 @@ class LocalEnvoyController:
                 str(item["id"]),
                 manifest,
                 str(item["track"]),
+                segment=str(item.get("segment", "backend")),
+                expected_members={},
+                allowed_member_options=({},),
+                envoy_attachment=(
+                    envoy_attachments[str(item["track"])]
+                    if str(item.get("segment", "backend")) == "frontend"
+                    else None
+                ),
                 require_complete_membership=False,
                 require_empty_membership=True,
             )
@@ -9681,6 +14958,8 @@ class LocalEnvoyController:
             "network_objects": [],
         }
         self._assert_only_recorded_managed(empty_state, expect_present=False)
+        if up_complete_observed:
+            self._attest_complete_topology_absence(manifest)
         journal_event(
             self.journal_path, "colima_stop_intent", {"profile": LAB_IDENTITY}
         )
@@ -9723,7 +15002,11 @@ class LocalEnvoyController:
                 failure_intent_sequence = len(intent_events)
             assert failure_intent_sequence is not None
             output = _prepare_failure_provisional(
-                self._private_provisional_root(), manifest, reset=True
+                self._private_provisional_root(),
+                manifest,
+                requests=self._failure_request_records(manifest),
+                raw_driver_results=self._private_driver_result_sources(manifest),
+                reset=True,
             )
             source_attestations = []
             completed = False
@@ -9756,6 +15039,8 @@ class LocalEnvoyController:
             ),
             {},
         )
+        if up_complete_observed:
+            self._require_complete_topology_absence(manifest)
         journal_event(
             self.journal_path,
             "publication_intent",
@@ -9813,7 +15098,7 @@ class LocalEnvoyController:
 def make_parser() -> ArgumentParser:
     parser = ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("preflight", "up", "run", "collect", "down"):
+    for command in ("preflight", "up", "readiness", "run", "collect", "down"):
         subparsers.add_parser(command)
     view = subparsers.add_parser("view")
     view.add_argument("--bundle", required=True, type=Path)

@@ -415,3 +415,25 @@ artifact hashes, and the approved evidence-language review.
 - [Hugging Face technical incident timeline](https://huggingface.co/blog/agent-intrusion-technical-timeline)
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Supersession notice — 2026-08-31
+
+The document above is preserved as the original approved V3 design and
+historical execution record. The current V3B-1 correction is governed by the
+[in-network request-driver design](2026-08-31-v3b1-in-network-request-driver-design.md)
+and its
+[implementation plan](../plans/2026-08-31-v3b1-in-network-request-driver.md).
+Host port forwarding and the Kind/Calico/NetworkPolicy topology described above
+are not the implemented V3B-1 boundary. Current V3B-1 uses three one-shot
+drivers, six Docker-internal networks, no host TCP publication, and a
+`local_envoy_boundary` claim scope; V3B-2 reserves Kind/Calico for future work.
+
+The corrected mechanism is implemented and statically approved at commits
+`75161f0` and `48bd81a`. The Task 8 implementation checkpoint passed 466
+non-runtime tests. The fresh Task 9 complete static gate passes 474 tests,
+including eight documentation tests. No corrected-topology live gate has yet
+been accepted. Request-free readiness is pending; one central proof is
+conditional on that gate. This notice supersedes only the live-mechanism status.
+It does not rewrite the historical text above.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

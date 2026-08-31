@@ -1,3 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>KIL Hybrid Two-Timescale Architecture</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --background: light-dark(#f7f8fa, #15181d);
+      --foreground: light-dark(#1c222b, #f3f6fa);
+      --muted: light-dark(#dce2e9, #2c333d);
+      --muted-foreground: light-dark(#4b5868, #bdc7d3);
+      --accent: light-dark(#dcecff, #163b60);
+      --border: light-dark(#9aa7b5, #697789);
+      --viz-series-1: light-dark(#1769aa, #77bdf4);
+      --viz-series-2: light-dark(#b95710, #f0a065);
+      --viz-series-3: light-dark(#4d328d, #bda2ff);
+    }
+    html { background: var(--background); }
+    body {
+      margin: 0;
+      padding: clamp(0.75rem, 2.5vw, 2rem);
+      background: var(--background);
+      color: var(--foreground);
+    }
+    main { max-width: 76rem; margin: 0 auto; }
+  </style>
+</head>
+<body>
+<main>
 <div id="kil-hybrid-architecture">
   <style>
     #kil-hybrid-architecture {
@@ -97,6 +130,7 @@
       padding: 0.55rem;
       text-align: center;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      overflow-wrap: anywhere;
     }
     #kil-hybrid-architecture .kil-runtime-title,
     #kil-hybrid-architecture .kil-rails-label {
@@ -225,9 +259,7 @@
       #kil-hybrid-architecture .kil-arrow { transform: rotate(90deg); }
       #kil-hybrid-architecture .kil-gates { grid-template-columns: 1fr 1fr; }
       #kil-hybrid-architecture .kil-loop-title { display: block; }
-      #kil-hybrid-architecture .kil-track-flow {
-        grid-template-columns: 1fr;
-      }
+      #kil-hybrid-architecture .kil-track-flow { grid-template-columns: 1fr; }
       #kil-hybrid-architecture .kil-traffic-arrow {
         text-align: center;
         transform: rotate(90deg);
@@ -378,3 +410,6 @@
     Q can reduce or withhold authority. It can never override a KTP veto, expand the KTP environmental envelope, or replenish authority in the fast loop. Historical facts remain observed and synthetic context remains modeled. KTP foundation: canonical CITATION.cff · https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff.
   </div>
 </div>
+</main>
+</body>
+</html>

@@ -1,93 +1,191 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980" role="img" aria-labelledby="title desc">
-  <title id="title">KIL Gate V3 Envoy live-validation architecture</title>
-  <desc id="desc">A host controller sends identical requests to three isolated Envoy authorization tracks. Decision, proxy, and target records are joined into an integrity-bound evidence bundle and live dashboard.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1360" viewBox="0 0 1600 1360" role="img" aria-labelledby="title desc">
+  <title id="title">KIL Gate V3 architecture: current V3B-1 local Envoy boundary and future V3B-2 Kind and Calico boundary</title>
+  <desc id="desc">The implemented V3B-1 mechanism uses three isolated tracks and six internal networks. In each track a request driver and Envoy share a frontend network, while Envoy, authorization, and a harmless target share a backend network. Envoy is the sole dual-homed service. Host Docker attach and standard input control are dotted and distinct from solid consequential request traffic. The transport witness does not change authorization semantics and is not KIL enforcement. credential_policy_baseline is a credential-policy control and does not consume signed composite KTP state; only signed_state_only and signed_plus_local_reduce consume signed composite KTP state. Three driver results and nine service sources enter a visible evidence join independently before the verifier. Request-free readiness and one central live gate remain pending. A separate future panel reserves Kind/Calico for V3B-2.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#07131f"/>
-      <stop offset="1" stop-color="#102842"/>
+      <stop offset="0" stop-color="#07121e"/>
+      <stop offset="1" stop-color="#102a43"/>
     </linearGradient>
-    <linearGradient id="kil" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#14b8a6"/>
-      <stop offset="1" stop-color="#22d3ee"/>
+    <linearGradient id="currentPanel" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0b2236"/>
+      <stop offset="1" stop-color="#0d2d3b"/>
     </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000" flood-opacity=".35"/>
+      <feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#000" flood-opacity=".3"/>
     </filter>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
-      <path d="M0,0 L10,5 L0,10 z" fill="#93c5fd"/>
+      <path d="M0,0 L10,5 L0,10 z" fill="#7dd3fc"/>
+    </marker>
+    <marker id="arrowMuted" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
     </marker>
     <style>
-      .title{font:700 34px system-ui,sans-serif;fill:#f8fafc}.sub{font:500 17px system-ui,sans-serif;fill:#bfdbfe}
-      .section{font:700 19px system-ui,sans-serif;fill:#e2e8f0}.boxTitle{font:700 18px system-ui,sans-serif;fill:#f8fafc}
-      .body{font:500 14px system-ui,sans-serif;fill:#cbd5e1}.small{font:600 12px system-ui,sans-serif;fill:#bae6fd}
-      .track{fill:#0b1f33;stroke:#3b82f6;stroke-width:2}.trackLocal{fill:#0c2430;stroke:#14b8a6;stroke-width:3}
-      .node{fill:#142b44;stroke:#60a5fa;stroke-width:1.5}.source{fill:#1e293b;stroke:#a78bfa;stroke-width:1.5}
-      .target{fill:#172554;stroke:#818cf8;stroke-width:1.5}.evidence{fill:#0f2f33;stroke:#2dd4bf;stroke-width:2}
-      .line{stroke:#93c5fd;stroke-width:2.5;fill:none;marker-end:url(#arrow)}.dash{stroke-dasharray:8 7}
-      .badge{fill:#1d4ed8}.badgeLocal{fill:#0f766e}.badgeText{font:700 12px system-ui,sans-serif;fill:white}
+      .title{font:700 32px system-ui,sans-serif;fill:#f8fafc}.subtitle{font:500 16px system-ui,sans-serif;fill:#bfdbfe}
+      .panelTitle{font:700 21px system-ui,sans-serif;fill:#f8fafc}.section{font:700 16px system-ui,sans-serif;fill:#e2e8f0}
+      .boxTitle{font:700 15px system-ui,sans-serif;fill:#f8fafc}.body{font:500 13px system-ui,sans-serif;fill:#cbd5e1}
+      .small{font:600 12px system-ui,sans-serif;fill:#bae6fd}.tiny{font:500 11px system-ui,sans-serif;fill:#cbd5e1}
+      .status{font:700 13px system-ui,sans-serif;fill:#ccfbf1}.future{font:700 13px system-ui,sans-serif;fill:#e9d5ff}
+      .current{fill:url(#currentPanel);stroke:#2dd4bf;stroke-width:2}.futurePanel{fill:#151c33;stroke:#a78bfa;stroke-width:2;stroke-dasharray:10 7}
+      .track{fill:#0a1c2d;stroke:#334155;stroke-width:1.5}.front{fill:#0d2840;stroke:#38bdf8;stroke-width:1.5}.back{fill:#0e2a2f;stroke:#2dd4bf;stroke-width:1.5}
+      .node{fill:#17314b;stroke:#60a5fa;stroke-width:1.5}.envoy{fill:#143a43;stroke:#2dd4bf;stroke-width:2.5}.authz{fill:#20304c;stroke:#818cf8;stroke-width:1.5}
+      .target{fill:#1c2943;stroke:#a78bfa;stroke-width:1.5}.control{fill:#1e293b;stroke:#94a3b8;stroke-width:1.5}.evidence{fill:#0f3338;stroke:#2dd4bf;stroke-width:1.8}
+      .solid{stroke:#7dd3fc;stroke-width:2.5;fill:none;marker-end:url(#arrow)}.return{stroke:#7dd3fc;stroke-width:1.5;fill:none;marker-end:url(#arrow)}
+      .dotted{stroke:#94a3b8;stroke-width:2;stroke-dasharray:3 8;stroke-linecap:round;fill:none;marker-end:url(#arrowMuted)}
+      .join{stroke:#5eead4;stroke-width:2;fill:none;marker-end:url(#arrow)}.divider{stroke:#334155;stroke-width:1}
+      .badgeCurrent{fill:#0f766e}.badgeFuture{fill:#6d28d9}.badgeText{font:700 12px system-ui,sans-serif;fill:#fff}
+      .link{font:600 12px system-ui,sans-serif;fill:#7dd3fc;text-decoration:underline}
     </style>
   </defs>
-  <rect width="1600" height="980" fill="url(#bg)"/>
-  <text x="80" y="70" class="title">KIL Gate V3 · Envoy Pre-Upstream Validation</text>
-  <text x="80" y="103" class="sub">Three infrastructure-fixed tracks · same requests · decision + proxy + target proof join</text>
+
+  <rect width="1600" height="1360" fill="url(#bg)"/>
+  <text x="60" y="58" class="title">KIL Gate V3 · From Signed State to an In-Network Enforcement Boundary</text>
+  <text x="60" y="88" class="subtitle">Implemented/static mechanism only · request-free readiness and one central live proof are pending</text>
 
   <g filter="url(#shadow)">
-    <rect x="80" y="145" width="330" height="115" rx="18" class="source"/>
-    <text x="105" y="180" class="boxTitle">Host run controller</text>
-    <text x="105" y="210" class="body">run ID · request IDs · repetitions</text>
-    <text x="105" y="234" class="body">monotonic timing · localhost only</text>
-
-    <rect x="455" y="145" width="400" height="115" rx="18" class="source"/>
-    <text x="480" y="180" class="boxTitle">Authoritative laboratory issuer</text>
-    <text x="480" y="210" class="body">KTP Trust Proof + Kinetic Envelope references</text>
-    <text x="480" y="234" class="body">Ed25519 signed, ≤10 s Qᵢ,c · modeled values</text>
-
-    <rect x="900" y="145" width="330" height="115" rx="18" class="source"/>
-    <text x="925" y="180" class="boxTitle">Local context fixture</text>
-    <text x="925" y="210" class="body">server-side · request-bound · freshness</text>
-    <text x="925" y="234" class="body">reducing only · explicitly modeled</text>
+    <rect x="40" y="120" width="1520" height="880" rx="24" class="current"/>
   </g>
-
-  <path d="M245 260 V320" class="line"/>
-  <path d="M655 260 V665" class="line dash"/>
-  <path d="M1065 260 V665" class="line dash"/>
-  <text x="80" y="305" class="section">Isolated Kind cluster · client cannot select or downgrade mode</text>
+  <rect x="65" y="143" width="188" height="28" rx="14" class="badgeCurrent"/>
+  <text x="82" y="162" class="badgeText">CURRENT · V3B-1</text>
+  <text x="275" y="163" class="panelTitle">Local Envoy boundary · six internal networks · no host publication</text>
+  <text x="1180" y="162" class="status">MECHANISM IMPLEMENTED · LIVE GATES PENDING</text>
 
   <g filter="url(#shadow)">
-    <rect x="70" y="330" width="1460" height="145" rx="22" class="track"/>
-    <rect x="95" y="348" width="225" height="34" rx="17" class="badge"/><text x="113" y="371" class="badgeText">credential_policy_baseline</text>
-    <rect x="120" y="395" width="280" height="58" rx="12" class="node"/><text x="140" y="430" class="boxTitle">Envoy ext_authz</text>
-    <rect x="555" y="395" width="330" height="58" rx="12" class="node"/><text x="575" y="421" class="boxTitle">Credential-policy authz</text><text x="575" y="442" class="small">credential_valid ∧ policy_allows</text>
-    <rect x="1080" y="395" width="330" height="58" rx="12" class="target"/><text x="1100" y="421" class="boxTitle">Harmless target</text><text x="1100" y="442" class="small">append-only invocation ledger</text>
-    <path d="M400 424 H555" class="line"/><path d="M885 424 H1080" class="line"/>
+    <rect x="65" y="205" width="240" height="550" rx="16" class="control"/>
+  </g>
+  <text x="86" y="238" class="section">Host control plane</text>
+  <text x="86" y="265" class="body">Docker attach + stdin only</text>
+  <text x="86" y="287" class="body">starts one-shot drivers</text>
+  <text x="86" y="309" class="body">reads one canonical result</text>
+  <line x1="86" y1="330" x2="284" y2="330" class="divider"/>
+  <text x="86" y="359" class="small">DOTTED = CONTROL</text>
+  <text x="86" y="382" class="body">Not consequential HTTP</text>
+  <text x="86" y="404" class="body">Not a published port</text>
+  <text x="86" y="446" class="small">SOLID = TRAFFIC</text>
+  <text x="86" y="469" class="body">driver → Envoy request</text>
+  <text x="86" y="491" class="body">Envoy ↔ authz check</text>
+  <text x="86" y="513" class="body">Envoy → target if permitted</text>
+  <line x1="86" y1="538" x2="284" y2="538" class="divider"/>
+  <text x="86" y="570" class="small">BOUNDARY RULE</text>
+  <text x="86" y="594" class="body">The host cannot route a</text>
+  <text x="86" y="616" class="body">request around Envoy.</text>
+  <text x="86" y="650" class="body">The driver witnesses</text>
+  <text x="86" y="672" class="body">transport; it does not</text>
+  <text x="86" y="694" class="body">perform KIL enforcement.</text>
+  <text x="86" y="716" class="tiny">Baseline does not consume signed</text>
+  <text x="86" y="732" class="tiny">composite KTP state. Only the two</text>
+  <text x="86" y="748" class="tiny">signed tracks consume that state.</text>
 
-    <rect x="70" y="500" width="1460" height="145" rx="22" class="track"/>
-    <rect x="95" y="518" width="170" height="34" rx="17" class="badge"/><text x="113" y="541" class="badgeText">signed_state_only</text>
-    <rect x="120" y="565" width="280" height="58" rx="12" class="node"/><text x="140" y="600" class="boxTitle">Envoy ext_authz</text>
-    <rect x="555" y="565" width="330" height="58" rx="12" class="node"/><text x="575" y="591" class="boxTitle">Signed-state authz</text><text x="575" y="612" class="small">verify Qᵢ,c · V1 deterministic gate</text>
-    <rect x="1080" y="565" width="330" height="58" rx="12" class="target"/><text x="1100" y="591" class="boxTitle">Harmless target</text><text x="1100" y="612" class="small">append-only invocation ledger</text>
-    <path d="M400 594 H555" class="line"/><path d="M885 594 H1080" class="line"/>
-
-    <rect x="70" y="670" width="1460" height="145" rx="22" class="trackLocal"/>
-    <rect x="95" y="688" width="220" height="34" rx="17" class="badgeLocal"/><text x="113" y="711" class="badgeText">signed_plus_local_reduce</text>
-    <rect x="120" y="735" width="280" height="58" rx="12" class="node"/><text x="140" y="770" class="boxTitle">Envoy ext_authz</text>
-    <rect x="555" y="735" width="330" height="58" rx="12" class="evidence"/><text x="575" y="761" class="boxTitle">Signed + local authz</text><text x="575" y="782" class="small">verify Qᵢ,c · clamp downward only</text>
-    <rect x="1080" y="735" width="330" height="58" rx="12" class="target"/><text x="1100" y="761" class="boxTitle">Harmless target</text><text x="1100" y="782" class="small">append-only invocation ledger</text>
-    <path d="M400 764 H555" class="line"/><path d="M885 764 H1080" class="line"/>
+  <!-- Track 1 -->
+  <g>
+    <rect x="340" y="205" width="1185" height="170" rx="16" class="track"/>
+    <text x="360" y="232" class="section">credential_policy_baseline</text>
+    <rect x="360" y="246" width="560" height="108" rx="12" class="front"/>
+    <text x="377" y="267" class="small">FRONTEND {driver, Envoy}</text>
+    <rect x="815" y="246" width="690" height="108" rx="12" class="back"/>
+    <text x="1208" y="267" class="small">BACKEND {Envoy, authz, target}</text>
+    <rect x="385" y="280" width="190" height="55" rx="10" class="node"/>
+    <text x="404" y="303" class="boxTitle">Request driver</text><text x="404" y="323" class="tiny">one shot · track-fixed</text>
+    <rect x="760" y="276" width="190" height="63" rx="10" class="envoy"/>
+    <text x="808" y="301" class="boxTitle">Envoy</text><text x="784" y="322" class="tiny">sole dual-homed node</text>
+    <rect x="1035" y="280" width="180" height="55" rx="10" class="authz"/>
+    <text x="1086" y="303" class="boxTitle">Authz</text><text x="1054" y="323" class="tiny">credential policy</text>
+    <rect x="1300" y="280" width="170" height="55" rx="10" class="target"/>
+    <text x="1352" y="303" class="boxTitle">Target</text><text x="1320" y="323" class="tiny">harmless ledger</text>
+    <path d="M575 307 H760" class="solid"/><path d="M950 296 H1035" class="solid"/><path d="M1035 324 H965" class="return"/><path d="M950 332 C1080 360 1205 360 1300 327" class="solid"/>
+    <text x="625" y="294" class="tiny">request</text><text x="969" y="287" class="tiny">check</text><text x="1181" y="355" class="tiny">permit only</text>
   </g>
 
-  <path d="M1430 424 H1490 V875 H1280" class="line"/>
-  <path d="M1430 594 H1470 V855 H1280" class="line"/>
-  <path d="M1430 764 H1450 V835 H1280" class="line"/>
-  <path d="M720 453 V850 H900" class="line dash"/>
-  <path d="M720 623 V835 H900" class="line dash"/>
-  <path d="M720 793 V820 H900" class="line dash"/>
+  <!-- Track 2 -->
+  <g>
+    <rect x="340" y="395" width="1185" height="170" rx="16" class="track"/>
+    <text x="360" y="422" class="section">signed_state_only</text>
+    <rect x="360" y="436" width="560" height="108" rx="12" class="front"/>
+    <text x="377" y="457" class="small">FRONTEND {driver, Envoy}</text>
+    <rect x="815" y="436" width="690" height="108" rx="12" class="back"/>
+    <text x="1208" y="457" class="small">BACKEND {Envoy, authz, target}</text>
+    <rect x="385" y="470" width="190" height="55" rx="10" class="node"/>
+    <text x="404" y="493" class="boxTitle">Request driver</text><text x="404" y="513" class="tiny">one shot · track-fixed</text>
+    <rect x="760" y="466" width="190" height="63" rx="10" class="envoy"/>
+    <text x="808" y="491" class="boxTitle">Envoy</text><text x="784" y="512" class="tiny">sole dual-homed node</text>
+    <rect x="1035" y="470" width="180" height="55" rx="10" class="authz"/>
+    <text x="1086" y="493" class="boxTitle">Authz</text><text x="1053" y="513" class="tiny">signed state only</text>
+    <rect x="1300" y="470" width="170" height="55" rx="10" class="target"/>
+    <text x="1352" y="493" class="boxTitle">Target</text><text x="1320" y="513" class="tiny">harmless ledger</text>
+    <path d="M575 497 H760" class="solid"/><path d="M950 486 H1035" class="solid"/><path d="M1035 514 H965" class="return"/><path d="M950 522 C1080 550 1205 550 1300 517" class="solid"/>
+    <text x="625" y="484" class="tiny">request</text><text x="969" y="477" class="tiny">check</text><text x="1181" y="545" class="tiny">permit only</text>
+  </g>
+
+  <!-- Track 3 -->
+  <g>
+    <rect x="340" y="585" width="1185" height="170" rx="16" class="track"/>
+    <text x="360" y="612" class="section">signed_plus_local_reduce</text>
+    <rect x="360" y="626" width="560" height="108" rx="12" class="front"/>
+    <text x="377" y="647" class="small">FRONTEND {driver, Envoy}</text>
+    <rect x="815" y="626" width="690" height="108" rx="12" class="back"/>
+    <text x="1208" y="647" class="small">BACKEND {Envoy, authz, target}</text>
+    <rect x="385" y="660" width="190" height="55" rx="10" class="node"/>
+    <text x="404" y="683" class="boxTitle">Request driver</text><text x="404" y="703" class="tiny">one shot · track-fixed</text>
+    <rect x="760" y="656" width="190" height="63" rx="10" class="envoy"/>
+    <text x="808" y="681" class="boxTitle">Envoy</text><text x="784" y="702" class="tiny">sole dual-homed node</text>
+    <rect x="1035" y="660" width="180" height="55" rx="10" class="authz"/>
+    <text x="1086" y="683" class="boxTitle">Authz</text><text x="1054" y="703" class="tiny">signed + reduce</text>
+    <rect x="1300" y="660" width="170" height="55" rx="10" class="target"/>
+    <text x="1352" y="683" class="boxTitle">Target</text><text x="1320" y="703" class="tiny">harmless ledger</text>
+    <path d="M575 687 H760" class="solid"/><path d="M950 676 H1035" class="solid"/><path d="M1035 704 H965" class="return"/><path d="M950 712 C1080 740 1205 740 1300 707" class="solid"/>
+    <text x="625" y="674" class="tiny">request</text><text x="969" y="667" class="tiny">check</text><text x="1181" y="735" class="tiny">permit only</text>
+  </g>
+
+  <!-- Dotted control paths are deliberately separate from solid request paths. -->
+  <path d="M305 292 C330 292 350 307 385 307" class="dotted"/>
+  <path d="M305 315 C325 365 335 497 385 497" class="dotted"/>
+  <path d="M305 340 C318 490 330 687 385 687" class="dotted"/>
 
   <g filter="url(#shadow)">
-    <rect x="520" y="850" width="760" height="92" rx="20" class="evidence"/>
-    <text x="550" y="883" class="boxTitle">Evidence joiner → integrity-bound run bundle → live dashboard → white paper</text>
-    <text x="550" y="911" class="body">deny = decision denies + Envoy does not forward + target marker absent</text>
-    <text x="550" y="932" class="body">permit = decision permits + Envoy forwards + exactly one target marker</text>
+    <rect x="65" y="795" width="1460" height="170" rx="18" class="evidence"/>
   </g>
-  <text x="80" y="944" class="small">Observed KTP facts remain observed · synthetic state/context remain modeled · joined local outcomes may become validated</text>
+  <text x="88" y="827" class="section">Integrity-bound evidence join · exact source inventory</text>
+  <rect x="88" y="848" width="335" height="82" rx="10" class="control"/>
+  <text x="107" y="875" class="boxTitle">3 canonical driver results</text>
+  <text x="107" y="898" class="body">one exact raw/drivers/&lt;track&gt;.json</text>
+  <text x="107" y="919" class="body">per commanded track</text>
+  <rect x="515" y="848" width="390" height="82" rx="10" class="control"/>
+  <text x="534" y="875" class="boxTitle">9 authoritative service sources</text>
+  <text x="534" y="898" class="body">3 decision + 3 Envoy + 3 target sources</text>
+  <text x="534" y="919" class="body">container- and configuration-bound</text>
+  <polygon points="980,858 1011,889 980,920 949,889" class="envoy"/>
+  <text x="959" y="894" class="boxTitle">JOIN</text>
+  <rect x="1060" y="840" width="420" height="98" rx="12" class="envoy"/>
+  <text x="1083" y="870" class="boxTitle">Verifier + evidence bundle</text>
+  <text x="1083" y="894" class="body">reconstruct · hash · join · fail closed</text>
+  <text x="1083" y="918" class="body">scope: local_envoy_boundary</text>
+  <path d="M255 930 V948 H980 V920" class="join"/>
+  <path d="M905 882 H949" class="join"/>
+  <path d="M1011 889 H1060" class="join"/>
+
+  <g filter="url(#shadow)">
+    <rect x="40" y="1030" width="1520" height="200" rx="24" class="futurePanel"/>
+  </g>
+  <rect x="65" y="1053" width="176" height="28" rx="14" class="badgeFuture"/>
+  <text x="81" y="1072" class="badgeText">FUTURE · V3B-2</text>
+  <text x="265" y="1073" class="panelTitle">Kind/Calico cluster boundary</text>
+  <text x="1163" y="1072" class="future">NOT IMPLEMENTED OR RUN IN THIS PHASE</text>
+  <rect x="70" y="1100" width="330" height="92" rx="12" class="authz"/>
+  <text x="92" y="1129" class="boxTitle">Kind namespaces</text>
+  <text x="92" y="1153" class="body">three isolated track deployments</text>
+  <text x="92" y="1175" class="body">reuse V3B-1 content identities</text>
+  <rect x="500" y="1100" width="330" height="92" rx="12" class="authz"/>
+  <text x="522" y="1129" class="boxTitle">Calico NetworkPolicy</text>
+  <text x="522" y="1153" class="body">cluster-enforced reachability</text>
+  <text x="522" y="1175" class="body">separate future failure matrix</text>
+  <rect x="930" y="1100" width="565" height="92" rx="12" class="control"/>
+  <text x="952" y="1129" class="boxTitle">Claim boundary</text>
+  <text x="952" y="1153" class="body">No Kind, Calico, NetworkPolicy, prevention, or performance result</text>
+  <text x="952" y="1175" class="body">may be inferred from the current V3B-1 static implementation.</text>
+  <path d="M400 1146 H500" class="dotted"/><path d="M830 1146 H930" class="dotted"/>
+
+  <rect x="40" y="1260" width="1520" height="66" rx="14" class="control"/>
+  <text x="65" y="1286" class="small">STATUS</text>
+  <text x="128" y="1286" class="body">Implemented/static only · request-free readiness gate pending · central live gate pending · no validated, prevention, or performance claim</text>
+  <text x="65" y="1310" class="small">KTP FOUNDATION</text>
+  <text x="190" y="1310" class="link">Canonical Kinetic Trust Protocol citation · https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff</text>
 </svg>

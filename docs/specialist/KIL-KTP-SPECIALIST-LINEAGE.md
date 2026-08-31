@@ -5353,3 +5353,840 @@ review. Only after approval of the written specification may the implementation
 plan be created.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-105 — 2026-08-31 — Written driver specification approved; implementation plan authorized
+
+**Input:** Approve the written request-driver specification, move immediately to
+the next phase, use as many agents as useful, and prioritize a visible live lab
+today.
+
+**Interpretation:** The user approval closes the written-spec gate and
+authorizes planning and test-first implementation of the selected driver
+boundary. Parallel agents may map independent runtime, evidence/recovery, and
+documentation/live-gate domains, but implementation remains ordered where
+files and state machines overlap. A live consequential request remains gated by
+the merged implementation and a passing request-free readiness lifecycle.
+
+**Decision status:** Confirmed specification approved. PR #10 passed both CI
+bootstrap jobs and is merged. Local and public main were synchronized cleanly at
+`ea27be02d347f2fc089cac1edd8b506138e4a9c5` before creating branch
+`codex/v3b1-in-network-request-driver`.
+
+Three parallel read-only planning agents mapped: container/runtime topology and
+interactive driver control; content identity, public evidence, offline
+verification, recovery, and teardown; and the visible readiness gate,
+architecture diagram, paper/demo, publication, backup, and notification
+boundaries. Their results were reconciled into the test-first plan
+`docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`.
+
+The plan creates separate shared-protocol, container-executable, and host-
+transport modules; preserves legacy bundle verification by schema dispatch;
+implements six internal segments, twelve track containers, and three stopped
+one-shot drivers; adds concurrent zero-byte readiness and deterministic EOF
+cancellation; routes exactly one post-intent request through each retained
+driver connection; publishes exact canonical driver results; and makes recovery
+and teardown phase-aware. It then requires independent review, an implementation
+PR and merge, a request-free live gate, and only then one no-retry central proof.
+
+**Rationale:** Decomposing protocol, container, and host transport responsibilities
+keeps the existing controller from absorbing another unrelated state machine.
+The ordered gates provide the fastest defensible route to a visible lab while
+preserving isolation, public evidence verifiability, and the no-retry boundary.
+
+**Affected artifacts:**
+
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- GitHub PR #10 and merged public main `ea27be02d347f2fc089cac1edd8b506138e4a9c5`
+
+**Unresolved questions:** Implementation and both live gates remain unexecuted.
+The offline backup still requires an explicit destination and a choice about
+including ignored private failed-run evidence. No external email connector is
+currently available in this execution context, so completion must not be
+claimed as emailed unless that capability becomes available.
+
+**Next gate:** Commit the implementation plan, establish an isolated worktree,
+and execute Tasks 1-9 through fresh implementer plus spec and quality review
+agents. After merge and synchronization, run the request-free live readiness
+gate visibly; authorize the central request only if that gate passes exactly.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-106 — 2026-08-31 — Closed request-driver protocol passes specification and quality gates
+
+**Input:** Begin the approved in-network request-driver implementation rapidly,
+use parallel agents where safe, keep progress visible, and reach a demonstrable
+lab today.
+
+**Interpretation:** Task 1 must freeze the legacy public-bundle verifier before
+new schemas are introduced, then establish one closed, non-circular protocol
+used by the future driver, controller, and offline verifier. Parallelism is
+appropriate for independent review, but corrections to the same protocol
+surface remain serialized through the original implementer.
+
+**Decision status:** Confirmed Task 1 complete after independent specification
+and code-quality review. Commits `a356797c4f92e5b02e628cc3121d6e4104a487fb`,
+`73c25b89ed7571b66e25a0b21b7d96a557a9dad6`, and
+`07a653a46503eb2d9365b828bdc306a492fe7e54` freeze a deterministic synthetic
+`kil.v3b1-public-manifest.v1` compatibility bundle; add closed driver
+definition, readiness, private instruction, result, transport-failure, and
+driver-control-failure contracts; and separate legacy-v1 from
+driver-topology-v2 inventory parsing.
+
+Review corrections made the inventory contracts bidirectionally reject
+cross-version names, froze a platform-independent Linux errno ABI for producer
+and verifier agreement, removed credential-bearing material from private parse
+exceptions and their cause/context/traceback, and closed retry controls,
+adversarial demonstration headers, identifiers, authorization shape, Q-state
+shape, ASCII, size, and control-character rules. The frozen v1 presenter bundle
+remains accepted without reinterpretation as a driver result.
+
+**Rationale:** The driver will transiently receive signed state and an
+authorization value, so its byte protocol must be smaller and more rigid than
+a general HTTP-client interface. Host-independent failure semantics and
+secret-free error boundaries are required for the same evidence to verify on
+the Linux driver and macOS laboratory controller without leaking the private
+instruction into logs or public artifacts.
+
+**Affected artifacts:**
+
+- `src/kil/v3b1_driver_protocol.py`
+- `tools/v3b1_harness_contract.py`
+- `tests/test_v3b1_request_driver.py`
+- `tests/test_v3b1_local_envoy.py`
+- `tests/fixtures/v3b1-request-driver-protocol.json`
+- `tests/fixtures/v3b1-integration-contract.json`
+- `tests/fixtures/v3b1-driver-topology-integration-contract.json`
+- `tests/fixtures/v3b1-public-bundle-v1/`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final implementer sweep passed 413 repository tests,
+protocol and harness compilation, and diff hygiene. The final independent
+quality re-review passed 83 focused non-runtime tests, accepted the frozen v1
+bundle, and reported no remaining Critical or Important finding. No Docker,
+Colima, network, or live request was invoked.
+
+**Unresolved questions:** The executable driver, immutable image binding,
+split-network topology, attached-session lifecycle, evidence v2, recovery,
+documentation, request-free readiness gate, and one central proof remain to be
+implemented or executed.
+
+**Next gate:** Implement Task 2 test-first: one retained `envoy:8080`
+connection, readiness before stdin, exact EOF cancellation, one bounded
+instruction and result, no reconnect or retry, bounded response consumption,
+and immutable image/build-context attestation. Then repeat independent
+specification and quality review before advancing schemas.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-107 — 2026-08-31 — White paper identifies its author and founder
+
+**Input:** Add the founder's name to `kinetic-infrastructure.md` as author and
+founder while the laboratory implementation continues.
+
+**Interpretation:** The official manuscript needs visible authorship and
+founder attribution in its title metadata. The repository's established Git
+author identity is `Storm`, so that exact existing form is used without
+inferring a longer legal or institutional name.
+
+**Decision status:** Confirmed publication metadata change. The manuscript now
+states `Author and founder: Storm` directly below the subtitle. This change does
+not alter KIL architecture, protocol semantics, evidence status, or validation
+claims.
+
+**Rationale:** Prominent and unambiguous attribution preserves authorship in
+Markdown, generated handouts, and future PDF renderings without coupling the
+technical paper to unconfirmed affiliation details.
+
+**Affected artifacts:**
+
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Whether the publication form should later use a full
+legal name, institutional affiliation, contact address, ORCID, or separate KTP
+and KIL founder titles remains unconfirmed.
+
+**Next gate:** Continue Task 2 of the approved V3B-1 request-driver plan. Before
+final PDF publication, confirm the preferred full author byline and any
+affiliation metadata.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-108 — 2026-08-31 — Founder byline refined to publication form
+
+**Input:** A concurrent founder-owned refinement changed the newly added white-
+paper byline from the repository shorthand `Storm` to `Mike Storm,
+Distinguished Engineer`.
+
+**Interpretation:** The more specific name and professional title supersede the
+initial shorthand for publication display. The existing T-107 entry remains as
+the historical record of the first attribution rather than being silently
+rewritten.
+
+**Decision status:** Confirmed byline refinement preserved. The manuscript now
+states `Author and founder: Mike Storm, Distinguished Engineer`. The Task 2
+implementation agent confirmed it did not create or inspect this unrelated
+change and will not overwrite it.
+
+**Rationale:** Preserving a concurrent founder-owned edit avoids losing the
+preferred publication identity while maintaining a transparent lineage from
+the initial repository-derived shorthand.
+
+**Affected artifacts:**
+
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Institutional affiliation, contact address, ORCID,
+and whether `Distinguished Engineer` should appear on the author line or a
+separate affiliation line remain optional publication decisions.
+
+**Next gate:** Continue Task 2 and independently review its executable driver
+and immutable image binding before advancing to topology schemas.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-109 — 2026-08-31 — Publication role refined from founder to creator
+
+**Input:** A second concurrent founder-owned byline refinement changed the role
+label from `Author and founder` to `Author and Creator` while retaining `Mike
+Storm, Distinguished Engineer`.
+
+**Interpretation:** `Creator` is the currently preferred publication role for
+Kinetic Infrastructure. The exact user-owned Markdown wording is preserved;
+the prior T-107 and T-108 entries remain as historical lineage and are not
+silently rewritten.
+
+**Decision status:** Confirmed latest byline preserved as `Author and Creator`
+with the name and title `Mike Storm, Distinguished Engineer`. This metadata
+change does not alter KIL architecture, protocol alignment, validation status,
+or evidence claims.
+
+**Rationale:** Authorship terminology is a founder-controlled publication
+decision. Preserving the latest explicit edit avoids substituting an inferred
+role while the technical implementation continues independently.
+
+**Affected artifacts:**
+
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Final typography may later add punctuation or place
+the professional title on a separate line; affiliation, contact address, and
+ORCID remain optional publication decisions.
+
+**Next gate:** Complete Task 2 specification and quality review, then record
+the executable-driver checkpoint before advancing to topology schemas.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-110 — 2026-08-31 — One-shot in-network request driver passes both review gates
+
+**Input:** Continue the approved V3B-1 implementation toward a visible lab
+today, with independent verification at each durable boundary.
+
+**Interpretation:** Task 2 must turn the closed protocol into a container-side
+client that can prove connectivity without sending a request, then reuse that
+same connection for at most one consequential request. Its executed bytes must
+be part of the immutable image identity before topology work begins.
+
+**Decision status:** Confirmed Task 2 complete after specification and quality
+approval. Commits `b9df1d44d828677da8191cd2ce5add195dedfe9a` and
+`4203a56face5cde6690a7cad33f39f374372069a` add the one-shot driver, exact
+Docker build allowlists, staged-module digest binding, and executable/container
+contract tests. The driver explicitly connects once to `envoy:8080`, disables
+`HTTPConnection` auto-reopen, emits and flushes readiness before reading stdin,
+cancels on EOF with zero HTTP bytes, consumes at most one closed instruction,
+and emits at most one closed result without reconnect or retry.
+
+Independent quality review reproduced and corrected partial stdout writes and
+premature response EOF. Canonical records now require complete bounded writes
+and flush; readiness output failure prevents stdin and request activity; a
+declared `Content-Length` must be fully consumed; and only OS/HTTP protocol
+failures become transport evidence. Unexpected programming faults propagate to
+the process-control boundary and the CLI remains silent.
+
+**Rationale:** Readiness is an authorization-independent proof of the retained
+transport path. Exact output framing and declared-body completeness are
+evidence-integrity properties: neither a truncated readiness/result record nor
+a truncated HTTP response may be promoted as a successful attempt.
+
+**Affected artifacts:**
+
+- `src/kil/v3b1_request_driver.py`
+- `tests/test_v3b1_request_driver.py`
+- `deploy/kind/Dockerfile.v3b`
+- `deploy/kind/Dockerfile.v3b.dockerignore`
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b_container_contract.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final implementation sweep passed 429 repository tests,
+Python compilation, and diff hygiene. Independent quality re-review passed 40
+focused driver/container tests and the same 429-test full suite, with no
+remaining Critical or Important finding. No Docker, Colima, external network,
+or live laboratory runtime was invoked.
+
+**Unresolved questions:** The driver is not yet present in an instantiated
+split-network runtime. Profile, content identity, private manifest, active
+state, topology attestation, attached sessions, public evidence v2, recovery,
+and both live gates remain.
+
+**Next gate:** Execute Task 3 test-first: remove host gateway ports from the
+released profile and advance content identity, manifest, and active-state
+schemas to bind six name-independent segment definitions plus three
+non-circular driver definitions without admitting run-derived names or IDs into
+the content-identity preimage.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-111 — 2026-08-31 — Driver-era content identity and runtime projection approved
+
+**Input:** Continue the V3B-1 implementation from the approved one-shot driver
+into the profile, content-identity, private-manifest, and active-state schema
+boundary.
+
+**Interpretation:** Content identity must bind the immutable topology and driver
+definitions without becoming circular or depending on generated runtime
+object names. The private manifest must nevertheless derive and cross-bind the
+exact future 12-container/6-network runtime projection so creation,
+attestation, recovery, and teardown cannot disagree about owned objects.
+
+**Decision status:** Confirmed Task 3 complete after specification and quality
+approval. Commits `ff2a99e5a6414f1c5193cfd2639e6187406cf1f7` and
+`a86e848216283146f9cc483b725dbfa8b63816aa` introduce the closed v2 profile
+without host gateway ports; v2 private manifest; v3 content identity; six
+canonical name-independent frontend/backend segment definitions; three
+non-circular driver definitions and hashes; and explicit legacy/new private and
+public schema dispatch. The legacy v1 presenter remains independently
+verifiable and cannot accept driver-era fields.
+
+Quality review reproduced acceptance of a detached runtime name that could
+make creation and teardown address different objects. The corrected manifest
+now deterministically derives and requires exact equality for all 12
+`(track, role)` container records and six `(track, segment)` network records,
+including track pointers, immutable images, approved source paths, driver
+references, and run-derived name suffixes. Duplicate, missing, extra, detached,
+or mismatched records fail validation. The coherent runtime projection remains
+outside the content preimage, so generated-name changes cannot redefine the
+immutable topology.
+
+**Rationale:** Excluding generated runtime identities from the content hash
+prevents circular identity; cross-binding them in the private manifest prevents
+ownership ambiguity. Both properties are required simultaneously for safe
+recovery and teardown.
+
+**Affected artifacts:**
+
+- `deploy/kind/v3b-profile.json`
+- `src/kil/v3b_preflight.py`
+- `tests/test_v3b_preflight.py`
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final correction sweep passed 432 repository tests,
+compilation, and diff hygiene. Independent quality re-review passed 79 focused
+lifecycle, attestation, and recovery tests plus the full suite, with no
+remaining Critical or Important finding. No Docker, Colima, network, or live
+laboratory runtime was invoked.
+
+**Unresolved questions:** The manifest carries the future 12/6 projection, but
+runtime commands intentionally still instantiate only the transitional nine
+service containers and three backend networks. A minor diagnostics issue
+remains: some unhashable malformed private-manifest key values can surface as
+`TypeError` rather than normalized `ControllerError`; they remain non-accepted
+and cannot redirect ownership.
+
+**Next gate:** Execute Task 4 test-first: create and attest six internal
+frontend/backend networks, nine running service containers, and three stopped
+drivers; make Envoy the sole dual-homed service with fixed frontend alias
+`envoy`; remove all host publication; and maintain exact inventory ownership.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-112 — 2026-08-31 — Split internal topology and phase-aware ownership recovery approved
+
+**Input:** Implement the Task 4 runtime topology rapidly but keep all work
+static and independently reviewed before any Docker or laboratory execution.
+
+**Interpretation:** The private 12-container/6-network projection must become
+exact runtime commands and attestations: three isolated frontend/backend pairs,
+Envoy as the sole dual-homed service, stopped one-shot drivers, no host
+publication, exact full-ID ownership, and recovery that remains safe at every
+possible frontend-attachment crash point.
+
+**Decision status:** Confirmed Task 4 complete after specification and repeated
+quality review. Commits `74e1a3da1da3c9d4f90022e9ce95a0421557cf0c`,
+`cb1e5ec2fb55d66852ed8429ffb85e3f92ec4ffd`,
+`5571d5cd0207da5c6f3f3db41be7d3ddad789d90`, and
+`67a1a79698d1e9346dfa4055688f5d8fea579910` implement six internal bridge
+segments; nine running authz/target/Envoy services; three stopped, stdin-open,
+mountless drivers; three transient validators; and zero host-published ports.
+Envoy starts on its backend and is attached by exact full IDs to its frontend
+under durable connect intent/completion with the fixed `envoy` alias.
+
+Review corrections added direct attestation of privilege, primary network,
+PID/IPC/UTS/user/cgroup namespaces for persistent and validator containers;
+pinned private cgroup namespaces; rejected malformed raw inspect shapes before
+normalization; closed alias upper bounds so only Envoy owns the reserved
+frontend alias; bound exact network full-ID-to-name membership; and expanded
+pure teardown to the exact 15-container/6-network owned inventory.
+
+The final recovery correction derives per-track `unstarted`, `pending`, or
+`complete` Envoy attachment state from durable journal events and recorded full
+IDs. Unstarted accepts backend-only and rejects unjournaled frontend
+attachment. Pending accepts exactly backend-only or the exact dual-homed shape.
+Complete requires exact dual-homing. The same phase object reaches load,
+state/runtime reverify, evidence freeze, stop, pre-removal reinspection, and
+network membership validation.
+
+**Rationale:** Runtime isolation is meaningful only when observed state, not
+command intent, proves the boundary. Phase-aware exact-ID recovery prevents
+both stranded owned objects and silent acceptance of mutations that were never
+durably journaled.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tools/v3b1_harness_contract.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final implementation sweep passed 105 focused lifecycle
+tests, 193 local-Envoy tests, and 437 repository tests plus compilation and diff
+hygiene. Independent quality re-review passed 83 focused recovery/contract
+tests and the full 437-test suite with no remaining Critical or Important
+finding. No Docker, Colima, network, or live laboratory runtime was invoked.
+
+**Unresolved questions:** The stopped drivers have not yet been started through
+attached control sessions. Readiness records, deterministic EOF cancellation,
+diagnostic-only lifecycle state, request sequencing, driver evidence, and both
+live gates remain unimplemented or unexecuted.
+
+**Next gate:** Execute Task 5 test-first: start all three exact stopped drivers
+through attached sessions, require all readiness records under one deadline,
+provide a request-free `readiness-only` lifecycle that sends EOF and proves
+zero request intent/HTTP bytes, and poison the lifecycle on malformed output or
+nonzero cancellation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-113 — 2026-08-31 — Request-free attached-driver readiness lifecycle approved
+
+**Input:** Continue from the approved split topology into an observable but
+request-free driver lifecycle before permitting any consequential lab traffic.
+
+**Interpretation:** All three stopped drivers must start through exact attached
+processes before the controller waits on any one of them. One common deadline,
+closed readiness records, deterministic EOF cancellation, exact cleanup, and a
+permanent diagnostic-only lifecycle must prove the transport path without
+creating request intent or sending HTTP bytes.
+
+**Decision status:** Confirmed Task 5 complete after specification and quality
+approval. Commits `3c6424d049bdb4c9680572ae864334578f0bfa67`,
+`11bea32429b31ef91b0cfd41892f5dd7975db735`, and
+`94c76fffc07810d18bdd69f8748f86efd74af324` add the bounded host transport
+adapter, exact `docker start --attach --interactive <full-id>` sessions, the
+`readiness` CLI lifecycle, closed v2 driver-lifecycle fixture records, and
+failure cleanup/replay hardening. Legacy v1 integration fixtures remain
+unchanged and reject driver-era records.
+
+All three processes start before any readiness read. One common monotonic
+deadline governs selector and non-file-descriptor streams. Success requires an
+exact readiness schema/status for each bound full ID and track, then EOF to all
+stdin streams, no later stdout or stderr, and zero exits. Requests remain
+`not_attempted`; no instruction or request intent is created; the lifecycle is
+durably diagnostic-only and `run` is forbidden until `down`.
+
+Review corrections added bounded terminate/kill/reap cleanup, exact primary
+failure attribution before each mutation, independent first-failure poison,
+replay rejection after any incomplete prior readiness session, controller-
+scoped aggregate failures, strict readiness schema discrimination, and exact
+container-state inspection before stop decisions. Local attached-client exit
+is never treated as proof the driver container stopped. Exact-ID stop and
+post-stop reinspection proceed even when cleanup journaling fails, while raw
+stdout/stderr and persistence exception text remain excluded.
+
+**Rationale:** A request-free readiness run is valuable only if failure cannot
+leave a retained credential-capable socket or permit a second attempt. The
+controller must prove process, container, journal, and diagnostic state as one
+closed lifecycle while sending zero consequential traffic.
+
+**Affected artifacts:**
+
+- `tools/v3b1_driver_transport.py`
+- `tools/v3b1_local_envoy.py`
+- `tools/v3b1_harness_contract.py`
+- `tests/test_v3b1_local_envoy.py`
+- `tests/fixtures/v3b1-driver-topology-integration-contract.json`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final implementation sweep passed 21 readiness tests,
+150 focused lifecycle tests, 459 repository tests, compilation, diff hygiene,
+and a real OS-pipe selector smoke test. Independent quality re-review passed
+215 local-Envoy tests and manually confirmed terminal-plus-poison double-fault
+cleanup/replay behavior, with no remaining Critical or Important finding. No
+Docker, Colima, network, or live laboratory runtime was invoked.
+
+**Unresolved questions:** Task 6 has not yet replaced the legacy direct-host
+request path with driver instructions. Driver result evidence, phase-aware
+post-request recovery/teardown, documentation, the request-free live run, and
+the one accepted central proof remain.
+
+**Next gate:** Execute Task 6 test-first: after all three readiness records are
+durable, write exactly one bounded canonical instruction per track under a
+durable request intent, collect one closed result, abort later tracks after any
+post-intent failure, and never reconnect, restart, replace, or retry a driver.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-114 — 2026-08-31 — One-shot in-network request sequencing approved
+
+**Input:** Replace the remaining host-controller HTTP request path with the
+approved one-shot instruction/result exchange through the retained in-network
+drivers, while keeping the implementation static until later live gates.
+
+**Interpretation:** Aggregate driver readiness must precede every request.
+Signed state may be issued only afterward and immediately before its bound
+instruction. Durable request and instruction intent must precede the only stdin
+write. Every result, exit, persistence boundary, later-driver cancellation,
+and failure provenance must be terminal, secret-free, exact-ID-bound, and
+non-retryable.
+
+**Decision status:** Confirmed Task 6 complete after specification and quality
+approval. Commits `ac8568aa45dd3794e1be3f949393c45ed63e2656`,
+`935dbc86eedcdec755087dffa6e9e92e588f4948`,
+`5de1394c555152c9d8a990626e17fa75b6c472b0`, and
+`22ba6a3135e4ed7afb52a852fb8292868d6d6f45` remove the host gateway
+connection/reset/direct-request path and route the three fixed tracks through
+their retained attached drivers in order: credential baseline, signed state,
+and signed state plus local reduction.
+
+All three readiness records become durable before Q-state issuance. Per track,
+the controller persists request intent and instruction-write intent, writes one
+bounded canonical instruction, closes stdin, reads one bounded closed result,
+attests exact terminal output/exit, persists the private 0600 raw result,
+persists normalized request v2, and completes the request attempt. Bearer and
+Q-state values exist only in the bounded in-memory stdin payload after intent;
+they never enter commands, environment, mounts, stdout/stderr, journal, or
+public evidence.
+
+Review corrections introduced one outer session-ownership guard over all
+post-readiness setup and persistence; shared the robust readiness poison and
+cleanup core between diagnostic readiness and run; guarded real clock and
+persistence exceptions after the durable session boundary; restored equivalent
+driver-era coverage for relevant removed host tests; conservatively set
+post-intent sent provenance true; preserved exact protocol-owned Linux errno
+facts independent of macOS; bound raw result digest, driver definition, full
+ID, and track; classified real waits as `process_wait` and output/exit integrity
+as `termination`; and made later-driver cancellation use fresh bounded cleanup
+deadlines with ordered, consumed, durable outcomes.
+
+**Rationale:** Once instruction delivery begins, the system can no longer prove
+that zero bytes crossed the socket. Conservative sent provenance, one owner for
+all ready sessions, and exact terminal evidence prevent a partial attempt from
+being retried or presented as a clean comparison.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tools/v3b1_driver_transport.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final implementation sweep passed 112 focused request,
+readiness, journal, teardown, and driver tests plus 442 repository tests,
+compilation, diff hygiene, host-path absence, and secret-containment audits.
+Independent quality re-review passed 53 focused tests and the full suite with
+no remaining Critical or Important finding. No Docker, Colima, network, or
+live laboratory runtime was invoked.
+
+**Unresolved questions:** Exact driver result files remain private and are not
+yet incorporated into the public v2 bundle, commitment, offline verifier, or
+presenter. Broader post-request recovery/teardown hardening, documentation,
+implementation merge, request-free live gate, and one accepted proof remain.
+
+**Next gate:** Execute Task 7 test-first: publish exact canonical driver result
+files, bind their hashes and driver facts into request v2 and public commitment,
+dispatch v1/v2 verification without hybrid acceptance, and update the presenter
+to show `request driver -> Envoy -> authorization -> target or withhold` with no
+host publication and explicit transport-witness scope.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-115 — 2026-08-31 — Exact driver evidence and private-public projection approved
+
+**Input:** Bind the three one-shot in-network driver results into the v2
+evidence bundle and derived presenter while preserving the frozen v1 evidence
+contract, secret boundaries, and the distinction between a transport witness
+and KIL enforcement.
+
+**Interpretation:** Every commanded track must publish its exact canonical
+driver-result bytes, and those bytes must be joined to the normalized request,
+driver definition, full container identity, track, Envoy, authorization,
+target, request ID, decision digest, commitment, checksums, manifest, and
+offline authority decision. A v1 bundle must reject driver-era files; a v2
+bundle must require all three results for acceptance. Private provisional
+evidence must remain contained even if directory entries are replaced during
+publication.
+
+**Decision status:** Confirmed Task 7 complete after final specification and
+quality approval. Commits `b0cb37e`, `8d38c5c`, `6d72875`, and `f167ea7` add
+the three exact `raw/drivers/<track>.json` files, explicit v1/v2 writer and
+verifier dispatch, deterministic nonpromotable failure reconstruction, public
+commitment and checksum bindings, and the v2 presenter statements:
+`request driver -> Envoy -> authorization -> target or withhold`, `No host
+publication`, `The driver is a laboratory transport witness, not KIL
+enforcement`, and `Evidence scope: local_envoy_boundary`.
+
+Review corrections closed a live `run()` to `collect()` handoff that omitted
+the required private driver sources, rejected dangling and pre-existing
+symlink ancestry, and replaced path-reopened private writes with a held
+`O_DIRECTORY | O_NOFOLLOW` descriptor transaction. Accepted, failure, and
+resumed publication now use descriptor-relative bounded reads, atomic writes,
+checksums, inventories, and final device/inode re-attestation for the `raw` and
+`drivers` directory-swap matrix. The independent reviewer also injected swaps
+during active writes; every case failed closed with zero outside writes.
+
+**Rationale:** The driver can support an authoritative laboratory claim only
+when its exact output is public, independently rehashed, and joined to the
+other enforcement evidence. The private-to-public projection is itself a
+security boundary, so validation that can be invalidated between checking and
+writing would undermine the evidence even when the final verifier later
+rejects it.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final implementation and independent re-reviews passed
+74 focused Task 7 tests, 210 local-Envoy tests, and the full 454-test
+non-runtime repository suite. Compilation, diff hygiene, CSP and secret scans,
+the accepted/failure/resume by raw/drivers swap matrix, and the frozen v1
+fixture and presenter bytes all passed. The worktree was clean. No Docker,
+Colima, network, or live laboratory runtime was invoked.
+
+**Unresolved questions:** Post-start driver state has not yet been made
+phase-aware for recovery and teardown. The request-free live gate, one central
+proof, future Kind/Calico V3B-2 validation, historical prevention, and
+production performance remain unexecuted and unclaimed.
+
+**Next gate:** Execute Task 8 test-first: accept only exact created drivers
+before start intent, never start or command a driver during recovery, require
+trusted terminal or exact stop/re-attestation before any Envoy stop, preserve
+the nine authoritative service sources, and prove all fifteen containers and
+six networks absent through durable exact-ID teardown.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-116 — 2026-08-31 — Driver-aware recovery and exact teardown approved
+
+**Input:** Make partial-up, post-readiness, post-request, and crash recovery
+aware of the retained one-shot request drivers without ever replaying a start,
+attach, instruction, or request, and make all teardown paths prove the complete
+driver-era topology absent before publishing evidence.
+
+**Interpretation:** The persisted ownership snapshot remains the exact
+created-state baseline. Live driver state is admitted only through closed,
+journal-derived phases. A persisted driver result or clean readiness
+cancellation proves output termination; Docker-client cleanup proves only the
+client was reaped; stop and cleanup completions prove teardown quiescence only.
+Every ambiguous post-start driver remains nonpromotable but must still be
+stopped and removed through its recorded full ID. Pure and imperative teardown
+must share the same driver-first authority and role ordering.
+
+**Decision status:** Confirmed Task 8 complete after final specification and
+quality approval. Commits `75161f0` and `48bd81a` add phase-scoped immutable
+driver attestation, a zero-restart recovery gate, conservative closure of
+stranded request intents, crash-idempotent exact driver stopping, exact
+frontend membership shrink, driver finalization before Envoy shutdown, the
+unchanged nine-service-source freeze, shared teardown ordering, and exact
+driver/Envoy/authz/target/validator/network removal.
+
+The final publication gate recomputes one durable commitment for all twelve
+manifest containers, three validators, and six manifest networks from the
+validated manifest plus exact creation and removal transitions. It requires
+unique full IDs and names, exact cardinalities and digests, empty survivor
+inventories, and one matching `topology_absence_attested` event before any
+complete-run publication action. The reconstruction no longer depends on the
+active-state file, so a crash after state unlink but before journal archival
+can validate, complete exactly once, and recover.
+
+Review corrections established real end-to-end partial-up and full `down()`
+proofs; separated attached-client cleanup from container termination; aligned
+the pure planner with imperative teardown; gated normal, provisional, renamed,
+and post-delete publication paths; and covered stop, absence, state-unlink,
+and journal-archive crash boundaries. The serialized public harness v1/v2
+schemas remain unchanged because the new facts are private recovery-journal
+records.
+
+**Rationale:** Driver-era recovery is safe only when journal phase determines
+which live states may be inspected and cleaned, never which actions may be
+replayed. Evidence is durable only when a complete-run publication is
+cryptographically and procedurally downstream of exact absence for every
+owned runtime object, including across the cleanup crash window.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** Final implementation and independent re-reviews passed 222
+local-Envoy tests, 38 teardown-continuation tests, seven focused correction
+proofs, and the full 466-test non-runtime repository suite. Compilation and
+diff hygiene passed. The exact partial-up survivor, immutable mutation matrix,
+full 12-plus-3 container/six-network fake runtime, missing and mismatched proof
+suppression, post-delete recovery, and state-unlink-to-journal-archive crash
+tests all passed. The worktree was clean. No Docker, Colima, network, or live
+laboratory runtime was invoked.
+
+**Unresolved questions:** The driver mechanism and teardown are implemented
+and statically approved but not yet exercised in the live dedicated profile.
+Request-free readiness, the one central proof, future Kind/Calico V3B-2,
+historical prevention, and production performance remain pending or unclaimed.
+
+**Next gate:** Execute Task 9: update all current-facing documentation, the
+white paper, the local-Envoy architecture SVG, the hybrid two-timescale HTML,
+progress state, supersession notes, and the ignored live board so every asset
+describes the implemented six-network driver topology and labels both live
+gates as pending. Then pass the complete static documentation and code gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-117 — 2026-08-31 — Driver-era publication set reaches the final static review gate
+
+**Input:** Unify the repository overview, controller and Envoy guidance, lab
+status, Kinetic Infrastructure paper, architecture visuals, superseded design
+records, and local live board around the approved V3B-1 in-network request
+driver without overstating an unexecuted live result or erasing pre-driver
+history.
+
+**Interpretation:** Current-facing material must distinguish Docker
+attach/stdin host control from consequential `driver -> Envoy -> authorization
+-> target or withhold` traffic; show three fixed tracks over six internal
+networks; identify Envoy as the sole dual-homed component; bind three driver
+results and nine service sources; keep the driver a transport witness rather
+than KIL enforcement; and make request-free readiness the prerequisite for one
+central proof. The credential-policy baseline remains the no-signed-state
+control, while only the two KIL tracks consume signed composite KTP state.
+
+**Decision status:** Proposed publication checkpoint ready for final quality
+re-review. The narrative set now reports the Task 8 implementation checkpoint
+as 466 tests and the fresh Task 9 complete static gate as 474 tests. It preserves
+the founder-approved opening and exact `**Author and Creator** Mike Storm,
+Distinguished Engineer` byline. Detailed nine-service/three-network smoke and
+launch records remain in a labeled historical pre-driver section and cannot be
+promoted to the current six-network contract. The older 2026-08-29 design and
+2026-08-30 plan retain byte-identical original prefixes followed by append-only
+supersession notes linking the approved 2026-08-31 driver design and plan.
+
+The local-Envoy SVG now separates host control, per-track frontend and backend
+networks, the two signed-state KIL tracks, baseline control, and two independent
+evidence inputs joined before verification. The hybrid two-timescale source
+remains a passive inline fragment; a passive, self-contained UTF-8 standalone
+publication wrapper provides durable desktop and narrow-width rendering. The
+paper links the standalone hybrid architecture and embeds the local-Envoy SVG.
+Both visuals separate current V3B-1 from future Kind/Calico V3B-2 and retain the
+canonical KTP citation.
+
+**Rationale:** Static implementation and historical development records answer
+different evidentiary questions. A unified publication must show exactly what
+is built and statically proved while keeping live acceptance, historical
+prevention, performance, Kubernetes, and NetworkPolicy claims outside the
+current evidence boundary.
+
+**Affected artifacts:**
+
+- `README.md`
+- `tools/README.md`
+- `adapters/envoy/README.md`
+- `docs/lab/V3-PROGRESS.md`
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/architecture/v3-envoy-live-validation.svg`
+- `docs/design-drafts/hybrid-two-timescale-architecture.html`
+- `docs/architecture/hybrid-two-timescale-architecture.html`
+- `docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md`
+- `docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md`
+- `tests/test_v3b1_documentation.py`
+- ignored `artifacts/generated/v3b1-task6-live-status.md`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** Eight new documentation regressions and sixteen focused
+documentation, citation, canonical-semantics, and consultation tests pass. The
+request-driver suite passes 28 tests; preflight, container, and local-Envoy
+modules pass 246 tests; the complete repository passes 474 tests. Python
+compilation, `make validate`, SVG XML parsing, passive-content checks, citation
+and historical-prefix checks, ignored-board hermeticity, and diff hygiene pass.
+The standalone hybrid wrapper was visually inspected at 1440 and 360 pixels;
+the SVG was rendered and inspected after evidence-arrow correction. No Docker,
+Colima, network, or live laboratory runtime was invoked.
+
+**Unresolved questions:** Independent final quality approval remains pending.
+The request-free live gate and one conditional central proof are unexecuted.
+Future Kind/Calico V3B-2, historical prevention, repetition, and production
+performance remain unvalidated or unclaimed.
+
+**Next gate:** Obtain final Task 9 specification and quality approval, commit
+the tracked publication set while leaving the live board ignored, publish and
+merge the correction, synchronize local and public main, then execute exactly
+one request-free `preflight -> up -> readiness -> down` lifecycle.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-118 — 2026-08-31 — Unified V3B-1 publication set passes both review gates
+
+**Input:** Final independent specification and quality re-review of the Task 9
+publication set after correcting track semantics, evidence-flow geometry,
+standalone visualization rendering, test hermeticity, and plan inventory.
+
+**Interpretation:** Publication readiness requires both semantic agreement and
+durable presentation: the baseline must remain the credential-policy control;
+only the two KIL tracks consume signed composite KTP state; driver results and
+service sources must join as independent evidence; the paper must render or
+link both architecture views; and a clean clone must pass without the ignored
+local live board.
+
+**Decision status:** Confirmed Task 9 approved. Independent specification and
+quality reviewers found no remaining Critical or Important issue. The tracked
+publication set is ready to commit. The ignored live status board remains local
+and untracked by design.
+
+**Rationale:** The lab can advance only from a public record that accurately
+states what is implemented, what has merely passed static verification, and
+what remains contingent on live evidence.
+
+**Affected artifacts:** The Task 9 artifacts enumerated in T-117, plus this
+final approval record and the completed Task 9 plan checkboxes.
+
+**Verification:** Sixteen focused publication, citation, canonical-semantics,
+and consultation tests and the full 474-test repository suite pass. Python
+compilation, `make validate`, SVG XML parsing, passive-content and clean-clone
+hermeticity checks, visual inspection at desktop and 360-pixel widths, secret
+and private-path review, and diff hygiene pass. No Docker, Colima, network, or
+live laboratory runtime was invoked.
+
+**Unresolved questions:** Request-free live readiness and one conditional
+central local-Envoy proof remain unexecuted. V3B-2 Kind/Calico, historical
+prevention, repetition, and production performance remain outside the present
+claim boundary.
+
+**Next gate:** Commit and publish Task 9, require CI and merge, synchronize
+local and public main, then execute exactly one request-free live
+`preflight -> up -> readiness -> down` lifecycle with visible status updates.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

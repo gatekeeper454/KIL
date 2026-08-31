@@ -1,5 +1,5 @@
 {
-  "schema_version": "kil.v3b-profile.v1",
+  "schema_version": "kil.v3b-profile.v2",
   "host_os": "darwin",
   "host_arch": "arm64",
   "colima_version": "0.10.3",
@@ -20,6 +20,5 @@
   "calico_version": "3.32.0",
   "calico_manifest_url": "https://raw.githubusercontent.com/projectcalico/calico/v3.32.0/manifests/calico.yaml",
   "cluster_name": "kil-v3-lab",
-  "gateway_ports": [18080, 18081, 18082],
   "evidence_scope": "local_envoy_boundary"
 }
