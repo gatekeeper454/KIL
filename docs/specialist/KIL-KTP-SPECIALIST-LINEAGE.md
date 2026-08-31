@@ -6418,6 +6418,15 @@ rejected. Reverification now derives membership from the freshly inspected
 container records rather than persisted pre-readiness state, so an executed
 driver cannot later inherit the created-state omission.
 
+The first PR #14 CI pair exposed an independent pre-existing test-fixture
+race: one runner failed and its twin stalled in
+`test_non_fileno_blocking_read_uses_common_deadline_and_cleans_up`. The test
+used a 0.5-second host-scheduler join to infer success before proving that its
+synthetic blocking read had started. The fixture now exposes exact
+`all_started` and `read_started` events, waits boundedly for those causal
+milestones, and only then evaluates the controller's simulated common
+deadline. Production transport and deadline behavior are unchanged.
+
 **Rationale:** Treating configured attachment as physical membership made the
 pinned Docker representation impossible to recover, while broadly permitting
 subsets would hide real topology drift. Binding the sole accepted physical
@@ -6449,7 +6458,10 @@ active reverification uses fresh exited state instead of the persisted created
 record. All 29 controller-contract tests and all 226 local-Envoy tests pass.
 Independent specification and quality reviews approved the correction with no
 Critical or Important finding. All 478 repository tests, Python compilation,
-and diff hygiene pass.
+and diff hygiene passed before publication. The scheduler-sensitive deadline
+test passes 20 consecutive event-synchronized repetitions, and the full
+478-test repository suite plus diff hygiene pass again after that fixture-only
+correction. Public CI must rerun on the new commit.
 
 **Unresolved questions:** The correction must pass public CI, merge, and
 synchronize before it may touch the isolated runtime. Bounded recovery must

@@ -4058,6 +4058,7 @@ class _BlockingDriverOutput(_DriverOutput):
     def __init__(self, owner, payload, events, factory, clock, advance_ns):
         super().__init__(owner, payload, events, factory, clock, advance_ns)
         self.release = threading.Event()
+        self.read_started = threading.Event()
 
     def fileno(self):
         raise io.UnsupportedOperation("no descriptor")
@@ -4066,6 +4067,7 @@ class _BlockingDriverOutput(_DriverOutput):
         self.events.append(("stdout_readline_blocking", self.owner.full_id, size))
         if len(self.factory.processes) != 3:
             raise AssertionError("readiness was consumed before all drivers started")
+        self.read_started.set()
         self.clock.advance(self.advance_ns)
         self.release.wait()
         if self.closed:
@@ -4160,6 +4162,7 @@ class _DriverProcessFactory:
         self.events = events
         self.clock = clock
         self.processes = []
+        self.all_started = threading.Event()
 
     def start(self, command):
         argv = list(command)
@@ -4178,6 +4181,8 @@ class _DriverProcessFactory:
             **behavior,
         )
         self.processes.append(process)
+        if len(self.processes) == len(self.behaviors):
+            self.all_started.set()
         return process
 
 
@@ -4573,13 +4578,20 @@ class DriverReadinessTest(unittest.TestCase):
 
             worker = threading.Thread(target=invoke_readiness, daemon=True)
             worker.start()
-            worker.join(0.5)
+            self.assertTrue(factory.all_started.wait(5))
+            blocking = next(
+                process.stdout
+                for process in factory.processes
+                if isinstance(process.stdout, _BlockingDriverOutput)
+            )
+            self.assertTrue(blocking.read_started.wait(5))
+            worker.join(5)
             completed_under_deadline = not worker.is_alive()
             if worker.is_alive():
                 for process in factory.processes:
                     process.kill()
                     process.stdout.close()
-                worker.join(0.5)
+                worker.join(5)
 
             self.assertTrue(completed_under_deadline)
             self.assertEqual(len(result), 1)
