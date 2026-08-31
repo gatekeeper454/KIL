@@ -6479,3 +6479,99 @@ lifecycle. The central `run` command remains prohibited until that gate's
 public-safe record is reviewed and merged.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-122 — 2026-08-31 — Controlled service stop preserves the no-publication invariant across Docker port normalization
+
+**Input:** After PR #14 merged as
+`7677052f6fd2b4287f419dc01ec9a1a859191777`, synchronize every `main`
+reference and resume only the bounded `down` for rejected Task 10 lifecycle
+`v3b1-05211715589b45f79dac4ebe5700004831c07b28af7ca42bce5111db47007801`.
+Do not start a driver or invoke readiness, an instruction, a request intent, an
+HTTP action, or the central `run` command.
+
+**Interpretation:** Docker 29.7.2 represents exposed-but-unpublished service
+ports differently across an exact stop. While running, the three fixed KIL
+service roles report `{"8080/tcp":null}` for authorization and target services
+and `{"10000/tcp":null}` for Envoy. After a controlled stop, Docker reports
+`{}`. Both shapes prove the same no-host-publication invariant, but the recovery
+comparator previously permitted only the concurrent `running -> exited|dead`
+state change.
+
+**Decision status:** Confirmed rejected recovery attempt; narrow correction
+implemented and locally verified but not yet published. The merged recovery
+re-attested the complete owned topology, retained all three never-started
+drivers in exact `created` state, durably classified the partial-up evidence as
+nonpromotable, and stopped only the baseline Envoy. Docker returned exit code
+zero, then the controller failed closed with
+`container changed after exact stop` before writing the stop-complete event or
+touching another container.
+
+Read-only inspection proved the stopped Envoy differed from its pre-stop
+normalized attestation in exactly two lifecycle fields: `state` changed from
+`running` to `exited`, and `published_ports` changed from
+`{"10000/tcp":null}` to `{}`. The other 34 normalized runtime fields remained
+unchanged. All six running authorization/target services retained their exact
+unbound `{"8080/tcp":null}` projection, both sibling Envoys retained
+`{"10000/tcp":null}`, all three drivers remained never-started, all three
+validators remained exited, and the six networks remained owned and bounded.
+The foreign stopped `default` profile was unchanged. Every request state
+remained `not_attempted`; no driver start, instruction, request intent, HTTP
+action, removal, or central-run transition occurred.
+
+The correction totalizes only this one-way controlled-stop representation. It
+requires a non-driver service transition from `running` to `exited|dead`, exact
+top-level identity, and exact equality for every runtime field except `state`
+and `published_ports`. The sole non-equal port alternatives are the role-bound
+running projections `authz|target -> {"8080/tcp":null}` and
+`envoy -> {"10000/tcp":null}` becoming exactly `{}`. Host bindings, wrong
+ports, reverse or same-state changes, drivers, and every additional field
+change remain rejected. Persisted live inspection is not rewritten.
+
+**Rationale:** An empty map and a fixed exposed-port map with null bindings both
+mean that no host port exists. Treating their Docker stop-time representation
+as equivalent prevents cleanup from deadlocking after an owned exact stop,
+while role-bound port literals and equality of every other attested field keep
+the exception narrower than a general semantic relaxation.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/lab/V3-PROGRESS.md`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- ignored `artifacts/generated/v3b1-task6-live-status.md`
+- private rejected lifecycle `v3b1-05211715589b45f79dac4ebe5700004831c07b28af7ca42bce5111db47007801`
+
+**Verification:** A RED comparator test first reproduced the live rejection; a
+second RED mutation proved that a generic all-null port collapse was too broad.
+The corrected unit matrix accepts the three exact role-bound service shapes
+only during controlled stop and rejects disabled stop authority, a still-running
+container, a host binding, wrong pre-stop or post-stop ports, unrelated network
+drift, and missing, unknown, or unhashable roles. The last case first reproduced
+a `TypeError`; the final exact-string guard totalizes it to rejection. A
+controller-level regression records exactly one stop intent and one stop
+completion for the accepted transition, while the network-drift twin retains
+only the stop intent and raises the original fail-closed error. Independent
+read-only runtime audit confirmed that no other normalized field changed.
+Independent specification and quality/security reviews approved the final
+correction with no Critical or Important finding. All 228 local-Envoy
+controller tests, the complete 480-test repository suite, `make validate`,
+Python compilation, and diff hygiene pass.
+
+**Unresolved questions:** The correction must pass public CI, merge, and
+synchronization before it may govern the remaining teardown. The isolated
+runtime still contains one cleanly stopped Envoy, eight running services, three
+created drivers, three exited validators, and six internal networks. Exact
+object/profile absence, foreign-state restoration, the fresh request-free gate,
+three clean cancellations, nine empty source copies, and the later one-shot
+central proof remain pending.
+
+**Next gate:** Publish and merge the role-bound stopped-port correction,
+synchronize all `main` references, update the live board, and resume only the
+bounded `down`. If exact recovery and foreign-state restoration pass, start one
+fresh request-free `preflight -> up -> readiness -> down` lifecycle. The
+central `run` command remains prohibited until that gate's public-safe record
+is reviewed, merged, and synchronized.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

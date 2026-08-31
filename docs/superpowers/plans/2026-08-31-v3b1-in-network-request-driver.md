@@ -838,6 +838,14 @@ Push the feature branch, create a PR, require both GitHub bootstrap jobs and the
 local static gate to pass, resolve review findings, merge, fast-forward local
 `main`, and verify local/remote/GitHub main commit equality and a clean tree.
 
+PR #14 completed this step for the created-driver endpoint correction and
+merged as `7677052f6fd2b4287f419dc01ec9a1a859191777`. The first merged-source
+recovery stop exposed one additional engine representation: an exact service
+stop collapses an unbound exposed-port map to `{}`. The role-bound correction
+must independently pass this same publish/CI/merge/synchronize gate before the
+bounded `down` may resume. The stopped container is owned and journal-anchored;
+no request-side action occurred.
+
 - [x] **Step 2: Record exact host state and run preflight**
 
 Read and record all Colima profiles without mutating them. Use the pinned PATH:

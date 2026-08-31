@@ -3006,10 +3006,38 @@ def _container_attestation_matches(
     }
     if recorded_without_runtime != current_without_runtime:
         return False
-    return {
+    recorded_without_state = {
         key: value for key, value in recorded_runtime.items() if key != "state"
-    } == {
+    }
+    current_without_state = {
         key: value for key, value in current_runtime.items() if key != "state"
+    }
+    if recorded_without_state == current_without_state:
+        return True
+    recorded_ports = recorded_runtime.get("published_ports")
+    current_ports = current_runtime.get("published_ports")
+    service_ports = {
+        "authz": {"8080/tcp": None},
+        "target": {"8080/tcp": None},
+        "envoy": {"10000/tcp": None},
+    }
+    role = recorded.get("role")
+    if type(role) is not str or role not in service_ports:
+        return False
+    unbound_ports_before_stop = service_ports[role]
+    if (
+        recorded_ports != unbound_ports_before_stop
+        or current_ports != {}
+    ):
+        return False
+    return {
+        key: value
+        for key, value in recorded_runtime.items()
+        if key not in {"state", "published_ports"}
+    } == {
+        key: value
+        for key, value in current_runtime.items()
+        if key not in {"state", "published_ports"}
     }
 
 
