@@ -6803,3 +6803,121 @@ permitted after request intent. The prospective outcome remains `permit / permit
 teardown, foreign-state restoration, and offline presenter acceptance.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-125 — 2026-08-31 — Demo readiness remains split between showcaseable assets and accepted live enforcement
+
+**Input:** Determine whether the KIL laboratory is ready to demonstrate after
+Task 10 publication PR #17 merged and synchronized.
+
+**Interpretation:** “Ready to demo” has two materially different meanings. The
+modeled V3A presenter and the live V3B-1 request-free lifecycle can be shown
+now. An accepted live KIL enforcement demonstration requires a consequential
+central request and therefore must satisfy the stronger evidence boundary
+before it runs.
+
+**Decision status:** Confirmed partial readiness. Public and local `main` are
+synchronized at merge commit
+`ab2667941b9328739c8201d626694770e2387fe9`; the merged 485-test gate passes;
+and Task 10 established three-driver readiness, clean cancellation, zero
+request activity, evidence freeze, and exact owned-object teardown. The central
+`run` has not executed and is not yet authorized. Exact before/after foreign-
+resource snapshots, verifier equality, and their publication gate remain
+unimplemented.
+
+**Rationale:** Showing the request-free lifecycle as an enforcement result
+would collapse lifecycle safety into authorization evidence. The accepted live
+demo must retain the no-retry boundary and must not claim exact foreign-state
+restoration until that state is durably bound at both observation boundaries.
+
+**Affected artifacts:**
+
+- `docs/lab/V3B1-TASK10-REQUEST-FREE-GATE.md`
+- `docs/lab/V3-PROGRESS.md`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The public representation of foreign-profile
+snapshots requires founder approval: exact raw records, digest-only records, or
+pseudonymous per-profile records. The recommended design retains exact names
+privately and publishes pseudonymous resource records.
+
+**Next gate:** Approve the snapshot representation; write and review its narrow
+design specification and implementation plan; implement it test-first; pass
+independent review and public CI; merge and synchronize; then execute and
+publish a fresh request-free snapshot lifecycle. Only after that gate may the
+one-shot central live proof execute.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-126 — 2026-08-31 — Current-main V3A modeled presenter regenerated for founder viewing
+
+**Input:** Display the V3A visual demonstration.
+
+**Interpretation:** Provide the existing V3A process-contract demonstration as
+a visible, integrity-checked modeled asset without representing it as the live
+V3B-1 enforcement proof.
+
+**Decision status:** Confirmed execution of the deterministic V3A presenter on
+current public `main` commit
+`ab2667941b9328739c8201d626694770e2387fe9`. The three fixed outcomes were
+`permit / permit / deny`, with target-marker counts `1 / 1 / 0` and valid
+proofs. The generated bundle identifier is `ea57c04913151539`.
+
+**Rationale:** The prior browser artifact lived in a removed development
+worktree. Regenerating from synchronized `main` supplies a current, reproducible
+presenter while preserving the evidence boundary: V3A remains modeled and
+process-contract-only, not a validated Envoy or cluster result.
+
+**Affected artifacts:**
+
+- ignored generated bundle
+  `artifacts/generated/v3a-process-contract/ea57c04913151539/`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** None for viewing. The accepted live-enforcement demo
+still depends on the approved foreign-resource snapshot contract and its fresh
+request-free publication gate.
+
+**Next gate:** Review the V3A presenter as a modeled showcase. Do not promote
+its outcomes as live enforcement; continue with snapshot-contract approval
+before authorizing the one-shot V3B-1 central proof.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-127 — 2026-08-31 — Founder approves pseudonymous-public/full-private foreign-resource snapshot design
+
+**Input:** Proceed with the next actions and confirm the recommended foreign-
+resource snapshot representation.
+
+**Interpretation:** The founder's “correct” confirms the recommended design:
+exact named snapshots remain private, complete public resource tuples use
+run-scoped pseudonymous profile references, equality is exact, v3 evidence
+fails closed on mismatch, and legacy v1/v2 bundles retain their original
+verification rules.
+
+**Decision status:** Confirmed architecture approval. The narrow design is
+recorded in
+`docs/superpowers/specs/2026-08-31-v3b1-foreign-resource-snapshot-design.md`.
+No controller behavior or consequential request has been executed. The
+isolated branch baseline passes all 485 tests.
+
+**Rationale:** This representation makes the full resource tuple independently
+inspectable without publishing local profile names. Exact private journal
+records retain recovery and audit authority. Observation never grants KIL
+authority to repair or mutate foreign profiles.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-08-31-v3b1-foreign-resource-snapshot-design.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- isolated branch `codex/v3b1-foreign-snapshot-contract`
+
+**Unresolved questions:** Founder review of the written specification remains
+the final design gate. Implementation planning and production-code changes have
+not begun.
+
+**Next gate:** Self-review and commit the specification, then obtain founder
+approval of the written file. After approval, write the complete test-first
+implementation plan. The central `run` remains prohibited.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
