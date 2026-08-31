@@ -73,6 +73,17 @@ PRIMER_VISUALS = {
     "trust-physics": "renderTrustPhysics",
 }
 
+CASE_VISUALS = {
+    "incident-overview": "renderIncidentOverview",
+    "foothold": "renderFoothold",
+    "branching-cutoff": "renderBranchingCutoff",
+    "incident-topology": "renderIncidentTopology",
+    "hybrid-applied": "renderHybridApplied",
+    "lab-mapping": "renderLabMapping",
+    "three-tracks": "renderThreeTracks",
+    "evidence-ladder": "renderEvidenceLadder",
+}
+
 
 class PresenterAudienceDemoContractTest(unittest.TestCase):
     def _html(self) -> str:
@@ -139,6 +150,29 @@ class PresenterAudienceDemoContractTest(unittest.TestCase):
         self.assertIn("Reducing-only local overlay", html)
         self.assertIn("Earn slowly", html)
         self.assertIn("Lose quickly", html)
+
+    def test_case_visuals_have_dedicated_bounded_renderers(self):
+        html = self._html()
+        scenes = self._scenes()
+        self.assertEqual(
+            [scene["visual"] for scene in scenes[4:]],
+            list(CASE_VISUALS),
+        )
+        for visual, renderer in CASE_VISUALS.items():
+            with self.subTest(visual=visual):
+                self.assertIn(f"function {renderer}(", html)
+        for required_copy in (
+            "0.95 modeled",
+            "0.90 modeled",
+            "Conditionally unreachable",
+            "PERMIT · PERMIT · DENY",
+            "200 · 200 · 403",
+            "V3A modeled",
+            "V3B-1 pending",
+            "V3B-2 future",
+        ):
+            with self.subTest(required_copy=required_copy):
+                self.assertIn(required_copy, html)
 
 
 if __name__ == "__main__":

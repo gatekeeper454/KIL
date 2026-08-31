@@ -415,11 +415,146 @@
         );
       }
 
+      function phaseBox(x, y, number, lines, state = 'observed') {
+        const className = state === 'cutoff' ? 'diagram-blue' : state === 'unreachable' ? 'diagram-line' : 'diagram-red';
+        const opacity = state === 'unreachable' ? ' opacity="0.48"' : '';
+        const labels = lines.map((line, index) => `<text x="${x + 62}" y="${y + 48 + index * 24}" text-anchor="middle" class="diagram-small">${escapeText(line)}</text>`).join('');
+        return `<g${opacity}><rect x="${x}" y="${y}" width="124" height="112" rx="10" class="diagram-panel"/><circle cx="${x + 18}" cy="${y + 18}" r="14" class="${className.replace('diagram-', 'diagram-')}-fill"/><text x="${x + 18}" y="${y + 24}" text-anchor="middle" class="diagram-small">${number}</text>${labels}</g>`;
+      }
+
+      function renderIncidentOverview() {
+        return svgShell(
+          'Eight-phase incident sequence used for the KIL counterfactual',
+          'The source-cited incident moves from worker foothold through control plane, cloud and node privilege, secrets, cross-cluster access, mesh enrollment, token forging, and CI targeting.',
+          `<text x="45" y="45" class="diagram-label">Observed sequence · source-cited</text>
+           <path d="M70 175 H930" class="diagram-red" marker-end="url(#arrow-red)"/>
+           ${phaseBox(32, 105, 1, ['Worker', 'foothold'])}${phaseBox(153, 105, 2, ['Cluster', 'API'])}${phaseBox(274, 105, 3, ['Cloud +', 'node'])}${phaseBox(395, 105, 4, ['Secret', 'read'])}${phaseBox(516, 105, 5, ['Cross-', 'cluster'])}${phaseBox(637, 105, 6, ['Mesh', 'enroll'])}${phaseBox(758, 105, 7, ['Token', 'forge'])}${phaseBox(879, 105, 8, ['CI', 'pivot'])}
+           <path d="M70 315 H930" class="diagram-red" marker-end="url(#arrow-red)"/>
+           <text x="500" y="300" text-anchor="middle" class="diagram-text">Expanding authority and blast radius</text>
+           <rect x="85" y="355" width="830" height="94" rx="12" class="diagram-panel"/>
+           <text x="500" y="392" text-anchor="middle" class="diagram-text">Counterfactual discipline</text>
+           <text x="500" y="424" text-anchor="middle" class="diagram-small">Observed incident actions + clearly labeled modeled KIL context</text>`
+        );
+      }
+
+      function renderFoothold() {
+        return svgShell(
+          'The worker foothold and the current mediation boundary',
+          'The disclosed application compromise occurs before the present lab boundary; the current Envoy rail begins at the first mediated outbound request.',
+          `<text x="45" y="45" class="diagram-label">Where the current demonstration begins</text>
+           <rect x="55" y="100" width="245" height="230" rx="14" class="diagram-panel"/><text x="177" y="145" text-anchor="middle" class="diagram-text">Application foothold</text><text x="177" y="190" text-anchor="middle" class="diagram-small">renderer-related</text><text x="177" y="218" text-anchor="middle" class="diagram-small">injection path</text><text x="177" y="278" text-anchor="middle" class="diagram-label">Observed</text>
+           <path d="M300 215 H470" class="diagram-red" marker-end="url(#arrow-red)"/>
+           <rect x="470" y="70" width="28" height="290" rx="8" class="diagram-blue-fill"/><text x="484" y="390" text-anchor="middle" class="diagram-small">mediation boundary</text>
+           <path d="M498 215 H680" class="diagram-blue" marker-end="url(#arrow-blue)"/>
+           <rect x="685" y="100" width="255" height="230" rx="14" class="diagram-panel"/><text x="812" y="145" text-anchor="middle" class="diagram-text">Outbound request</text><text x="812" y="190" text-anchor="middle" class="diagram-small">worker → cluster API</text><text x="812" y="250" text-anchor="middle" class="diagram-label">Modeled KIL cutoff</text>
+           <text x="500" y="445" text-anchor="middle" class="diagram-small">The Envoy lab does not claim to mediate the original local file or parser event.</text>`
+        );
+      }
+
+      function renderBranchingCutoff() {
+        return svgShell(
+          'The first mediated divergence branches the actual and modeled paths',
+          'The observed incident continues beyond the Kubernetes API call, while a modeled 0.95 divergence causes the KIL path to deny at the first mediated boundary.',
+          `<text x="45" y="45" class="diagram-label">Actual incident versus KIL counterfactual</text>
+           <text x="55" y="124" class="diagram-text">Observed path</text><path d="M205 116 H920" class="diagram-red" marker-end="url(#arrow-red)"/><text x="560" y="98" text-anchor="middle" class="diagram-small">control plane → cloud → node → secrets → downstream branches</text>
+           <text x="55" y="282" class="diagram-text">KIL path</text><path d="M205 274 H430" class="diagram-blue" marker-end="url(#arrow-blue)"/>
+           <rect x="430" y="205" width="36" height="145" rx="7" class="diagram-blue-fill"/>
+           <text x="448" y="385" text-anchor="middle" class="diagram-small">infrastructure boundary</text>
+           <rect x="240" y="310" width="170" height="58" rx="9" class="diagram-panel"/><text x="325" y="345" text-anchor="middle" class="diagram-text">0.95 modeled</text>
+           <g opacity="0.48"><path d="M466 274 H920" class="diagram-line" stroke-dasharray="12 10"/>${phaseBox(520, 218, 2, ['Cloud', 'map'], 'unreachable')}${phaseBox(650, 218, 3, ['Node', 'root'], 'unreachable')}${phaseBox(780, 218, 4, ['Secret', 'read'], 'unreachable')}</g>
+           <text x="700" y="440" text-anchor="middle" class="diagram-text">Conditionally unreachable</text>`
+        );
+      }
+
+      function renderIncidentTopology() {
+        return svgShell(
+          'Incident topology and dependency-aware reachability',
+          'A control-plane path leads to cloud and node privilege, then a modeled bulk-secret divergence precedes multiple downstream branches that remain conditional on upstream success.',
+          `<text x="45" y="45" class="diagram-label">Persistent topology · claims follow dependency edges</text>
+           ${phaseBox(35, 185, 1, ['Cluster', 'API'])}${phaseBox(190, 185, 2, ['Cloud', 'map'])}${phaseBox(345, 185, 3, ['Node', 'root'])}${phaseBox(500, 185, 4, ['136-key', 'read'], 'cutoff')}
+           <path d="M159 241 H190 M314 241 H345 M469 241 H500" class="diagram-red"/>
+           <path d="M624 241 C680 241 670 95 710 95 M624 241 H710 M624 241 C680 241 670 385 710 385" class="diagram-line" stroke-dasharray="10 8"/>
+           ${phaseBox(710, 40, 5, ['Cross-', 'cluster'], 'unreachable')}${phaseBox(710, 185, 6, ['Mesh', 'enroll'], 'unreachable')}${phaseBox(710, 330, 7, ['Token', 'forge'], 'unreachable')}
+           <path d="M834 386 H855" class="diagram-line" stroke-dasharray="10 8"/>${phaseBox(855, 330, 8, ['CI', 'pivot'], 'unreachable')}
+           <rect x="480" y="75" width="190" height="72" rx="9" class="diagram-panel"/><text x="575" y="105" text-anchor="middle" class="diagram-text">0.90 modeled</text><text x="575" y="132" text-anchor="middle" class="diagram-small">Phase 4 divergence</text>
+           <text x="760" y="476" text-anchor="middle" class="diagram-small">Conditionally unreachable — not counted as separate local detections</text>`
+        );
+      }
+
+      function renderHybridApplied() {
+        return svgShell(
+          'Hybrid KIL authority applied to the worker request',
+          'Signed KTP state is verified at the boundary; fresh worker-to-control-plane divergence may only reduce the effective authority consumed by Envoy external authorization.',
+          `<text x="45" y="45" class="diagram-label">Same architecture · now bound to the incident action</text>
+           <rect x="65" y="92" width="360" height="105" rx="12" class="diagram-panel"/><text x="245" y="128" text-anchor="middle" class="diagram-text">Signed KTP enforcement state</text><text x="245" y="160" text-anchor="middle" class="diagram-small">fresh · class-bound · environment-bounded</text>
+           <path d="M245 197 V300" class="diagram-blue" marker-end="url(#arrow-blue)"/>
+           <rect x="65" y="315" width="360" height="100" rx="12" class="diagram-panel"/><text x="245" y="352" text-anchor="middle" class="diagram-text">Envoy external authorization</text><text x="245" y="383" text-anchor="middle" class="diagram-small">verify and consume</text>
+           <rect x="575" y="92" width="360" height="105" rx="12" class="diagram-panel"/><text x="755" y="128" text-anchor="middle" class="diagram-text">Fresh trajectory evidence</text><text x="755" y="160" text-anchor="middle" class="diagram-small">worker → Kubernetes control plane</text>
+           <path d="M755 197 V300" class="diagram-red" marker-end="url(#arrow-red)"/>
+           <rect x="575" y="315" width="360" height="100" rx="12" class="diagram-panel"/><text x="755" y="352" text-anchor="middle" class="diagram-text">Reducing-only local overlay</text><text x="755" y="383" text-anchor="middle" class="diagram-small">effective authority can move only downward</text>
+           <path d="M425 365 H575" class="diagram-blue"/>
+           <text x="500" y="462" text-anchor="middle" class="diagram-small">The fast path cannot mint authority, widen scope, or clear a KTP veto.</text>`
+        );
+      }
+
+      function renderLabMapping() {
+        return svgShell(
+          'Harmless mapping from incident boundary to validation lab',
+          'A one-shot driver, Envoy, authorization service, harmless target marker, and evidence bundle reproduce the enforcement question without reproducing exploit behavior.',
+          `<text x="45" y="45" class="diagram-label">V3B-1 local Envoy rail · harmless components</text>
+           <rect x="45" y="150" width="160" height="125" rx="12" class="diagram-panel"/><text x="125" y="196" text-anchor="middle" class="diagram-text">Request driver</text><text x="125" y="228" text-anchor="middle" class="diagram-small">one normalized action</text>
+           <path d="M205 212 H300" class="diagram-blue" marker-end="url(#arrow-blue)"/>
+           <rect x="305" y="150" width="160" height="125" rx="12" class="diagram-panel"/><text x="385" y="196" text-anchor="middle" class="diagram-text">Envoy</text><text x="385" y="228" text-anchor="middle" class="diagram-small">mediated transport</text>
+           <path d="M465 212 H560" class="diagram-blue" marker-end="url(#arrow-blue)"/>
+           <rect x="565" y="115" width="180" height="195" rx="12" class="diagram-panel"/><text x="655" y="160" text-anchor="middle" class="diagram-text">KIL authz</text><text x="655" y="194" text-anchor="middle" class="diagram-small">signed state</text><text x="655" y="222" text-anchor="middle" class="diagram-small">+ local reduction</text><text x="655" y="270" text-anchor="middle" class="diagram-label">permit / deny</text>
+           <path d="M745 212 H820" class="diagram-blue" marker-end="url(#arrow-blue)"/>
+           <rect x="825" y="150" width="130" height="125" rx="12" class="diagram-panel"/><text x="890" y="196" text-anchor="middle" class="diagram-text">Target</text><text x="890" y="228" text-anchor="middle" class="diagram-small">harmless marker</text>
+           <path d="M655 310 V390 H890 V275" class="diagram-line" stroke-dasharray="8 7"/>
+           <text x="770" y="420" text-anchor="middle" class="diagram-small">canonical evidence records what was forwarded</text>`
+        );
+      }
+
+      function renderThreeTracks() {
+        return svgShell(
+          'Three-track controlled comparison',
+          'The same action is permitted by credential policy, permitted by the last signed state alone, and denied only when fresh reducing local evidence is applied.',
+          `<text x="45" y="45" class="diagram-label">Same normalized request · one changed variable</text>
+           <rect x="55" y="95" width="270" height="245" rx="14" class="diagram-panel"/><text x="190" y="140" text-anchor="middle" class="diagram-text">A · Credential policy</text><text x="190" y="205" text-anchor="middle" class="diagram-green-fill diagram-text">PERMIT</text><text x="190" y="246" text-anchor="middle" class="diagram-small">HTTP 200</text><text x="190" y="285" text-anchor="middle" class="diagram-small">target marker 1</text>
+           <rect x="365" y="95" width="270" height="245" rx="14" class="diagram-panel"/><text x="500" y="140" text-anchor="middle" class="diagram-text">B · Signed state</text><text x="500" y="205" text-anchor="middle" class="diagram-green-fill diagram-text">PERMIT</text><text x="500" y="246" text-anchor="middle" class="diagram-small">HTTP 200</text><text x="500" y="285" text-anchor="middle" class="diagram-small">target marker 1</text>
+           <rect x="675" y="95" width="270" height="245" rx="14" class="diagram-panel"/><text x="810" y="140" text-anchor="middle" class="diagram-text">C · State + reduction</text><text x="810" y="205" text-anchor="middle" class="diagram-red-fill diagram-text">DENY</text><text x="810" y="246" text-anchor="middle" class="diagram-small">HTTP 403</text><text x="810" y="285" text-anchor="middle" class="diagram-small">target marker 0</text>
+           <text x="500" y="395" text-anchor="middle" class="diagram-text">PERMIT · PERMIT · DENY</text><text x="500" y="432" text-anchor="middle" class="diagram-small">200 · 200 · 403</text><text x="500" y="470" text-anchor="middle" class="diagram-label">V3A modeled · V3B-1 pending</text>`
+        );
+      }
+
+      function renderEvidenceLadder() {
+        return svgShell(
+          'KIL evidence ladder',
+          'Evidence progresses from deterministic model tests through historical replay, modeled process contract, pending local Envoy validation, future cluster rail, and integrity-checked publication.',
+          `<text x="45" y="45" class="diagram-label">Claims advance only with evidence</text>
+           <path d="M90 410 L245 335 L400 260 L555 185 L710 110 L875 45" class="diagram-blue"/>
+           <g><circle cx="90" cy="410" r="30" class="diagram-blue-fill"/><text x="90" y="417" text-anchor="middle" class="diagram-text">V1</text><text x="90" y="462" text-anchor="middle" class="diagram-small">model invariants</text></g>
+           <g><circle cx="245" cy="335" r="30" class="diagram-blue-fill"/><text x="245" y="342" text-anchor="middle" class="diagram-text">V2</text><text x="245" y="382" text-anchor="middle" class="diagram-small">historical replay</text></g>
+           <g><circle cx="400" cy="260" r="30" class="diagram-blue-fill"/><text x="400" y="267" text-anchor="middle" class="diagram-text">V3A</text><text x="400" y="307" text-anchor="middle" class="diagram-small">V3A modeled</text></g>
+           <g><circle cx="555" cy="185" r="30" class="diagram-panel"/><text x="555" y="192" text-anchor="middle" class="diagram-text">3B1</text><text x="555" y="232" text-anchor="middle" class="diagram-small">V3B-1 pending</text></g>
+           <g><circle cx="710" cy="110" r="30" class="diagram-panel"/><text x="710" y="117" text-anchor="middle" class="diagram-text">3B2</text><text x="710" y="157" text-anchor="middle" class="diagram-small">V3B-2 future</text></g>
+           <g><circle cx="875" cy="45" r="30" class="diagram-panel"/><text x="875" y="52" text-anchor="middle" class="diagram-text">V4</text><text x="875" y="92" text-anchor="middle" class="diagram-small">publication</text></g>
+           <rect x="550" y="315" width="380" height="116" rx="12" class="diagram-panel"/><text x="740" y="350" text-anchor="middle" class="diagram-text">Current claim boundary</text><text x="740" y="382" text-anchor="middle" class="diagram-small">Observed facts · modeled KIL results</text><text x="740" y="410" text-anchor="middle" class="diagram-small">Live result withheld until accepted evidence exists</text>`
+        );
+      }
+
       const visualRenderers = {
         'ambient-breach': renderAmbientBreach,
         'kil-comparison': renderKILComparison,
         'hybrid-architecture': renderHybridArchitecture,
-        'trust-physics': renderTrustPhysics
+        'trust-physics': renderTrustPhysics,
+        'incident-overview': renderIncidentOverview,
+        'foothold': renderFoothold,
+        'branching-cutoff': renderBranchingCutoff,
+        'incident-topology': renderIncidentTopology,
+        'hybrid-applied': renderHybridApplied,
+        'lab-mapping': renderLabMapping,
+        'three-tracks': renderThreeTracks,
+        'evidence-ladder': renderEvidenceLadder
       };
 
       function render(scene) {
