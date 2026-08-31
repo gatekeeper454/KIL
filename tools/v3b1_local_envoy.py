@@ -7601,40 +7601,36 @@ class LocalEnvoyController:
         ):
             raise ControllerError("partial-up evidence status is contradictory")
         if not up_complete_observed:
-            survivor_identities = {
-                "containers": sorted(
-                    (
-                        {"id": str(item["id"]), "name": str(item["name"])}
-                        for item in ordered
+            if not partial_rejections:
+                survivor_identities = {
+                    "containers": sorted(
+                        (
+                            {"id": str(item["id"]), "name": str(item["name"])}
+                            for item in ordered
+                        ),
+                        key=lambda item: (item["name"], item["id"]),
                     ),
-                    key=lambda item: (item["name"], item["id"]),
-                ),
-                "networks": sorted(
-                    (
-                        {"id": str(item["id"]), "name": str(item["name"])}
-                        for item in state["network_objects"]  # type: ignore[union-attr]
+                    "networks": sorted(
+                        (
+                            {"id": str(item["id"]), "name": str(item["name"])}
+                            for item in state["network_objects"]  # type: ignore[union-attr]
+                        ),
+                        key=lambda item: (item["name"], item["id"]),
                     ),
-                    key=lambda item: (item["name"], item["id"]),
-                ),
-            }
-            rejection_details = {
-                "reason_code": "up_complete_absent",
-                "up_complete_observed": False,
-                "promotable": False,
-                "container_count": len(survivor_identities["containers"]),
-                "network_count": len(survivor_identities["networks"]),
-                "survivor_identity_sha256": _digest_bytes(
-                    canonical_json(survivor_identities).encode("utf-8")
-                ),
-            }
-            if partial_rejections:
-                if partial_rejections[0]["details"] != rejection_details:
-                    raise ControllerError("partial-up survivor provenance changed")
-            else:
+                }
                 journal_event(
                     self.journal_path,
                     "partial_up_evidence_rejected",
-                    rejection_details,
+                    {
+                        "reason_code": "up_complete_absent",
+                        "up_complete_observed": False,
+                        "promotable": False,
+                        "container_count": len(survivor_identities["containers"]),
+                        "network_count": len(survivor_identities["networks"]),
+                        "survivor_identity_sha256": _digest_bytes(
+                            canonical_json(survivor_identities).encode("utf-8")
+                        ),
+                    },
                 )
             for item in ordered:
                 self._stop_and_attest_container(item, manifest)

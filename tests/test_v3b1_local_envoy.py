@@ -4297,6 +4297,296 @@ class JournalRecoveryTest(unittest.TestCase):
 
 
 class TeardownContinuationTest(unittest.TestCase):
+    def test_partial_up_down_retry_keeps_initial_rejection_and_cleans_exact_remainder(
+        self,
+    ):
+        for crash_stage in (
+            "after_remove_intent",
+            "after_actual_removal",
+            "after_remove_complete",
+            "after_final_empty_inventory",
+        ):
+            with (
+                self.subTest(crash_stage=crash_stage),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory) / "repo"
+                profile_path = root / "deploy/kind/v3b-profile.json"
+                profile_path.parent.mkdir(parents=True)
+                profile_path.write_bytes(
+                    (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+                )
+
+                class RetryController(LocalEnvoyController):
+                    def __init__(self, *args, **kwargs):
+                        super().__init__(*args, **kwargs)
+                        self.objects = []
+                        self.networks = []
+                        self.running_ids = set()
+                        self.removed_ids = set()
+                        self.commands = []
+                        self.deleted = False
+                        self.crashed = False
+                        self.replacement = None
+
+                    def _container_inventory_records(self):
+                        records = [
+                            item
+                            for item in self.objects
+                            if item["id"] not in self.removed_ids
+                        ]
+                        if self.replacement is not None:
+                            records.append(self.replacement)
+                        return records
+
+                    def _execute(self, argv, *, timeout_s, docker=False):
+                        self.commands.append(list(argv))
+                        if list(argv[:3]) == ["colima", "list", "--json"]:
+                            return CommandResult(
+                                0,
+                                "[]\n"
+                                if self.deleted
+                                else (
+                                    '{"name":"kil-v3-lab","status":"Running",'
+                                    '"arch":"aarch64","cpus":4,'
+                                    '"memory":8589934592,"disk":64424509440,'
+                                    '"runtime":"docker"}\n'
+                                ),
+                                "",
+                            )
+                        if argv[0:2] == ["colima", "delete"]:
+                            self.deleted = True
+                            return CommandResult(0, "", "")
+                        if "context" in argv and "show" in argv:
+                            return CommandResult(0, "personal\n", "")
+                        if len(argv) > 5 and argv[5] == "ps":
+                            return CommandResult(
+                                0,
+                                "".join(
+                                    canonical_json(
+                                        {"id": item["id"], "name": item["name"]}
+                                    )
+                                    + "\n"
+                                    for item in self._container_inventory_records()
+                                ),
+                                "",
+                            )
+                        if len(argv) > 6 and argv[5:7] == ["network", "ls"]:
+                            return CommandResult(
+                                0,
+                                "".join(
+                                    canonical_json(
+                                        {"id": item["id"], "name": item["name"]}
+                                    )
+                                    + "\n"
+                                    for item in self.networks
+                                    if item["id"] not in self.removed_ids
+                                ),
+                                "",
+                            )
+                        if "{{.State.Running}}" in argv:
+                            return CommandResult(
+                                0,
+                                ("true" if argv[-1] in self.running_ids else "false")
+                                + "\n",
+                                "",
+                            )
+                        if len(argv) > 5 and argv[5] == "stop":
+                            self.running_ids.discard(argv[-1])
+                            return CommandResult(0, argv[-1] + "\n", "")
+                        if len(argv) > 5 and argv[5] == "rm":
+                            if (
+                                crash_stage == "after_remove_intent"
+                                and not self.crashed
+                            ):
+                                self.crashed = True
+                                raise ControllerError(
+                                    "injected crash after remove intent"
+                                )
+                            self.removed_ids.add(argv[-1])
+                            return CommandResult(0, argv[-1] + "\n", "")
+                        if len(argv) > 6 and argv[5:7] == ["network", "rm"]:
+                            self.removed_ids.add(argv[-1])
+                            return CommandResult(0, argv[-1] + "\n", "")
+                        return CommandResult(0, "", "")
+
+                    def _attest_colima_after_start(self, execution_nonce=None):
+                        return {"test_attestation": True}
+
+                    def _inspect_container(self, identifier, *_args, **_kwargs):
+                        return next(
+                            item
+                            for item in self.objects
+                            if item["id"] == identifier
+                        )
+
+                    def _inspect_network(self, identifier, *_args, **_kwargs):
+                        if (
+                            crash_stage == "after_remove_complete"
+                            and not self.crashed
+                            and any(
+                                event["event"] == "container_remove_complete"
+                                for event in load_lifecycle_journal(
+                                    self.journal_path
+                                )["events"]
+                            )
+                        ):
+                            self.crashed = True
+                            raise ControllerError(
+                                "injected crash after remove completion"
+                            )
+                        return next(
+                            item for item in self.networks if item["id"] == identifier
+                        )
+
+                    def _assert_only_recorded_managed(self, state, *, expect_present):
+                        super()._assert_only_recorded_managed(
+                            state, expect_present=expect_present
+                        )
+                        if (
+                            crash_stage == "after_actual_removal"
+                            and not self.crashed
+                            and self.objects[0]["id"] in self.removed_ids
+                            and not any(
+                                event["event"] == "container_remove_complete"
+                                for event in load_lifecycle_journal(
+                                    self.journal_path
+                                )["events"]
+                            )
+                        ):
+                            self.crashed = True
+                            raise ControllerError(
+                                "injected crash after actual removal"
+                            )
+                        if (
+                            crash_stage == "after_final_empty_inventory"
+                            and not expect_present
+                            and not self.crashed
+                        ):
+                            self.crashed = True
+                            raise ControllerError(
+                                "injected crash after final empty inventory"
+                            )
+
+                controller = RetryController(
+                    root,
+                    FakeRunner(),
+                    home=Path(directory) / "home",
+                    port_probe=lambda port: False,
+                    tool_verifier=lambda: TOOL_IDENTITIES,
+                )
+                controller._prepare_private_roots()
+                value = manifest(
+                    docker_host=controller.docker_host,
+                    execution_nonce=HEX_A,
+                )
+                private_manifest = controller.private_root / "manifests/run.json"
+                private_manifest.write_text(canonical_json(value) + "\n")
+                temporary_state = controller.private_root / "fixture-state.json"
+                persist_active_state(temporary_state, private_manifest, value)
+                complete_state = load_bound_active_state(temporary_state)
+                temporary_state.unlink()
+                controller.objects = [complete_state["objects"][0]]
+                controller.networks = [complete_state["network_objects"][0]]
+                controller.running_ids = {controller.objects[0]["id"]}
+                create_lifecycle_journal(
+                    controller.journal_path,
+                    private_root=controller.private_root,
+                    repository_root=root,
+                    docker_host=controller.docker_host,
+                    source_commit="d" * 40,
+                    execution_nonce=HEX_A,
+                    global_context="personal",
+                )
+                journal_event(
+                    controller.journal_path,
+                    "preflight_complete",
+                    {
+                        "tool_identities": TOOL_IDENTITIES,
+                        "ports": list(controller.profile.gateway_ports),
+                        "dedicated_profile_absent": True,
+                    },
+                )
+                journal_event(
+                    controller.journal_path,
+                    "colima_attestation_complete",
+                    {"profile": "kil-v3-lab", "attestation": {}},
+                )
+                journal_event(
+                    controller.journal_path,
+                    "engine_provenance_observed",
+                    ENGINE_PROVENANCE,
+                )
+                _bind_journal_manifest(
+                    controller.journal_path, private_manifest, value
+                )
+                for kind, item in (
+                    ("network", controller.networks[0]),
+                    ("container", controller.objects[0]),
+                ):
+                    journal_event(
+                        controller.journal_path,
+                        f"{kind}_create_intent",
+                        {"name": item["name"]},
+                    )
+                    journal_event(
+                        controller.journal_path,
+                        f"{kind}_create_complete",
+                        {"id": item["id"], "name": item["name"]},
+                    )
+
+                with self.assertRaisesRegex(ControllerError, "injected crash"):
+                    controller.down()
+                first_rejection = next(
+                    event
+                    for event in load_lifecycle_journal(
+                        controller.journal_path
+                    )["events"]
+                    if event["event"] == "partial_up_evidence_rejected"
+                )
+
+                if crash_stage == "after_actual_removal":
+                    replacement_id = "f" * 64
+                    controller.replacement = {
+                        "id": replacement_id,
+                        "name": controller.objects[0]["name"],
+                    }
+                    with self.assertRaisesRegex(ControllerError, "identity"):
+                        controller.down()
+                    self.assertNotIn(replacement_id, controller.removed_ids)
+                    self.assertFalse(controller.deleted)
+                    controller.replacement = None
+
+                published = controller.down()
+
+                archived = load_lifecycle_journal(
+                    controller._private_completed_root()
+                    / f"{value['run_id']}.journal.json"
+                )
+                rejections = [
+                    event
+                    for event in archived["events"]
+                    if event["event"] == "partial_up_evidence_rejected"
+                ]
+                self.assertEqual(rejections, [first_rejection])
+                self.assertTrue(controller.deleted)
+                self.assertEqual(
+                    controller.removed_ids,
+                    {
+                        controller.objects[0]["id"],
+                        controller.networks[0]["id"],
+                    },
+                )
+                self.assertFalse(
+                    json.loads((published / "manifest.json").read_text())[
+                        "run_complete"
+                    ]
+                )
+                for command in controller.commands:
+                    self.assertNotIn("*", command)
+                    self.assertNotIn("prune", command)
+                    self.assertNotIn("-aq", command)
+
     def test_partial_up_down_skips_freeze_and_exactly_cleans_each_survivor_kind(self):
         for case in ("service", "validator", "network"):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:

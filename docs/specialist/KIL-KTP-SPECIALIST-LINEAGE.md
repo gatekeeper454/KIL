@@ -4158,3 +4158,50 @@ unchanged.
 live smoke before the single accepted proof run.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-084 — 2026-08-30 — Partial V3B-1 teardown retries preserve first-observation provenance
+
+**Input:** Make the incomplete-up teardown path retry-safe across crashes after
+a removal intent, after an actual removal but before completion, after durable
+removal completion, and after the final-empty inventory gate. Preserve the
+initial rejection record and retain replacement-identity fail-closed behavior.
+
+**Interpretation:** `partial_up_evidence_rejected` attests the exact survivor
+set observed when incomplete-up teardown first began. It is immutable lineage,
+not a checksum of the progressively shrinking survivor set. Subsequent
+authorization comes from the durable full-ID creation/removal transitions and
+the jointly validated current container and custom-network inventories loaded
+by `_load_for_down()`.
+
+**Decision status:** Confirmed harness-only correction complete, pending
+independent re-review. A retry retains the first closed rejection event
+unchanged and does not recompute or compare its identity digest against current
+survivors. Pending-and-absent removal is completed only after both inventories
+validate; durably completed removals remain absent; exact remaining objects are
+stopped, attested, and removed by full ID; and the final-empty and profile
+deletion gates remain mandatory. A same-name replacement with a different full
+ID fails closed, is never sent to Docker removal, and cleanup resumes only once
+the ambiguity is absent.
+
+**Rationale:** Legitimate teardown progress necessarily changes the current
+inventory. Comparing that current set to the initial rejection digest strands
+owned resources after a crash and misuses historical provenance as mutable
+state. Keeping the two roles separate preserves both auditability and safe,
+idempotent cleanup.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker or Colima operation was performed.
+Installed-runtime retry timing remains gated on independent review and the
+committed zero-request smoke. KIL, signed composite state, authorization,
+Envoy routing, target behavior, and evidence acceptance semantics are
+unchanged.
+
+**Next gate:** Independent Task 4 retry-safety re-review, followed by the
+committed zero-request live smoke before the single accepted proof run.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
