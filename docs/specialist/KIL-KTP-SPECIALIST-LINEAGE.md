@@ -7032,3 +7032,40 @@ separate speaker guide, and dual presenter/audience modes; approve the narrow
 design before any page modification.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-131 — 2026-08-31 — Balanced 30–45-second stage narration selected
+
+**Input:** Select 30–45 seconds of narration for each of the seven walkthrough
+stages.
+
+**Interpretation:** Write approximately 70–90 spoken words per stage for a
+mixed executive and technical audience, yielding an approximately five-minute
+guided presentation.
+
+**Decision status:** Confirmed narration depth; presentation model proposed.
+The recommended model keeps notes synchronized with the existing stage buttons
+and adds a presenter-notes visibility control so one page supports rehearsal
+and a clean audience view.
+
+**Rationale:** A synchronized presenter mode avoids switching to a separate
+document while preventing speaker text from permanently cluttering the public
+diagram. Each script can carry its own observed, modeled, or pending claim
+boundary at the moment it matters.
+
+**Affected artifacts:**
+
+- proposed walkthrough talk-track design specification
+- proposed update to `kil-live-demo-walkthrough.html`
+- proposed regenerated export
+  `artifacts/generated/kil-live-demo-walkthrough.html`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Founder approval of the recommended synchronized
+presenter/audience mode remains required before writing the specification or
+modifying the walkthrough.
+
+**Next gate:** Approve the presentation model, then write and commit the narrow
+talk-track design specification for final founder review. No laboratory or
+enforcement behavior changes are in scope.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
