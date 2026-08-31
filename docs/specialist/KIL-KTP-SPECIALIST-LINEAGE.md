@@ -7069,3 +7069,54 @@ talk-track design specification for final founder review. No laboratory or
 enforcement behavior changes are in scope.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-132 — 2026-08-31 — Incident-centered Presenter/Audience storyboard scoped
+
+**Input:** Build synchronized Presenter/Audience mode so the demonstration
+tells the story of the disclosed Hugging Face breach, shows how KIL could
+potentially have interrupted it, and uses graphics plus a referenced topology
+to explain what is happening and why.
+
+**Interpretation:** Expand the seven-step technical walkthrough into one
+incident-centered narrative. A persistent topology should trace the disclosed
+path from the dataset worker through control-plane, cloud, secret, cross-cluster,
+mesh, token, and CI targets; the same view should then map the relevant incident
+boundary into the three-track KIL lab. Each selected scene should synchronize
+the topology, audience takeaway, evidence label, and a 30–45-second presenter
+script. Audience mode hides the script without changing the selected scene.
+
+**Decision status:** Scope confirmed; detailed design proposed and awaiting
+founder approval. The recommended cutoff is deliberately two-part: anomalous
+local reads are shown as an early trajectory signal, while the first claimed
+transport-level intervention is the worker's attempted Kubernetes control-plane
+or cloud-metadata egress. Downstream incident branches become conditionally
+unreachable rather than being counted as separately prevented. No walkthrough
+code or evidence status has changed in this turn.
+
+**Rationale:** The current Envoy laboratory tests an HTTP enforcement boundary,
+not application parsing or kernel file access. Locating the decisive public
+counterfactual at the first mediated egress keeps the story visually strong
+without implying that the current lab has reproduced the complete historical
+intrusion or an earlier kernel-level cutoff.
+
+**Affected artifacts:**
+
+- proposed incident-centered Presenter/Audience design specification
+- proposed update to the visualization source
+  `kil-live-demo-walkthrough.html`
+- proposed regenerated export
+  `artifacts/generated/kil-live-demo-walkthrough.html`
+- canonical scenario `scenarios/hugging-face-july-2026/scenario-v1.json`
+  as the scene source of record
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Founder approval is required for the integrated
+storyboard and for treating first privileged egress as the principal KIL
+counterfactual cutoff. The written v3 foreign-resource snapshot specification
+also still requires founder review, and the central live run remains prohibited.
+
+**Next gate:** Approve the incident-centered topology and cutoff boundary;
+then write, self-review, and commit the design specification before any page
+implementation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
