@@ -2643,6 +2643,57 @@ def validate_image_architecture(value: Mapping[str, object]) -> None:
         raise ControllerError("image architecture is not exact linux/arm64")
 
 
+_EXPANDED_HEALTHCHECK_FIELDS = frozenset(
+    {"Test", "Interval", "Timeout", "StartPeriod", "Retries"}
+)
+
+
+def _classify_inspected_healthcheck(
+    actual: object, immutable: object
+) -> str | None:
+    """Classify only closed Docker healthcheck representations as disabled."""
+    if actual is None:
+        return None
+    if type(actual) is not dict:
+        return "configured"
+
+    # Docker 29.7.2 retains the immutable image timing/retry fields when
+    # replacing only Test with NONE. Bind every retained scalar, including its
+    # exact JSON type, to the already-inspected immutable image definition.
+    if (
+        set(actual) != _EXPANDED_HEALTHCHECK_FIELDS
+        or actual.get("Test") != ["NONE"]
+        or type(immutable) is not dict
+        or set(immutable) != _EXPANDED_HEALTHCHECK_FIELDS
+    ):
+        return "configured"
+    immutable_test = immutable.get("Test")
+    if (
+        type(immutable_test) is not list
+        or len(immutable_test) < 2
+        or any(type(item) is not str or not item for item in immutable_test)
+        or immutable_test[0] not in {"CMD", "CMD-SHELL"}
+    ):
+        return "configured"
+    scalar_constraints = {
+        "Interval": lambda value: value > 0,
+        "Timeout": lambda value: value > 0,
+        "StartPeriod": lambda value: value >= 0,
+        "Retries": lambda value: value > 0,
+    }
+    for field, valid in scalar_constraints.items():
+        actual_value = actual[field]
+        immutable_value = immutable[field]
+        if (
+            type(actual_value) is not int
+            or type(immutable_value) is not int
+            or not valid(immutable_value)
+            or actual_value != immutable_value
+        ):
+            return "configured"
+    return "disabled"
+
+
 def _validate_container_labels(
     actual: object,
     immutable: object,
@@ -10055,12 +10106,9 @@ class LocalEnvoyController:
             "state": state_status,
             "stdin_open": config_value.get("OpenStdin", False),
             "tty": config_value.get("Tty", False),
-            "healthcheck": (
-                "disabled"
-                if config_value.get("Healthcheck") == {"Test": ["NONE"]}
-                else None
-                if config_value.get("Healthcheck") is None
-                else "configured"
+            "healthcheck": _classify_inspected_healthcheck(
+                config_value.get("Healthcheck"),
+                image_config.get("Healthcheck"),
             ),
             "privileged": privileged,
             "network_mode": network_mode,

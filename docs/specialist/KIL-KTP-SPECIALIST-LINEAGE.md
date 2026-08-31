@@ -6284,3 +6284,93 @@ published commit. Do not invoke the central `run` command unless that fresh gate
 passes and its public-safe record is merged.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-120 — 2026-08-31 — Driver healthcheck attestation binds Docker disablement to the immutable image
+
+**Input:** After the closed Docker null-network correction merged and bounded
+recovery restored the host exactly, execute one fresh Task 10 request-free
+`preflight -> up -> readiness -> down` lifecycle from corrected public `main`.
+
+**Interpretation:** The fresh gate must remain request-free and fail closed on
+any live runtime record that does not match its immutable definition. If Docker
+represents a requested runtime override by replacing one field while retaining
+immutable fields, acceptance must bind the complete observed record to the
+already-attested immutable image rather than adding a permissive value test.
+
+**Decision status:** Confirmed rejected second live attempt; corrected
+healthcheck contract independently approved but not yet published. The first
+rejected lifecycle `v3b1-e81dc498e2ef1693640b56a7b04575c8ff5a788cb931e371bf7087830de129b7`
+was recovered by merged correction `397b524f97995f95b7a8c4b24840e132faa9105b`.
+Its dedicated profile was removed, the stopped foreign `default` profile and
+resources were restored exactly, active journal/state/poison were absent, all
+failure-bundle checksums passed, and all request, decision, Envoy, target, and
+join files were zero bytes.
+
+Fresh preflight then passed from `397b524f97995f95b7a8c4b24840e132faa9105b`.
+`up` validated all three Envoy configurations, created six internal networks
+and twelve service/driver containers, connected each Envoy to its frontend,
+then failed closed with `driver runtime definition attestation failed`. The
+mandatory single `down` preserved the same primary failure. No driver was
+started; no readiness record, instruction, request intent, HTTP action, or
+central `run` occurred.
+
+Read-only inspection of rejected lifecycle
+`v3b1-05211715589b45f79dac4ebe5700004831c07b28af7ca42bce5111db47007801`
+showed the driver correctly created with `--no-healthcheck`, open stdin, no
+TTY, created state, exact command, fixed frontend network, and no host
+publication. Docker 29.7.2 replaced the immutable image healthcheck `Test`
+with `["NONE"]` but retained the image's `Interval`, `Timeout`, `StartPeriod`,
+and `Retries`. The controller recognized only a synthetic one-field
+`{"Test":["NONE"]}` record and therefore mislabeled the live disabled record as
+configured.
+
+Correction commits `9f31ccc83502d38318744db8e085451797a29155` and
+`80ca1fe9c4d8a36c15b0e62709a27918cee1f7ac` now classify a driver healthcheck
+as disabled only when the runtime object has exactly the five pinned fields,
+`Test` is exactly `["NONE"]`, every retained scalar has an exact integer type
+and value match to the immutable image record, and that immutable record is
+itself a closed active `CMD` or `CMD-SHELL` healthcheck with valid values. An
+initial compatibility proposal retained the unbound one-field form;
+specification review rejected it as an Important gap. The final correction
+removes that path and proves the singleton fails both with valid and missing
+immutable metadata. Service health and readiness requirements remain
+unchanged.
+
+**Rationale:** `--no-healthcheck` is a runtime override, not authority to
+discard provenance. Deriving the sole accepted disabled form from the exact
+immutable image prevents missing, extra, changed, malformed, or type-confused
+fields from masquerading as the pinned driver contract and preserves strict
+recovery equality.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- ignored `artifacts/generated/v3b1-task6-live-status.md`
+- private lifecycle `v3b1-05211715589b45f79dac4ebe5700004831c07b28af7ca42bce5111db47007801`
+
+**Verification:** The exact Docker 29.7.2 expanded disabled record reproduced
+the prior driver-attestation failure before the correction and passed after it.
+Closed negative cases reject missing, extra, changed, wrong-type, Boolean,
+non-`NONE`, malformed-image, and unbound-singleton records. Independent
+specification and quality/security reviews approved the final correction with
+no remaining Critical or Important finding. Ten runtime-attestation tests, 224
+local-Envoy tests, and the complete 476-test repository suite pass; Python
+compilation, `make validate`, worktree cleanliness, and diff hygiene pass.
+
+**Unresolved questions:** The correction must pass public CI and merge before
+it may govern recovery. The dedicated profile for the rejected second attempt
+is isolated in a broken status with the durable journal and owned objects left
+untouched. Corrected bounded recovery, exact foreign-state restoration, the
+complete request-free gate, three clean cancellations, nine empty source
+copies, and the later one-shot central proof remain pending.
+
+**Next gate:** Publish and merge the image-bound healthcheck correction,
+synchronize every `main` reference, and execute bounded recovery for the
+rejected second attempt. Verify exact object/profile absence and foreign-state
+restoration, then start one new request-free lifecycle from that merged commit.
+The central `run` command remains prohibited until a complete Task 10 record is
+public, reviewed, merged, and synchronized.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
