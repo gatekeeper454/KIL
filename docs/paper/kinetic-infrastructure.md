@@ -2,7 +2,7 @@
 
 ## Ambient Enforcement for Agent-Speed Cybersecurity
 
-**Author and founder:** Storm
+**Author and founder:** Mike Storm, Distinguished Engineer
 
 **Status:** Official KIL white-paper manuscript, prevalidation edition
 

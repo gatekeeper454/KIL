@@ -5513,3 +5513,37 @@ final PDF publication, confirm the preferred full author byline and any
 affiliation metadata.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-108 — 2026-08-31 — Founder byline refined to publication form
+
+**Input:** A concurrent founder-owned refinement changed the newly added white-
+paper byline from the repository shorthand `Storm` to `Mike Storm,
+Distinguished Engineer`.
+
+**Interpretation:** The more specific name and professional title supersede the
+initial shorthand for publication display. The existing T-107 entry remains as
+the historical record of the first attribution rather than being silently
+rewritten.
+
+**Decision status:** Confirmed byline refinement preserved. The manuscript now
+states `Author and founder: Mike Storm, Distinguished Engineer`. The Task 2
+implementation agent confirmed it did not create or inspect this unrelated
+change and will not overwrite it.
+
+**Rationale:** Preserving a concurrent founder-owned edit avoids losing the
+preferred publication identity while maintaining a transparent lineage from
+the initial repository-derived shorthand.
+
+**Affected artifacts:**
+
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Institutional affiliation, contact address, ORCID,
+and whether `Distinguished Engineer` should appear on the author line or a
+separate affiliation line remain optional publication decisions.
+
+**Next gate:** Continue Task 2 and independently review its executable driver
+and immutable image binding before advancing to topology schemas.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
