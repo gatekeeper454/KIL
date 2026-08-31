@@ -1,3 +1,4 @@
+import errno
 import json
 from pathlib import Path
 import unittest
@@ -266,9 +267,21 @@ class DriverProtocolTest(unittest.TestCase):
     def test_transport_and_driver_control_failures_are_exact_and_ordered(self):
         transport = self.fixture["transport_failure_result"]
         control = self.fixture["driver_control_failure_result"]
+        valid_outside_prior_allowlist = {
+            **transport,
+            "errno": errno.EIO,
+            "errno_name": errno.errorcode[errno.EIO],
+        }
+        self.assertEqual(
+            parse_result(
+                canonical_record(valid_outside_prior_allowlist),
+                expected_track="signed_state_only",
+            ),
+            valid_outside_prior_allowlist,
+        )
         rejected = (
             {**transport, "stage": "connect"},
-            {**transport, "errno": 111, "errno_name": "ECONNRESET"},
+            {**transport, "errno": errno.EIO, "errno_name": "ECONNRESET"},
             {**transport, "request_bytes_may_have_been_sent": False},
             {**transport, "failure_monotonic_ns": 1},
             {**control, "stage": "socket_open"},

@@ -112,6 +112,10 @@ ENGINE_PROVENANCE = {
 
 class HarnessIntegrationContractTest(unittest.TestCase):
     FIXTURE = ROOT / "tests/fixtures/v3b1-integration-contract.json"
+    DRIVER_FIXTURE = (
+        ROOT / "tests/fixtures/v3b1-driver-topology-integration-contract.json"
+    )
+    DRIVER_SCHEMA = "kil.v3b1-integration-contract.v2"
 
     def test_fixture_is_canonical_closed_frozen_and_explicitly_provenanced(self):
         fixture = load_integration_contract(self.FIXTURE)
@@ -130,9 +134,6 @@ class HarnessIntegrationContractTest(unittest.TestCase):
         self.assertEqual(
             {case.name for case in fixture.cases if case.provenance == "reconstructed"},
             {
-                "cycle-4-backend-network-reconstructed-inventory",
-                "cycle-4-driver-container-reconstructed-inventory",
-                "cycle-4-frontend-network-reconstructed-inventory",
                 "cycle-1-observed-network-values-reconstructed-inventory",
                 "cycle-2-observed-network-values-reconstructed-inventory",
                 "cycle-3-network-not-found-replacement-inventory",
@@ -142,6 +143,19 @@ class HarnessIntegrationContractTest(unittest.TestCase):
         )
         with self.assertRaises(FrozenInstanceError):
             fixture.cases[0].provenance = "reconstructed"
+
+    def test_driver_topology_fixture_uses_its_closed_v2_inventory_schema(self):
+        fixture = load_integration_contract(self.DRIVER_FIXTURE)
+
+        self.assertEqual(fixture.schema_version, self.DRIVER_SCHEMA)
+        self.assertEqual(
+            {case.name for case in fixture.cases},
+            {
+                "cycle-4-backend-network-reconstructed-inventory",
+                "cycle-4-driver-container-reconstructed-inventory",
+                "cycle-4-frontend-network-reconstructed-inventory",
+            },
+        )
 
     def test_request_failure_provenance_is_closed_and_sanitized(self):
         record = RequestFailureProvenance.from_mapping(
@@ -533,21 +547,6 @@ class HarnessIntegrationContractTest(unittest.TestCase):
             "network",
         )
         self.assertEqual(network.entries[0].name, network_name)
-        driver_name = "kil-v3b1-driver-signed-state-only-ffffffffffff"
-        driver = parse_inventory_rows(
-            canonical_json({"id": HEX_A, "name": driver_name}) + "\n",
-            "container",
-        )
-        self.assertEqual(driver.entries[0].name, driver_name)
-        for segment in ("frontend", "backend"):
-            segmented_name = (
-                f"kil-v3b1-{segment}-signed-state-only-ffffffffffff"
-            )
-            segmented = parse_inventory_rows(
-                canonical_json({"id": HEX_B, "name": segmented_name}) + "\n",
-                "network",
-            )
-            self.assertEqual(segmented.entries[0].name, segmented_name)
         self.assertEqual(parse_inventory_rows("", "network").entries, ())
         for rejected in (
             canonical_json({"id": "a" * 12, "name": first_name}) + "\n",
@@ -569,6 +568,75 @@ class HarnessIntegrationContractTest(unittest.TestCase):
             )
         with self.assertRaises(ContractError):
             parse_inventory_rows("", [])
+
+    def test_inventory_schema_dispatch_rejects_cross_schema_names(self):
+        legacy_schema = "kil.v3b1-integration-contract.v1"
+        driver_schema = self.DRIVER_SCHEMA
+        legacy_network = (
+            "kil-v3b1-network-credential-policy-baseline-eeeeeeeeeeee"
+        )
+        driver_container = "kil-v3b1-driver-signed-state-only-ffffffffffff"
+        segmented_networks = tuple(
+            f"kil-v3b1-{segment}-signed-state-only-ffffffffffff"
+            for segment in ("frontend", "backend")
+        )
+
+        legacy = parse_inventory_rows(
+            canonical_json({"id": HEX_A, "name": legacy_network}) + "\n",
+            "network",
+            schema_version=legacy_schema,
+        )
+        self.assertEqual(legacy.entries[0].name, legacy_network)
+        driver = parse_inventory_rows(
+            canonical_json({"id": HEX_B, "name": driver_container}) + "\n",
+            "container",
+            schema_version=driver_schema,
+        )
+        self.assertEqual(driver.entries[0].name, driver_container)
+        for name in segmented_networks:
+            segmented = parse_inventory_rows(
+                canonical_json({"id": HEX_C, "name": name}) + "\n",
+                "network",
+                schema_version=driver_schema,
+            )
+            self.assertEqual(segmented.entries[0].name, name)
+
+        for name, kind, schema_version in (
+            (driver_container, "container", legacy_schema),
+            (segmented_networks[0], "network", legacy_schema),
+            (segmented_networks[1], "network", legacy_schema),
+            (legacy_network, "network", driver_schema),
+        ):
+            with self.subTest(
+                name=name, schema_version=schema_version
+            ), self.assertRaises(ContractError):
+                parse_inventory_rows(
+                    canonical_json({"id": HEX_A, "name": name}) + "\n",
+                    kind,
+                    schema_version=schema_version,
+                )
+
+    def test_fixture_loader_passes_schema_to_inventory_validation(self):
+        loaded_legacy = load_integration_contract(self.FIXTURE)
+        with self.assertRaises(ContractError):
+            IntegrationContractFixture(
+                self.DRIVER_SCHEMA,
+                (loaded_legacy.cases[0],),
+            )
+
+        legacy = json.loads(self.FIXTURE.read_text())
+        driver = json.loads(self.DRIVER_FIXTURE.read_text())
+        with tempfile.TemporaryDirectory(dir=self.FIXTURE.parent) as directory:
+            path = Path(directory) / "fixture.json"
+            legacy["schema_version"] = self.DRIVER_SCHEMA
+            path.write_text(canonical_json(legacy) + "\n")
+            with self.assertRaises(ContractError):
+                load_integration_contract(path)
+
+            driver["schema_version"] = SCHEMA_VERSION
+            path.write_text(canonical_json(driver) + "\n")
+            with self.assertRaises(ContractError):
+                load_integration_contract(path)
 
     def test_inventory_parser_totalizes_encoding_recursion_and_record_failures(self):
         name = "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa"

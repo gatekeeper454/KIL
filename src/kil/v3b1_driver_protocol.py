@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from base64 import urlsafe_b64decode
 from copy import deepcopy
+import errno as errno_module
 import json
 import re
 
@@ -119,13 +120,6 @@ _EXCEPTION_CLASSES = {
     "ConnectionAbortedError",
     "ConnectionRefusedError",
     "ConnectionResetError",
-}
-_LINUX_TRANSPORT_ERRNOS = {
-    32: "EPIPE",
-    103: "ECONNABORTED",
-    104: "ECONNRESET",
-    110: "ETIMEDOUT",
-    111: "ECONNREFUSED",
 }
 _MAX_MONOTONIC_NS = (1 << 63) - 1
 
@@ -468,8 +462,9 @@ def _validate_transport_failure(value: dict[str, object]) -> None:
         raise DriverProtocolError("driver transport errno fields are inconsistent")
     if number is not None and (
         type(number) is not int
+        or number < 0
         or type(name) is not str
-        or _LINUX_TRANSPORT_ERRNOS.get(number) != name
+        or errno_module.errorcode.get(number) != name
     ):
         raise DriverProtocolError("driver transport errno is invalid")
     connect = _require_monotonic(

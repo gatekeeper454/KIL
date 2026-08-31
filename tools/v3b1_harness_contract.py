@@ -15,6 +15,7 @@ from typing import Mapping
 
 
 SCHEMA_VERSION = "kil.v3b1-integration-contract.v1"
+DRIVER_TOPOLOGY_SCHEMA_VERSION = "kil.v3b1-integration-contract.v2"
 _HEX = re.compile(r"^[a-f0-9]{64}$")
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 _CASE_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,95}$")
@@ -39,7 +40,10 @@ _COMPACT_JWS_CANDIDATE = re.compile(
 _TRACK_SLUG = (
     r"(?:credential-policy-baseline|signed-state-only|signed-plus-local-reduce)"
 )
-_CONTAINER_NAME = re.compile(
+_LEGACY_V1_CONTAINER_NAME = re.compile(
+    rf"^kil-v3b1-(?:authz|target|envoy|validate)-{_TRACK_SLUG}-[a-f0-9]{{12}}$"
+)
+_DRIVER_TOPOLOGY_CONTAINER_NAME = re.compile(
     rf"^kil-v3b1-(?:authz|target|envoy|driver|validate)-{_TRACK_SLUG}-[a-f0-9]{{12}}$"
 )
 _LEGACY_V1_NETWORK_NAME = re.compile(
@@ -48,8 +52,15 @@ _LEGACY_V1_NETWORK_NAME = re.compile(
 _SEGMENT_NETWORK_NAME = re.compile(
     rf"^kil-v3b1-(?:frontend|backend)-{_TRACK_SLUG}-[a-f0-9]{{12}}$"
 )
-_NETWORK_NAME_PATTERNS = {
-    SCHEMA_VERSION: (_LEGACY_V1_NETWORK_NAME, _SEGMENT_NETWORK_NAME),
+_INVENTORY_NAME_PATTERNS = {
+    SCHEMA_VERSION: {
+        "container": _LEGACY_V1_CONTAINER_NAME,
+        "network": _LEGACY_V1_NETWORK_NAME,
+    },
+    DRIVER_TOPOLOGY_SCHEMA_VERSION: {
+        "container": _DRIVER_TOPOLOGY_CONTAINER_NAME,
+        "network": _SEGMENT_NETWORK_NAME,
+    },
 }
 _MAX_FIXTURE_BYTES = 1_000_000
 _MAX_SOURCE_BYTES = 64 * 1024 * 1024
@@ -130,14 +141,23 @@ def _require_name(value: object, label: str = "Docker object name") -> str:
     return value
 
 
-def _require_inventory_name(value: object, kind: str) -> str:
+def _require_schema_version(value: object) -> str:
+    if type(value) is not str or value not in _INVENTORY_NAME_PATTERNS:
+        raise ContractError("integration transcript schema is invalid")
+    return value
+
+
+def _require_inventory_name(
+    value: object,
+    kind: str,
+    schema_version: str,
+) -> str:
     name = _require_name(value)
-    patterns = (
-        (_CONTAINER_NAME,)
-        if kind == "container"
-        else _NETWORK_NAME_PATTERNS[SCHEMA_VERSION]
-    )
-    if not any(pattern.fullmatch(name) is not None for pattern in patterns):
+    schema = _require_schema_version(schema_version)
+    if kind not in {"container", "network"}:
+        raise ContractError("Docker inventory kind is invalid")
+    pattern = _INVENTORY_NAME_PATTERNS[schema][kind]
+    if pattern.fullmatch(name) is None:
         raise ContractError(f"Docker {kind} name is outside the fixed KIL pattern")
     return name
 
@@ -503,21 +523,30 @@ class DockerInventoryEntry:
     kind: str
     object_id: str
     name: str
+    schema_version: str = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
         if type(self.kind) is not str or self.kind not in {"container", "network"}:
             raise ContractError("Docker inventory kind is invalid")
+        _require_schema_version(self.schema_version)
         _require_object_id(self.object_id)
-        _require_inventory_name(self.name, self.kind)
+        _require_inventory_name(self.name, self.kind, self.schema_version)
 
     @classmethod
-    def from_mapping(cls, value: object, kind: str) -> DockerInventoryEntry:
+    def from_mapping(
+        cls,
+        value: object,
+        kind: str,
+        *,
+        schema_version: str = SCHEMA_VERSION,
+    ) -> DockerInventoryEntry:
         record = _require_fields(value, {"id", "name"}, "Docker inventory entry")
         reject_sensitive_material(record)
         return cls(  # type: ignore[arg-type]
             kind=kind,
             object_id=record["id"],
             name=record["name"],
+            schema_version=schema_version,
         )
 
     def to_mapping(self) -> dict[str, str]:
@@ -528,12 +557,16 @@ class DockerInventoryEntry:
 class DockerInventory:
     kind: str
     entries: tuple[DockerInventoryEntry, ...]
+    schema_version: str = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
         if type(self.kind) is not str or self.kind not in {"container", "network"}:
             raise ContractError("Docker inventory kind is invalid")
+        _require_schema_version(self.schema_version)
         if type(self.entries) is not tuple or any(
-            not isinstance(item, DockerInventoryEntry) or item.kind != self.kind
+            not isinstance(item, DockerInventoryEntry)
+            or item.kind != self.kind
+            or item.schema_version != self.schema_version
             for item in self.entries
         ):
             raise ContractError("Docker inventory entries are invalid")
@@ -545,9 +578,15 @@ class DockerInventory:
             raise ContractError("Docker inventory contains a duplicate name")
 
 
-def parse_inventory_rows(payload: str | bytes, kind: str) -> DockerInventory:
+def parse_inventory_rows(
+    payload: str | bytes,
+    kind: str,
+    *,
+    schema_version: str = SCHEMA_VERSION,
+) -> DockerInventory:
     if type(kind) is not str or kind not in {"container", "network"}:
         raise ContractError("Docker inventory kind is invalid")
+    schema = _require_schema_version(schema_version)
     try:
         if type(payload) is bytes:
             text = payload.decode("utf-8")
@@ -556,7 +595,7 @@ def parse_inventory_rows(payload: str | bytes, kind: str) -> DockerInventory:
         else:
             raise ContractError("Docker inventory payload must be text or bytes")
         if not text:
-            return DockerInventory(kind, ())
+            return DockerInventory(kind, (), schema)
         if (
             len(text.encode("utf-8")) > _MAX_FIXTURE_BYTES
             or not text.endswith("\n")
@@ -576,8 +615,14 @@ def parse_inventory_rows(payload: str | bytes, kind: str) -> DockerInventory:
                 ) from error
             if line != _canonical_json(value):
                 raise ContractError("Docker inventory row is not canonical JSON")
-            entries.append(DockerInventoryEntry.from_mapping(value, kind))
-        return DockerInventory(kind, tuple(entries))
+            entries.append(
+                DockerInventoryEntry.from_mapping(
+                    value,
+                    kind,
+                    schema_version=schema,
+                )
+            )
+        return DockerInventory(kind, tuple(entries), schema)
     except ContractError:
         raise
     except (
@@ -622,16 +667,24 @@ class IntegrationContractFixture:
     cases: tuple[TranscriptCase, ...]
 
     def __post_init__(self) -> None:
-        if self.schema_version != SCHEMA_VERSION or type(self.cases) is not tuple:
+        _require_schema_version(self.schema_version)
+        if type(self.cases) is not tuple:
             raise ContractError("integration transcript fixture identity is invalid")
         if any(not isinstance(case, TranscriptCase) for case in self.cases):
             raise ContractError("integration transcript fixture cases are invalid")
+        if any(
+            isinstance(case.record, DockerInventory)
+            and case.record.schema_version != self.schema_version
+            for case in self.cases
+        ):
+            raise ContractError("integration transcript inventory schema is inconsistent")
         names = [case.name for case in self.cases]
         if len(names) != len(set(names)):
             raise ContractError("integration transcript contains duplicate case names")
 
 
-def _load_case(value: object) -> TranscriptCase:
+def _load_case(value: object, schema_version: str) -> TranscriptCase:
+    schema = _require_schema_version(schema_version)
     case = _require_fields(
         value,
         {"name", "provenance", "record", "record_type"},
@@ -660,7 +713,15 @@ def _load_case(value: object) -> TranscriptCase:
             raise ContractError("inventory transcript fields are invalid")
         record = DockerInventory(
             kind,
-            tuple(DockerInventoryEntry.from_mapping(row, kind) for row in rows),
+            tuple(
+                DockerInventoryEntry.from_mapping(
+                    row,
+                    kind,
+                    schema_version=schema,
+                )
+                for row in rows
+            ),
+            schema,
         )
     else:
         raise ContractError("transcript record type is invalid")
@@ -764,7 +825,8 @@ def load_integration_contract(path: Path) -> IntegrationContractFixture:
     cases = fixture["cases"]
     if type(cases) is not list or len(cases) > 100:
         raise ContractError("integration transcript cases are invalid")
+    schema_version = _require_schema_version(fixture["schema_version"])
     return IntegrationContractFixture(
-        schema_version=fixture["schema_version"],  # type: ignore[arg-type]
-        cases=tuple(_load_case(case) for case in cases),
+        schema_version=schema_version,
+        cases=tuple(_load_case(case, schema_version) for case in cases),
     )
