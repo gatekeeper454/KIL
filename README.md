@@ -31,12 +31,13 @@ The harness now contains a bounded exact-byte service-ledger export correction.
 Two subsequent launch attempts stopped before profile creation because of host
 tool discovery and a Colima false-flag compatibility mismatch; both were
 durably archived without a request or KIL runtime. The minimal launch correction
-retains post-start attestation that nested virtualization is disabled. The next
-execution gate is a fresh zero-request `preflight` / `up` / `down` smoke from a
-clean public commit containing both corrections. A central request remains
-prohibited until all nine source legs are copied and byte-bound. Kind/Calico
-validation (V3B-2) and repetition and performance promotion (V3C) remain
-unexecuted.
+retains post-start attestation that nested virtualization is disabled. The
+corrected zero-request smoke from public main `6706859d2652` then passed: no
+request occurred, all nine zero-byte source legs were copied and byte-bound,
+exact teardown completed, and the foreign runtime was restored. The next gate
+is exactly one central local-boundary proof with no retry after request intent.
+Kind/Calico validation (V3B-2) and repetition and performance promotion (V3C)
+remain unexecuted.
 
 ## Evidence classes
 

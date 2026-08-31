@@ -4984,3 +4984,75 @@ saved-config attestation, nine copied and byte-bound source legs, exact teardown
 and foreign-runtime restoration before any central request.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-098 — 2026-08-30 — Corrected zero-request V3B-1 gate passes all nine source legs
+
+**Input:** After merging the exact-byte ledger and Colima launch corrections,
+repeat exactly one zero-request `preflight` / `up` / `down` lifecycle from clean
+public main, restore the foreign runtime, and authorize a central request only
+if every source leg is copied and byte-bound.
+
+**Interpretation:** The gate is a lifecycle and evidence-freeze proof, not an
+enforcement proof. It must create the reviewed isolated boundary, send no
+request, freeze the actual empty service sources, tear down only owned objects,
+publish an incomplete nonpromotable bundle, and restore the pre-existing host
+state. Presenter rejection is expected because no accepted run exists.
+
+**Decision status:** Confirmed gate passed from synchronized public source
+commit `6706859d265204e0a569ebb6817d187dc1728f9d` as run
+`v3b1-0374c771b23adcab64060cd8c854d12b72417ff8e4713d24e6f6a550e20bdbea`.
+The saved Colima configuration attestation passed before deployment. Exactly
+three isolated networks and nine service containers were created; no `run`
+command, readiness event, request intent, authorization action, or target action
+occurred.
+
+All nine source terminals are `copied`: three Envoy access logs, three
+authorization decision ledgers, and three target marker ledgers. For every leg,
+the observed and copied byte counts are zero and both SHA-256 values equal
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+The eight public JSONL files are zero bytes and all 11 `SHA256SUMS` entries
+verify. The public manifest remains correctly `run_complete=false`,
+`promotion_status=not_promoted`, and
+`intermediate_provisional_failure_local_boundary`, with claim exclusions for
+cluster, historical-prevention, performance, and NetworkPolicy validation. Its
+SHA-256 is
+`bbc69830f67508d5f83055ff69ce756f4a200db5a03062744e649d813680cf60`;
+the `SHA256SUMS` SHA-256 is
+`a935c4a895e84c76b3e4b5294047f67d394f27bc01a7f20cb81d24031f78e753`.
+
+Teardown removed nine services, three transient validator containers, all three
+networks, and only `kil-v3-lab` before publication. The active journal, state,
+and readiness poison are absent. Host-level verification confirmed the foreign
+`default` profile restored to Running, containerd, arm64, 4 CPU, 4 GiB memory,
+and 20 GiB disk. Offline `view --bundle` rejects this smoke as designed because
+it is not an accepted local-boundary run.
+
+**Rationale:** Unlike the first smoke, each service source now has actual copied
+bytes bound to its independent observation and durable terminal status. Exact
+teardown and foreign-state restoration close the lifecycle. The result therefore
+authorizes one central local-boundary request sequence while establishing no
+enforcement outcome by itself.
+
+**Affected artifacts:**
+
+- `README.md`
+- `docs/lab/V3-PROGRESS.md`
+- `docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- `artifacts/generated/v3b1-local-envoy/v3b1-0374c771b23adcab64060cd8c854d12b72417ff8e4713d24e6f6a550e20bdbea/`
+  (ignored private nonpromotable smoke bundle)
+- `.tools/v3b1-private/completed/v3b1-0374c771b23adcab64060cd8c854d12b72417ff8e4713d24e6f6a550e20bdbea.journal.json`
+  (ignored private lifecycle journal)
+
+**Unresolved questions:** No central enforcement result is yet accepted,
+promoted, or validated. The next proof remains limited to the pinned local
+Envoy boundary; V3B-2 cluster and NetworkPolicy behavior, historical prevention,
+and production performance remain excluded.
+
+**Next gate:** Commit and publish these public-safe smoke references, pass CI,
+merge, and synchronize main. Then execute exactly one central V3B-1
+`preflight` / `up` / `run` / `down` proof with no retry after request intent and
+require `permit / permit / deny`, target markers `1 / 1 / 0`, complete joins,
+checksums, exact teardown, restored foreign state, and presenter acceptance.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
