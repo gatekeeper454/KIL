@@ -4762,7 +4762,9 @@ class DriverRequestSequencingTest(unittest.TestCase):
             "track": track.value,
         }
 
-    def make_controller(self, directory, behavior_changes=None):
+    def make_controller(
+        self, directory, behavior_changes=None, *, real_collect=False
+    ):
         root = Path(directory) / "repo"
         profile_path = root / "deploy/kind/v3b-profile.json"
         profile_path.parent.mkdir(parents=True)
@@ -4779,7 +4781,15 @@ class DriverRequestSequencingTest(unittest.TestCase):
                 self.run_events.append(("collect",))
                 return self.root / "collected"
 
-        controller = RunOnlyController(
+        class CollectHandoffController(LocalEnvoyController):
+            def _load_and_reverify(self):
+                return self.bound_state, self.bound_manifest
+
+            def _copy_sources(self, state, manifest_value, collection_epoch):
+                return self.collect_sources
+
+        controller_class = CollectHandoffController if real_collect else RunOnlyController
+        controller = controller_class(
             root,
             FakeRunner(),
             home=Path(directory) / "home",
@@ -4805,6 +4815,19 @@ class DriverRequestSequencingTest(unittest.TestCase):
         controller.bound_state = load_bound_active_state(controller.state_path)
         controller.bound_manifest = value
         controller.run_events = events
+        _, _, decisions, envoy, targets = JoinContractTest().all_records()
+        controller.collect_sources = (
+            {
+                track: b"".join(
+                    (canonical_json(record) + "\n").encode()
+                    for record in decisions
+                    if record["track"] == track.value
+                )
+                for track in LiveTrack
+            },
+            envoy,
+            targets,
+        )
         drivers = {
             item["track"]: item
             for item in controller.bound_state["objects"]
@@ -4925,6 +4948,55 @@ class DriverRequestSequencingTest(unittest.TestCase):
                 self.assertNotIn(q_state, serialized)
                 self.assertNotIn(q_state, request_path.read_text())
             self.assertFalse(any("authorization" in " ".join(event[1]) for event in events if event[0] == "start"))
+
+    def test_real_run_collect_handoff_binds_three_exact_driver_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, _, raw_results = self.make_controller(
+                directory, real_collect=True
+            )
+
+            output = controller.run()
+
+            requests = [
+                json.loads(line)
+                for line in (output / "requests.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            by_track = {record["track"]: record for record in requests}
+            for track in LiveTrack:
+                relative = f"raw/drivers/{track.value}.json"
+                payload = (output / relative).read_bytes()
+                self.assertEqual(payload, raw_results[track])
+                self.assertEqual(
+                    by_track[track.value]["driver_result_sha256"],
+                    sha256(payload).hexdigest(),
+                )
+                self.assertEqual(
+                    payload,
+                    (canonical_json(json.loads(payload)) + "\n").encode(),
+                )
+            self.assertEqual(
+                authoritative_bundle_attestation(output)["schema_version"],
+                "kil.v3b1-authoritative-bundle.v2",
+            )
+
+    def test_dangling_private_driver_result_symlink_is_never_uncommanded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, _, _ = self.make_controller(directory)
+            raw_root = (
+                controller.private_root
+                / "driver-results"
+                / controller.bound_manifest["run_id"]
+            )
+            raw_root.mkdir(parents=True)
+            path = raw_root / "credential_policy_baseline.json"
+            path.symlink_to(raw_root / "missing-driver-result.json")
+
+            with self.assertRaisesRegex(ControllerError, "unsafe|symbolic"):
+                controller._private_driver_result_sources(
+                    controller.bound_manifest
+                )
 
     def test_post_intent_failures_are_terminal_cancel_later_drivers_and_never_retry(self):
         baseline = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
@@ -11216,6 +11288,86 @@ class EvidenceBundleTest(unittest.TestCase):
             missing.unlink()
             with self.assertRaisesRegex(ControllerError, "missing|closed|artifact"):
                 local_envoy_module.verify_presenter_bundle(published)
+
+    def test_private_bundle_writers_reject_symlinked_ancestry_before_writes(self):
+        value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+        raw_driver_results = driver_results_for_requests(requests)
+        cases = (
+            ("accepted", "root"),
+            ("accepted", "run"),
+            ("failure", "run"),
+            ("failure", "raw"),
+            ("failure", "decisions"),
+            ("failure", "drivers"),
+            ("resume", "run"),
+            ("resume", "raw"),
+            ("resume", "decisions"),
+            ("resume", "drivers"),
+        )
+        for mode, component in cases:
+            with (
+                self.subTest(mode=mode, component=component),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                base = Path(directory)
+                outside = base / "outside"
+                outside.mkdir()
+                evidence_root = base / "evidence"
+                if component == "root":
+                    evidence_root.symlink_to(outside, target_is_directory=True)
+                else:
+                    evidence_root.mkdir()
+                    output = evidence_root / value["run_id"]
+                    if component == "run":
+                        output.symlink_to(outside, target_is_directory=True)
+                    else:
+                        output.mkdir()
+                        raw = output / "raw"
+                        if component == "raw":
+                            raw.symlink_to(outside, target_is_directory=True)
+                        else:
+                            raw.mkdir()
+                            if component == "decisions":
+                                (raw / "decisions").symlink_to(
+                                    outside, target_is_directory=True
+                                )
+                            else:
+                                (raw / "decisions").mkdir()
+                                (raw / "drivers").symlink_to(
+                                    outside, target_is_directory=True
+                                )
+
+                with self.assertRaisesRegex(
+                    ControllerError, "unsafe|symbolic|contained|directory"
+                ):
+                    if mode == "failure":
+                        _prepare_failure_provisional(
+                            evidence_root,
+                            value,
+                            raw_driver_results={
+                                track: b"" for track in LiveTrack
+                            },
+                            reset=True,
+                        )
+                    else:
+                        write_evidence_bundle(
+                            evidence_root,
+                            value,
+                            requests=requests,
+                            decisions=decisions,
+                            envoy=envoy,
+                            targets=targets,
+                            joins=join_evidence(
+                                value,
+                                requests,
+                                decisions,
+                                envoy,
+                                targets,
+                            ),
+                            raw_driver_results=raw_driver_results,
+                            resume_attested=mode == "resume",
+                        )
+                self.assertEqual(list(outside.iterdir()), [])
 
     def test_v2_verifier_reconstructs_driver_bytes_and_rejects_repaired_join_drift(self):
         with tempfile.TemporaryDirectory() as directory:

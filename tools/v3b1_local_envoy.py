@@ -8033,6 +8033,104 @@ def finalize_publication(
                 os.close(descriptor)
 
 
+def _secure_private_evidence_directory(
+    path: Path, parent: Path, label: str
+) -> Path:
+    """Create or re-attest one private evidence directory without following links."""
+    _require_contained(path, parent, label)
+    before: os.stat_result | None
+    try:
+        before = os.lstat(path)
+    except FileNotFoundError:
+        before = None
+    except OSError as error:
+        raise ControllerError(f"{label} is unavailable or unsafe") from error
+    if before is not None and (
+        stat.S_ISLNK(before.st_mode) or not stat.S_ISDIR(before.st_mode)
+    ):
+        raise ControllerError(f"{label} is not a safe directory")
+    if before is None:
+        try:
+            path.mkdir(mode=0o700)
+        except (FileExistsError, OSError) as error:
+            raise ControllerError(f"{label} could not be safely created") from error
+    _require_contained(path, parent, label)
+    try:
+        after = os.lstat(path)
+    except OSError as error:
+        raise ControllerError(f"{label} changed during creation") from error
+    if stat.S_ISLNK(after.st_mode) or not stat.S_ISDIR(after.st_mode):
+        raise ControllerError(f"{label} is not a safe directory")
+    if before is not None and (
+        before.st_dev,
+        before.st_ino,
+        stat.S_IFMT(before.st_mode),
+    ) != (
+        after.st_dev,
+        after.st_ino,
+        stat.S_IFMT(after.st_mode),
+    ):
+        raise ControllerError(f"{label} changed during validation")
+    return path
+
+
+def _prepare_private_evidence_output(
+    evidence_root: Path, run_id: str
+) -> tuple[Path, bool]:
+    evidence_root = Path(os.path.abspath(evidence_root))
+    parent = evidence_root.parent
+    if parent.is_symlink() or not parent.is_dir():
+        raise ControllerError("private evidence parent is missing or unsafe")
+    _secure_private_evidence_directory(
+        evidence_root, parent, "private evidence root"
+    )
+    output = evidence_root / run_id
+    existed = os.path.lexists(output)
+    _secure_private_evidence_directory(
+        output, evidence_root, "private evidence run directory"
+    )
+    return output, existed
+
+
+def _prepare_private_evidence_raw_directories(
+    output: Path, *, include_drivers: bool
+) -> tuple[Path, Path | None]:
+    raw = _secure_private_evidence_directory(
+        output / "raw", output, "private evidence raw directory"
+    )
+    decisions = _secure_private_evidence_directory(
+        raw / "decisions", raw, "private evidence decision directory"
+    )
+    drivers = (
+        _secure_private_evidence_directory(
+            raw / "drivers", raw, "private evidence driver directory"
+        )
+        if include_drivers
+        else None
+    )
+    for path, parent, label in (
+        (output, output.parent, "private evidence run directory"),
+        (raw, output, "private evidence raw directory"),
+        (decisions, raw, "private evidence decision directory"),
+    ):
+        _secure_private_evidence_directory(path, parent, label)
+    if drivers is not None:
+        _secure_private_evidence_directory(
+            drivers, raw, "private evidence driver directory"
+        )
+    expected_raw = {"decisions"} | ({"drivers"} if include_drivers else set())
+    if set(os.listdir(raw)) != expected_raw:
+        raise ControllerError("private evidence raw directory is not closed")
+    decision_names = {f"{track.value}.jsonl" for track in _TRACKS}
+    if not set(os.listdir(decisions)).issubset(decision_names):
+        raise ControllerError("private evidence decision directory is not closed")
+    if drivers is not None:
+        driver_names = {f"{track.value}.json" for track in _TRACKS}
+        if not set(os.listdir(drivers)).issubset(driver_names):
+            raise ControllerError("private evidence driver directory is not closed")
+    return decisions, drivers
+
+
 def write_evidence_bundle(
     evidence_root: Path,
     manifest: dict[str, object],
@@ -8048,16 +8146,19 @@ def write_evidence_bundle(
 ) -> Path:
     """Rebuild the exact public bundle from verified source records."""
     _validate_manifest(manifest)
-    output = evidence_root / str(manifest["run_id"])
-    if output.exists() and any(output.iterdir()) and not resume_attested:
+    generation = _bundle_generation(manifest.get("schema_version"))
+    output, output_existed = _prepare_private_evidence_output(
+        evidence_root, str(manifest["run_id"])
+    )
+    if output_existed and any(output.iterdir()) and not resume_attested:
         raise ControllerError("evidence run already exists; attested resume required")
-    output.mkdir(parents=True, exist_ok=True)
     allowed = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
     unexpected = {item.name for item in output.iterdir()} - allowed
     if unexpected:
         raise ControllerError(f"evidence directory contains unexpected files: {sorted(unexpected)}")
-    raw_root = output / "raw/decisions"
-    raw_root.mkdir(parents=True, exist_ok=True)
+    raw_root, driver_root = _prepare_private_evidence_raw_directories(
+        output, include_drivers=generation == 2
+    )
     if raw_decisions is None:
         raw_decisions = {
             track: _jsonl_payload(
@@ -8078,7 +8179,6 @@ def write_evidence_bundle(
         if any(record["track"] != track.value for record in parsed):
             raise ControllerError("raw decision source track does not match fixed file")
         _write_file(raw_root / f"{track.value}.jsonl", payload, 0o444)
-    generation = _bundle_generation(manifest.get("schema_version"))
     if generation == 2:
         if (
             type(raw_driver_results) is not dict
@@ -8087,8 +8187,7 @@ def write_evidence_bundle(
             raise ControllerError(
                 "v2 driver results must cover the three fixed tracks"
             )
-        driver_root = output / "raw/drivers"
-        driver_root.mkdir(parents=True, exist_ok=True)
+        assert driver_root is not None
         driver_payloads: dict[str, bytes] = {}
         for track in _TRACKS:
             payload = raw_driver_results[track]
@@ -8096,7 +8195,7 @@ def write_evidence_bundle(
                 raise ControllerError("driver result source must be exact bytes")
             relative = f"raw/drivers/{track.value}.json"
             driver_payloads[relative] = payload
-            _write_file(output / relative, payload, 0o444)
+            _write_file(driver_root / f"{track.value}.json", payload, 0o444)
         _validate_driver_result_bindings(
             driver_payloads,
             manifest,
@@ -8160,14 +8259,17 @@ def _prepare_failure_provisional(
 ) -> Path:
     """Preserve an incomplete lifecycle without representing it as promotable proof."""
     _validate_manifest(manifest)
-    output = provisional_root / str(manifest["run_id"])
-    output.mkdir(parents=True, exist_ok=True)
+    generation = _bundle_generation(manifest.get("schema_version"))
+    output, _ = _prepare_private_evidence_output(
+        provisional_root, str(manifest["run_id"])
+    )
     allowed = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
     unexpected = {item.name for item in output.iterdir()} - allowed
     if unexpected:
         raise ControllerError("failure provisional contains unexpected files")
-    raw_root = output / "raw/decisions"
-    raw_root.mkdir(parents=True, exist_ok=True)
+    raw_root, driver_root = _prepare_private_evidence_raw_directories(
+        output, include_drivers=generation == 2
+    )
     if raw_decisions is not None and set(raw_decisions) != set(_TRACKS):
         raise ControllerError("failure raw decisions do not cover fixed tracks")
     parsed_decisions: list[dict[str, object]] = []
@@ -8187,7 +8289,6 @@ def _prepare_failure_provisional(
             _write_file(path, payload, 0o444)
         elif reset or not path.exists():
             _write_file(path, b"", 0o444)
-    generation = _bundle_generation(manifest.get("schema_version"))
     if generation == 2:
         if (
             type(raw_driver_results) is not dict
@@ -8196,8 +8297,7 @@ def _prepare_failure_provisional(
             raise ControllerError(
                 "failure v2 driver results must cover fixed tracks"
             )
-        driver_root = output / "raw/drivers"
-        driver_root.mkdir(parents=True, exist_ok=True)
+        assert driver_root is not None
         driver_payloads: dict[str, bytes] = {}
         for track in _TRACKS:
             payload = raw_driver_results[track]
@@ -8205,7 +8305,7 @@ def _prepare_failure_provisional(
                 raise ControllerError("failure driver result must be exact bytes")
             relative = f"raw/drivers/{track.value}.json"
             driver_payloads[relative] = payload
-            _write_file(output / relative, payload, 0o444)
+            _write_file(driver_root / f"{track.value}.json", payload, 0o444)
         _validate_driver_result_bindings(
             driver_payloads,
             manifest,
@@ -10620,6 +10720,8 @@ class LocalEnvoyController:
             path = root / f"{track.value}.json"
             _require_contained(path, root, "private driver result")
             request = normalized.get(track.value)
+            if path.is_symlink():
+                raise ControllerError("private driver result is unsafe")
             if not path.exists():
                 if request is None:
                     results[track] = b""
@@ -10635,7 +10737,7 @@ class LocalEnvoyController:
                 )
                 results[track] = canonical_record(result)
                 continue
-            if path.is_symlink() or not path.is_file():
+            if not path.is_file():
                 raise ControllerError("private driver result is unsafe")
             payload = path.read_bytes()
             if len(payload) > 8 * 1024:
@@ -11593,6 +11695,7 @@ class LocalEnvoyController:
         )
         state, manifest = self._load_and_reverify()
         requests = self._request_records(manifest)
+        raw_driver_results = self._private_driver_result_sources(manifest)
         raw, envoy, targets = self._copy_sources(
             state, manifest, f"collect-{time.monotonic_ns()}"
         )
@@ -11616,6 +11719,7 @@ class LocalEnvoyController:
             targets=targets,
             joins=joins,
             raw_decisions=raw,
+            raw_driver_results=raw_driver_results,
             resume_attested=True,
         )
         authoritative = authoritative_bundle_attestation(output)
