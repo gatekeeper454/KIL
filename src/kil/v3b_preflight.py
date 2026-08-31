@@ -7,7 +7,7 @@ from typing import Mapping
 from urllib.parse import urlsplit
 
 
-SCHEMA_VERSION = "kil.v3b-profile.v1"
+SCHEMA_VERSION = "kil.v3b-profile.v2"
 LAB_IDENTITY = "kil-v3-lab"
 NODE_IMAGE = (
     "kindest/node:v1.36.1@sha256:"
@@ -92,7 +92,6 @@ class V3BProfile:
     calico_version: str
     calico_manifest_url: str
     cluster_name: str
-    gateway_ports: tuple[int, ...]
     evidence_scope: str
 
     @classmethod
@@ -125,27 +124,10 @@ class V3BProfile:
             raise ProfileError(f"missing V3B profile fields: {sorted(missing)}")
 
         values: dict[str, object] = {}
-        for name in expected - {"gateway_ports"}:
+        for name in expected:
             values[name] = _require_string(name, mapping[name])
         for name in _URL_HOSTS:
             values[name] = _require_url(name, mapping[name])
-
-        raw_ports = mapping["gateway_ports"]
-        if (
-            type(raw_ports) is not list
-            or len(raw_ports) != 3
-            or any(type(port) is not int for port in raw_ports)
-            or any(not 1024 <= port <= 65535 for port in raw_ports)
-            or len(set(raw_ports)) != len(raw_ports)
-        ):
-            raise ProfileError(
-                "gateway_ports must be three distinct non-privileged integers"
-            )
-        values["gateway_ports"] = tuple(raw_ports)
-        if values["gateway_ports"] != (18080, 18081, 18082):
-            raise ProfileError(
-                "gateway_ports must be the fixed V3B ports 18080, 18081, 18082"
-            )
 
         exact_values = {
             "schema_version": SCHEMA_VERSION,

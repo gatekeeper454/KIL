@@ -29,6 +29,7 @@ from kil.canonical import canonical_json
 from kil.live_authz import LiveTrack
 from kil.q_state import QStateClaims, issue_q_state, key_id
 from kil.v3b_envoy import render_envoy_json
+from kil.v3b1_driver_protocol import canonical_record, driver_definition
 from kil.v3b_preflight import EVIDENCE_SCOPE, LAB_IDENTITY, V3BProfile
 
 try:
@@ -67,7 +68,8 @@ REQUEST_ID = "v3b1-central-request"
 AUTHORIZATION = "Bearer v3b1-lab-credential"
 SUBJECT = "spiffe://kil.local/workload/demo"
 PLATFORM = "linux/arm64"
-MANIFEST_SCHEMA = "kil.v3b1-manifest.v1"
+LEGACY_MANIFEST_SCHEMA = "kil.v3b1-manifest.v1"
+MANIFEST_SCHEMA = "kil.v3b1-manifest.v2"
 STATE_SCHEMA = "kil.v3b1-active-state.v1"
 JOURNAL_SCHEMA = "kil.v3b1-lifecycle-journal.v1"
 READINESS_POISON_SCHEMA = "kil.v3b1-readiness-poison.v1"
@@ -1935,6 +1937,45 @@ def _runtime_root(root: Path, manifest: Mapping[str, object]) -> Path:
     )
 
 
+def _segment_definitions() -> list[dict[str, object]]:
+    """Return the six canonical, name-independent internal segments."""
+    return [
+        {
+            "schema_version": "kil.v3b1-segment-definition.v1",
+            "track": track.value,
+            "segment": segment,
+            "internal": True,
+        }
+        for track in _TRACKS
+        for segment in ("frontend", "backend")
+    ]
+
+
+def _driver_definitions(
+    *,
+    kil_image_id: str,
+    bootstrap_sha256: str,
+    segment_definitions: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    """Return three definitions whose inputs never include runtime identity."""
+    frontend_by_track = {
+        str(item["track"]): _digest_bytes(_canonical_bytes(dict(item)))
+        for item in segment_definitions
+        if item.get("segment") == "frontend"
+    }
+    if set(frontend_by_track) != {track.value for track in _TRACKS}:
+        raise ControllerError("frontend segment definitions are incomplete")
+    return [
+        driver_definition(
+            track=track.value,
+            image_id=kil_image_id,
+            bootstrap_sha256=bootstrap_sha256,
+            frontend_segment_sha256=frontend_by_track[track.value],
+        )
+        for track in _TRACKS
+    ]
+
+
 def _manifest_identity(
     profile: V3BProfile,
     *,
@@ -1949,9 +1990,11 @@ def _manifest_identity(
     dockerfile_sha256: str,
     dockerignore_sha256: str,
     build_context_sha256: str,
+    segment_definitions: Sequence[Mapping[str, object]],
+    driver_definitions: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
     return {
-        "schema_version": "kil.v3b1-content-identity.v2",
+        "schema_version": "kil.v3b1-content-identity.v3",
         "profile_sha256": profile_sha256,
         "colima_profile": profile.colima_profile,
         "docker_endpoint": {
@@ -1971,9 +2014,18 @@ def _manifest_identity(
         "kil_image_id": kil_image_id,
         "kil_archive_sha256": kil_archive_sha256,
         "request_id": REQUEST_ID,
-        "tracks": [
-            {"track": track.value, "gateway_port": port}
-            for track, port in zip(_TRACKS, profile.gateway_ports, strict=True)
+        "driver_endpoint": {
+            "transport": "tcp",
+            "host": "envoy",
+            "port": 8080,
+        },
+        "segment_definitions": [dict(item) for item in segment_definitions],
+        "driver_definition_sha256": [
+            {
+                "track": item["track"],
+                "sha256": _digest_bytes(canonical_record(item)),
+            }
+            for item in driver_definitions
         ],
     }
 
@@ -1987,6 +2039,7 @@ def create_run_manifest(
     envoy_image_id: str | None = None,
     kil_image_id: str,
     kil_archive_sha256: str,
+    driver_bootstrap_sha256: str,
     docker_host: str,
     source_commit: str = "0" * 40,
     source_clean: bool = True,
@@ -2008,6 +2061,7 @@ def create_run_manifest(
     if _IMAGE_ID.fullmatch(kil_image_id) is None:
         raise ControllerError("kil_image_id must be an immutable image ID")
     _require_sha256("kil_archive_sha256", kil_archive_sha256)
+    _require_sha256("driver_bootstrap_sha256", driver_bootstrap_sha256)
     if type(docker_host) is not str or not docker_host.startswith("unix:///"):
         raise ControllerError("docker_host must be an explicit Unix socket")
     if (
@@ -2020,6 +2074,12 @@ def create_run_manifest(
     _require_sha256("dockerfile_sha256", dockerfile_sha256)
     _require_sha256("dockerignore_sha256", dockerignore_sha256)
     _require_sha256("build_context_sha256", build_context_sha256)
+    segments = _segment_definitions()
+    drivers = _driver_definitions(
+        kil_image_id=kil_image_id,
+        bootstrap_sha256=driver_bootstrap_sha256,
+        segment_definitions=segments,
+    )
     identity = _manifest_identity(
         profile,
         profile_sha256=profile_sha256,
@@ -2033,6 +2093,8 @@ def create_run_manifest(
         dockerfile_sha256=dockerfile_sha256,
         dockerignore_sha256=dockerignore_sha256,
         build_context_sha256=build_context_sha256,
+        segment_definitions=segments,
+        driver_definitions=drivers,
     )
     identity_sha256 = _digest_bytes(canonical_json(identity).encode("utf-8"))
     run_id = f"v3b1-{identity_sha256}"
@@ -2040,7 +2102,7 @@ def create_run_manifest(
     networks = []
     tracks = []
     containers = []
-    for track, port in zip(_TRACKS, profile.gateway_ports, strict=True):
+    for track in _TRACKS:
         slug = _track_slug(track)
         names = {
             role: f"kil-v3b1-{role}-{slug}-{suffix}"
@@ -2051,7 +2113,11 @@ def create_run_manifest(
         tracks.append(
             {
                 "track": track.value,
-                "gateway_port": port,
+                "driver_endpoint": {
+                    "transport": "tcp",
+                    "host": "envoy",
+                    "port": 8080,
+                },
                 "authz_container": names["authz"],
                 "target_container": names["target"],
                 "envoy_container": names["envoy"],
@@ -2087,6 +2153,8 @@ def create_run_manifest(
         "envoy_image_id": envoy_image_id,
         "kil_image_id": kil_image_id,
         "kil_archive_sha256": kil_archive_sha256,
+        "segment_definitions": segments,
+        "driver_definitions": drivers,
         "networks": networks,
         "tracks": tracks,
         "containers": containers,
@@ -2099,7 +2167,7 @@ def create_run_manifest(
     }
 
 
-def _validate_manifest(value: object) -> dict[str, object]:
+def _validate_manifest_v1(value: object) -> dict[str, object]:
     expected = {
         "schema_version",
         "evidence_scope",
@@ -2124,7 +2192,7 @@ def _validate_manifest(value: object) -> dict[str, object]:
     }
     if type(value) is not dict or set(value) != expected:
         raise ControllerError("manifest fields are not closed")
-    if value["schema_version"] != MANIFEST_SCHEMA or value["evidence_scope"] != EVIDENCE_SCOPE:
+    if value["schema_version"] != LEGACY_MANIFEST_SCHEMA or value["evidence_scope"] != EVIDENCE_SCOPE:
         raise ControllerError("manifest identity is invalid")
     identity = value["content_identity"]
     identity_fields = {
@@ -2296,6 +2364,204 @@ def _validate_manifest(value: object) -> dict[str, object]:
     ):
         raise ControllerError("manifest teardown state is invalid")
     return value
+
+
+def _validate_manifest_v2(value: object) -> dict[str, object]:
+    expected = {
+        "schema_version", "evidence_scope", "content_identity_sha256",
+        "content_identity", "run_id", "request_id", "colima_profile",
+        "docker_host", "execution_nonce", "platform", "source_commit",
+        "python_image_digest", "envoy_image_digest", "envoy_image_id",
+        "kil_image_id", "kil_archive_sha256", "segment_definitions",
+        "driver_definitions", "networks", "tracks", "containers", "teardown",
+    }
+    if type(value) is not dict or set(value) != expected:
+        raise ControllerError("manifest fields are not closed")
+    if (
+        value["schema_version"] != MANIFEST_SCHEMA
+        or value["evidence_scope"] != EVIDENCE_SCOPE
+    ):
+        raise ControllerError("manifest identity is invalid")
+
+    identity = value["content_identity"]
+    identity_fields = {
+        "schema_version", "profile_sha256", "colima_profile",
+        "docker_endpoint", "platform", "source_commit",
+        "execution_nonce_sha256", "dockerfile_sha256",
+        "dockerignore_sha256", "build_context_sha256",
+        "python_image_digest", "envoy_image_digest", "envoy_image_id",
+        "kil_image_id", "kil_archive_sha256", "request_id",
+        "driver_endpoint", "segment_definitions", "driver_definition_sha256",
+    }
+    if type(identity) is not dict or set(identity) != identity_fields:
+        raise ControllerError("manifest content identity is invalid")
+    if identity["schema_version"] != "kil.v3b1-content-identity.v3":
+        raise ControllerError("manifest content identity schema is invalid")
+    for name in (
+        "profile_sha256", "execution_nonce_sha256", "dockerfile_sha256",
+        "dockerignore_sha256", "build_context_sha256",
+    ):
+        _require_sha256(name, identity[name])
+    if identity["docker_endpoint"] != {
+        "transport": "unix",
+        "logical_locator": "colima_profile_socket",
+        "profile": LAB_IDENTITY,
+    }:
+        raise ControllerError("manifest logical Docker endpoint is invalid")
+    endpoint = {"transport": "tcp", "host": "envoy", "port": 8080}
+    if identity["driver_endpoint"] != endpoint:
+        raise ControllerError("manifest driver endpoint is invalid")
+
+    segments = value["segment_definitions"]
+    if segments != _segment_definitions() or identity["segment_definitions"] != segments:
+        raise ControllerError("manifest segment definitions are invalid")
+    drivers = value["driver_definitions"]
+    if type(drivers) is not list or len(drivers) != len(_TRACKS):
+        raise ControllerError("manifest driver definitions are invalid")
+    if any(type(item) is not dict for item in drivers):
+        raise ControllerError("manifest driver definitions are invalid")
+    bootstrap_values = {item.get("bootstrap_sha256") for item in drivers}
+    if len(bootstrap_values) != 1:
+        raise ControllerError("manifest driver bootstrap binding is invalid")
+    bootstrap_sha256 = next(iter(bootstrap_values))
+    _require_sha256("manifest driver bootstrap", bootstrap_sha256)
+    expected_drivers = _driver_definitions(
+        kil_image_id=str(value["kil_image_id"]),
+        bootstrap_sha256=bootstrap_sha256,
+        segment_definitions=segments,
+    )
+    if drivers != expected_drivers:
+        raise ControllerError("manifest driver definitions are invalid")
+    expected_driver_hashes = [
+        {
+            "track": item["track"],
+            "sha256": _digest_bytes(canonical_record(item)),
+        }
+        for item in drivers
+    ]
+    if identity["driver_definition_sha256"] != expected_driver_hashes:
+        raise ControllerError("manifest driver definition hashes are invalid")
+
+    digest = _digest_bytes(canonical_json(identity).encode("utf-8"))
+    if (
+        value["content_identity_sha256"] != digest
+        or value["run_id"] != f"v3b1-{digest}"
+    ):
+        raise ControllerError("manifest content address is invalid")
+    if value["request_id"] != REQUEST_ID or value["colima_profile"] != LAB_IDENTITY:
+        raise ControllerError("manifest fixed identifiers are invalid")
+    for name in (
+        "request_id", "colima_profile", "platform", "source_commit",
+        "python_image_digest", "envoy_image_digest", "envoy_image_id",
+        "kil_image_id", "kil_archive_sha256",
+    ):
+        if value[name] != identity[name]:
+            raise ControllerError(f"manifest {name} diverges from content identity")
+    execution_nonce = _require_sha256(
+        "manifest execution nonce", value["execution_nonce"]
+    )
+    if identity["execution_nonce_sha256"] != _digest_bytes(
+        execution_nonce.encode("ascii")
+    ):
+        raise ControllerError("manifest execution nonce diverges from content identity")
+    if type(value["docker_host"]) is not str or not value["docker_host"].startswith(
+        "unix:///"
+    ):
+        raise ControllerError("manifest Docker host is invalid")
+    if value["platform"] != PLATFORM:
+        raise ControllerError("manifest platform is invalid")
+    if type(value["source_commit"]) is not str or re.fullmatch(
+        r"[a-f0-9]{40}", value["source_commit"]
+    ) is None:
+        raise ControllerError("manifest source commit is invalid")
+    _require_digest_ref("python_image_digest", value["python_image_digest"])
+    _require_digest_ref("envoy_image_digest", value["envoy_image_digest"])
+    for name in ("envoy_image_id", "kil_image_id"):
+        if type(value[name]) is not str or _IMAGE_ID.fullmatch(value[name]) is None:
+            raise ControllerError("manifest image ID is invalid")
+    _require_sha256("kil_archive_sha256", value["kil_archive_sha256"])
+
+    expected_tracks = [track.value for track in _TRACKS]
+    tracks = value["tracks"]
+    track_fields = {
+        "track", "driver_endpoint", "authz_container", "target_container",
+        "envoy_container", "network", "decision_source", "target_source",
+        "envoy_source",
+    }
+    if (
+        type(tracks) is not list
+        or len(tracks) != 3
+        or [item.get("track") for item in tracks if type(item) is dict]
+        != expected_tracks
+        or any(type(item) is not dict or set(item) != track_fields for item in tracks)
+        or any(item["driver_endpoint"] != endpoint for item in tracks)
+    ):
+        raise ControllerError("manifest tracks are invalid")
+    networks = value["networks"]
+    if (
+        type(networks) is not list
+        or len(networks) != 3
+        or [item.get("track") for item in networks if type(item) is dict]
+        != expected_tracks
+        or any(
+            type(item) is not dict
+            or set(item) != {"track", "name"}
+            or not str(item["name"]).startswith("kil-v3b1-network-")
+            for item in networks
+        )
+    ):
+        raise ControllerError("manifest per-track networks are invalid")
+    network_by_track = {item["track"]: item["name"] for item in networks}
+    if any(item["network"] != network_by_track[item["track"]] for item in tracks):
+        raise ControllerError("manifest track network binding is invalid")
+    containers = value["containers"]
+    if type(containers) is not list or len(containers) != 9:
+        raise ControllerError("manifest containers are invalid")
+    names: list[object] = []
+    for item in containers:
+        if type(item) is not dict or set(item) != {"name", "role", "track", "image"}:
+            raise ControllerError("manifest container fields are invalid")
+        if not str(item["name"]).startswith("kil-v3b1-"):
+            raise ControllerError("manifest container name is invalid")
+        names.append(item["name"])
+    if len(set(names)) != 9:
+        raise ControllerError("manifest container names are not unique")
+    expected_role_tracks = {
+        (role, track.value)
+        for track in _TRACKS
+        for role in ("authz", "target", "envoy")
+    }
+    if {(item["role"], item["track"]) for item in containers} != expected_role_tracks:
+        raise ControllerError("manifest container roles/tracks are invalid")
+    teardown = value["teardown"]
+    if type(teardown) is not dict or set(teardown) != {
+        "status", "containers_removed", "network_removed", "profile_deleted",
+    }:
+        raise ControllerError("manifest teardown fields are invalid")
+    if teardown not in (
+        {
+            "status": "pending", "containers_removed": False,
+            "network_removed": False, "profile_deleted": False,
+        },
+        {
+            "status": "complete", "containers_removed": True,
+            "network_removed": True, "profile_deleted": True,
+        },
+    ):
+        raise ControllerError("manifest teardown state is invalid")
+    return value
+
+
+def _validate_manifest(value: object) -> dict[str, object]:
+    """Dispatch private manifests without accepting hybrid schema shapes."""
+    if type(value) is not dict:
+        raise ControllerError("manifest fields are not closed")
+    schema = value.get("schema_version")
+    if schema == LEGACY_MANIFEST_SCHEMA:
+        return _validate_manifest_v1(value)
+    if schema == MANIFEST_SCHEMA:
+        return _validate_manifest_v2(value)
+    raise ControllerError("manifest schema is invalid")
 
 
 def _claims(audience: str, issued_at_s: int) -> QStateClaims:
@@ -2643,7 +2909,7 @@ def build_runtime_commands(
                 "--tmpfs",
                 "/tmp:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700",
                 "--publish",
-                f"127.0.0.1:{item['gateway_port']}:8080/tcp",
+                f"127.0.0.1:{_TRACK_PORTS[track]}:8080/tcp",
                 "--mount",
                 f"type=bind,src={track_root / 'envoy.json'},dst=/etc/envoy/envoy.json,readonly",
                 "--entrypoint",
@@ -2755,7 +3021,9 @@ def _synthetic_state_object(
                 "8080/tcp": [
                     {
                         "HostIp": "127.0.0.1",
-                        "HostPort": str(track_record["gateway_port"]),
+                        "HostPort": str(
+                            _TRACK_PORTS[LiveTrack(str(track_record["track"]))]
+                        ),
                     }
                 ]
             }
@@ -2906,7 +3174,11 @@ def _validate_state_objects(
             "network": track_record["network"],
             "config_path": item["config_path"],
             "config_sha256": item["config_sha256"],
-            "gateway_port": track_record["gateway_port"] if item["role"] == "envoy" else None,
+            "gateway_port": (
+                _TRACK_PORTS[LiveTrack(str(track_record["track"]))]
+                if item["role"] == "envoy"
+                else None
+            ),
         }
         runtime = validate_container_attestation(
             item["runtime_attestation"], expected_runtime
@@ -3514,6 +3786,7 @@ _PRESENTER_FORBIDDEN = (
     "compact_jws",
 )
 _PUBLIC_COMMITMENT_SCHEMA = "kil.v3b1-public-commitment.v1"
+_PUBLIC_COMMITMENT_SCHEMA_V2 = "kil.v3b1-public-commitment.v2"
 _PUBLIC_COMMITMENT_RULE = (
     "sha256_of_canonical_manifest_without_public_commitment_sha256_and_"
     "all_public_file_sha256_except_manifest_and_SHA256SUMS"
@@ -4058,7 +4331,7 @@ def _public_bundle_snapshot(
                 os.close(descriptor)
 
 
-def _validate_public_manifest(
+def _validate_public_manifest_v1(
     value: Mapping[str, object],
     payloads: Mapping[str, bytes],
     *,
@@ -4231,6 +4504,129 @@ def _validate_public_manifest(
         value, payloads
     ):
         raise ControllerError("public commitment does not bind the snapshot")
+
+
+def _validate_public_manifest_v2(
+    value: Mapping[str, object],
+    payloads: Mapping[str, bytes],
+    *,
+    completed: bool = True,
+) -> None:
+    """Validate the driver-era public manifest without widening v1."""
+    if type(value) is not dict or value.get("schema_version") != (
+        "kil.v3b1-public-manifest.v2"
+    ):
+        raise ControllerError("public manifest schema is invalid")
+    identity = value.get("content_identity")
+    identity_fields = {
+        "schema_version", "profile_sha256", "colima_profile",
+        "docker_endpoint", "platform", "source_commit",
+        "execution_nonce_sha256", "dockerfile_sha256",
+        "dockerignore_sha256", "build_context_sha256",
+        "python_image_digest", "envoy_image_digest", "envoy_image_id",
+        "kil_image_id", "kil_archive_sha256", "request_id",
+        "driver_endpoint", "segment_definitions", "driver_definition_sha256",
+    }
+    if type(identity) is not dict or set(identity) != identity_fields:
+        raise ControllerError("public content identity fields are not closed")
+    if identity["schema_version"] != "kil.v3b1-content-identity.v3":
+        raise ControllerError("public content identity schema is invalid")
+    for name in (
+        "profile_sha256", "execution_nonce_sha256", "dockerfile_sha256",
+        "dockerignore_sha256", "build_context_sha256",
+    ):
+        _require_sha256(f"public content identity {name}", identity[name])
+    if identity["docker_endpoint"] != {
+        "transport": "unix",
+        "logical_locator": "colima_profile_socket",
+        "profile": LAB_IDENTITY,
+    }:
+        raise ControllerError("public content identity endpoint is invalid")
+    if identity["driver_endpoint"] != {
+        "transport": "tcp", "host": "envoy", "port": 8080,
+    }:
+        raise ControllerError("public driver endpoint is invalid")
+    if identity["segment_definitions"] != _segment_definitions():
+        raise ControllerError("public segment definitions are invalid")
+    hashes = identity["driver_definition_sha256"]
+    if (
+        type(hashes) is not list
+        or len(hashes) != len(_TRACKS)
+        or [item.get("track") for item in hashes if type(item) is dict]
+        != [track.value for track in _TRACKS]
+        or any(
+            type(item) is not dict
+            or set(item) != {"track", "sha256"}
+            for item in hashes
+        )
+    ):
+        raise ControllerError("public driver definition hashes are invalid")
+    for item in hashes:
+        _require_sha256("public driver definition", item["sha256"])
+    if (
+        identity["colima_profile"] != LAB_IDENTITY
+        or identity["platform"] != value.get("platform")
+        or identity["source_commit"] != value.get("source_commit")
+        or identity["request_id"] != value.get("request_id")
+    ):
+        raise ControllerError("public content identity cross-binding is invalid")
+    identity_digest = _digest_bytes(canonical_json(identity).encode("utf-8"))
+    if (
+        value.get("content_identity_sha256") != identity_digest
+        or value.get("run_id") != f"v3b1-{identity_digest}"
+    ):
+        raise ControllerError("public run identity does not match content identity")
+
+    # Reuse the unchanged v1 validator for every common closed field by
+    # projecting only the version-specific identity and commitment inputs.
+    projected = dict(value)
+    projected["schema_version"] = "kil.v3b1-public-manifest.v1"
+    legacy_identity = {
+        key: identity[key]
+        for key in (
+            "profile_sha256", "colima_profile", "docker_endpoint", "platform",
+            "source_commit", "execution_nonce_sha256", "dockerfile_sha256",
+            "dockerignore_sha256", "build_context_sha256",
+            "python_image_digest", "envoy_image_digest", "envoy_image_id",
+            "kil_image_id", "kil_archive_sha256", "request_id",
+        )
+    }
+    legacy_identity["schema_version"] = "kil.v3b1-content-identity.v2"
+    legacy_identity["tracks"] = [
+        {"track": track.value, "gateway_port": port}
+        for track, port in zip(_TRACKS, _TRACK_PORTS.values(), strict=True)
+    ]
+    legacy_digest = _digest_bytes(canonical_json(legacy_identity).encode("utf-8"))
+    projected["content_identity"] = legacy_identity
+    projected["content_identity_sha256"] = legacy_digest
+    projected["run_id"] = f"v3b1-{legacy_digest}"
+    projected["public_commitment_sha256"] = _public_commitment_sha256(
+        projected, payloads
+    )
+    _validate_public_manifest_v1(projected, payloads, completed=completed)
+    if value.get("public_commitment_sha256") != _public_commitment_sha256(
+        value, payloads
+    ):
+        raise ControllerError("public commitment does not bind the snapshot")
+
+
+def _validate_public_manifest(
+    value: Mapping[str, object],
+    payloads: Mapping[str, bytes],
+    *,
+    completed: bool = True,
+) -> None:
+    """Dispatch public manifests with no legacy/new field union."""
+    if type(value) is not dict:
+        raise ControllerError("public manifest fields are not closed")
+    schema = value.get("schema_version")
+    if schema == "kil.v3b1-public-manifest.v1":
+        _validate_public_manifest_v1(value, payloads, completed=completed)
+        return
+    if schema == "kil.v3b1-public-manifest.v2":
+        _validate_public_manifest_v2(value, payloads, completed=completed)
+        return
+    raise ControllerError("public manifest schema is invalid")
 
 
 def _normalized_presenter_decision_closed(record: Mapping[str, object]) -> None:
@@ -4653,8 +5049,15 @@ def _public_commitment_sha256(
         raise ControllerError("public commitment file set is incomplete")
     projected_manifest = dict(manifest)
     projected_manifest.pop("public_commitment_sha256", None)
+    public_schema = manifest.get("schema_version")
+    if public_schema == "kil.v3b1-public-manifest.v1":
+        commitment_schema = _PUBLIC_COMMITMENT_SCHEMA
+    elif public_schema == "kil.v3b1-public-manifest.v2":
+        commitment_schema = _PUBLIC_COMMITMENT_SCHEMA_V2
+    else:
+        raise ControllerError("public commitment manifest schema is invalid")
     commitment = {
-        "schema_version": _PUBLIC_COMMITMENT_SCHEMA,
+        "schema_version": commitment_schema,
         "manifest": projected_manifest,
         "file_sha256": {
             relative: _digest_bytes(payloads[relative])
@@ -5377,7 +5780,7 @@ def finalize_publication(
     identity = private_manifest["content_identity"]
     assert isinstance(identity, dict)
     public_manifest: dict[str, object] = {
-        "schema_version": "kil.v3b1-public-manifest.v1",
+        "schema_version": "kil.v3b1-public-manifest.v2",
         "run_id": private_manifest["run_id"],
         "request_id": private_manifest["request_id"],
         "evidence_scope": EVIDENCE_SCOPE,
@@ -6063,7 +6466,7 @@ class LocalEnvoyController:
         ]
 
     def validate_ports(self) -> None:
-        for port in self.profile.gateway_ports:
+        for port in _TRACK_PORTS.values():
             if self.port_probe(port):
                 raise ControllerError(f"gateway port {port} is occupied")
 
@@ -6081,7 +6484,7 @@ class LocalEnvoyController:
         self.validate_ports()
         return {
             "profiles": profiles,
-            "ports": self.profile.gateway_ports,
+            "ports": tuple(_TRACK_PORTS.values()),
             "tool_identities": _tool_identity_projection(tools),
         }
 
@@ -6630,7 +7033,11 @@ class LocalEnvoyController:
             "network": track_manifest["network"],
             "config_path": str(config),
             "config_sha256": _digest_file(config),
-            "gateway_port": track_manifest["gateway_port"] if role == "envoy" else None,
+            "gateway_port": (
+                _TRACK_PORTS[track]
+                if role == "envoy"
+                else None
+            ),
         }
         validate_container_attestation(actual, expected)
         return {
@@ -7219,7 +7626,7 @@ class LocalEnvoyController:
             "preflight_complete",
             {
                 "tool_identities": preflight["tool_identities"],
-                "ports": list(self.profile.gateway_ports),
+                "ports": list(_TRACK_PORTS.values()),
                 "dedicated_profile_absent": True,
             },
         )
@@ -7317,6 +7724,9 @@ class LocalEnvoyController:
             envoy_image_id=envoy_image_id,
             kil_image_id=kil_image_id,
             kil_archive_sha256=archive_sha,
+            driver_bootstrap_sha256=driver_bootstrap_sha256(
+                self._build_context_attestation
+            ),
             docker_host=self.docker_host,
             source_commit=source_commit,
             source_clean=True,
@@ -8527,7 +8937,7 @@ class LocalEnvoyController:
                     LiveTrack, int, int, int, BaseException
                 ] | None = None
                 for track, port in zip(
-                    _TRACKS, self.profile.gateway_ports, strict=True
+                    _TRACKS, _TRACK_PORTS.values(), strict=True
                 ):
                     connect_ns = self._monotonic_now()
                     remaining_ns = deadline_ns - connect_ns
@@ -8580,7 +8990,7 @@ class LocalEnvoyController:
                             "round": round_number,
                             "host": "127.0.0.1",
                             "tracks": [track.value for track in _TRACKS],
-                            "ports": list(self.profile.gateway_ports),
+                            "ports": list(_TRACK_PORTS.values()),
                             "ready_monotonic_ns": ready_ns,
                         },
                     )
@@ -8716,7 +9126,7 @@ class LocalEnvoyController:
                 "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
             }
             comparison_sha = comparison_facts_sha256(comparison)
-            for track, port in zip(_TRACKS, self.profile.gateway_ports, strict=True):
+            for track, port in zip(_TRACKS, _TRACK_PORTS.values(), strict=True):
                 issued = int(time.time())
                 q_state = None
                 if track is LiveTrack.SIGNED_STATE_ONLY:

@@ -18,6 +18,7 @@ class V3BProfileTest(unittest.TestCase):
     def test_loads_the_closed_released_profile(self):
         profile = V3BProfile.load(PROFILE_PATH)
 
+        self.assertEqual(profile.schema_version, "kil.v3b-profile.v2")
         self.assertEqual(profile.kind_version, "0.32.0")
         self.assertEqual(profile.kubernetes_version, "1.36.1")
         self.assertEqual(profile.envoy_version, "1.39.1")
@@ -28,7 +29,8 @@ class V3BProfileTest(unittest.TestCase):
         self.assertEqual(profile.cluster_name, "kil-v3-lab")
         self.assertEqual(profile.colima_profile, "kil-v3-lab")
         self.assertEqual(profile.evidence_scope, "local_envoy_boundary")
-        self.assertEqual(profile.gateway_ports, (18080, 18081, 18082))
+        self.assertFalse(hasattr(profile, "gateway_ports"))
+        self.assertNotIn("gateway_ports", self.raw_profile())
 
     def test_profile_is_frozen_and_slotted(self):
         profile = V3BProfile.load(PROFILE_PATH)
@@ -100,20 +102,11 @@ class V3BProfileTest(unittest.TestCase):
         with self.assertRaisesRegex(ProfileError, "kind_url"):
             V3BProfile.from_mapping(raw)
 
-    def test_rejects_boolean_duplicate_and_privileged_ports(self):
-        cases = ([True, 18081, 18082], [18080, 18080, 18082], [80, 18081, 18082])
-        for ports in cases:
-            with self.subTest(ports=ports):
-                raw = self.raw_profile()
-                raw["gateway_ports"] = ports
-                with self.assertRaisesRegex(ProfileError, "gateway_ports"):
-                    V3BProfile.from_mapping(raw)
-
-    def test_rejects_a_different_valid_port_set(self):
+    def test_rejects_legacy_gateway_port_compatibility(self):
         raw = self.raw_profile()
-        raw["gateway_ports"] = [19080, 19081, 19082]
+        raw["gateway_ports"] = [18080, 18081, 18082]
 
-        with self.assertRaisesRegex(ProfileError, "gateway_ports"):
+        with self.assertRaisesRegex(ProfileError, "unknown"):
             V3BProfile.from_mapping(raw)
 
     def test_load_rejects_non_object_json(self):

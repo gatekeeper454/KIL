@@ -876,6 +876,7 @@ def manifest(
         envoy_image_digest=ENVOY_DIGEST,
         kil_image_id=KIL_IMAGE_ID,
         kil_archive_sha256=HEX_A,
+        driver_bootstrap_sha256=HEX_A,
         docker_host=docker_host,
         execution_nonce=execution_nonce,
     )
@@ -1935,8 +1936,12 @@ class ControllerContractTest(unittest.TestCase):
     def test_manifest_is_content_addressed_and_refuses_mutable_images(self):
         value = manifest()
 
+        self.assertEqual(value["schema_version"], "kil.v3b1-manifest.v2")
         self.assertRegex(value["run_id"], r"^v3b1-[a-f0-9]{64}$")
         identity = value["content_identity"]
+        self.assertEqual(
+            identity["schema_version"], "kil.v3b1-content-identity.v3"
+        )
         self.assertEqual(
             identity["docker_endpoint"],
             {
@@ -1960,6 +1965,57 @@ class ControllerContractTest(unittest.TestCase):
         self.assertEqual(value["evidence_scope"], "local_envoy_boundary")
         self.assertEqual(value["envoy_image_digest"], ENVOY_DIGEST)
         self.assertEqual(value["kil_image_id"], KIL_IMAGE_ID)
+        self.assertEqual(len(value["segment_definitions"]), 6)
+        self.assertEqual(len(value["driver_definitions"]), 3)
+        self.assertEqual(len(identity["segment_definitions"]), 6)
+        self.assertEqual(len(identity["driver_definition_sha256"]), 3)
+        self.assertEqual(
+            {item["segment"] for item in value["segment_definitions"]},
+            {"frontend", "backend"},
+        )
+        self.assertTrue(
+            all(item["internal"] is True for item in value["segment_definitions"])
+        )
+        self.assertTrue(
+            all(
+                item["endpoint"] == {"host": "envoy", "port": 8080}
+                for item in value["driver_definitions"]
+            )
+        )
+        frontend_sha = {
+            item["track"]: sha256(
+                (canonical_json(item) + "\n").encode("utf-8")
+            ).hexdigest()
+            for item in value["segment_definitions"]
+            if item["segment"] == "frontend"
+        }
+        self.assertEqual(
+            [item["frontend_segment_sha256"] for item in value["driver_definitions"]],
+            [frontend_sha[track.value] for track in LiveTrack],
+        )
+        self.assertEqual(
+            identity["driver_definition_sha256"],
+            [
+                {
+                    "track": item["track"],
+                    "sha256": sha256(
+                        (canonical_json(item) + "\n").encode("utf-8")
+                    ).hexdigest(),
+                }
+                for item in value["driver_definitions"]
+            ],
+        )
+        definition_bytes = canonical_json(
+            {
+                "segments": value["segment_definitions"],
+                "drivers": value["driver_definitions"],
+            }
+        )
+        self.assertNotIn(value["run_id"], definition_bytes)
+        self.assertNotIn(value["content_identity_sha256"][:12], definition_bytes)
+        self.assertNotIn("gateway_port", canonical_json(identity))
+        self.assertNotIn("container_name", canonical_json(identity))
+        self.assertNotIn("run_id", canonical_json(identity))
         self.assertEqual(len(value["containers"]), 9)
         different = create_run_manifest(
             PROFILE,
@@ -1968,6 +2024,7 @@ class ControllerContractTest(unittest.TestCase):
             envoy_image_digest=ENVOY_DIGEST,
             kil_image_id=KIL_IMAGE_ID,
             kil_archive_sha256=HEX_A,
+            driver_bootstrap_sha256=HEX_A,
             docker_host="unix:///socket",
             execution_nonce=HEX_B,
         )
@@ -1987,6 +2044,7 @@ class ControllerContractTest(unittest.TestCase):
                 envoy_image_digest=ENVOY_DIGEST,
                 kil_image_id=KIL_IMAGE_ID,
                 kil_archive_sha256=HEX_A,
+                driver_bootstrap_sha256=HEX_A,
                 docker_host="unix:///socket",
             )
         with self.assertRaisesRegex(ControllerError, "image ID"):
@@ -1997,8 +2055,66 @@ class ControllerContractTest(unittest.TestCase):
                 envoy_image_digest=ENVOY_DIGEST,
                 kil_image_id="kil-v3b1:latest",
                 kil_archive_sha256=HEX_A,
+                driver_bootstrap_sha256=HEX_A,
                 docker_host="unix:///socket",
             )
+
+    def test_runtime_names_labels_and_full_ids_do_not_change_content_digest(self):
+        value = manifest()
+        digest = value["content_identity_sha256"]
+        changed = json.loads(json.dumps(value))
+        changed["containers"][0]["name"] = "kil-v3b1-authz-runtime-only"
+        changed["networks"][0]["name"] = "kil-v3b1-backend-runtime-only"
+        changed["runtime_attestations"] = {
+            "container_full_ids": [HEX_A],
+            "labels": {"kil.v3b1.runtime": "changed"},
+        }
+
+        self.assertEqual(
+            digest,
+            sha256(
+                canonical_json(changed["content_identity"]).encode("utf-8")
+            ).hexdigest(),
+        )
+
+    def test_private_manifest_dispatch_rejects_hybrid_schema_shapes(self):
+        value = manifest()
+        for missing in ("segment_definitions", "driver_definitions"):
+            with self.subTest(missing=missing):
+                changed = json.loads(json.dumps(value))
+                del changed[missing]
+                with self.assertRaisesRegex(ControllerError, "closed"):
+                    local_envoy_module._validate_manifest(changed)
+
+        for missing in (
+            "driver_endpoint",
+            "segment_definitions",
+            "driver_definition_sha256",
+        ):
+            with self.subTest(identity_missing=missing):
+                changed = json.loads(json.dumps(value))
+                del changed["content_identity"][missing]
+                with self.assertRaises(ControllerError):
+                    local_envoy_module._validate_manifest(changed)
+
+        legacy_tagged = json.loads(json.dumps(value))
+        legacy_tagged["schema_version"] = "kil.v3b1-manifest.v1"
+        with self.assertRaises(ControllerError):
+            local_envoy_module._validate_manifest(legacy_tagged)
+
+    def test_public_v1_dispatch_rejects_driver_identity_fields(self):
+        fixture_root = ROOT / "tests/fixtures/v3b1-public-bundle-v1"
+        bundle = next(path for path in fixture_root.iterdir() if path.is_dir())
+        public = json.loads((bundle / "manifest.json").read_text())
+        payloads = {
+            path.relative_to(bundle).as_posix(): path.read_bytes()
+            for path in bundle.rglob("*")
+            if path.is_file()
+        }
+        public["content_identity"]["segment_definitions"] = []
+
+        with self.assertRaises(ControllerError):
+            local_envoy_module._validate_public_manifest(public, payloads)
 
     def test_inputs_are_read_only_closed_and_requests_are_central_and_adversarial(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -4261,7 +4377,7 @@ class JournalRecoveryTest(unittest.TestCase):
                 def preflight(self):
                     return {
                         "profiles": (),
-                        "ports": self.profile.gateway_ports,
+                        "ports": (18080, 18081, 18082),
                         "tool_identities": TOOL_IDENTITIES,
                     }
 
@@ -4545,7 +4661,7 @@ class TeardownContinuationTest(unittest.TestCase):
                     "preflight_complete",
                     {
                         "tool_identities": TOOL_IDENTITIES,
-                        "ports": list(controller.profile.gateway_ports),
+                        "ports": [18080, 18081, 18082],
                         "dedicated_profile_absent": True,
                     },
                 )
@@ -4867,7 +4983,7 @@ class TeardownContinuationTest(unittest.TestCase):
                     "preflight_complete",
                     {
                         "tool_identities": TOOL_IDENTITIES,
-                        "ports": list(controller.profile.gateway_ports),
+                        "ports": [18080, 18081, 18082],
                         "dedicated_profile_absent": True,
                     },
                 )
@@ -5117,7 +5233,7 @@ class TeardownContinuationTest(unittest.TestCase):
                     "preflight_complete",
                     {
                         "tool_identities": TOOL_IDENTITIES,
-                        "ports": list(controller.profile.gateway_ports),
+                        "ports": [18080, 18081, 18082],
                         "dedicated_profile_absent": True,
                     },
                 )
@@ -7347,7 +7463,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                             "8080/tcp": [
                                 {
                                     "HostIp": "127.0.0.1",
-                                    "HostPort": str(track_value["gateway_port"]),
+                                    "HostPort": "18080",
                                 }
                             ]
                         },
@@ -8944,7 +9060,7 @@ class EvidenceBundleTest(unittest.TestCase):
             expected_commitment = sha256(
                 canonical_json(
                     {
-                        "schema_version": "kil.v3b1-public-commitment.v1",
+                        "schema_version": "kil.v3b1-public-commitment.v2",
                         "manifest": projected,
                         "file_sha256": dict(sorted(committed_files.items())),
                     }
