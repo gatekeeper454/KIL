@@ -8033,102 +8033,433 @@ def finalize_publication(
                 os.close(descriptor)
 
 
-def _secure_private_evidence_directory(
-    path: Path, parent: Path, label: str
-) -> Path:
-    """Create or re-attest one private evidence directory without following links."""
-    _require_contained(path, parent, label)
-    before: os.stat_result | None
+_PRIVATE_DIRECTORY_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_DIRECTORY", 0)
+    | getattr(os, "O_NOFOLLOW", 0)
+)
+
+
+@dataclass(slots=True)
+class _PrivateEvidenceTransaction:
+    parent_path: Path
+    evidence_root: Path
+    output: Path
+    parent_fd: int
+    root_fd: int
+    run_fd: int
+    parent_identity: tuple[int, int]
+    root_identity: tuple[int, int]
+    run_identity: tuple[int, int]
+    output_existed: bool
+    raw_fd: int = -1
+    decisions_fd: int = -1
+    drivers_fd: int = -1
+    raw_identity: tuple[int, int] | None = None
+    decisions_identity: tuple[int, int] | None = None
+    drivers_identity: tuple[int, int] | None = None
+
+    def close(self) -> None:
+        for name in ("drivers_fd", "decisions_fd", "raw_fd", "run_fd", "root_fd", "parent_fd"):
+            descriptor = getattr(self, name)
+            if descriptor >= 0:
+                os.close(descriptor)
+                setattr(self, name, -1)
+
+
+def _private_directory_names(descriptor: int, label: str) -> set[str]:
     try:
-        before = os.lstat(path)
+        return set(os.listdir(descriptor))
+    except OSError as error:
+        raise ControllerError(f"{label} inventory is unavailable or unsafe") from error
+
+
+def _open_or_create_private_directory_at(
+    parent_fd: int,
+    name: str,
+    label: str,
+) -> tuple[int, tuple[int, int], bool]:
+    if not name or "/" in name or name in {".", ".."}:
+        raise ControllerError(f"{label} name is invalid")
+    existed = True
+    try:
+        current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
     except FileNotFoundError:
-        before = None
+        existed = False
+        try:
+            os.mkdir(name, mode=0o700, dir_fd=parent_fd)
+            os.fsync(parent_fd)
+        except OSError as error:
+            raise ControllerError(f"{label} could not be safely created") from error
     except OSError as error:
         raise ControllerError(f"{label} is unavailable or unsafe") from error
-    if before is not None and (
-        stat.S_ISLNK(before.st_mode) or not stat.S_ISDIR(before.st_mode)
-    ):
-        raise ControllerError(f"{label} is not a safe directory")
-    if before is None:
-        try:
-            path.mkdir(mode=0o700)
-        except (FileExistsError, OSError) as error:
-            raise ControllerError(f"{label} could not be safely created") from error
-    _require_contained(path, parent, label)
+    else:
+        if not stat.S_ISDIR(current.st_mode):
+            raise ControllerError(f"{label} is not a safe directory")
+    descriptor = -1
     try:
-        after = os.lstat(path)
+        descriptor = os.open(name, _PRIVATE_DIRECTORY_FLAGS, dir_fd=parent_fd)
+        opened = os.fstat(descriptor)
+        current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
     except OSError as error:
+        if descriptor >= 0:
+            os.close(descriptor)
         raise ControllerError(f"{label} changed during creation") from error
-    if stat.S_ISLNK(after.st_mode) or not stat.S_ISDIR(after.st_mode):
-        raise ControllerError(f"{label} is not a safe directory")
-    if before is not None and (
-        before.st_dev,
-        before.st_ino,
-        stat.S_IFMT(before.st_mode),
-    ) != (
-        after.st_dev,
-        after.st_ino,
-        stat.S_IFMT(after.st_mode),
+    identity = _directory_object_identity(opened)
+    if (
+        not stat.S_ISDIR(opened.st_mode)
+        or not stat.S_ISDIR(current.st_mode)
+        or identity != _directory_object_identity(current)
     ):
-        raise ControllerError(f"{label} changed during validation")
-    return path
+        os.close(descriptor)
+        raise ControllerError(f"{label} identity is unstable")
+    return descriptor, identity, existed
 
 
 def _prepare_private_evidence_output(
     evidence_root: Path, run_id: str
-) -> tuple[Path, bool]:
+) -> _PrivateEvidenceTransaction:
     evidence_root = Path(os.path.abspath(evidence_root))
-    parent = evidence_root.parent
-    if parent.is_symlink() or not parent.is_dir():
-        raise ControllerError("private evidence parent is missing or unsafe")
-    _secure_private_evidence_directory(
-        evidence_root, parent, "private evidence root"
-    )
-    output = evidence_root / run_id
-    existed = os.path.lexists(output)
-    _secure_private_evidence_directory(
-        output, evidence_root, "private evidence run directory"
-    )
-    return output, existed
+    parent_path = evidence_root.parent
+    parent_fd = root_fd = run_fd = -1
+    try:
+        parent_fd, parent_identity = _open_verified_directory(
+            parent_path, "private evidence parent"
+        )
+        root_fd, root_identity, _ = _open_or_create_private_directory_at(
+            parent_fd, evidence_root.name, "private evidence root"
+        )
+        run_fd, run_identity, output_existed = _open_or_create_private_directory_at(
+            root_fd, run_id, "private evidence run directory"
+        )
+        return _PrivateEvidenceTransaction(
+            parent_path,
+            evidence_root,
+            evidence_root / run_id,
+            parent_fd,
+            root_fd,
+            run_fd,
+            parent_identity,
+            root_identity,
+            run_identity,
+            output_existed,
+        )
+    except BaseException:
+        for descriptor in (run_fd, root_fd, parent_fd):
+            if descriptor >= 0:
+                os.close(descriptor)
+        raise
 
 
 def _prepare_private_evidence_raw_directories(
-    output: Path, *, include_drivers: bool
-) -> tuple[Path, Path | None]:
-    raw = _secure_private_evidence_directory(
-        output / "raw", output, "private evidence raw directory"
-    )
-    decisions = _secure_private_evidence_directory(
-        raw / "decisions", raw, "private evidence decision directory"
-    )
-    drivers = (
-        _secure_private_evidence_directory(
-            raw / "drivers", raw, "private evidence driver directory"
+    transaction: _PrivateEvidenceTransaction, *, include_drivers: bool
+) -> None:
+    raw_fd = decisions_fd = drivers_fd = -1
+    try:
+        raw_fd, raw_identity, _ = _open_or_create_private_directory_at(
+            transaction.run_fd, "raw", "private evidence raw directory"
         )
-        if include_drivers
-        else None
-    )
-    for path, parent, label in (
-        (output, output.parent, "private evidence run directory"),
-        (raw, output, "private evidence raw directory"),
-        (decisions, raw, "private evidence decision directory"),
+        decisions_fd, decisions_identity, _ = _open_or_create_private_directory_at(
+            raw_fd, "decisions", "private evidence decision directory"
+        )
+        if include_drivers:
+            drivers_fd, drivers_identity, _ = _open_or_create_private_directory_at(
+                raw_fd, "drivers", "private evidence driver directory"
+            )
+        else:
+            drivers_identity = None
+        transaction.raw_fd = raw_fd
+        transaction.decisions_fd = decisions_fd
+        transaction.drivers_fd = drivers_fd
+        transaction.raw_identity = raw_identity
+        transaction.decisions_identity = decisions_identity
+        transaction.drivers_identity = drivers_identity
+        raw_fd = decisions_fd = drivers_fd = -1
+        expected_raw = {"decisions"} | ({"drivers"} if include_drivers else set())
+        if _private_directory_names(
+            transaction.raw_fd, "private evidence raw directory"
+        ) != expected_raw:
+            raise ControllerError("private evidence raw directory is not closed")
+        decision_names = {f"{track.value}.jsonl" for track in _TRACKS}
+        if not _private_directory_names(
+            transaction.decisions_fd, "private evidence decision directory"
+        ).issubset(decision_names):
+            raise ControllerError("private evidence decision directory is not closed")
+        if include_drivers:
+            driver_names = {f"{track.value}.json" for track in _TRACKS}
+            if not _private_directory_names(
+                transaction.drivers_fd, "private evidence driver directory"
+            ).issubset(driver_names):
+                raise ControllerError("private evidence driver directory is not closed")
+    except BaseException:
+        for descriptor in (drivers_fd, decisions_fd, raw_fd):
+            if descriptor >= 0:
+                os.close(descriptor)
+        raise
+
+
+def _require_private_directory_identity_at(
+    parent_fd: int,
+    name: str,
+    descriptor: int,
+    identity: tuple[int, int],
+    label: str,
+) -> None:
+    try:
+        opened = os.fstat(descriptor)
+        current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError as error:
+        raise ControllerError(f"{label} changed during evidence transaction") from error
+    if (
+        not stat.S_ISDIR(opened.st_mode)
+        or not stat.S_ISDIR(current.st_mode)
+        or identity != _directory_object_identity(opened)
+        or identity != _directory_object_identity(current)
     ):
-        _secure_private_evidence_directory(path, parent, label)
-    if drivers is not None:
-        _secure_private_evidence_directory(
-            drivers, raw, "private evidence driver directory"
+        raise ControllerError(f"{label} identity changed during evidence transaction")
+
+
+def _require_private_evidence_tree(transaction: _PrivateEvidenceTransaction) -> None:
+    _require_directory_identity(
+        transaction.parent_fd,
+        transaction.parent_path,
+        transaction.parent_identity,
+        "private evidence parent",
+    )
+    _require_private_directory_identity_at(
+        transaction.parent_fd,
+        transaction.evidence_root.name,
+        transaction.root_fd,
+        transaction.root_identity,
+        "private evidence root",
+    )
+    _require_private_directory_identity_at(
+        transaction.root_fd,
+        transaction.output.name,
+        transaction.run_fd,
+        transaction.run_identity,
+        "private evidence run directory",
+    )
+    if transaction.raw_fd >= 0:
+        assert transaction.raw_identity is not None
+        assert transaction.decisions_identity is not None
+        _require_private_directory_identity_at(
+            transaction.run_fd,
+            "raw",
+            transaction.raw_fd,
+            transaction.raw_identity,
+            "private evidence raw directory",
         )
-    expected_raw = {"decisions"} | ({"drivers"} if include_drivers else set())
-    if set(os.listdir(raw)) != expected_raw:
-        raise ControllerError("private evidence raw directory is not closed")
-    decision_names = {f"{track.value}.jsonl" for track in _TRACKS}
-    if not set(os.listdir(decisions)).issubset(decision_names):
-        raise ControllerError("private evidence decision directory is not closed")
-    if drivers is not None:
-        driver_names = {f"{track.value}.json" for track in _TRACKS}
-        if not set(os.listdir(drivers)).issubset(driver_names):
-            raise ControllerError("private evidence driver directory is not closed")
-    return decisions, drivers
+        _require_private_directory_identity_at(
+            transaction.raw_fd,
+            "decisions",
+            transaction.decisions_fd,
+            transaction.decisions_identity,
+            "private evidence decision directory",
+        )
+    if transaction.drivers_fd >= 0:
+        assert transaction.drivers_identity is not None
+        _require_private_directory_identity_at(
+            transaction.raw_fd,
+            "drivers",
+            transaction.drivers_fd,
+            transaction.drivers_identity,
+            "private evidence driver directory",
+        )
+
+
+def _private_file_location(
+    transaction: _PrivateEvidenceTransaction, relative: str
+) -> tuple[int, str]:
+    parts = relative.split("/")
+    if len(parts) == 1:
+        descriptor = transaction.run_fd
+        name = parts[0]
+    elif len(parts) == 3 and parts[:2] == ["raw", "decisions"]:
+        descriptor = transaction.decisions_fd
+        name = parts[2]
+    elif len(parts) == 3 and parts[:2] == ["raw", "drivers"]:
+        descriptor = transaction.drivers_fd
+        name = parts[2]
+    else:
+        raise ControllerError("private evidence relative path is invalid")
+    if descriptor < 0 or not name or name in {".", ".."} or "/" in name:
+        raise ControllerError("private evidence file location is unavailable")
+    return descriptor, name
+
+
+def _read_private_file_at(
+    directory_fd: int,
+    name: str,
+    *,
+    maximum_bytes: int = 64 * 1024 * 1024,
+) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = -1
+    try:
+        descriptor = os.open(name, flags, dir_fd=directory_fd)
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or opened.st_size > maximum_bytes:
+            raise ControllerError("private evidence file is not a bounded regular file")
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(descriptor, min(1024 * 1024, maximum_bytes + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > maximum_bytes:
+                raise ControllerError("private evidence file exceeds its byte bound")
+        finished = os.fstat(descriptor)
+        current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except OSError as error:
+        raise ControllerError("private evidence file is missing or unsafe") from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    identity = _snapshot_identity(opened)
+    if (
+        identity != _snapshot_identity(finished)
+        or identity != _snapshot_identity(current)
+    ):
+        raise ControllerError("private evidence file changed during snapshot")
+    return b"".join(chunks)
+
+
+def _private_file_exists_at(directory_fd: int, name: str) -> bool:
+    try:
+        current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise ControllerError("private evidence file inventory is unsafe") from error
+    if not stat.S_ISREG(current.st_mode):
+        raise ControllerError("private evidence file inventory is unsafe")
+    return True
+
+
+def _write_private_file_at(
+    directory_fd: int,
+    name: str,
+    payload: bytes,
+    mode: int = 0o600,
+) -> None:
+    if type(payload) is not bytes or not name or "/" in name or name in {".", ".."}:
+        raise ControllerError("private evidence leaf write is invalid")
+    _private_file_exists_at(directory_fd, name)
+    temporary_name: str | None = None
+    temporary_fd = -1
+    try:
+        for _ in range(100):
+            candidate = f".{name}.{secrets.token_hex(16)}"
+            try:
+                temporary_fd = os.open(
+                    candidate,
+                    os.O_WRONLY
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    mode,
+                    dir_fd=directory_fd,
+                )
+            except FileExistsError:
+                continue
+            temporary_name = candidate
+            break
+        if temporary_name is None or temporary_fd < 0:
+            raise ControllerError("private evidence temporary names are exhausted")
+        offset = 0
+        while offset < len(payload):
+            written = os.write(temporary_fd, payload[offset:])
+            if written <= 0:
+                raise OSError("private evidence write made no progress")
+            offset += written
+        os.fsync(temporary_fd)
+        os.fchmod(temporary_fd, mode)
+        os.fsync(temporary_fd)
+        os.close(temporary_fd)
+        temporary_fd = -1
+        os.rename(
+            temporary_name,
+            name,
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+        )
+        temporary_name = None
+        os.fsync(directory_fd)
+        current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(current.st_mode)
+            or stat.S_IMODE(current.st_mode) != mode
+            or _read_private_file_at(directory_fd, name) != payload
+        ):
+            raise ControllerError("private evidence leaf write did not persist exactly")
+    except OSError as error:
+        raise ControllerError("private evidence leaf write failed safely") from error
+    finally:
+        if temporary_fd >= 0:
+            os.close(temporary_fd)
+        if temporary_name is not None:
+            try:
+                os.unlink(temporary_name, dir_fd=directory_fd)
+                os.fsync(directory_fd)
+            except FileNotFoundError:
+                pass
+
+
+def _write_private_file(
+    transaction: _PrivateEvidenceTransaction,
+    relative: str,
+    payload: bytes,
+    mode: int = 0o600,
+) -> None:
+    descriptor, name = _private_file_location(transaction, relative)
+    _write_private_file_at(descriptor, name, payload, mode)
+
+
+def _private_checksum_payload(
+    transaction: _PrivateEvidenceTransaction, schema_version: object
+) -> bytes:
+    lines = []
+    for relative in sorted(
+        _authoritative_file_names(schema_version) - {"SHA256SUMS"}
+    ):
+        descriptor, name = _private_file_location(transaction, relative)
+        payload = _read_private_file_at(descriptor, name)
+        lines.append(f"{_digest_bytes(payload)}  {relative}\n")
+    return "".join(lines).encode("ascii")
+
+
+def _write_and_verify_private_sums(
+    transaction: _PrivateEvidenceTransaction, schema_version: object
+) -> None:
+    expected = _private_checksum_payload(transaction, schema_version)
+    _write_private_file(transaction, "SHA256SUMS", expected, 0o444)
+    if _read_private_file_at(transaction.run_fd, "SHA256SUMS") != expected:
+        raise ControllerError("private evidence checksum mismatch")
+
+
+def _require_private_bundle_inventory(
+    transaction: _PrivateEvidenceTransaction, schema_version: object
+) -> None:
+    generation = _bundle_generation(schema_version)
+    if _private_directory_names(
+        transaction.run_fd, "private evidence run directory"
+    ) != set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}:
+        raise ControllerError("private evidence artifact set is not closed")
+    if _private_directory_names(
+        transaction.raw_fd, "private evidence raw directory"
+    ) != {"decisions"} | ({"drivers"} if generation == 2 else set()):
+        raise ControllerError("private evidence raw artifact set is not closed")
+    if _private_directory_names(
+        transaction.decisions_fd, "private evidence decision directory"
+    ) != {f"{track.value}.jsonl" for track in _TRACKS}:
+        raise ControllerError("private evidence decision artifact set is not closed")
+    if generation == 2 and _private_directory_names(
+        transaction.drivers_fd, "private evidence driver directory"
+    ) != {f"{track.value}.json" for track in _TRACKS}:
+        raise ControllerError("private evidence driver artifact set is not closed")
 
 
 def write_evidence_bundle(
@@ -8143,85 +8474,141 @@ def write_evidence_bundle(
     raw_decisions: Mapping[LiveTrack, bytes] | None = None,
     raw_driver_results: Mapping[LiveTrack, bytes] | None = None,
     resume_attested: bool = False,
+    private_evidence_fault: Callable[[str, Path], None] | None = None,
 ) -> Path:
     """Rebuild the exact public bundle from verified source records."""
     _validate_manifest(manifest)
     generation = _bundle_generation(manifest.get("schema_version"))
-    output, output_existed = _prepare_private_evidence_output(
+    transaction = _prepare_private_evidence_output(
         evidence_root, str(manifest["run_id"])
     )
-    if output_existed and any(output.iterdir()) and not resume_attested:
-        raise ControllerError("evidence run already exists; attested resume required")
-    allowed = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
-    unexpected = {item.name for item in output.iterdir()} - allowed
-    if unexpected:
-        raise ControllerError(f"evidence directory contains unexpected files: {sorted(unexpected)}")
-    raw_root, driver_root = _prepare_private_evidence_raw_directories(
-        output, include_drivers=generation == 2
-    )
-    if raw_decisions is None:
-        raw_decisions = {
-            track: _jsonl_payload(
-                [record for record in decisions if record.get("track") == track.value]
-            )
-            for track in _TRACKS
-        }
-    if set(raw_decisions) != set(_TRACKS):
-        raise ControllerError("raw decision sources must cover the three fixed tracks")
-    for track in _TRACKS:
-        payload = raw_decisions[track]
-        parsed = _parse_jsonl_bytes(
-            payload,
-            f"raw decisions for {track.value}",
-            _decision_closed,
-            allow_empty=False,
+    try:
+        initial_names = _private_directory_names(
+            transaction.run_fd, "private evidence run directory"
         )
-        if any(record["track"] != track.value for record in parsed):
-            raise ControllerError("raw decision source track does not match fixed file")
-        _write_file(raw_root / f"{track.value}.jsonl", payload, 0o444)
-    if generation == 2:
         if (
-            type(raw_driver_results) is not dict
-            or set(raw_driver_results) != set(_TRACKS)
+            transaction.output_existed
+            and initial_names
+            and not resume_attested
         ):
             raise ControllerError(
-                "v2 driver results must cover the three fixed tracks"
+                "evidence run already exists; attested resume required"
             )
-        assert driver_root is not None
-        driver_payloads: dict[str, bytes] = {}
-        for track in _TRACKS:
-            payload = raw_driver_results[track]
-            if type(payload) is not bytes:
-                raise ControllerError("driver result source must be exact bytes")
-            relative = f"raw/drivers/{track.value}.json"
-            driver_payloads[relative] = payload
-            _write_file(driver_root / f"{track.value}.json", payload, 0o444)
-        _validate_driver_result_bindings(
-            driver_payloads,
-            manifest,
-            requests,
-            completed=True,
+        allowed = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
+        unexpected = initial_names - allowed
+        if unexpected:
+            raise ControllerError(
+                f"evidence directory contains unexpected files: {sorted(unexpected)}"
+            )
+        _prepare_private_evidence_raw_directories(
+            transaction, include_drivers=generation == 2
         )
-    elif raw_driver_results is not None:
-        raise ControllerError("legacy evidence cannot contain driver results")
-    normalized_decisions = _normalized_decision_records(manifest, decisions)
-    _write_file(output / "requests.jsonl", _jsonl_payload(requests), 0o444)
-    _write_file(
-        output / "decisions.jsonl", _jsonl_payload(normalized_decisions), 0o444
-    )
-    _write_file(output / "envoy.jsonl", _jsonl_payload(envoy), 0o444)
-    _write_file(output / "targets.jsonl", _jsonl_payload(targets), 0o444)
-    _write_file(output / "joins.jsonl", _jsonl_payload(joins), 0o444)
-    _write_file(output / "manifest.json", _canonical_bytes(manifest), 0o444)
-    _write_file(output / "summary.md", _summary(manifest, joins).encode("utf-8"), 0o444)
-    _write_file(
-        output / "live.html",
-        _render_live_html(_presenter_model(manifest, normalized_decisions, joins)),
-        0o444,
-    )
-    _write_sums(output)
-    _verify_sums(output)
-    return output
+        if private_evidence_fault is not None:
+            private_evidence_fault("after_prepare", transaction.output)
+        _require_private_evidence_tree(transaction)
+        if raw_decisions is None:
+            raw_decisions = {
+                track: _jsonl_payload(
+                    [
+                        record
+                        for record in decisions
+                        if record.get("track") == track.value
+                    ]
+                )
+                for track in _TRACKS
+            }
+        if set(raw_decisions) != set(_TRACKS):
+            raise ControllerError(
+                "raw decision sources must cover the three fixed tracks"
+            )
+        for track in _TRACKS:
+            payload = raw_decisions[track]
+            parsed = _parse_jsonl_bytes(
+                payload,
+                f"raw decisions for {track.value}",
+                _decision_closed,
+                allow_empty=False,
+            )
+            if any(record["track"] != track.value for record in parsed):
+                raise ControllerError(
+                    "raw decision source track does not match fixed file"
+                )
+            _write_private_file(
+                transaction,
+                f"raw/decisions/{track.value}.jsonl",
+                payload,
+                0o444,
+            )
+        if generation == 2:
+            if (
+                type(raw_driver_results) is not dict
+                or set(raw_driver_results) != set(_TRACKS)
+            ):
+                raise ControllerError(
+                    "v2 driver results must cover the three fixed tracks"
+                )
+            driver_payloads: dict[str, bytes] = {}
+            for track in _TRACKS:
+                payload = raw_driver_results[track]
+                if type(payload) is not bytes:
+                    raise ControllerError("driver result source must be exact bytes")
+                relative = f"raw/drivers/{track.value}.json"
+                driver_payloads[relative] = payload
+                _write_private_file(transaction, relative, payload, 0o444)
+            _validate_driver_result_bindings(
+                driver_payloads,
+                manifest,
+                requests,
+                completed=True,
+            )
+        elif raw_driver_results is not None:
+            raise ControllerError("legacy evidence cannot contain driver results")
+        normalized_decisions = _normalized_decision_records(manifest, decisions)
+        _write_private_file(
+            transaction, "requests.jsonl", _jsonl_payload(requests), 0o444
+        )
+        _write_private_file(
+            transaction,
+            "decisions.jsonl",
+            _jsonl_payload(normalized_decisions),
+            0o444,
+        )
+        _write_private_file(
+            transaction, "envoy.jsonl", _jsonl_payload(envoy), 0o444
+        )
+        _write_private_file(
+            transaction, "targets.jsonl", _jsonl_payload(targets), 0o444
+        )
+        _write_private_file(
+            transaction, "joins.jsonl", _jsonl_payload(joins), 0o444
+        )
+        _write_private_file(
+            transaction, "manifest.json", _canonical_bytes(manifest), 0o444
+        )
+        _write_private_file(
+            transaction,
+            "summary.md",
+            _summary(manifest, joins).encode("utf-8"),
+            0o444,
+        )
+        _write_private_file(
+            transaction,
+            "live.html",
+            _render_live_html(
+                _presenter_model(manifest, normalized_decisions, joins)
+            ),
+            0o444,
+        )
+        _write_and_verify_private_sums(
+            transaction, manifest["schema_version"]
+        )
+        _require_private_bundle_inventory(
+            transaction, manifest["schema_version"]
+        )
+        _require_private_evidence_tree(transaction)
+        return transaction.output
+    finally:
+        transaction.close()
 
 
 def _normalized_decision_records(
@@ -8256,104 +8643,132 @@ def _prepare_failure_provisional(
     envoy: Sequence[Mapping[str, object]] | None = None,
     targets: Sequence[Mapping[str, object]] | None = None,
     reset: bool = False,
+    private_evidence_fault: Callable[[str, Path], None] | None = None,
 ) -> Path:
     """Preserve an incomplete lifecycle without representing it as promotable proof."""
     _validate_manifest(manifest)
     generation = _bundle_generation(manifest.get("schema_version"))
-    output, _ = _prepare_private_evidence_output(
+    transaction = _prepare_private_evidence_output(
         provisional_root, str(manifest["run_id"])
     )
-    allowed = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
-    unexpected = {item.name for item in output.iterdir()} - allowed
-    if unexpected:
-        raise ControllerError("failure provisional contains unexpected files")
-    raw_root, driver_root = _prepare_private_evidence_raw_directories(
-        output, include_drivers=generation == 2
-    )
-    if raw_decisions is not None and set(raw_decisions) != set(_TRACKS):
-        raise ControllerError("failure raw decisions do not cover fixed tracks")
-    parsed_decisions: list[dict[str, object]] = []
-    for track in _TRACKS:
-        path = raw_root / f"{track.value}.jsonl"
-        if raw_decisions is not None:
-            payload = raw_decisions[track]
-            parsed = _parse_jsonl_bytes(
-                payload,
-                f"failure raw decisions {track.value}",
-                _decision_closed,
-                allow_empty=True,
-            )
-            if any(record["track"] != track.value for record in parsed):
-                raise ControllerError("failure raw decision track is invalid")
-            parsed_decisions.extend(parsed)
-            _write_file(path, payload, 0o444)
-        elif reset or not path.exists():
-            _write_file(path, b"", 0o444)
-    if generation == 2:
-        if (
-            type(raw_driver_results) is not dict
-            or set(raw_driver_results) != set(_TRACKS)
-        ):
-            raise ControllerError(
-                "failure v2 driver results must cover fixed tracks"
-            )
-        assert driver_root is not None
-        driver_payloads: dict[str, bytes] = {}
-        for track in _TRACKS:
-            payload = raw_driver_results[track]
-            if type(payload) is not bytes:
-                raise ControllerError("failure driver result must be exact bytes")
-            relative = f"raw/drivers/{track.value}.json"
-            driver_payloads[relative] = payload
-            _write_file(driver_root / f"{track.value}.json", payload, 0o444)
-        _validate_driver_result_bindings(
-            driver_payloads,
-            manifest,
-            requests or [],
-            completed=False,
+    try:
+        allowed = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
+        unexpected = _private_directory_names(
+            transaction.run_fd, "failure provisional"
+        ) - allowed
+        if unexpected:
+            raise ControllerError("failure provisional contains unexpected files")
+        _prepare_private_evidence_raw_directories(
+            transaction, include_drivers=generation == 2
         )
-    elif raw_driver_results is not None:
-        raise ControllerError("legacy failure evidence cannot contain driver results")
-    supplied = {
-        "requests.jsonl": requests,
-        "decisions.jsonl": (
+        if private_evidence_fault is not None:
+            private_evidence_fault("after_prepare", transaction.output)
+        _require_private_evidence_tree(transaction)
+        if raw_decisions is not None and set(raw_decisions) != set(_TRACKS):
+            raise ControllerError("failure raw decisions do not cover fixed tracks")
+        parsed_decisions: list[dict[str, object]] = []
+        for track in _TRACKS:
+            name = f"{track.value}.jsonl"
+            if raw_decisions is not None:
+                payload = raw_decisions[track]
+                parsed = _parse_jsonl_bytes(
+                    payload,
+                    f"failure raw decisions {track.value}",
+                    _decision_closed,
+                    allow_empty=True,
+                )
+                if any(record["track"] != track.value for record in parsed):
+                    raise ControllerError("failure raw decision track is invalid")
+                parsed_decisions.extend(parsed)
+                _write_private_file_at(
+                    transaction.decisions_fd, name, payload, 0o444
+                )
+            elif reset or not _private_file_exists_at(
+                transaction.decisions_fd, name
+            ):
+                _write_private_file_at(
+                    transaction.decisions_fd, name, b"", 0o444
+                )
+        if generation == 2:
+            if (
+                type(raw_driver_results) is not dict
+                or set(raw_driver_results) != set(_TRACKS)
+            ):
+                raise ControllerError(
+                    "failure v2 driver results must cover fixed tracks"
+                )
+            driver_payloads: dict[str, bytes] = {}
+            for track in _TRACKS:
+                payload = raw_driver_results[track]
+                if type(payload) is not bytes:
+                    raise ControllerError(
+                        "failure driver result must be exact bytes"
+                    )
+                relative = f"raw/drivers/{track.value}.json"
+                driver_payloads[relative] = payload
+                _write_private_file(transaction, relative, payload, 0o444)
+            _validate_driver_result_bindings(
+                driver_payloads,
+                manifest,
+                requests or [],
+                completed=False,
+            )
+        elif raw_driver_results is not None:
+            raise ControllerError(
+                "legacy failure evidence cannot contain driver results"
+            )
+        supplied = {
+            "requests.jsonl": requests,
+            "decisions.jsonl": (
+                _normalized_decision_records(manifest, parsed_decisions)
+                if raw_decisions is not None
+                else None
+            ),
+            "envoy.jsonl": envoy,
+            "targets.jsonl": targets,
+            "joins.jsonl": None,
+        }
+        for name, records in supplied.items():
+            if records is not None:
+                _write_private_file_at(
+                    transaction.run_fd, name, _jsonl_payload(records), 0o444
+                )
+            elif reset or not _private_file_exists_at(transaction.run_fd, name):
+                _write_private_file_at(transaction.run_fd, name, b"", 0o444)
+        _write_private_file(
+            transaction, "manifest.json", _canonical_bytes(manifest), 0o444
+        )
+        _write_private_file(
+            transaction,
+            "summary.md",
+            (
+                "# KIL V3B-1 incomplete private lifecycle evidence\n\n"
+                "This provisional bundle is non-promotable and awaits verified teardown.\n\n"
+                f"{_KTP_CITATION}"
+            ).encode("utf-8"),
+            0o444,
+        )
+        normalized = (
             _normalized_decision_records(manifest, parsed_decisions)
-            if raw_decisions is not None
-            else None
-        ),
-        "envoy.jsonl": envoy,
-        "targets.jsonl": targets,
-        "joins.jsonl": None,
-    }
-    for name, records in supplied.items():
-        path = output / name
-        if records is not None:
-            _write_file(path, _jsonl_payload(records), 0o444)
-        elif reset or not path.exists():
-            _write_file(path, b"", 0o444)
-    _write_file(output / "manifest.json", _canonical_bytes(manifest), 0o444)
-    _write_file(
-        output / "summary.md",
-        (
-            "# KIL V3B-1 incomplete private lifecycle evidence\n\n"
-            "This provisional bundle is non-promotable and awaits verified teardown.\n\n"
-            f"{_KTP_CITATION}"
-        ).encode("utf-8"),
-        0o444,
-    )
-    normalized = (
-        _normalized_decision_records(manifest, parsed_decisions)
-        if parsed_decisions
-        else []
-    )
-    _write_file(
-        output / "live.html",
-        _render_live_html(_presenter_model(manifest, normalized, [])),
-        0o444,
-    )
-    _write_sums(output)
-    _verify_sums(output)
-    return output
+            if parsed_decisions
+            else []
+        )
+        _write_private_file(
+            transaction,
+            "live.html",
+            _render_live_html(_presenter_model(manifest, normalized, [])),
+            0o444,
+        )
+        _write_and_verify_private_sums(
+            transaction, manifest["schema_version"]
+        )
+        _require_private_bundle_inventory(
+            transaction, manifest["schema_version"]
+        )
+        _require_private_evidence_tree(transaction)
+        return transaction.output
+    finally:
+        transaction.close()
 
 
 def finalize_teardown_evidence(output: Path, run_id: str) -> None:

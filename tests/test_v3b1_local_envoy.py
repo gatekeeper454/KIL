@@ -11369,6 +11369,100 @@ class EvidenceBundleTest(unittest.TestCase):
                         )
                 self.assertEqual(list(outside.iterdir()), [])
 
+    def test_private_bundle_transactions_reject_post_prepare_directory_swaps(self):
+        value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+        raw_driver_results = driver_results_for_requests(requests)
+        cases = (
+            ("accepted", "raw"),
+            ("accepted", "drivers"),
+            ("failure", "raw"),
+            ("failure", "drivers"),
+            ("resume", "raw"),
+            ("resume", "drivers"),
+        )
+        for mode, component in cases:
+            with (
+                self.subTest(mode=mode, component=component),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                base = Path(directory)
+                evidence_root = base / "evidence"
+                outside = base / "outside"
+                outside.mkdir()
+                if mode == "resume":
+                    seeded = write_evidence_bundle(
+                        evidence_root,
+                        value,
+                        requests=requests,
+                        decisions=decisions,
+                        envoy=envoy,
+                        targets=targets,
+                        joins=join_evidence(
+                            value,
+                            requests,
+                            decisions,
+                            envoy,
+                            targets,
+                        ),
+                        raw_driver_results=raw_driver_results,
+                    )
+                    self.assertTrue(any(seeded.iterdir()))
+                stages: list[str] = []
+
+                def swap_after_prepare(stage: str, output: Path) -> None:
+                    stages.append(stage)
+                    self.assertEqual(stage, "after_prepare")
+                    victim = output / "raw"
+                    if component == "drivers":
+                        victim /= "drivers"
+                    held = base / f"held-{mode}-{component}"
+                    victim.rename(held)
+                    victim.symlink_to(outside, target_is_directory=True)
+
+                with self.assertRaisesRegex(
+                    ControllerError, "changed|identity|unsafe|directory"
+                ):
+                    if mode == "failure":
+                        _prepare_failure_provisional(
+                            evidence_root,
+                            value,
+                            requests=requests,
+                            raw_decisions={
+                                track: b"".join(
+                                    (canonical_json(record) + "\n").encode("utf-8")
+                                    for record in decisions
+                                    if record["track"] == track.value
+                                )
+                                for track in LiveTrack
+                            },
+                            raw_driver_results=raw_driver_results,
+                            envoy=envoy,
+                            targets=targets,
+                            reset=True,
+                            private_evidence_fault=swap_after_prepare,
+                        )
+                    else:
+                        write_evidence_bundle(
+                            evidence_root,
+                            value,
+                            requests=requests,
+                            decisions=decisions,
+                            envoy=envoy,
+                            targets=targets,
+                            joins=join_evidence(
+                                value,
+                                requests,
+                                decisions,
+                                envoy,
+                                targets,
+                            ),
+                            raw_driver_results=raw_driver_results,
+                            resume_attested=mode == "resume",
+                            private_evidence_fault=swap_after_prepare,
+                        )
+                self.assertEqual(stages, ["after_prepare"])
+                self.assertEqual(list(outside.iterdir()), [])
+
     def test_v2_verifier_reconstructs_driver_bytes_and_rejects_repaired_join_drift(self):
         with tempfile.TemporaryDirectory() as directory:
             published = published_presenter_bundle(Path(directory))
@@ -12766,21 +12860,31 @@ class EvidenceBundleTest(unittest.TestCase):
         value, requests, decisions, envoy, targets = JoinContractTest().all_records()
         joins = join_evidence(value, requests, decisions, envoy, targets)
         observed = []
-        original_write_sums = local_envoy_module._write_sums
+        original_write_sums = local_envoy_module._write_and_verify_private_sums
 
-        def observe_presenter(output):
-            live = output / "live.html"
+        def observe_presenter(transaction, schema_version):
+            live = os.stat(
+                "live.html",
+                dir_fd=transaction.run_fd,
+                follow_symlinks=False,
+            )
             observed.append(
                 (
-                    live.is_file(),
-                    stat.S_IMODE(live.stat().st_mode),
-                    sha256(live.read_bytes()).hexdigest(),
+                    stat.S_ISREG(live.st_mode),
+                    stat.S_IMODE(live.st_mode),
+                    sha256(
+                        local_envoy_module._read_private_file_at(
+                            transaction.run_fd, "live.html"
+                        )
+                    ).hexdigest(),
                 )
             )
-            return original_write_sums(output)
+            return original_write_sums(transaction, schema_version)
 
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(
-            local_envoy_module, "_write_sums", side_effect=observe_presenter
+            local_envoy_module,
+            "_write_and_verify_private_sums",
+            side_effect=observe_presenter,
         ):
             output = write_evidence_bundle(
                 Path(directory),
