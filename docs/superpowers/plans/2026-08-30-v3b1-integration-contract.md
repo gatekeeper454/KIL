@@ -206,13 +206,13 @@ git diff --check
 - Modify: `artifacts/generated/v3b1-task6-live-status.md` (ignored live board)
 - Modify: `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
 
-- [ ] **Step 1: Record and, if necessary, temporarily pause foreign runtime state**
+- [x] **Step 1: Record and, if necessary, temporarily pause foreign runtime state**
 
 Capture the exact pre-run `default` Colima state. Do not alter it unless needed
 for the dedicated profile; if paused, restore the exact configuration and
 status after the KIL cycle.
 
-- [ ] **Step 2: Run `preflight`, `up`, then `down` without `run`**
+- [x] **Step 2: Run `preflight`, `up`, then `down` without `run`**
 
 Use the exact committed implementation identity. Confirm no request intent,
 request send, authz decision, or target marker occurred.
@@ -223,10 +223,20 @@ Verify public checksums, nonpromotable classification, one bundle/archive,
 recorded object absence, dedicated profile absence, restored foreign profile,
 and unchanged global Docker context.
 
-- [ ] **Step 4: Record the smoke result and commit**
+- [x] **Step 4: Record the blocked smoke result**
 
 Commit only public-safe evidence references and documentation. Preserve raw
 runtime journals and failed runs under ignored private paths.
+
+Attempted on 2026-08-30 from public source
+`47c0614d49ec1a7484cdefd04cc5d080adc73ca2`. The nonpromotable smoke run was
+`v3b1-1db8b5914ce26e2e6c60e74124bcc1b2c9ed66b7dd68c2d3cf4ea1bc0d18c9b3`;
+all public evidence JSONLs were empty, checksums and exact teardown passed, and
+the foreign profile was restored. Three Envoy sources were copied, but six
+authorization and target ledger copies failed after zero-byte in-container
+observations. The failure bundle is nonpromotable and does not independently
+prove service-source absence. Correct the exact-byte export and repeat Task 6;
+Task 7 remains prohibited.
 
 ### Task 7: Execute one accepted local Envoy proof and presenter bundle
 

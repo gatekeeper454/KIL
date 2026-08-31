@@ -55,10 +55,28 @@ races without changing the live boundary. Fresh static verification at the
 current branch checkpoint passed 174 controller tests and 389 repository tests,
 plus Python compilation and diff hygiene.
 
-Three exploratory local cycles were rejected and remain private. No V3B-1 run
-has been accepted, promoted, or labeled validated. The presenter and its
-offline `view` verifier make accepted evidence portable and inspectable; their
-static completion does not turn any prior run into accepted evidence.
+Three exploratory local cycles were rejected and remain private. The first
+committed zero-request smoke completed from merged public source
+`47c0614d49ec1a7484cdefd04cc5d080adc73ca2` with run ID
+`v3b1-1db8b5914ce26e2e6c60e74124bcc1b2c9ed66b7dd68c2d3cf4ea1bc0d18c9b3`.
+Its eight request, normalized-decision, Envoy, target, join, and raw-decision
+JSONL files were exactly zero bytes. `SHA256SUMS` verified, the manifest was
+`run_complete=false`, `promotion_status=not_promoted`, and teardown was
+complete and verified before publication. Nine service containers, three
+transient validator containers, all three networks, and only the dedicated
+profile were removed; lifecycle state, readiness poison, and the active journal
+were absent; the foreign `default` profile was restored to Running/containerd/
+4 CPU/4 GiB/20 GiB. The smoke manifest SHA-256 is
+`24176666cc860cfe0b66a67f8a63d0f63d66b4f91329e06464b1475eb84e55c4`.
+The ignored nonpromotable bundle remains private for offline backup.
+
+The run safely exercised teardown and foreign-runtime restoration, but it did
+not pass the zero-request evidence-freeze gate. The durable lifecycle journal
+records all three requests as `not_attempted`; all nine sources were observed
+as zero bytes; and the three Envoy legs were copied and byte-bound. Docker
+copy failed for all six authorization and target ledgers, however, so the empty
+failure bundle does not independently prove those service sources were absent.
+No V3B-1 enforcement run has been accepted, promoted, or labeled validated.
 
 V3B-1 is limited to the local Envoy boundary. Full local-cluster transport
 validation remains V3B-2: the isolated Kind/Calico topology, approved failure
@@ -76,11 +94,11 @@ and the complete approved specification is
 
 ## Next gate
 
-Using the final committed implementation identity, execute exactly one
-zero-request `preflight` / `up` / `down` smoke and verify its nonpromotable
-bundle, exact object and profile absence, unchanged global Docker context, and
-restored foreign profile state. A central request is prohibited until that
-smoke passes. Only then may one accepted V3B-1 proof be attempted. V3B-2 and
-V3C remain separate later gates, and all V3A output remains explicitly modeled.
+Publish an exact-byte service-ledger export correction, then execute a fresh
+zero-request `preflight` / `up` / `down` smoke from the clean synchronized
+commit. Require all nine source legs to be copied and byte-bound, along with
+exact teardown and foreign-runtime restoration. A central request remains
+prohibited until that gate passes. V3B-2 and V3C remain separate later gates,
+and all V3A output remains explicitly modeled.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
