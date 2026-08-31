@@ -1,0 +1,46 @@
+ARG PYTHON_BASE_IMAGE
+FROM ${PYTHON_BASE_IMAGE}
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /build
+COPY pyproject.toml README.md ./
+COPY deploy/kind/requirements-v3b-build.txt \
+    deploy/kind/requirements-v3b-runtime.txt \
+    deploy/kind/
+COPY src/kil/__init__.py \
+    src/kil/canonical.py \
+    src/kil/decay.py \
+    src/kil/domain.py \
+    src/kil/engine.py \
+    src/kil/ext_authz_http.py \
+    src/kil/live_authz.py \
+    src/kil/q_state.py \
+    src/kil/target_http.py \
+    src/kil/
+RUN python -m pip install --no-cache-dir --no-compile --require-hashes \
+    --only-binary=:all: -r deploy/kind/requirements-v3b-build.txt
+RUN python -m pip install --prefix=/install --no-cache-dir --no-compile \
+    --require-hashes --only-binary=:all: \
+    -r deploy/kind/requirements-v3b-runtime.txt
+RUN python -m pip install --prefix=/install --no-cache-dir --no-compile \
+    --no-deps --no-build-isolation ".[lab]"
+
+FROM ${PYTHON_BASE_IMAGE}
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN groupadd --gid 65532 kil \
+    && useradd --uid 65532 --gid 65532 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin kil
+COPY --from=0 /install/ /usr/local/
+
+USER 65532:65532
+EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["python", "-c", "import http.client; connection=http.client.HTTPConnection('127.0.0.1', 8080, timeout=2); connection.request('GET', '/healthz'); response=connection.getresponse(); raise SystemExit(response.status != 200)"]

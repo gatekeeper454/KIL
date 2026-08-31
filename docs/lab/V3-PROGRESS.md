@@ -1,6 +1,6 @@
 # Gate V3 implementation progress
 
-## Current status
+## V3A status
 
 V3A implements the signed-state and authorization core behind the approved
 three-track architecture. The implementation now includes:
@@ -43,11 +43,27 @@ forwarding, target invocation, and evidence joining. It does not run Envoy or
 Kubernetes and therefore does not establish a `validated` cluster result.
 Synthetic charge, threshold, and local-divergence values remain modeled.
 
-The full transport validation is Gate V3B. That gate must deploy Envoy
-`ext_authz` and harmless targets in an isolated Kind cluster, pin runtime and
-image identities, exercise the approved failure matrix, collect target-side
-markers, and measure cluster-level latency before any result is labeled
-validated.
+## V3B-1 current status
+
+Through implementation commit
+`14ed92dfb1431fb2e4c3f588ff19ad07122f11fe`, V3B-1 implements the pinned local
+Envoy `ext_authz` boundary, the transcript-driven readiness, provenance,
+evidence-freeze, exact-inventory teardown and partial-up recovery contracts,
+and a deterministic authoritative offline presenter. Subsequent publication-
+recovery hardening closes repaired-checksum and post-validation completion
+races without changing the live boundary. Fresh static verification at the
+current branch checkpoint passed 174 controller tests and 389 repository tests,
+plus Python compilation and diff hygiene.
+
+Three exploratory local cycles were rejected and remain private. No V3B-1 run
+has been accepted, promoted, or labeled validated. The presenter and its
+offline `view` verifier make accepted evidence portable and inspectable; their
+static completion does not turn any prior run into accepted evidence.
+
+V3B-1 is limited to the local Envoy boundary. Full local-cluster transport
+validation remains V3B-2: the isolated Kind/Calico topology, approved failure
+matrix, target-side markers, and cluster-level measurements are still
+unexecuted.
 
 ## Architecture
 
@@ -60,9 +76,11 @@ and the complete approved specification is
 
 ## Next gate
 
-Gate V3B must resolve the local container runtime and client tooling, pin the
-Envoy and workload image digests, implement the HTTP `ext_authz` mapping,
-verify Kind network isolation and failure behavior, and execute the cluster
-validation protocol. Until then, all V3A output remains explicitly modeled.
+Using the final committed implementation identity, execute exactly one
+zero-request `preflight` / `up` / `down` smoke and verify its nonpromotable
+bundle, exact object and profile absence, unchanged global Docker context, and
+restored foreign profile state. A central request is prohibited until that
+smoke passes. Only then may one accepted V3B-1 proof be attempted. V3B-2 and
+V3C remain separate later gates, and all V3A output remains explicitly modeled.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

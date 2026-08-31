@@ -1,8 +1,9 @@
 # Envoy adapter boundary — Gate V3B
 
-Gate V3B will place three independently configured Envoy `ext_authz` routes in
-front of harmless target workloads. Each authorization service instance fixes
-one track at startup:
+V3B-1 implements three independently configured local Envoy `ext_authz` routes
+in front of harmless target workloads. Each authorization service instance
+fixes one track at startup. V3B-2 will reuse the same fixed tracks in the Kind
+topology. No V3B-1 proof has yet been accepted, promoted, or labeled validated:
 
 1. `credential_policy_baseline`
 2. `signed_state_only`
@@ -22,13 +23,21 @@ timeout of 250 ms, disables retries, sets `failure_mode_allow: false`, and does
 not enable route-cache clearing. An unavailable, timed-out, or malformed
 authorization response therefore cannot fall through to the target.
 
-The request-header allowlist sent to the authorization service is exactly:
+The authorization service consumes exactly five trusted semantic inputs:
 
 - `:method`
 - `:path`
 - `x-request-id`
 - `authorization`
 - `x-kil-q-state`
+
+Envoy's raw HTTP `ext_authz` protocol conveys the original method and path as
+the authorization request's method and path, and automatically includes Host,
+Method, Path, Content-Length, and Authorization. The configured
+`allowed_headers` matcher therefore adds only `x-request-id` and
+`x-kil-q-state`. Host and Content-Length are transport metadata and must not
+enter authorization evaluation. Their presence does not expand the five-input
+semantic contract above.
 
 The adapter must not forward client-supplied `x-kil-mode`,
 `x-kil-local-evidence`, `x-kil-verified-subject`, `x-kil-issuer`, or any
