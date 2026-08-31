@@ -4111,3 +4111,50 @@ authorization, Envoy routing, and target semantics remain unchanged.
 the committed zero-request live smoke and then the single accepted proof run.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-083 — 2026-08-30 — Incomplete V3B-1 up now has a non-evidentiary teardown path
+
+**Input:** Correct the final Task 4 harness blocker: when `up_complete` was
+never durably recorded, `down` must not attempt the nine-source evidence
+freeze. It must recover and clean an exactly owned service, validator, or
+network survivor without changing KIL authorization or runtime semantics.
+
+**Interpretation:** Absence of `up_complete` is a closed lifecycle fact that
+precludes an evidence claim; it is not a reason to strand resources. The
+controller may use only the already-bound manifest, durable full-ID ownership
+history, exact current inventories, and already-observed preflight and engine
+provenance. Present container survivors still require exact identity
+attestation and stop verification before the existing removal protocol runs.
+
+**Decision status:** Confirmed harness-only correction complete, pending
+independent re-review. Partial-up teardown now writes a single closed
+`partial_up_evidence_rejected` event with fixed reason, false promotion status,
+bounded survivor counts, and a canonical identity-set digest. A replay must
+match that provenance exactly. The controller skips source freezing and does
+not fabricate source attestations; it stops and reattests recovered service or
+validator containers, then rejoins the existing full-ID removal, exact survivor
+inventory, final-empty, and dedicated-profile deletion gates. The resulting
+public bundle is explicitly incomplete and classified as a failure boundary.
+
+**Rationale:** A nine-source freeze assumes the full runtime reached its
+durable ready boundary. Applying it to a partially created topology cannot
+produce complete evidence and can prevent safe cleanup. Separating the
+non-evidentiary recovery path preserves teardown safety while preventing an
+incomplete run from being mistaken for validated KIL behavior.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker or Colima operation was performed.
+Installed-runtime recovery behavior remains gated on independent review and
+the committed zero-request smoke. KIL, signed composite state, authorization,
+Envoy routing, target behavior, and evidence acceptance semantics are
+unchanged.
+
+**Next gate:** Independent Task 4 re-review, then the committed zero-request
+live smoke before the single accepted proof run.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

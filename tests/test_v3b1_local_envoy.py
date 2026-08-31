@@ -4297,6 +4297,290 @@ class JournalRecoveryTest(unittest.TestCase):
 
 
 class TeardownContinuationTest(unittest.TestCase):
+    def test_partial_up_down_skips_freeze_and_exactly_cleans_each_survivor_kind(self):
+        for case in ("service", "validator", "network"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / "repo"
+                profile_path = root / "deploy/kind/v3b-profile.json"
+                profile_path.parent.mkdir(parents=True)
+                profile_path.write_bytes(
+                    (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+                )
+
+                class PartialUpController(LocalEnvoyController):
+                    def __init__(self, *args, **kwargs):
+                        super().__init__(*args, **kwargs)
+                        self.bound_state = None
+                        self.bound_manifest = None
+                        self.commands = []
+                        self.removed_ids = set()
+                        self.running_ids = set()
+                        self.deleted = False
+                        self.freeze_calls = 0
+                        self.final_empty_observed = False
+
+                    def _execute(self, argv, *, timeout_s, docker=False):
+                        self.commands.append(list(argv))
+                        if list(argv[:3]) == ["colima", "list", "--json"]:
+                            return CommandResult(
+                                0,
+                                "[]\n"
+                                if self.deleted
+                                else (
+                                    '{"name":"kil-v3-lab","status":"Running",'
+                                    '"arch":"aarch64","cpus":4,'
+                                    '"memory":8589934592,"disk":64424509440,'
+                                    '"runtime":"docker"}\n'
+                                ),
+                                "",
+                            )
+                        if argv[0:2] == ["colima", "delete"]:
+                            self.deleted = True
+                            return CommandResult(0, "", "")
+                        if "context" in argv and "show" in argv:
+                            return CommandResult(0, "personal\n", "")
+                        if len(argv) > 5 and argv[5] == "ps":
+                            records = [
+                                item
+                                for item in [
+                                    *self.bound_state["objects"],
+                                    *self.bound_state["transient_objects"],
+                                ]
+                                if item["id"] not in self.removed_ids
+                            ]
+                            return CommandResult(
+                                0,
+                                "".join(
+                                    canonical_json(
+                                        {"id": item["id"], "name": item["name"]}
+                                    )
+                                    + "\n"
+                                    for item in records
+                                ),
+                                "",
+                            )
+                        if len(argv) > 6 and argv[5:7] == ["network", "ls"]:
+                            records = [
+                                item
+                                for item in self.bound_state["network_objects"]
+                                if item["id"] not in self.removed_ids
+                            ]
+                            return CommandResult(
+                                0,
+                                "".join(
+                                    canonical_json(
+                                        {"id": item["id"], "name": item["name"]}
+                                    )
+                                    + "\n"
+                                    for item in records
+                                ),
+                                "",
+                            )
+                        if "{{.State.Running}}" in argv:
+                            return CommandResult(
+                                0,
+                                ("true" if argv[-1] in self.running_ids else "false")
+                                + "\n",
+                                "",
+                            )
+                        if len(argv) > 5 and argv[5] == "stop":
+                            self.running_ids.discard(argv[-1])
+                            return CommandResult(0, argv[-1] + "\n", "")
+                        if len(argv) > 5 and (
+                            argv[5] == "rm" or argv[5:7] == ["network", "rm"]
+                        ):
+                            self.removed_ids.add(argv[-1])
+                            return CommandResult(0, argv[-1] + "\n", "")
+                        return CommandResult(0, "", "")
+
+                    def _attest_colima_after_start(self, execution_nonce=None):
+                        return {"test_attestation": True}
+
+                    def _load_for_down(self):
+                        return (
+                            self.bound_state,
+                            self.bound_manifest,
+                            load_lifecycle_journal(self.journal_path),
+                        )
+
+                    def _inspect_container(self, identifier, *_args, **_kwargs):
+                        return next(
+                            item
+                            for item in self.bound_state["objects"]
+                            if item["id"] == identifier
+                        )
+
+                    def _inspect_validation_container(self, identifier, *_args, **_kwargs):
+                        return next(
+                            item
+                            for item in self.bound_state["transient_objects"]
+                            if item["id"] == identifier
+                        )
+
+                    def _inspect_network(self, identifier, *_args, **_kwargs):
+                        return next(
+                            item
+                            for item in self.bound_state["network_objects"]
+                            if item["id"] == identifier
+                        )
+
+                    def _freeze_before_service_teardown(self, *args, **kwargs):
+                        self.freeze_calls += 1
+                        raise AssertionError("partial-up teardown entered evidence freeze")
+
+                    def _assert_only_recorded_managed(self, state, *, expect_present):
+                        super()._assert_only_recorded_managed(
+                            state, expect_present=expect_present
+                        )
+                        if not expect_present:
+                            self.final_empty_observed = True
+
+                controller = PartialUpController(
+                    root,
+                    FakeRunner(),
+                    home=Path(directory) / "home",
+                    port_probe=lambda port: False,
+                    tool_verifier=lambda: TOOL_IDENTITIES,
+                )
+                controller._prepare_private_roots()
+                value = manifest(
+                    docker_host=controller.docker_host,
+                    execution_nonce=HEX_A,
+                )
+                private_manifest = controller.private_root / "manifests/run.json"
+                private_manifest.write_text(canonical_json(value) + "\n")
+                create_lifecycle_journal(
+                    controller.journal_path,
+                    private_root=controller.private_root,
+                    repository_root=root,
+                    docker_host=controller.docker_host,
+                    source_commit="d" * 40,
+                    execution_nonce=HEX_A,
+                    global_context="personal",
+                )
+                journal_event(
+                    controller.journal_path,
+                    "preflight_complete",
+                    {
+                        "tool_identities": TOOL_IDENTITIES,
+                        "ports": list(controller.profile.gateway_ports),
+                        "dedicated_profile_absent": True,
+                    },
+                )
+                journal_event(
+                    controller.journal_path,
+                    "colima_attestation_complete",
+                    {"profile": "kil-v3-lab", "attestation": {}},
+                )
+                journal_event(
+                    controller.journal_path,
+                    "engine_provenance_observed",
+                    ENGINE_PROVENANCE,
+                )
+                _bind_journal_manifest(
+                    controller.journal_path, private_manifest, value
+                )
+                state_path = controller.private_root / "partial-state.json"
+                persist_active_state(state_path, private_manifest, value)
+                complete_state = load_bound_active_state(state_path)
+                if case == "service":
+                    objects = [complete_state["objects"][0]]
+                    transients = []
+                    networks = []
+                elif case == "validator":
+                    track = LiveTrack.CREDENTIAL_POLICY_BASELINE
+                    transients = [
+                        {
+                            "id": HEX_B,
+                            "name": (
+                                f"kil-v3b1-validate-{track.value.replace('_', '-')}-"
+                                f"{str(value['content_identity_sha256'])[:12]}"
+                            ),
+                            "role": "validator",
+                            "track": track.value,
+                        }
+                    ]
+                    objects = []
+                    networks = []
+                else:
+                    objects = []
+                    transients = []
+                    networks = [complete_state["network_objects"][0]]
+                controller.bound_state = {
+                    "objects": objects,
+                    "transient_objects": transients,
+                    "network_objects": networks,
+                    "profile_created": True,
+                    "colima_profile": "kil-v3-lab",
+                    "docker_host": controller.docker_host,
+                    "docker_config": str(controller.docker_config),
+                }
+                controller.bound_manifest = value
+                controller.running_ids = {
+                    item["id"] for item in [*objects, *transients]
+                }
+
+                published = controller.down()
+
+                self.assertEqual(controller.freeze_calls, 0)
+                self.assertTrue(controller.deleted)
+                self.assertTrue(controller.final_empty_observed)
+                self.assertEqual(
+                    controller.removed_ids,
+                    {
+                        item["id"]
+                        for item in [*objects, *transients, *networks]
+                    },
+                )
+                events = load_lifecycle_journal(
+                    controller._private_completed_root()
+                    / f"{value['run_id']}.journal.json"
+                )["events"]
+                rejection = [
+                    event
+                    for event in events
+                    if event["event"] == "partial_up_evidence_rejected"
+                ]
+                self.assertEqual(len(rejection), 1)
+                self.assertFalse(rejection[0]["details"]["promotable"])
+                expected_survivors = {
+                    "containers": sorted(
+                        (
+                            {"id": item["id"], "name": item["name"]}
+                            for item in [*objects, *transients]
+                        ),
+                        key=lambda item: (item["name"], item["id"]),
+                    ),
+                    "networks": sorted(
+                        (
+                            {"id": item["id"], "name": item["name"]}
+                            for item in networks
+                        ),
+                        key=lambda item: (item["name"], item["id"]),
+                    ),
+                }
+                self.assertEqual(
+                    rejection[0]["details"]["survivor_identity_sha256"],
+                    sha256(canonical_json(expected_survivors).encode("utf-8")).hexdigest(),
+                )
+                stop_completes = {
+                    event["details"]["id"]
+                    for event in events
+                    if event["event"] == "container_stop_complete"
+                }
+                self.assertEqual(
+                    stop_completes,
+                    {item["id"] for item in [*objects, *transients]},
+                )
+                public_manifest = json.loads(
+                    (published / "manifest.json").read_text()
+                )
+                self.assertFalse(public_manifest["run_complete"])
+                self.assertIn("failure", public_manifest["bundle_class"])
+                encoded_commands = canonical_json(controller.commands)
+                for forbidden in ("*", "prune", "-aq"):
+                    self.assertNotIn(forbidden, encoded_commands)
+
     def make_freeze_controller(
         self,
         directory,

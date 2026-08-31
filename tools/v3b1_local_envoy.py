@@ -382,6 +382,31 @@ def _validate_lifecycle_event_details(
     details: Mapping[str, object],
     requests: Mapping[str, object] | None = None,
 ) -> None:
+    if event_name == "partial_up_evidence_rejected":
+        expected = {
+            "reason_code",
+            "up_complete_observed",
+            "promotable",
+            "container_count",
+            "network_count",
+            "survivor_identity_sha256",
+        }
+        if (
+            set(details) != expected
+            or details["reason_code"] != "up_complete_absent"
+            or details["up_complete_observed"] is not False
+            or details["promotable"] is not False
+            or type(details["container_count"]) is not int
+            or not 0 <= details["container_count"] <= 12
+            or type(details["network_count"]) is not int
+            or not 0 <= details["network_count"] <= 3
+        ):
+            raise ControllerError("partial-up rejection provenance is invalid")
+        _require_sha256(
+            "partial-up survivor identity",
+            details["survivor_identity_sha256"],
+        )
+        return
     if event_name in {
         "container_create_intent",
         "container_create_complete",
@@ -7561,22 +7586,79 @@ class LocalEnvoyController:
             for item in objects
             if item["role"] == role
         ]
-        requests_state = journal["requests"]
-        assert isinstance(requests_state, dict)
-        attempted_complete = all(
-            item["status"] == "completed" for item in requests_state.values()
+        lifecycle_events = journal["events"]
+        assert isinstance(lifecycle_events, list)
+        up_complete_observed = any(
+            event["event"] == "up_complete" for event in lifecycle_events
         )
-        freeze = self._freeze_before_service_teardown(
-            state,
-            manifest,
-            attempted_complete=attempted_complete,
-            transient_objects=transient_objects,
-        )
-        output, source_attestations, completed, evidence_rejection = (
-            self._prepare_teardown_evidence(
-                manifest, objects, freeze
+        partial_rejections = [
+            event
+            for event in lifecycle_events
+            if event["event"] == "partial_up_evidence_rejected"
+        ]
+        if len(partial_rejections) > 1 or (
+            up_complete_observed and partial_rejections
+        ):
+            raise ControllerError("partial-up evidence status is contradictory")
+        if not up_complete_observed:
+            survivor_identities = {
+                "containers": sorted(
+                    (
+                        {"id": str(item["id"]), "name": str(item["name"])}
+                        for item in ordered
+                    ),
+                    key=lambda item: (item["name"], item["id"]),
+                ),
+                "networks": sorted(
+                    (
+                        {"id": str(item["id"]), "name": str(item["name"])}
+                        for item in state["network_objects"]  # type: ignore[union-attr]
+                    ),
+                    key=lambda item: (item["name"], item["id"]),
+                ),
+            }
+            rejection_details = {
+                "reason_code": "up_complete_absent",
+                "up_complete_observed": False,
+                "promotable": False,
+                "container_count": len(survivor_identities["containers"]),
+                "network_count": len(survivor_identities["networks"]),
+                "survivor_identity_sha256": _digest_bytes(
+                    canonical_json(survivor_identities).encode("utf-8")
+                ),
+            }
+            if partial_rejections:
+                if partial_rejections[0]["details"] != rejection_details:
+                    raise ControllerError("partial-up survivor provenance changed")
+            else:
+                journal_event(
+                    self.journal_path,
+                    "partial_up_evidence_rejected",
+                    rejection_details,
+                )
+            for item in ordered:
+                self._stop_and_attest_container(item, manifest)
+            output = None
+            source_attestations = []
+            completed = False
+            evidence_rejection = "partial_up:up_complete_absent"
+        else:
+            requests_state = journal["requests"]
+            assert isinstance(requests_state, dict)
+            attempted_complete = all(
+                item["status"] == "completed" for item in requests_state.values()
             )
-        )
+            freeze = self._freeze_before_service_teardown(
+                state,
+                manifest,
+                attempted_complete=attempted_complete,
+                transient_objects=transient_objects,
+            )
+            output, source_attestations, completed, evidence_rejection = (
+                self._prepare_teardown_evidence(
+                    manifest, objects, freeze
+                )
+            )
 
         remaining_containers = list(ordered)
         remaining_networks = list(state["network_objects"])
