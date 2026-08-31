@@ -83,7 +83,7 @@ separate V3A artifact path.
 - Modify: `tools/v3b1_harness_contract.py`
 - Modify: `tests/test_v3b1_local_envoy.py`
 
-- [ ] **Step 1: Freeze one deterministic legacy bundle before changing writers**
+- [x] **Step 1: Freeze one deterministic legacy bundle before changing writers**
 
 Use the existing `published_presenter_bundle()` test helper to materialize the
 current complete `kil.v3b1-public-manifest.v1` file set under
@@ -92,7 +92,7 @@ temporary directory and requires `verify_presenter_bundle()` to accept it.
 Label its request facts as a deterministic synthetic compatibility fixture; do
 not call it a historical or live run.
 
-- [ ] **Step 2: Write RED tests for non-circular definitions and closed records**
+- [x] **Step 2: Write RED tests for non-circular definitions and closed records**
 
 Add tests with these exact public APIs:
 
@@ -124,7 +124,7 @@ unexpected endpoint, oversized input, authorization/Q-state fields in public
 records, compact JWS values, environment material, paths, tokens, and exception
 messages to fail with `DriverProtocolError`.
 
-- [ ] **Step 3: Run the focused tests and verify RED**
+- [x] **Step 3: Run the focused tests and verify RED**
 
 Run:
 
@@ -134,7 +134,7 @@ PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b1_request_driver -v
 
 Expected: FAIL because `kil.v3b1_driver_protocol` does not exist.
 
-- [ ] **Step 4: Implement the minimal closed protocol**
+- [x] **Step 4: Implement the minimal closed protocol**
 
 Define fixed constants and closed validators:
 
@@ -211,13 +211,13 @@ Use one duplicate-key rejecting JSON loader and exact field sets for readiness,
 instruction, success result, transport-failure result, and driver-control
 failure. Public-safe records must be recursively secret-scanned.
 
-- [ ] **Step 5: Make harness inventory contracts recognize the new fixed names**
+- [x] **Step 5: Make harness inventory contracts recognize the new fixed names**
 
 Extend container roles to `authz|target|envoy|driver|validate` and network names
 to `frontend|backend`. Add sanitized inventory cases to both fixtures. Keep the
 legacy v1 patterns available only through explicit schema dispatch.
 
-- [ ] **Step 6: Verify GREEN and commit**
+- [x] **Step 6: Verify GREEN and commit**
 
 Run:
 

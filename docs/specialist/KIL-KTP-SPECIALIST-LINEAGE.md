@@ -5411,3 +5411,71 @@ agents. After merge and synchronization, run the request-free live readiness
 gate visibly; authorize the central request only if that gate passes exactly.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-106 — 2026-08-31 — Closed request-driver protocol passes specification and quality gates
+
+**Input:** Begin the approved in-network request-driver implementation rapidly,
+use parallel agents where safe, keep progress visible, and reach a demonstrable
+lab today.
+
+**Interpretation:** Task 1 must freeze the legacy public-bundle verifier before
+new schemas are introduced, then establish one closed, non-circular protocol
+used by the future driver, controller, and offline verifier. Parallelism is
+appropriate for independent review, but corrections to the same protocol
+surface remain serialized through the original implementer.
+
+**Decision status:** Confirmed Task 1 complete after independent specification
+and code-quality review. Commits `a356797c4f92e5b02e628cc3121d6e4104a487fb`,
+`73c25b89ed7571b66e25a0b21b7d96a557a9dad6`, and
+`07a653a46503eb2d9365b828bdc306a492fe7e54` freeze a deterministic synthetic
+`kil.v3b1-public-manifest.v1` compatibility bundle; add closed driver
+definition, readiness, private instruction, result, transport-failure, and
+driver-control-failure contracts; and separate legacy-v1 from
+driver-topology-v2 inventory parsing.
+
+Review corrections made the inventory contracts bidirectionally reject
+cross-version names, froze a platform-independent Linux errno ABI for producer
+and verifier agreement, removed credential-bearing material from private parse
+exceptions and their cause/context/traceback, and closed retry controls,
+adversarial demonstration headers, identifiers, authorization shape, Q-state
+shape, ASCII, size, and control-character rules. The frozen v1 presenter bundle
+remains accepted without reinterpretation as a driver result.
+
+**Rationale:** The driver will transiently receive signed state and an
+authorization value, so its byte protocol must be smaller and more rigid than
+a general HTTP-client interface. Host-independent failure semantics and
+secret-free error boundaries are required for the same evidence to verify on
+the Linux driver and macOS laboratory controller without leaking the private
+instruction into logs or public artifacts.
+
+**Affected artifacts:**
+
+- `src/kil/v3b1_driver_protocol.py`
+- `tools/v3b1_harness_contract.py`
+- `tests/test_v3b1_request_driver.py`
+- `tests/test_v3b1_local_envoy.py`
+- `tests/fixtures/v3b1-request-driver-protocol.json`
+- `tests/fixtures/v3b1-integration-contract.json`
+- `tests/fixtures/v3b1-driver-topology-integration-contract.json`
+- `tests/fixtures/v3b1-public-bundle-v1/`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final implementer sweep passed 413 repository tests,
+protocol and harness compilation, and diff hygiene. The final independent
+quality re-review passed 83 focused non-runtime tests, accepted the frozen v1
+bundle, and reported no remaining Critical or Important finding. No Docker,
+Colima, network, or live request was invoked.
+
+**Unresolved questions:** The executable driver, immutable image binding,
+split-network topology, attached-session lifecycle, evidence v2, recovery,
+documentation, request-free readiness gate, and one central proof remain to be
+implemented or executed.
+
+**Next gate:** Implement Task 2 test-first: one retained `envoy:8080`
+connection, readiness before stdin, exact EOF cancellation, one bounded
+instruction and result, no reconnect or retry, bounded response consumption,
+and immutable image/build-context attestation. Then repeat independent
+specification and quality review before advancing schemas.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
