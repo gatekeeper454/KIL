@@ -2065,6 +2065,73 @@ def _validate_request_failure_provenance(
     return _validate_driver_control_provenance(value)
 
 
+def _driver_failure_result_from_provenance(
+    track: LiveTrack, provenance: object
+) -> dict[str, object]:
+    """Reconstruct the one canonical terminal result bound by journal provenance."""
+    if not isinstance(track, LiveTrack):
+        raise ControllerError("driver failure track is invalid")
+    validated = _validate_request_failure_provenance(provenance)
+    if validated.get("provenance_source") == "linux_request_driver":
+        if validated["track"] != track.value:
+            raise ControllerError("driver failure provenance track is invalid")
+        result = {
+            "attempt_count": validated["attempt_count"],
+            "connect_monotonic_ns": validated["connect_monotonic_ns"],
+            "errno": validated["errno"],
+            "errno_name": validated["errno_name"],
+            "exception_class": validated["exception_class"],
+            "failure_monotonic_ns": validated["failure_monotonic_ns"],
+            "request_bytes_may_have_been_sent": validated[
+                "driver_request_bytes_may_have_been_sent"
+            ],
+            "retry_performed": validated["retry_performed"],
+            "schema_version": validated["driver_result_schema_version"],
+            "send_monotonic_ns": validated["send_monotonic_ns"],
+            "stage": validated["stage"],
+            "status": validated["driver_status"],
+            "track": track.value,
+        }
+    else:
+        result = {
+            "attempt_count": validated["attempt_count"],
+            "failure_monotonic_ns": validated["failure_monotonic_ns"],
+            "request_bytes_may_have_been_sent": validated[
+                "request_bytes_may_have_been_sent"
+            ],
+            "retry_performed": validated["retry_performed"],
+            "schema_version": "kil.v3b1-driver-result.v1",
+            "stage": validated["stage"],
+            "status": "driver_control_failure",
+            "track": track.value,
+        }
+    payload = canonical_record(result)
+    try:
+        parsed = parse_driver_result(payload, expected_track=track.value)
+    except (DriverProtocolError, TypeError, ValueError, UnicodeError) as error:
+        raise ControllerError(
+            "driver failure provenance cannot reconstruct a closed result"
+        ) from error
+    if parsed != result:
+        raise ControllerError("driver failure result reconstruction is unstable")
+    return result
+
+
+def _driver_failure_journal_details(
+    track: LiveTrack,
+    intent_id: str,
+    provenance: Mapping[str, object],
+) -> dict[str, object]:
+    _require_sha256("driver failure request intent", intent_id)
+    _driver_failure_result_from_provenance(track, provenance)
+    return {
+        "track": track.value,
+        "record_sha256": None,
+        "intent_id": intent_id,
+        "provenance": dict(provenance),
+    }
+
+
 def _complete_request_attempt(
     journal_path: Path,
     track: LiveTrack,
@@ -4895,6 +4962,87 @@ def _request_closed(record: Mapping[str, object]) -> None:
         _require_sha256("request driver result", record["driver_result_sha256"])
 
 
+def _driver_failure_request_closed(record: Mapping[str, object]) -> None:
+    expected = {
+        "schema_version",
+        "run_id",
+        "request_id",
+        "track",
+        "request_transport",
+        "driver_role",
+        "driver_full_id",
+        "driver_image_id",
+        "driver_definition_sha256",
+        "driver_result_sha256",
+        "driver_status",
+        "intent_id",
+        "journal_sequence",
+        "journal_event_sha256",
+        "failure_provenance",
+    }
+    if (
+        set(record) != expected
+        or record.get("schema_version") != "kil.v3b1-request-failure.v1"
+        or record.get("request_transport") != "in_network_request_driver"
+        or record.get("driver_role") != "request_driver"
+        or type(record.get("run_id")) is not str
+        or type(record.get("request_id")) is not str
+    ):
+        raise ControllerError("driver failure request fields are not closed")
+    try:
+        track = LiveTrack(record["track"])
+    except (TypeError, ValueError) as error:
+        raise ControllerError("driver failure request track is invalid") from error
+    _require_sha256("driver failure full ID", record["driver_full_id"])
+    image_id = record["driver_image_id"]
+    if type(image_id) is not str or _IMAGE_ID.fullmatch(image_id) is None:
+        raise ControllerError("driver failure image ID is invalid")
+    _require_sha256(
+        "driver failure definition", record["driver_definition_sha256"]
+    )
+    _require_sha256("driver failure result", record["driver_result_sha256"])
+    intent_id = _require_sha256("driver failure intent", record["intent_id"])
+    journal_digest = _require_sha256(
+        "driver failure journal event", record["journal_event_sha256"]
+    )
+    journal_sequence = record["journal_sequence"]
+    if type(journal_sequence) is not int or journal_sequence < 1:
+        raise ControllerError("driver failure journal sequence is invalid")
+    provenance = record["failure_provenance"]
+    result = _driver_failure_result_from_provenance(track, provenance)
+    if record["driver_status"] != result["status"]:
+        raise ControllerError("driver failure request status is invalid")
+    result_payload = canonical_record(result)
+    if record["driver_result_sha256"] != _digest_bytes(result_payload):
+        raise ControllerError("driver failure request result binding is invalid")
+    assert isinstance(provenance, dict)
+    journal_details = _driver_failure_journal_details(
+        track, intent_id, provenance
+    )
+    journal_event = {
+        "sequence": journal_sequence,
+        "event": "request_send_failed",
+        "details": journal_details,
+    }
+    if journal_digest != _digest_bytes(canonical_record(journal_event)):
+        raise ControllerError("driver failure request journal binding is invalid")
+    if provenance.get("provenance_source") == "linux_request_driver" and (
+        record["driver_full_id"] != provenance["driver_full_id"]
+        or record["driver_definition_sha256"]
+        != provenance["driver_definition_sha256"]
+        or record["driver_result_sha256"] != provenance["driver_result_sha256"]
+    ):
+        raise ControllerError("driver transport request provenance diverges")
+    _reject_public_secrets(dict(record))
+
+
+def _failure_evidence_request_closed(record: Mapping[str, object]) -> None:
+    if record.get("schema_version") == "kil.v3b1-request-failure.v1":
+        _driver_failure_request_closed(record)
+        return
+    _request_closed(record)
+
+
 def _validate_driver_result_bindings(
     payloads: Mapping[str, bytes],
     manifest: Mapping[str, object],
@@ -4914,11 +5062,11 @@ def _validate_driver_result_bindings(
     request_by_track = {str(request.get("track")): request for request in requests}
     if len(request_by_track) != len(requests):
         raise ControllerError("driver request track identity is duplicated")
-    if any(
-        request.get("schema_version") != "kil.v3b1-request.v2"
-        for request in requests
-    ):
-        raise ControllerError("driver presenter requires v2 request records")
+    allowed_request_schemas = {"kil.v3b1-request.v2"}
+    if not completed:
+        allowed_request_schemas.add("kil.v3b1-request-failure.v1")
+    if any(request.get("schema_version") not in allowed_request_schemas for request in requests):
+        raise ControllerError("driver presenter request generation is invalid")
     identity = manifest.get("content_identity")
     immutable = manifest.get("immutable_images")
     if type(identity) is not dict:
@@ -4959,30 +5107,17 @@ def _validate_driver_result_bindings(
             raise ControllerError("driver result bytes are not canonical")
         results[track.value] = result
         if request is None:
-            if result.get("status") == "complete":
-                raise ControllerError("complete driver result lacks normalized request")
-            continue
-        _request_closed(request)
+            raise ControllerError("commanded driver result lacks normalized request")
+        request_schema = request.get("schema_version")
+        if request_schema == "kil.v3b1-request-failure.v1":
+            _driver_failure_request_closed(request)
+        else:
+            _request_closed(request)
         full_id = request["driver_full_id"]
         if full_id in driver_ids:
             raise ControllerError("driver full ID is reused across tracks")
         driver_ids.add(str(full_id))
         result_digest = _digest_bytes(payload)
-        expected_projection = {
-            "attempt_count": request["attempt_count"],
-            "decision_digest": request["client_decision_digest"],
-            "receive_monotonic_ns": request["receive_monotonic_ns"],
-            "response_status": request["client_response_status"],
-            "retry_performed": request["retry_observed"],
-            "send_monotonic_ns": request["send_monotonic_ns"],
-            "status": "complete",
-            "track": request["track"],
-        }
-        if any(
-            result.get(name) != value
-            for name, value in expected_projection.items()
-        ):
-            raise ControllerError("driver result normalized request projection is invalid")
         if (
             request["run_id"] != manifest.get("run_id")
             or request["request_id"] != manifest.get("request_id")
@@ -4992,6 +5127,32 @@ def _validate_driver_result_bindings(
             or request["driver_result_sha256"] != result_digest
         ):
             raise ControllerError("driver request identity or result binding is invalid")
+        if request_schema == "kil.v3b1-request-failure.v1":
+            expected_result = _driver_failure_result_from_provenance(
+                track, request["failure_provenance"]
+            )
+            if result != expected_result:
+                raise ControllerError(
+                    "driver failure result does not match journal projection"
+                )
+        else:
+            expected_projection = {
+                "attempt_count": request["attempt_count"],
+                "decision_digest": request["client_decision_digest"],
+                "receive_monotonic_ns": request["receive_monotonic_ns"],
+                "response_status": request["client_response_status"],
+                "retry_performed": request["retry_observed"],
+                "send_monotonic_ns": request["send_monotonic_ns"],
+                "status": "complete",
+                "track": request["track"],
+            }
+            if any(
+                result.get(name) != value
+                for name, value in expected_projection.items()
+            ):
+                raise ControllerError(
+                    "driver result normalized request projection is invalid"
+                )
     if completed and set(results) != {track.value for track in _TRACKS}:
         raise ControllerError("accepted bundle requires three driver results")
     return results
@@ -5424,7 +5585,7 @@ def _driver_result_file_names() -> set[str]:
     return {f"raw/drivers/{track.value}.json" for track in _TRACKS}
 
 
-def _authoritative_file_names(schema_version: object = MANIFEST_SCHEMA) -> set[str]:
+def _authoritative_file_names(schema_version: object) -> set[str]:
     names = {
         *_EVIDENCE_FILES,
         "SHA256SUMS",
@@ -6584,7 +6745,7 @@ def _validate_failure_presenter_records(
     requests = _parse_jsonl_bytes(
         payloads["requests.jsonl"],
         "failure presenter requests",
-        _request_closed,
+        _failure_evidence_request_closed,
         allow_empty=True,
     )
     _validate_driver_result_bindings(
@@ -6996,6 +7157,14 @@ def _publication_recovery_contract(
         or intent["completed"] is not completed
     ):
         raise ControllerError("durable publication intent identity/class is invalid")
+    authority_hashes = authority["file_sha256"]
+    assert isinstance(authority_hashes, dict)
+    if set(authority_hashes) != _authoritative_file_names(
+        private_manifest.get("schema_version")
+    ):
+        raise ControllerError(
+            "durable publication authority generation diverges from manifest"
+        )
     return completed, source_attestations, authority
 
 
@@ -7017,7 +7186,19 @@ def _verify_recovered_publication(
     authority = _validate_authoritative_attestation(authoritative_attestation)
     authority_hashes = authority["file_sha256"]
     assert isinstance(authority_hashes, dict)
-    invariant_names = _authoritative_file_names() - {
+    private_schema = private_manifest.get("schema_version")
+    private_generation = _bundle_generation(private_schema)
+    expected_public_schema = (
+        _LEGACY_PUBLIC_MANIFEST_SCHEMA
+        if private_generation == 1
+        else _DRIVER_PUBLIC_MANIFEST_SCHEMA
+    )
+    expected_authority_names = _authoritative_file_names(private_schema)
+    if set(authority_hashes) != expected_authority_names:
+        raise ControllerError(
+            "recovered publication authority generation is mixed"
+        )
+    invariant_names = expected_authority_names - {
         "manifest.json",
         "summary.md",
         "SHA256SUMS",
@@ -7027,6 +7208,10 @@ def _verify_recovered_publication(
         public_manifest = _validate_presenter_snapshot(
             payloads, completed=completed
         )
+        if public_manifest.get("schema_version") != expected_public_schema:
+            raise ControllerError(
+                "recovered public/private manifest generation diverges"
+            )
         expected_private_projection = {
             "run_id": private_manifest["run_id"],
             "request_id": private_manifest["request_id"],
@@ -7232,7 +7417,7 @@ def _validate_provisional_driver_bindings(
     requests = _parse_jsonl_bytes(
         (output / "requests.jsonl").read_bytes(),
         "provisional requests",
-        _request_closed,
+        _request_closed if completed else _failure_evidence_request_closed,
         allow_empty=not completed,
     )
     _validate_driver_result_bindings(
@@ -7502,6 +7687,17 @@ def finalize_publication(
 ) -> Path:
     """Finalize privately, then atomically rename one immutable public bundle."""
     _validate_manifest(private_manifest)
+    private_schema = private_manifest.get("schema_version")
+    generation = _bundle_generation(private_schema)
+    public_schema = (
+        _LEGACY_PUBLIC_MANIFEST_SCHEMA
+        if generation == 1
+        else _DRIVER_PUBLIC_MANIFEST_SCHEMA
+    )
+    private_file_names = _authoritative_file_names(private_schema)
+    public_file_names = _authoritative_file_names(public_schema)
+    if private_file_names != public_file_names:
+        raise ControllerError("private/public evidence generations diverge")
     safety_root = (
         repository_root.resolve()
         if repository_root is not None
@@ -7549,6 +7745,11 @@ def finalize_publication(
         provisional, source_attestations, private_manifest
     )
     artifact_hashes = _artifact_hash_map(provisional)
+    expected_artifact_names = private_file_names - {
+        "manifest.json", "summary.md", "SHA256SUMS",
+    }
+    if set(artifact_hashes) != expected_artifact_names:
+        raise ControllerError("provisional artifact generation is mixed")
     bundle_class = (
         "intermediate_provisional_local_boundary"
         if completed
@@ -7557,7 +7758,7 @@ def finalize_publication(
     identity = private_manifest["content_identity"]
     assert isinstance(identity, dict)
     public_manifest: dict[str, object] = {
-        "schema_version": "kil.v3b1-public-manifest.v2",
+        "schema_version": public_schema,
         "run_id": private_manifest["run_id"],
         "request_id": private_manifest["request_id"],
         "evidence_scope": EVIDENCE_SCOPE,
@@ -7631,7 +7832,7 @@ def finalize_publication(
     public_summary = _public_summary(public_manifest).encode("utf-8")
     commitment_payloads = {
         relative: (staging / relative).read_bytes()
-        for relative in _authoritative_file_names()
+        for relative in public_file_names
         if relative not in {"manifest.json", "SHA256SUMS"}
     }
     commitment_payloads["summary.md"] = public_summary
@@ -10237,23 +10438,217 @@ class LocalEnvoyController:
         )
         return records
 
+    def _failure_request_records(
+        self, manifest: Mapping[str, object]
+    ) -> list[dict[str, object]]:
+        """Normalize durable request outcomes for nonpromotable evidence."""
+        journal = load_lifecycle_journal(self.journal_path)
+        requests_state = journal["requests"]
+        events = journal["events"]
+        assert isinstance(requests_state, dict)
+        assert isinstance(events, list)
+        runtime_path = _runtime_root(self.root, manifest) / "requests.jsonl"
+        if not runtime_path.is_symlink() and runtime_path.is_file():
+            successful = _parse_jsonl_bytes(
+                runtime_path.read_bytes(),
+                "partial normalized requests",
+                _request_closed,
+                allow_empty=True,
+            )
+        elif all(
+            isinstance(request, dict) and request.get("status") == "completed"
+            for request in requests_state.values()
+        ):
+            successful = self._request_records(manifest)
+        else:
+            successful = []
+        successful_by_track = {
+            str(record["track"]): record for record in successful
+        }
+        if len(successful_by_track) != len(successful):
+            raise ControllerError("partial normalized request tracks are duplicated")
+        identity = manifest.get("content_identity")
+        if type(identity) is not dict:
+            raise ControllerError("failure request manifest identity is invalid")
+        definitions = identity.get("driver_definition_sha256")
+        if type(definitions) is not list:
+            raise ControllerError("failure request driver definitions are invalid")
+        definition_by_track = {
+            str(item.get("track")): item.get("sha256")
+            for item in definitions
+            if type(item) is dict
+        }
+        normalized: list[dict[str, object]] = []
+        for track in _TRACKS:
+            state = requests_state[track.value]
+            assert isinstance(state, dict)
+            status = state.get("status")
+            if status == "not_attempted":
+                if track.value in successful_by_track:
+                    raise ControllerError(
+                        "uncommanded request has a normalized record"
+                    )
+                continue
+            if status == "completed":
+                record = successful_by_track.get(track.value)
+                if record is None:
+                    raise ControllerError(
+                        "completed request lacks its exact normalized record"
+                    )
+                normalized.append(record)
+                continue
+            if status == "intent_persisted":
+                raise ControllerError(
+                    "commanded request lacks terminal closed provenance"
+                )
+            if status != "failed":
+                raise ControllerError("durable request state is invalid")
+            matches = [
+                event
+                for event in events
+                if event.get("event") == "request_send_failed"
+                and isinstance(event.get("details"), dict)
+                and event["details"].get("track") == track.value
+            ]
+            if len(matches) != 1:
+                raise ControllerError(
+                    "commanded failure lacks one durable terminal event"
+                )
+            details = matches[0]["details"]
+            assert isinstance(details, dict)
+            if set(details) != {
+                "track", "record_sha256", "intent_id", "provenance",
+            }:
+                raise ControllerError(
+                    "commanded failure lacks closed reconstruction provenance"
+                )
+            intent_id = _require_sha256(
+                "failure request intent", details["intent_id"]
+            )
+            provenance = _validate_request_failure_provenance(
+                details["provenance"]
+            )
+            result = _driver_failure_result_from_provenance(track, provenance)
+            result_payload = canonical_record(result)
+            instruction_intents = [
+                event
+                for event in events
+                if event.get("event") == "driver_instruction_write_intent"
+                and isinstance(event.get("details"), dict)
+                and event["details"].get("track") == track.value
+                and event["details"].get("intent_id") == intent_id
+            ]
+            if len(instruction_intents) > 1:
+                raise ControllerError("driver instruction intent is duplicated")
+            if instruction_intents:
+                driver_id = instruction_intents[0]["details"]["driver_id"]
+            else:
+                if (
+                    result.get("stage") != "instruction_write"
+                    or result.get("request_bytes_may_have_been_sent") is not False
+                ):
+                    raise ControllerError(
+                        "driver failure stage lacks its instruction intent"
+                    )
+                readiness = [
+                    event
+                    for event in events
+                    if event.get("event") == "driver_readiness_complete"
+                    and isinstance(event.get("details"), dict)
+                    and event["details"].get("track") == track.value
+                    and event["sequence"] < matches[0]["sequence"]
+                ]
+                if not readiness:
+                    raise ControllerError(
+                        "commanded failure lacks durable driver identity"
+                    )
+                driver_id = readiness[-1]["details"]["driver_id"]
+            definition_sha = definition_by_track.get(track.value)
+            _require_sha256("failure request definition", definition_sha)
+            journal_details = _driver_failure_journal_details(
+                track, intent_id, provenance
+            )
+            record = {
+                "schema_version": "kil.v3b1-request-failure.v1",
+                "run_id": manifest["run_id"],
+                "request_id": manifest["request_id"],
+                "track": track.value,
+                "request_transport": "in_network_request_driver",
+                "driver_role": "request_driver",
+                "driver_full_id": driver_id,
+                "driver_image_id": manifest["kil_image_id"],
+                "driver_definition_sha256": definition_sha,
+                "driver_result_sha256": _digest_bytes(result_payload),
+                "driver_status": result["status"],
+                "intent_id": intent_id,
+                "journal_sequence": matches[0]["sequence"],
+                "journal_event_sha256": _digest_bytes(
+                    canonical_record(matches[0])
+                ),
+                "failure_provenance": dict(provenance),
+            }
+            _driver_failure_request_closed(record)
+            normalized.append(record)
+        if set(successful_by_track) - {
+            str(record["track"])
+            for record in normalized
+            if record.get("schema_version") == "kil.v3b1-request.v2"
+        }:
+            raise ControllerError("normalized request is not durably completed")
+        completed_records = [
+            record
+            for record in normalized
+            if record.get("schema_version") == "kil.v3b1-request.v2"
+        ]
+        if completed_records:
+            validate_request_journal(
+                completed_records, journal, require_all=False
+            )
+        return normalized
+
     def _private_driver_result_sources(
         self, manifest: Mapping[str, object]
     ) -> dict[LiveTrack, bytes]:
+        normalized = {
+            str(record["track"]): record
+            for record in self._failure_request_records(manifest)
+        }
         root = self.private_root / "driver-results" / str(manifest["run_id"])
         _require_contained(root, self.private_root, "private driver result root")
         results: dict[LiveTrack, bytes] = {}
         for track in _TRACKS:
             path = root / f"{track.value}.json"
             _require_contained(path, root, "private driver result")
+            request = normalized.get(track.value)
             if not path.exists():
-                results[track] = b""
+                if request is None:
+                    results[track] = b""
+                    continue
+                if request.get("schema_version") != (
+                    "kil.v3b1-request-failure.v1"
+                ):
+                    raise ControllerError(
+                        "commanded driver result is missing without failure provenance"
+                    )
+                result = _driver_failure_result_from_provenance(
+                    track, request["failure_provenance"]
+                )
+                results[track] = canonical_record(result)
                 continue
             if path.is_symlink() or not path.is_file():
                 raise ControllerError("private driver result is unsafe")
             payload = path.read_bytes()
             if len(payload) > 8 * 1024:
                 raise ControllerError("private driver result exceeds its bound")
+            if request is None:
+                raise ControllerError(
+                    "uncommanded track has a private driver result"
+                )
+            expected_digest = request["driver_result_sha256"]
+            if _digest_bytes(payload) != expected_digest:
+                raise ControllerError(
+                    "private driver result diverges from durable command state"
+                )
             results[track] = payload
         return results
 
@@ -12088,21 +12483,38 @@ class LocalEnvoyController:
         self,
         track: LiveTrack,
         *,
+        manifest: Mapping[str, object],
         stage: str,
         request_bytes_may_have_been_sent: bool,
     ) -> None:
+        provenance = {
+            "stage": stage,
+            "failure_monotonic_ns": self._monotonic_now(),
+            "request_bytes_may_have_been_sent": request_bytes_may_have_been_sent,
+            "attempt_count": 1,
+            "retry_performed": False,
+        }
+        result = _driver_failure_result_from_provenance(track, provenance)
+        raw_root = (
+            self.private_root / "driver-results" / str(manifest["run_id"])
+        )
+        _require_contained(raw_root, self.private_root, "private driver result root")
+        try:
+            _write_file(
+                raw_root / f"{track.value}.json",
+                canonical_record(result),
+                0o600,
+            )
+        except (ControllerError, OSError):
+            # The closed journal provenance remains sufficient to reconstruct
+            # the identical bytes if the private result write is the failure.
+            pass
         _complete_request_attempt(
             self.journal_path,
             track,
             success=False,
             record_sha256=None,
-            failure_provenance={
-                "stage": stage,
-                "failure_monotonic_ns": self._monotonic_now(),
-                "request_bytes_may_have_been_sent": request_bytes_may_have_been_sent,
-                "attempt_count": 1,
-                "retry_performed": False,
-            },
+            failure_provenance=provenance,
         )
 
     def run(self) -> Path:
@@ -12414,8 +12826,11 @@ class LocalEnvoyController:
                     else:
                         self._record_driver_control_failure(
                             active_track,
+                            manifest=manifest,
                             stage=failure_stage,
-                            request_bytes_may_have_been_sent=True,
+                            request_bytes_may_have_been_sent=(
+                                instruction_delivery_started
+                            ),
                         )
                 except Exception:
                     pass
@@ -12573,24 +12988,7 @@ class LocalEnvoyController:
                 if (output / "targets.jsonl").read_bytes() != _jsonl_payload(copied_targets):
                     raise ControllerError("stopped-container target byte comparison failed")
             else:
-                partial_requests: list[dict[str, object]] | None = None
-                request_path = _runtime_root(self.root, manifest) / "requests.jsonl"
-                partial_requests = (
-                    _parse_jsonl_bytes(
-                        request_path.read_bytes(),
-                        "incomplete central requests",
-                        _request_closed,
-                        allow_empty=True,
-                    )
-                    if request_path.is_file() and not request_path.is_symlink()
-                    else []
-                )
-                if partial_requests:
-                    validate_request_journal(
-                        partial_requests,
-                        load_lifecycle_journal(self.journal_path),
-                        require_all=False,
-                    )
+                partial_requests = self._failure_request_records(manifest)
                 failure_raw_decisions = {
                     track: (
                         raw[(track.value, "authz_decisions")]
@@ -12831,6 +13229,7 @@ class LocalEnvoyController:
                         provisional = _prepare_failure_provisional(
                             self._private_provisional_root(),
                             manifest,
+                            requests=self._failure_request_records(manifest),
                             raw_driver_results=self._private_driver_result_sources(
                                 manifest
                             ),
@@ -13359,6 +13758,7 @@ class LocalEnvoyController:
             output = _prepare_failure_provisional(
                 self._private_provisional_root(),
                 manifest,
+                requests=self._failure_request_records(manifest),
                 raw_driver_results=self._private_driver_result_sources(manifest),
                 reset=True,
             )

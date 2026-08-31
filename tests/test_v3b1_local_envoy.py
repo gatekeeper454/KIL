@@ -5739,6 +5739,208 @@ class DriverRequestSequencingTest(unittest.TestCase):
                 self.assertNotIn("private journal persistence failure", raw)
                 self.assertNotIn("private completion persistence failure", raw)
 
+    def test_commanded_failures_publish_bound_control_results_not_empty(self):
+        baseline_track = LiveTrack.CREDENTIAL_POLICY_BASELINE
+        baseline = baseline_track.value
+        readiness = (
+            canonical_json(
+                {
+                    "schema_version": "kil.v3b1-driver-readiness.v1",
+                    "track": baseline,
+                    "status": "ready",
+                    "connect_monotonic_ns": 1,
+                    "ready_monotonic_ns": 2,
+                }
+            )
+            + "\n"
+        ).encode()
+        cases = {
+            "instruction_write": {
+                "behavior": {"write_error": BrokenPipeError(errno.EPIPE, "private")},
+                "expected_stage": "instruction_write",
+            },
+            "stdout_read": {
+                "behavior": {"payload": readiness + b"not-json\n"},
+                "expected_stage": "stdout_read",
+            },
+            "process_wait": {
+                "behavior": {
+                    "wait_error": subprocess.TimeoutExpired("private", 1)
+                },
+                "expected_stage": "process_wait",
+            },
+            "termination": {
+                "behavior": {"stderr": b"private post-result stderr"},
+                "expected_stage": "termination",
+            },
+            "persistence": {
+                "behavior": {},
+                "expected_stage": "termination",
+            },
+        }
+        for name, case in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                controller, _, _, _, _ = self.make_controller(
+                    directory, {baseline: case["behavior"]}
+                )
+                real_write = local_envoy_module._write_file
+
+                def fail_driver_result_writes(path, payload, mode):
+                    if name == "persistence" and "driver-results" in Path(path).parts:
+                        raise ControllerError("private driver persistence failure")
+                    return real_write(path, payload, mode)
+
+                with mock.patch(
+                    "tools.v3b1_local_envoy._write_file",
+                    side_effect=fail_driver_result_writes,
+                ):
+                    with self.assertRaisesRegex(
+                        ControllerError, "terminal|teardown"
+                    ):
+                        controller.run()
+
+                journal = load_lifecycle_journal(controller.journal_path)
+                failure = next(
+                    event
+                    for event in journal["events"]
+                    if event["event"] == "request_send_failed"
+                )
+                provenance = failure["details"]["provenance"]
+                self.assertEqual(provenance["stage"], case["expected_stage"])
+                self.assertEqual(provenance["attempt_count"], 1)
+                self.assertFalse(provenance["retry_performed"])
+
+                requests = controller._failure_request_records(
+                    controller.bound_manifest
+                )
+                private_result = (
+                    controller.private_root
+                    / "driver-results"
+                    / controller.bound_manifest["run_id"]
+                    / f"{baseline}.json"
+                )
+                if name == "persistence":
+                    self.assertFalse(private_result.exists())
+                else:
+                    self.assertEqual(
+                        stat.S_IMODE(private_result.stat().st_mode), 0o600
+                    )
+                raw_driver_results = controller._private_driver_result_sources(
+                    controller.bound_manifest
+                )
+                expected_result = {
+                    "attempt_count": 1,
+                    "failure_monotonic_ns": provenance["failure_monotonic_ns"],
+                    "request_bytes_may_have_been_sent": provenance[
+                        "request_bytes_may_have_been_sent"
+                    ],
+                    "retry_performed": False,
+                    "schema_version": "kil.v3b1-driver-result.v1",
+                    "stage": case["expected_stage"],
+                    "status": "driver_control_failure",
+                    "track": baseline,
+                }
+                expected_raw = (canonical_json(expected_result) + "\n").encode()
+                self.assertEqual(raw_driver_results[baseline_track], expected_raw)
+                self.assertTrue(
+                    all(
+                        raw_driver_results[track] == b""
+                        for track in tuple(LiveTrack)[1:]
+                    )
+                )
+                self.assertEqual(len(requests), 1)
+                self.assertEqual(
+                    requests[0]["schema_version"],
+                    "kil.v3b1-request-failure.v1",
+                )
+                self.assertEqual(
+                    requests[0]["driver_result_sha256"],
+                    sha256(expected_raw).hexdigest(),
+                )
+
+                root = Path(directory)
+                provisional = _prepare_failure_provisional(
+                    root / "private-evidence",
+                    controller.bound_manifest,
+                    requests=requests,
+                    raw_driver_results=raw_driver_results,
+                    reset=True,
+                )
+                authority = authoritative_bundle_attestation(provisional)
+                published = finalize_publication(
+                    provisional,
+                    root / "public-evidence",
+                    controller.bound_manifest,
+                    source_attestations=[],
+                    tool_identities=TOOL_IDENTITIES,
+                    engine_provenance=ENGINE_PROVENANCE,
+                    global_context_before="personal",
+                    global_context_after="personal",
+                    completed=False,
+                    authoritative_attestation=authority,
+                )
+                self.assertEqual(
+                    (
+                        published
+                        / f"raw/drivers/{baseline}.json"
+                    ).read_bytes(),
+                    expected_raw,
+                )
+                self.assertEqual(
+                    local_envoy_module._verify_failure_presenter_bundle(
+                        published
+                    ),
+                    published.resolve() / "live.html",
+                )
+                if name == "instruction_write":
+                    requests_path = published / "requests.jsonl"
+                    mutated = [
+                        json.loads(line)
+                        for line in requests_path.read_text(
+                            encoding="utf-8"
+                        ).splitlines()
+                    ]
+                    mutated[0]["journal_event_sha256"] = HEX_C
+                    requests_path.chmod(0o600)
+                    requests_path.write_bytes(
+                        b"".join(
+                            (canonical_json(record) + "\n").encode()
+                            for record in mutated
+                        )
+                    )
+                    requests_path.chmod(0o444)
+                    rewrite_public_bundle_hashes(published)
+                    with self.assertRaisesRegex(
+                        ControllerError, "journal binding"
+                    ):
+                        local_envoy_module._verify_failure_presenter_bundle(
+                            published
+                        )
+
+    def test_commanded_failure_without_closed_provenance_rejects_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, _, _ = self.make_controller(directory)
+            with mock.patch(
+                "tools.v3b1_local_envoy._complete_request_attempt",
+                side_effect=ControllerError("private terminal persistence failure"),
+            ):
+                with self.assertRaisesRegex(ControllerError, "terminal|teardown"):
+                    controller.run()
+
+            journal = load_lifecycle_journal(controller.journal_path)
+            self.assertEqual(
+                journal["requests"][LiveTrack.CREDENTIAL_POLICY_BASELINE.value][
+                    "status"
+                ],
+                "intent_persisted",
+            )
+            with self.assertRaisesRegex(
+                ControllerError, "terminal closed provenance"
+            ):
+                controller._private_driver_result_sources(
+                    controller.bound_manifest
+                )
+
 
 def _record_test_readiness(journal_path: Path, nonce: str = HEX_B) -> str:
     journal_event(
@@ -8977,9 +9179,21 @@ class TeardownContinuationTest(unittest.TestCase):
                     controller.state_path
                 )
                 controller.bound_manifest = value
-                _, requests, _, _, _ = JoinContractTest().all_records()
+                requests = [request_record(value, track) for track in LiveTrack]
                 controller.request_records = requests
                 if failure != "no_run":
+                    driver_root = (
+                        controller.private_root
+                        / "driver-results"
+                        / value["run_id"]
+                    )
+                    driver_root.mkdir(parents=True, exist_ok=True)
+                    for track, payload in driver_results_for_requests(
+                        requests
+                    ).items():
+                        path = driver_root / f"{track.value}.json"
+                        path.write_bytes(payload)
+                        path.chmod(0o600)
                     readiness_nonce = _record_test_readiness(controller.journal_path)
                     for track, record in zip(LiveTrack, requests, strict=True):
                         claim_request_attempt(
@@ -11111,6 +11325,196 @@ class EvidenceBundleTest(unittest.TestCase):
             self.assertEqual(
                 local_envoy_module.verify_presenter_bundle(copied),
                 copied.resolve() / "live.html",
+            )
+
+    def test_legacy_v1_write_finalize_verify_preserves_exact_generation(self):
+        fixture_root = ROOT / "tests/fixtures/v3b1-public-bundle-v1"
+        fixture = next(path for path in fixture_root.iterdir() if path.is_dir())
+        frozen_manifest = json.loads(
+            (fixture / "manifest.json").read_text(encoding="utf-8")
+        )
+        identity = frozen_manifest["content_identity"]
+        networks = [
+            {
+                "track": track.value,
+                "name": f"kil-v3b1-network-{index}",
+            }
+            for index, track in enumerate(LiveTrack)
+        ]
+        containers = []
+        tracks = []
+        for index, track in enumerate(LiveTrack):
+            names = {
+                role: f"kil-v3b1-{role}-{index}"
+                for role in ("authz", "target", "envoy")
+            }
+            containers.extend(
+                {
+                    "name": names[role],
+                    "role": role,
+                    "track": track.value,
+                    "image": (
+                        frozen_manifest["immutable_images"]["envoy_digest"]
+                        if role == "envoy"
+                        else frozen_manifest["immutable_images"]["kil_image_id"]
+                    ),
+                }
+                for role in ("authz", "target", "envoy")
+            )
+            tracks.append(
+                {
+                    "track": track.value,
+                    "gateway_port": 18080 + index,
+                    "authz_container": names["authz"],
+                    "target_container": names["target"],
+                    "envoy_container": names["envoy"],
+                    "network": networks[index]["name"],
+                    "decision_source": "/evidence/decisions.jsonl",
+                    "target_source": "/evidence/targets.jsonl",
+                    "envoy_source": "/evidence/access.jsonl",
+                }
+            )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            private_manifest = {
+                "schema_version": "kil.v3b1-manifest.v1",
+                "evidence_scope": "local_envoy_boundary",
+                "content_identity_sha256": frozen_manifest[
+                    "content_identity_sha256"
+                ],
+                "content_identity": identity,
+                "run_id": frozen_manifest["run_id"],
+                "request_id": frozen_manifest["request_id"],
+                "colima_profile": "kil-v3-lab",
+                "docker_host": f"unix://{root}/docker.sock",
+                "execution_nonce": "0" * 64,
+                "platform": frozen_manifest["platform"],
+                "source_commit": frozen_manifest["source_commit"],
+                "python_image_digest": frozen_manifest["immutable_images"][
+                    "python"
+                ],
+                "envoy_image_digest": frozen_manifest["immutable_images"][
+                    "envoy_digest"
+                ],
+                "envoy_image_id": frozen_manifest["immutable_images"][
+                    "envoy_image_id"
+                ],
+                "kil_image_id": frozen_manifest["immutable_images"][
+                    "kil_image_id"
+                ],
+                "kil_archive_sha256": frozen_manifest["immutable_images"][
+                    "kil_archive_sha256"
+                ],
+                "networks": networks,
+                "tracks": tracks,
+                "containers": containers,
+                "teardown": {
+                    "status": "pending",
+                    "containers_removed": False,
+                    "network_removed": False,
+                    "profile_deleted": False,
+                },
+            }
+            local_envoy_module._validate_manifest(private_manifest)
+            requests = [
+                json.loads(line)
+                for line in (fixture / "requests.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            raw_driverless_decisions = {
+                track: (
+                    fixture / f"raw/decisions/{track.value}.jsonl"
+                ).read_bytes()
+                for track in LiveTrack
+            }
+            decisions = [
+                json.loads(raw_driverless_decisions[track])
+                for track in LiveTrack
+            ]
+            envoy = [
+                json.loads(line)
+                for line in (fixture / "envoy.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            targets = [
+                json.loads(line)
+                for line in (fixture / "targets.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            joins = [
+                json.loads(line)
+                for line in (fixture / "joins.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            provisional = write_evidence_bundle(
+                root / "private",
+                private_manifest,
+                requests=requests,
+                decisions=decisions,
+                envoy=envoy,
+                targets=targets,
+                joins=joins,
+                raw_decisions=raw_driverless_decisions,
+            )
+            frozen_inventory = {
+                path.relative_to(fixture).as_posix()
+                for path in fixture.rglob("*")
+                if path.is_file()
+            }
+            provisional_inventory = {
+                path.relative_to(provisional).as_posix()
+                for path in provisional.rglob("*")
+                if path.is_file()
+            }
+            self.assertEqual(provisional_inventory, frozen_inventory)
+            self.assertNotIn(
+                "raw/drivers/credential_policy_baseline.json",
+                provisional_inventory,
+            )
+            self.assertEqual(
+                (provisional / "live.html").read_bytes(),
+                (fixture / "live.html").read_bytes(),
+            )
+            authority = authoritative_bundle_attestation(provisional)
+            self.assertEqual(
+                authority["schema_version"],
+                "kil.v3b1-authoritative-bundle.v1",
+            )
+            published = finalize_publication(
+                provisional,
+                root / "public",
+                private_manifest,
+                source_attestations=frozen_manifest["source_attestations"],
+                tool_identities=frozen_manifest["verified_tool_identities"],
+                engine_provenance=frozen_manifest[
+                    "docker_engine_provenance"
+                ],
+                global_context_before="personal",
+                global_context_after="personal",
+                completed=True,
+                authoritative_attestation=authority,
+            )
+            published_inventory = {
+                path.relative_to(published).as_posix()
+                for path in published.rglob("*")
+                if path.is_file()
+            }
+            self.assertEqual(published_inventory, frozen_inventory)
+            self.assertEqual(
+                (published / "live.html").read_bytes(),
+                (fixture / "live.html").read_bytes(),
+            )
+            self.assertEqual(
+                json.loads((published / "manifest.json").read_text())["schema_version"],
+                "kil.v3b1-public-manifest.v1",
+            )
+            self.assertEqual(
+                local_envoy_module.verify_presenter_bundle(published),
+                published.resolve() / "live.html",
             )
 
     def assert_summary_citation_is_bound(self, output, *, public):
