@@ -251,7 +251,7 @@ git commit -m "Lock the V3B-1 request driver protocol"
 - Modify: `tools/v3b1_local_envoy.py`
 - Modify: `tests/test_v3b_container_contract.py`
 
-- [ ] **Step 1: Write RED executable tests with an injected connection**
+- [x] **Step 1: Write RED executable tests with an injected connection**
 
 Test this exact callable boundary:
 
@@ -280,7 +280,7 @@ Require:
   failure result without raw exception text; and
 - no path reconnects or retries.
 
-- [ ] **Step 2: Run each new test and verify RED**
+- [x] **Step 2: Run each new test and verify RED**
 
 Run:
 
@@ -291,7 +291,7 @@ PYTHONPATH=src .venv/bin/python -m unittest \
 
 Expected: FAIL because `kil.v3b1_request_driver.execute_driver` is unavailable.
 
-- [ ] **Step 3: Implement the retained-connection state machine**
+- [x] **Step 3: Implement the retained-connection state machine**
 
 Implement only:
 
@@ -325,14 +325,14 @@ by the Task 1 protocol validators.
 `main()` accepts only `--track` and fixed `--endpoint envoy:8080`, then calls
 `execute_driver()` with binary standard streams. It must never log to stderr.
 
-- [ ] **Step 4: Include and attest the module in the immutable image**
+- [x] **Step 4: Include and attest the module in the immutable image**
 
 Add `src/kil/v3b1_driver_protocol.py` and `src/kil/v3b1_request_driver.py` to
 the Docker build copy and dockerignore allowlist, `_BUILD_CONTEXT_FILES`, and
 container-contract tests. The bootstrap digest is the SHA-256 of the exact
 driver module bytes included in the build context.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run:
 

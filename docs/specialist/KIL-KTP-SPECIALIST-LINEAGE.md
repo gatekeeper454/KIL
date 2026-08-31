@@ -5581,3 +5581,65 @@ ORCID remain optional publication decisions.
 the executable-driver checkpoint before advancing to topology schemas.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-110 — 2026-08-31 — One-shot in-network request driver passes both review gates
+
+**Input:** Continue the approved V3B-1 implementation toward a visible lab
+today, with independent verification at each durable boundary.
+
+**Interpretation:** Task 2 must turn the closed protocol into a container-side
+client that can prove connectivity without sending a request, then reuse that
+same connection for at most one consequential request. Its executed bytes must
+be part of the immutable image identity before topology work begins.
+
+**Decision status:** Confirmed Task 2 complete after specification and quality
+approval. Commits `b9df1d44d828677da8191cd2ce5add195dedfe9a` and
+`4203a56face5cde6690a7cad33f39f374372069a` add the one-shot driver, exact
+Docker build allowlists, staged-module digest binding, and executable/container
+contract tests. The driver explicitly connects once to `envoy:8080`, disables
+`HTTPConnection` auto-reopen, emits and flushes readiness before reading stdin,
+cancels on EOF with zero HTTP bytes, consumes at most one closed instruction,
+and emits at most one closed result without reconnect or retry.
+
+Independent quality review reproduced and corrected partial stdout writes and
+premature response EOF. Canonical records now require complete bounded writes
+and flush; readiness output failure prevents stdin and request activity; a
+declared `Content-Length` must be fully consumed; and only OS/HTTP protocol
+failures become transport evidence. Unexpected programming faults propagate to
+the process-control boundary and the CLI remains silent.
+
+**Rationale:** Readiness is an authorization-independent proof of the retained
+transport path. Exact output framing and declared-body completeness are
+evidence-integrity properties: neither a truncated readiness/result record nor
+a truncated HTTP response may be promoted as a successful attempt.
+
+**Affected artifacts:**
+
+- `src/kil/v3b1_request_driver.py`
+- `tests/test_v3b1_request_driver.py`
+- `deploy/kind/Dockerfile.v3b`
+- `deploy/kind/Dockerfile.v3b.dockerignore`
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b_container_contract.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final implementation sweep passed 429 repository tests,
+Python compilation, and diff hygiene. Independent quality re-review passed 40
+focused driver/container tests and the same 429-test full suite, with no
+remaining Critical or Important finding. No Docker, Colima, external network,
+or live laboratory runtime was invoked.
+
+**Unresolved questions:** The driver is not yet present in an instantiated
+split-network runtime. Profile, content identity, private manifest, active
+state, topology attestation, attached sessions, public evidence v2, recovery,
+and both live gates remain.
+
+**Next gate:** Execute Task 3 test-first: remove host gateway ports from the
+released profile and advance content identity, manifest, and active-state
+schemas to bind six name-independent segment definitions plus three
+non-circular driver definitions without admitting run-derived names or IDs into
+the content-identity preimage.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
