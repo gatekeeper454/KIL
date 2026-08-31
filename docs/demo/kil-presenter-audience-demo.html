@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en" data-mode="standalone">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KIL — Ambient Enforcement Demonstration</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --kil-bg: light-dark(#f6f8fb, #10151c);
+      --kil-panel: light-dark(#ffffff, #18212c);
+      --kil-text: light-dark(#14202b, #edf4fa);
+      --kil-muted: light-dark(#536574, #aab9c5);
+      --kil-line: light-dark(#c9d4dc, #40505d);
+      --kil-blue: light-dark(#175da8, #69aef5);
+      --kil-red: light-dark(#ae3025, #ff766c);
+      --kil-green: light-dark(#207347, #63c98e);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--kil-bg); color: var(--kil-text); }
+    button { font: inherit; min-height: 44px; }
+    #kil-demo-app { width: min(1180px, 100%); margin: 0 auto; padding: 20px; }
+    .kil-eyebrow { color: var(--kil-blue); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .kil-meta, .kil-controls, .kil-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    [data-visual] { min-height: 360px; margin: 20px 0; padding: 20px; background: var(--kil-panel); border: 1px solid var(--kil-line); }
+    [data-presenter-notes] { margin-top: 20px; padding: 20px; background: var(--kil-panel); border-left: 4px solid var(--kil-blue); }
+    [data-source], footer { color: var(--kil-muted); }
+    footer { margin-top: 28px; font-size: .9rem; }
+    footer a { color: inherit; }
+  </style>
+</head>
+<body>
+  <main id="kil-demo-app">
+    <header>
+      <div class="kil-eyebrow">Kinetic Infrastructure Layer</div>
+      <div class="kil-meta">
+        <span data-mode-label>Standalone</span>
+        <span data-status></span>
+        <span data-progress></span>
+        <span data-sync-status aria-live="polite">Not synchronized</span>
+      </div>
+      <h1 data-title></h1>
+    </header>
+
+    <nav class="kil-controls" data-act-controls aria-label="Presentation acts"></nav>
+    <nav class="kil-controls" data-scene-controls aria-label="Scenes"></nav>
+
+    <section data-visual aria-live="polite"></section>
+    <p data-takeaway></p>
+
+    <aside data-presenter-notes>
+      <h2>Say this</h2>
+      <p data-script></p>
+      <p data-source></p>
+    </aside>
+
+    <nav class="kil-actions" aria-label="Presentation navigation">
+      <button type="button" data-prev>Previous</button>
+      <button type="button" data-next>Next</button>
+      <button type="button" data-open-audience>Open audience view</button>
+    </nav>
+
+    <footer>
+      Sources:
+      <a href="https://github.com/nmcitra/ktp-rfc/tree/v2.0.0">KTP v2.0.0</a> ·
+      <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">KTP citation</a> ·
+      <a href="https://kinetic-trust-protocol.net/enterprise/architecture">KTP Enterprise architecture</a> ·
+      <a href="https://kinetic-trust-protocol.net/learn/constitution">KTP Constitution</a> ·
+      <a href="https://huggingface.co/blog/agent-intrusion-technical-timeline">Hugging Face technical timeline</a>
+    </footer>
+  </main>
+
+  <script id="kil-demo-scenes" type="application/json">
+[
+  {
+    "id": "primer-ambient-breach",
+    "act": "primer",
+    "order": 1,
+    "title": "Ambient breach requires ambient enforcement",
+    "status": "Proposed KIL thesis",
+    "takeaway": "Credential validity does not establish behavioral legitimacy at agent speed.",
+    "script": "Cybersecurity now faces more than occasional ambient threat. Autonomous systems can discover capabilities, reuse authentic credentials, and execute novel sequences faster than a human-led control loop can correlate them. A credential checkpoint can correctly verify identity and policy while remaining blind to the behavior that follows. KIL begins from that structural gap: enforcement must remain present where digital action becomes consequence, continuously and at infrastructure speed. This is the KIL thesis.",
+    "source": "KIL paper, Introduction and checkpoint problem; proposed architectural thesis.",
+    "visual": "ambient-breach"
+  },
+  {
+    "id": "primer-kinetic-infrastructure",
+    "act": "primer",
+    "order": 2,
+    "title": "KIL turns authorization into a property of motion",
+    "status": "Proposed KIL extension",
+    "takeaway": "Ambient enforcement consumes fresh authority at the consequential boundary.",
+    "script": "A credential-and-policy checkpoint asks whether the credential is authentic and whether an operation is allowed. KIL adds a different question: does this identity’s present trajectory still carry enough fresh, class-bound authority for this action now? The infrastructure boundary consumes that live authority before forwarding, constraining, or withholding the action. Authority is therefore not treated as a possession that survives unchanged until expiry; it becomes a time-sensitive property of motion through the system. This is a proposed KIL extension.",
+    "source": "KIL paper, ambient enforcement and infrastructure-consumption contract.",
+    "visual": "kil-comparison"
+  },
+  {
+    "id": "primer-ktp-extension",
+    "act": "primer",
+    "order": 3,
+    "title": "KIL is a proposed extension of KTP",
+    "status": "KTP source · proposed KIL extension",
+    "takeaway": "KTP remains authoritative; KIL adds a reducing-only infrastructure consumption profile.",
+    "script": "KIL does not replace Kinetic Trust Protocol or create a competing trust system. KTP remains authoritative for identity, trajectory, standing, environmental bounds, vetoes, and governance. KIL proposes a signed, short-lived composite enforcement state for an identity and authority class, then defines how infrastructure consumes it. The fast path can apply fresh local evidence only to reduce or withhold authority. It can never clear a KTP veto or create new authority. This is a proposed KIL extension.",
+    "source": "KTP v2.0.0, Enterprise architecture, Constitution, and the KIL extension boundary.",
+    "visual": "hybrid-architecture"
+  },
+  {
+    "id": "primer-trust-physics",
+    "act": "primer",
+    "order": 4,
+    "title": "Why kinetic authority works",
+    "status": "Proposed mechanism · modeled parameters",
+    "takeaway": "Authority is earned slowly, remains class-bound, decays, and can be lost quickly.",
+    "script": "The model is deliberately asymmetric. Confirmed low-divergence behavior can contribute only to a later signed state, so authority arrives slowly. Silence does not preserve it forever: charge and state age. History is isolated by authority class, so ordinary data reads cannot finance a first cluster-admin action. High divergence can impose superlinear loss, and declared operational change is bounded, signed, and auditable. The mechanism is precise, but its initial thresholds and coupling coefficients still require measurement. These parameters are modeled.",
+    "source": "KIL paper, formal trust-decay profile and parameter status.",
+    "visual": "trust-physics"
+  },
+  {
+    "id": "case-ambient-breach",
+    "act": "case-study",
+    "order": 5,
+    "title": "From ambient threat to ambient breach",
+    "status": "Observed incident · KIL framing",
+    "takeaway": "The disclosure provides a source-cited sequence for a bounded counterfactual.",
+    "script": "The July 2026 Hugging Face disclosure gives us a concrete sequence rather than a generic threat story. An autonomous agent moved from a production worker foothold into control-plane access, cloud discovery, privilege, secrets, cross-cluster reach, mesh enrollment, token creation, and a source-control or CI-directed pivot. KIL does not claim access to unpublished telemetry. We use the disclosed sequence as observed context, then keep every synthetic KIL signal visibly separate. These incident facts are source-cited.",
+    "source": "Hugging Face technical timeline; KIL canonical eight-phase scenario.",
+    "visual": "incident-overview"
+  },
+  {
+    "id": "case-foothold",
+    "act": "case-study",
+    "order": 6,
+    "title": "A trusted worker becomes the foothold",
+    "status": "Observed incident",
+    "takeaway": "The disclosed application compromise precedes the transport boundary tested by the lab.",
+    "script": "The incident reached a production dataset-processing worker through renderer-related injection paths. That transition matters because it establishes the compromised workload whose later actions carry authentic service context. An application-aware or kernel-aware adapter might treat unusual local resolution as a trajectory signal, but our current Envoy laboratory does not mediate that file access. The showcase therefore starts the enforceable KIL counterfactual at the worker’s first mediated outbound request, not at the original parser event. These incident facts are source-cited.",
+    "source": "Hugging Face disclosure Phase 0; KIL paper Phase map and limitation boundary.",
+    "visual": "foothold"
+  },
+  {
+    "id": "case-first-divergence",
+    "act": "case-study",
+    "order": 7,
+    "title": "The first mediated divergence",
+    "status": "Modeled counterfactual",
+    "takeaway": "Modeled divergence reduces authority before the first Kubernetes control-plane call is forwarded.",
+    "script": "The compromised worker used its service-account context and addressed the Kubernetes control plane. In the canonical scenario, that new administrative trajectory receives a modeled divergence of zero point nine five. The disclosed incident path continues because the credential could be used. In the KIL counterfactual, fresh local divergence reduces the effective class authority below its threshold at the mediated egress boundary. The request is withheld, and dependent phases are marked conditionally unreachable rather than separately prevented. This KIL result is modeled.",
+    "source": "Canonical scenario event hf-p1-cluster-api; modeled divergence 0.95.",
+    "visual": "branching-cutoff"
+  },
+  {
+    "id": "case-cascade",
+    "act": "case-study",
+    "order": 8,
+    "title": "One credential path becomes a cascade",
+    "status": "Observed incident · modeled reachability",
+    "takeaway": "Dependency-aware reachability shows the leverage of an early cutoff without multiplying claims.",
+    "script": "After control-plane access, the disclosed sequence expanded through cloud mapping, privileged node access, and a high-value secret read. That secret access then supported branches toward cross-cluster administration, corporate mesh enrollment, forged identity tokens, and CI or source-control targeting. The Phase 4 divergence in our scenario is modeled at zero point nine zero. KIL displays descendants made unreachable by an earlier deny, but it does not count them as independent detections or claim each branch was reproduced locally. This KIL result is modeled.",
+    "source": "Hugging Face timeline and canonical scenario dependency graph; Phase 4 divergence 0.90 modeled.",
+    "visual": "incident-topology"
+  },
+  {
+    "id": "case-kil-mechanics",
+    "act": "case-study",
+    "order": 9,
+    "title": "KIL changes authority in motion",
+    "status": "Modeled counterfactual",
+    "takeaway": "Signed KTP state remains authoritative while local divergence can only reduce effective authority.",
+    "script": "Now we apply the primer to the incident. The slower authoritative loop derives and signs short-lived composite KTP state for the worker and requested authority class. The infrastructure verifies authenticity, freshness, environmental bounds, and vetoes. Between refreshes, the experimental local overlay observes the worker’s novel control-plane trajectory and may clamp effective authority downward. It cannot add charge, widen the KTP environment, or clear a veto. The next authoritative state reconciles the result under explicit rules. This KIL result is modeled.",
+    "source": "KIL hybrid two-timescale architecture and non-expansion invariant.",
+    "visual": "hybrid-applied"
+  },
+  {
+    "id": "case-lab-mapping",
+    "act": "case-study",
+    "order": 10,
+    "title": "The incident boundary becomes a lab boundary",
+    "status": "Modeled lab mapping",
+    "takeaway": "Harmless components preserve the authorization question without recreating the breach.",
+    "script": "The laboratory does not recreate the intrusion. It preserves the authorization question at a harmless boundary. The compromised worker maps to a one-shot request driver. Envoy represents the mediated outbound path. The authorization service consumes signed state and optional local reduction. A harmless target marker records whether forwarding occurred, and canonical records preserve provenance. This lets us compare enforcement behavior without running exploit code, touching a production cluster, or claiming the complete historical environment was reproduced. This is a modeled lab mapping.",
+    "source": "KIL V3A process contract and V3B-1 local Envoy architecture.",
+    "visual": "lab-mapping"
+  },
+  {
+    "id": "case-three-tracks",
+    "act": "case-study",
+    "order": 11,
+    "title": "Same request, three enforcement tracks",
+    "status": "V3A modeled · V3B-1 pending",
+    "takeaway": "The third track isolates the effect of fresh, reducing-only local divergence.",
+    "script": "All three tracks receive the same normalized action. The credential-policy baseline permits. Signed composite state alone also permits because its latest authoritative snapshot has not changed. Signed state plus fresh local reduction withholds the request, producing the modeled comparison permit, permit, deny: HTTP two hundred, two hundred, four hundred three, with target markers one, one, zero. These outcomes exist today as V3A modeled process-contract evidence. The accepted V3B-1 live enforcement bundle is not yet promoted. The V3B-1 live result remains pending.",
+    "source": "KIL V3A generated evidence and V3B-1 gate status.",
+    "visual": "three-tracks"
+  },
+  {
+    "id": "case-evidence",
+    "act": "case-study",
+    "order": 12,
+    "title": "What is evidence today?",
+    "status": "Observed · modeled · pending",
+    "takeaway": "The demo closes by separating disclosure facts, counterfactual results, and local validation gates.",
+    "script": "The evidence ladder prevents a persuasive demonstration from outrunning the project. V1 tests deterministic model invariants. V2 replays source-cited historical actions with explicitly modeled KIL context. V3A supplies modeled process-contract behavior. V3B-1 is the pending local Envoy enforcement proof, while V3B-2 remains a future Kind and Calico rail. V4 promotes only immutable, integrity-checked run bundles whose claims match their evidence. Today’s story is therefore useful, inspectable, and intentionally bounded. The V3B-1 live result remains pending.",
+    "source": "KIL paper validation gates and current V3 progress record.",
+    "visual": "evidence-ladder"
+  }
+]
+  </script>
+
+  <script>
+    (() => {
+      const scenes = JSON.parse(document.getElementById('kil-demo-scenes').textContent);
+      const first = scenes[0];
+      document.querySelector('[data-title]').textContent = first.title;
+      document.querySelector('[data-status]').textContent = first.status;
+      document.querySelector('[data-progress]').textContent = 'Primer P1 of P4';
+      document.querySelector('[data-takeaway]').textContent = first.takeaway;
+      document.querySelector('[data-script]').textContent = first.script;
+      document.querySelector('[data-source]').textContent = first.source;
+      document.querySelector('[data-visual]').textContent = first.takeaway;
+    })();
+  </script>
+</body>
+</html>
