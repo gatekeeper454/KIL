@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from base64 import urlsafe_b64decode
 from copy import deepcopy
-import errno as errno_module
 import json
 import re
+from types import MappingProxyType
 
 from .canonical import canonical_json
 
@@ -20,6 +20,141 @@ DRIVER_ENDPOINT = {"host": "envoy", "port": 8080}
 MAX_INSTRUCTION_BYTES = 32 * 1024
 MAX_RESULT_BYTES = 8 * 1024
 MAX_RESPONSE_BODY_BYTES = 4096
+LINUX_ERRNO_NAMES = MappingProxyType(
+    {
+        1: "EPERM",
+        2: "ENOENT",
+        3: "ESRCH",
+        4: "EINTR",
+        5: "EIO",
+        6: "ENXIO",
+        7: "E2BIG",
+        8: "ENOEXEC",
+        9: "EBADF",
+        10: "ECHILD",
+        11: "EAGAIN",
+        12: "ENOMEM",
+        13: "EACCES",
+        14: "EFAULT",
+        15: "ENOTBLK",
+        16: "EBUSY",
+        17: "EEXIST",
+        18: "EXDEV",
+        19: "ENODEV",
+        20: "ENOTDIR",
+        21: "EISDIR",
+        22: "EINVAL",
+        23: "ENFILE",
+        24: "EMFILE",
+        25: "ENOTTY",
+        26: "ETXTBSY",
+        27: "EFBIG",
+        28: "ENOSPC",
+        29: "ESPIPE",
+        30: "EROFS",
+        31: "EMLINK",
+        32: "EPIPE",
+        33: "EDOM",
+        34: "ERANGE",
+        35: "EDEADLK",
+        36: "ENAMETOOLONG",
+        37: "ENOLCK",
+        38: "ENOSYS",
+        39: "ENOTEMPTY",
+        40: "ELOOP",
+        42: "ENOMSG",
+        43: "EIDRM",
+        44: "ECHRNG",
+        45: "EL2NSYNC",
+        46: "EL3HLT",
+        47: "EL3RST",
+        48: "ELNRNG",
+        49: "EUNATCH",
+        50: "ENOCSI",
+        51: "EL2HLT",
+        52: "EBADE",
+        53: "EBADR",
+        54: "EXFULL",
+        55: "ENOANO",
+        56: "EBADRQC",
+        57: "EBADSLT",
+        59: "EBFONT",
+        60: "ENOSTR",
+        61: "ENODATA",
+        62: "ETIME",
+        63: "ENOSR",
+        64: "ENONET",
+        65: "ENOPKG",
+        66: "EREMOTE",
+        67: "ENOLINK",
+        68: "EADV",
+        69: "ESRMNT",
+        70: "ECOMM",
+        71: "EPROTO",
+        72: "EMULTIHOP",
+        73: "EDOTDOT",
+        74: "EBADMSG",
+        75: "EOVERFLOW",
+        76: "ENOTUNIQ",
+        77: "EBADFD",
+        78: "EREMCHG",
+        79: "ELIBACC",
+        80: "ELIBBAD",
+        81: "ELIBSCN",
+        82: "ELIBMAX",
+        83: "ELIBEXEC",
+        84: "EILSEQ",
+        85: "ERESTART",
+        86: "ESTRPIPE",
+        87: "EUSERS",
+        88: "ENOTSOCK",
+        89: "EDESTADDRREQ",
+        90: "EMSGSIZE",
+        91: "EPROTOTYPE",
+        92: "ENOPROTOOPT",
+        93: "EPROTONOSUPPORT",
+        94: "ESOCKTNOSUPPORT",
+        95: "EOPNOTSUPP",
+        96: "EPFNOSUPPORT",
+        97: "EAFNOSUPPORT",
+        98: "EADDRINUSE",
+        99: "EADDRNOTAVAIL",
+        100: "ENETDOWN",
+        101: "ENETUNREACH",
+        102: "ENETRESET",
+        103: "ECONNABORTED",
+        104: "ECONNRESET",
+        105: "ENOBUFS",
+        106: "EISCONN",
+        107: "ENOTCONN",
+        108: "ESHUTDOWN",
+        109: "ETOOMANYREFS",
+        110: "ETIMEDOUT",
+        111: "ECONNREFUSED",
+        112: "EHOSTDOWN",
+        113: "EHOSTUNREACH",
+        114: "EALREADY",
+        115: "EINPROGRESS",
+        116: "ESTALE",
+        117: "EUCLEAN",
+        118: "ENOTNAM",
+        119: "ENAVAIL",
+        120: "EISNAM",
+        121: "EREMOTEIO",
+        122: "EDQUOT",
+        123: "ENOMEDIUM",
+        124: "EMEDIUMTYPE",
+        125: "ECANCELED",
+        126: "ENOKEY",
+        127: "EKEYEXPIRED",
+        128: "EKEYREVOKED",
+        129: "EKEYREJECTED",
+        130: "EOWNERDEAD",
+        131: "ENOTRECOVERABLE",
+        132: "ERFKILL",
+        133: "EHWPOISON",
+    }
+)
 DRIVER_RUNTIME_POLICY = {
     "user": "65532:65532",
     "read_only": True,
@@ -105,6 +240,20 @@ _BASE_INSTRUCTION_HEADERS = {
     "x-request-id",
 }
 _SIGNED_INSTRUCTION_HEADER = "x-kil-q-state"
+_MAX_HEADER_VALUE_BYTES = 4096
+_AUTHORIZATION = re.compile(r"^Bearer [!-~]+$", re.ASCII)
+_RUN_ID = re.compile(r"^v3b1-[a-f0-9]{64}$", re.ASCII)
+_REQUEST_ID = "v3b1-central-request"
+_FIXED_INSTRUCTION_HEADER_VALUES = {
+    "x-envoy-hedge-on-per-try-timeout": "false",
+    "x-envoy-max-retries": "0",
+    "x-kil-decision-digest": "f" * 64,
+    "x-kil-issuer": "https://attacker.invalid",
+    "x-kil-local-evidence": '{"divergence":"0"}',
+    "x-kil-mode": "credential_policy_baseline",
+    "x-kil-track": "client-selected-track",
+    "x-kil-verified-subject": "spiffe://attacker.invalid/workload",
+}
 _TRANSPORT_STAGES = {"request_send", "response_headers", "response_body"}
 _DRIVER_CONTROL_STAGES = {
     "instruction_write",
@@ -160,7 +309,7 @@ def _closed_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, value in pairs:
         if key in result:
-            raise DriverProtocolError(f"duplicate JSON field: {key}")
+            raise DriverProtocolError("driver protocol JSON contains a duplicate field")
         result[key] = value
     return result
 
@@ -248,12 +397,14 @@ def reject_sensitive_material(value: object) -> None:
 
 def canonical_record(value: object) -> bytes:
     """Serialize one protocol record as canonical UTF-8 plus one newline."""
+    result: bytes | None = None
     try:
-        return (canonical_json(value) + "\n").encode("utf-8")
-    except DriverProtocolError:
-        raise
-    except (TypeError, ValueError, UnicodeError, RecursionError) as error:
-        raise DriverProtocolError("public record canonicalization failed") from error
+        result = (canonical_json(value) + "\n").encode("utf-8")
+    except (DriverProtocolError, TypeError, ValueError, UnicodeError, RecursionError):
+        pass
+    if result is None:
+        raise DriverProtocolError("protocol record canonicalization failed") from None
+    return result
 
 
 def driver_definition(
@@ -281,14 +432,16 @@ def driver_definition(
 def _load_record(payload: object, limit: int, label: str) -> dict[str, object]:
     if type(payload) is not bytes or not payload or len(payload) > limit:
         raise DriverProtocolError(f"{label} is not bounded bytes")
+    value: object = None
+    canonical: bytes | None = None
     try:
         text = payload.decode("utf-8")
         value = _decode_json(text)
         canonical = (canonical_json(value) + "\n").encode("utf-8")
-    except DriverProtocolError:
-        raise
-    except (TypeError, ValueError, UnicodeError, RecursionError) as error:
-        raise DriverProtocolError(f"{label} is not closed JSON") from error
+    except (DriverProtocolError, TypeError, ValueError, UnicodeError, RecursionError):
+        pass
+    if canonical is None:
+        raise DriverProtocolError(f"{label} is not closed JSON") from None
     if payload != canonical:
         raise DriverProtocolError(f"{label} is not canonical JSON")
     if type(value) is not dict:
@@ -300,8 +453,9 @@ def _require_header_value(value: object) -> str:
     if (
         type(value) is not str
         or not value
-        or len(value.encode("utf-8")) > 16 * 1024
-        or any(character in value for character in ("\r", "\n", "\0"))
+        or not value.isascii()
+        or len(value) > _MAX_HEADER_VALUE_BYTES
+        or any(ord(character) < 0x20 or ord(character) == 0x7F for character in value)
     ):
         raise DriverProtocolError("driver instruction header value is invalid")
     return value
@@ -349,8 +503,17 @@ def parse_instruction(
         if type(key) is not str:
             raise DriverProtocolError("driver instruction header name is invalid")
         _require_header_value(item)
-    if not str(headers["authorization"]).lower().startswith("bearer "):
+    if any(
+        headers[key] != expected_value
+        for key, expected_value in _FIXED_INSTRUCTION_HEADER_VALUES.items()
+    ):
+        raise DriverProtocolError("driver instruction fixed headers are invalid")
+    if _AUTHORIZATION.fullmatch(str(headers["authorization"])) is None:
         raise DriverProtocolError("driver instruction authorization is invalid")
+    if _RUN_ID.fullmatch(str(headers["x-kil-run-id"])) is None:
+        raise DriverProtocolError("driver instruction run ID is invalid")
+    if headers["x-request-id"] != _REQUEST_ID:
+        raise DriverProtocolError("driver instruction request ID is invalid")
     if track != "credential_policy_baseline" and not _looks_like_compact_jws(
         str(headers[_SIGNED_INSTRUCTION_HEADER])
     ):
@@ -464,7 +627,7 @@ def _validate_transport_failure(value: dict[str, object]) -> None:
         type(number) is not int
         or number < 0
         or type(name) is not str
-        or errno_module.errorcode.get(number) != name
+        or LINUX_ERRNO_NAMES.get(number) != name
     ):
         raise DriverProtocolError("driver transport errno is invalid")
     connect = _require_monotonic(
