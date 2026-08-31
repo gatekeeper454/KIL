@@ -5922,3 +5922,71 @@ to show `request driver -> Envoy -> authorization -> target or withhold` with no
 host publication and explicit transport-witness scope.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-115 — 2026-08-31 — Exact driver evidence and private-public projection approved
+
+**Input:** Bind the three one-shot in-network driver results into the v2
+evidence bundle and derived presenter while preserving the frozen v1 evidence
+contract, secret boundaries, and the distinction between a transport witness
+and KIL enforcement.
+
+**Interpretation:** Every commanded track must publish its exact canonical
+driver-result bytes, and those bytes must be joined to the normalized request,
+driver definition, full container identity, track, Envoy, authorization,
+target, request ID, decision digest, commitment, checksums, manifest, and
+offline authority decision. A v1 bundle must reject driver-era files; a v2
+bundle must require all three results for acceptance. Private provisional
+evidence must remain contained even if directory entries are replaced during
+publication.
+
+**Decision status:** Confirmed Task 7 complete after final specification and
+quality approval. Commits `b0cb37e`, `8d38c5c`, `6d72875`, and `f167ea7` add
+the three exact `raw/drivers/<track>.json` files, explicit v1/v2 writer and
+verifier dispatch, deterministic nonpromotable failure reconstruction, public
+commitment and checksum bindings, and the v2 presenter statements:
+`request driver -> Envoy -> authorization -> target or withhold`, `No host
+publication`, `The driver is a laboratory transport witness, not KIL
+enforcement`, and `Evidence scope: local_envoy_boundary`.
+
+Review corrections closed a live `run()` to `collect()` handoff that omitted
+the required private driver sources, rejected dangling and pre-existing
+symlink ancestry, and replaced path-reopened private writes with a held
+`O_DIRECTORY | O_NOFOLLOW` descriptor transaction. Accepted, failure, and
+resumed publication now use descriptor-relative bounded reads, atomic writes,
+checksums, inventories, and final device/inode re-attestation for the `raw` and
+`drivers` directory-swap matrix. The independent reviewer also injected swaps
+during active writes; every case failed closed with zero outside writes.
+
+**Rationale:** The driver can support an authoritative laboratory claim only
+when its exact output is public, independently rehashed, and joined to the
+other enforcement evidence. The private-to-public projection is itself a
+security boundary, so validation that can be invalidated between checking and
+writing would undermine the evidence even when the final verifier later
+rejects it.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final implementation and independent re-reviews passed
+74 focused Task 7 tests, 210 local-Envoy tests, and the full 454-test
+non-runtime repository suite. Compilation, diff hygiene, CSP and secret scans,
+the accepted/failure/resume by raw/drivers swap matrix, and the frozen v1
+fixture and presenter bytes all passed. The worktree was clean. No Docker,
+Colima, network, or live laboratory runtime was invoked.
+
+**Unresolved questions:** Post-start driver state has not yet been made
+phase-aware for recovery and teardown. The request-free live gate, one central
+proof, future Kind/Calico V3B-2 validation, historical prevention, and
+production performance remain unexecuted and unclaimed.
+
+**Next gate:** Execute Task 8 test-first: accept only exact created drivers
+before start intent, never start or command a driver during recovery, require
+trusted terminal or exact stop/re-attestation before any Envoy stop, preserve
+the nine authoritative service sources, and prove all fifteen containers and
+six networks absent through durable exact-ID teardown.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

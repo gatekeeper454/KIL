@@ -640,7 +640,7 @@ git commit -m "Route V3B-1 requests through one-shot drivers"
 - Modify: `tools/v3b1_local_envoy.py`
 - Modify: `tests/test_v3b1_local_envoy.py`
 
-- [ ] **Step 1: Write RED bundle and compatibility tests**
+- [x] **Step 1: Write RED bundle and compatibility tests**
 
 Require exactly:
 
@@ -659,7 +659,7 @@ run, track, request ID, and decision digest.
 Require v1 bundles to reject driver files, v2 bundles to require them, and the
 frozen v1 fixture to retain its original HTML bytes and acceptance behavior.
 
-- [ ] **Step 2: Write RED presenter tests**
+- [x] **Step 2: Write RED presenter tests**
 
 The v2 presenter must visibly contain:
 
@@ -673,12 +673,12 @@ Evidence scope: local_envoy_boundary
 It must derive entirely from verified public records and keep the existing CSP,
 escaping, no-script, and no-external-asset rules.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run `EvidenceBundleTest` and presenter tests. Expect the old authoritative file
 set, v1-only validators, and old HTML model to fail.
 
-- [ ] **Step 4: Implement explicit v1/v2 writer and verifier dispatch**
+- [x] **Step 4: Implement explicit v1/v2 writer and verifier dispatch**
 
 Keep legacy expected file sets and validators separate. For v2, add the three
 driver files to authoritative names, public snapshot, artifact hashes,
@@ -686,7 +686,7 @@ commitment, checksums, manifest, and presenter derivation. Empty files are
 permitted only for uncommanded tracks in nonpromotable failure bundles; an
 accepted bundle requires all three exact results.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run all evidence/presenter tests, verify the frozen v1 fixture, compile, and
 check the diff.
