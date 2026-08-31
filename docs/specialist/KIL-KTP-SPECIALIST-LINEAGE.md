@@ -5847,3 +5847,78 @@ durable request intent, collect one closed result, abort later tracks after any
 post-intent failure, and never reconnect, restart, replace, or retry a driver.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-114 — 2026-08-31 — One-shot in-network request sequencing approved
+
+**Input:** Replace the remaining host-controller HTTP request path with the
+approved one-shot instruction/result exchange through the retained in-network
+drivers, while keeping the implementation static until later live gates.
+
+**Interpretation:** Aggregate driver readiness must precede every request.
+Signed state may be issued only afterward and immediately before its bound
+instruction. Durable request and instruction intent must precede the only stdin
+write. Every result, exit, persistence boundary, later-driver cancellation,
+and failure provenance must be terminal, secret-free, exact-ID-bound, and
+non-retryable.
+
+**Decision status:** Confirmed Task 6 complete after specification and quality
+approval. Commits `ac8568aa45dd3794e1be3f949393c45ed63e2656`,
+`935dbc86eedcdec755087dffa6e9e92e588f4948`,
+`5de1394c555152c9d8a990626e17fa75b6c472b0`, and
+`22ba6a3135e4ed7afb52a852fb8292868d6d6f45` remove the host gateway
+connection/reset/direct-request path and route the three fixed tracks through
+their retained attached drivers in order: credential baseline, signed state,
+and signed state plus local reduction.
+
+All three readiness records become durable before Q-state issuance. Per track,
+the controller persists request intent and instruction-write intent, writes one
+bounded canonical instruction, closes stdin, reads one bounded closed result,
+attests exact terminal output/exit, persists the private 0600 raw result,
+persists normalized request v2, and completes the request attempt. Bearer and
+Q-state values exist only in the bounded in-memory stdin payload after intent;
+they never enter commands, environment, mounts, stdout/stderr, journal, or
+public evidence.
+
+Review corrections introduced one outer session-ownership guard over all
+post-readiness setup and persistence; shared the robust readiness poison and
+cleanup core between diagnostic readiness and run; guarded real clock and
+persistence exceptions after the durable session boundary; restored equivalent
+driver-era coverage for relevant removed host tests; conservatively set
+post-intent sent provenance true; preserved exact protocol-owned Linux errno
+facts independent of macOS; bound raw result digest, driver definition, full
+ID, and track; classified real waits as `process_wait` and output/exit integrity
+as `termination`; and made later-driver cancellation use fresh bounded cleanup
+deadlines with ordered, consumed, durable outcomes.
+
+**Rationale:** Once instruction delivery begins, the system can no longer prove
+that zero bytes crossed the socket. Conservative sent provenance, one owner for
+all ready sessions, and exact terminal evidence prevent a partial attempt from
+being retried or presented as a clean comparison.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tools/v3b1_driver_transport.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final implementation sweep passed 112 focused request,
+readiness, journal, teardown, and driver tests plus 442 repository tests,
+compilation, diff hygiene, host-path absence, and secret-containment audits.
+Independent quality re-review passed 53 focused tests and the full suite with
+no remaining Critical or Important finding. No Docker, Colima, network, or
+live laboratory runtime was invoked.
+
+**Unresolved questions:** Exact driver result files remain private and are not
+yet incorporated into the public v2 bundle, commitment, offline verifier, or
+presenter. Broader post-request recovery/teardown hardening, documentation,
+implementation merge, request-free live gate, and one accepted proof remain.
+
+**Next gate:** Execute Task 7 test-first: publish exact canonical driver result
+files, bind their hashes and driver facts into request v2 and public commitment,
+dispatch v1/v2 verification without hybrid acceptance, and update the presenter
+to show `request driver -> Envoy -> authorization -> target or withhold` with no
+host publication and explicit transport-witness scope.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

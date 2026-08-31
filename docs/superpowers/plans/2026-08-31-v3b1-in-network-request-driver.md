@@ -570,7 +570,7 @@ git commit -m "Add V3B-1 in-network driver readiness"
 - Modify: `tools/v3b1_driver_transport.py`
 - Modify: `tests/test_v3b1_local_envoy.py`
 
-- [ ] **Step 1: Write RED sequencing tests**
+- [x] **Step 1: Write RED sequencing tests**
 
 Require this fixed ordering for each commanded track:
 
@@ -593,7 +593,7 @@ in-memory stdin payload after durable intent and never in commands, environment,
 mounts, stdout/stderr, journals, or evidence. Track order remains credential
 baseline, signed only, signed plus local reduction.
 
-- [ ] **Step 2: Write RED failure tests**
+- [x] **Step 2: Write RED failure tests**
 
 Test partial pipe write, broken stdin, invalid result, missing result, extra
 stdout, nonzero exit, timeout, and driver transport failure. Once any
@@ -602,12 +602,12 @@ instruction byte may have been written, provenance must say
 cancels every later driver, leaves later requests `not_attempted`, and enters
 teardown without restart, reconnect, replacement, or retry.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run `DriverRequestSequencingTest`; expect the old host `HTTPConnection` path and
 socket-specific helpers to violate the new assertions.
 
-- [ ] **Step 4: Implement one-shot instruction/result handling**
+- [x] **Step 4: Implement one-shot instruction/result handling**
 
 Remove `_connect_ready_gateways()`, `_reset_request_timeouts()`, and direct host
 `HTTPConnection.request()` use. Issue Q-state only after aggregate readiness and
@@ -620,7 +620,7 @@ Controller-only failure provenance uses closed stages
 `instruction_write|stdout_read|process_wait|termination`. It never stores raw
 exception text.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run driver sequencing, request journal, Q-state expiry, compilation, and diff
 checks.
