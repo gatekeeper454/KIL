@@ -903,6 +903,25 @@ def target_record(run_manifest, track, digest):
 
 
 class ControllerContractTest(unittest.TestCase):
+    def _make_inventory_controller(self, directory, runner):
+        root = Path(directory)
+        profile_path = root / "deploy/kind/v3b-profile.json"
+        profile_path.parent.mkdir(parents=True, exist_ok=True)
+        profile_path.write_bytes(
+            (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+        )
+        controller = LocalEnvoyController(
+            root,
+            runner,
+            home=root / "home",
+            port_probe=lambda port: False,
+            tool_verifier=lambda: {},
+        )
+        controller._prepare_private_roots()
+        self.assertTrue(controller.docker_config.is_dir())
+        self.assertEqual(list(controller.docker_config.iterdir()), [])
+        return controller
+
     def test_docker_inventory_commands_return_closed_full_identity_rows(self):
         first_name = "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa"
         network_name = "kil-v3b1-network-credential-policy-baseline-aaaaaaaaaaaa"
@@ -920,16 +939,10 @@ class ControllerContractTest(unittest.TestCase):
                 ),
             ]
         )
-        controller = LocalEnvoyController(
-            ROOT,
-            runner,
-            home=Path("/Users/lab"),
-            port_probe=lambda port: False,
-            tool_verifier=lambda: {},
-        )
-
-        containers = controller._docker_inventory("container")
-        networks = controller._docker_inventory("network")
+        with tempfile.TemporaryDirectory() as directory:
+            controller = self._make_inventory_controller(directory, runner)
+            containers = controller._docker_inventory("container")
+            networks = controller._docker_inventory("network")
 
         self.assertEqual(
             [(item.object_id, item.name) for item in containers.entries],
@@ -967,33 +980,30 @@ class ControllerContractTest(unittest.TestCase):
         self.assertNotIn("inspect", network_command)
 
     def test_docker_inventory_totalizes_parser_recursion_and_rejects_identity_drift(self):
-        controller = LocalEnvoyController(
-            ROOT,
-            FakeRunner([CommandResult(0, "", "")]),
-            home=Path("/Users/lab"),
-            port_probe=lambda port: False,
-            tool_verifier=lambda: {},
-        )
-        with mock.patch.object(
-            local_envoy_module,
-            "parse_inventory_rows",
-            side_effect=RecursionError("nested inventory"),
-        ):
-            with self.assertRaisesRegex(ControllerError, "inventory.*invalid"):
-                controller._docker_inventory("container")
+        with tempfile.TemporaryDirectory() as directory:
+            controller = self._make_inventory_controller(
+                directory, FakeRunner([CommandResult(0, "", "")])
+            )
+            with mock.patch.object(
+                local_envoy_module,
+                "parse_inventory_rows",
+                side_effect=RecursionError("nested inventory"),
+            ):
+                with self.assertRaisesRegex(ControllerError, "inventory.*invalid"):
+                    controller._docker_inventory("container")
 
-        expected = {HEX_A: "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa"}
-        for actual in (
-            {HEX_B: expected[HEX_A]},
-            {HEX_A: "kil-v3b1-envoy-credential-policy-baseline-aaaaaaaaaaaa"},
-            {HEX_A[:12]: expected[HEX_A]},
-            {**expected, HEX_B: "kil-v3b1-target-credential-policy-baseline-bbbbbbbbbbbb"},
-        ):
-            with self.subTest(actual=actual):
-                with self.assertRaisesRegex(ControllerError, "inventory"):
-                    controller._require_exact_inventory(
-                        "container", actual, expected
-                    )
+            expected = {HEX_A: "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa"}
+            for actual in (
+                {HEX_B: expected[HEX_A]},
+                {HEX_A: "kil-v3b1-envoy-credential-policy-baseline-aaaaaaaaaaaa"},
+                {HEX_A[:12]: expected[HEX_A]},
+                {**expected, HEX_B: "kil-v3b1-target-credential-policy-baseline-bbbbbbbbbbbb"},
+            ):
+                with self.subTest(actual=actual):
+                    with self.assertRaisesRegex(ControllerError, "inventory"):
+                        controller._require_exact_inventory(
+                            "container", actual, expected
+                        )
 
     def test_survivor_inventory_requires_exact_id_name_pairs_for_both_kinds(self):
         container = {
@@ -1010,29 +1020,27 @@ class ControllerContractTest(unittest.TestCase):
             "network_objects": [network],
         }
 
-        def controller_with(container_record):
-            return LocalEnvoyController(
-                ROOT,
-                FakeRunner(
-                    [
-                        CommandResult(
-                            0, canonical_json(container_record) + "\n", ""
-                        ),
-                        CommandResult(0, canonical_json(network) + "\n", ""),
-                    ]
-                ),
-                home=Path("/Users/lab"),
-                port_probe=lambda port: False,
-                tool_verifier=lambda: {},
-            )
+        with tempfile.TemporaryDirectory() as directory:
+            def controller_with(container_record):
+                return self._make_inventory_controller(
+                    directory,
+                    FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(container_record) + "\n", ""
+                            ),
+                            CommandResult(0, canonical_json(network) + "\n", ""),
+                        ]
+                    ),
+                )
 
-        controller_with(container)._assert_only_recorded_managed(
-            state, expect_present=True
-        )
-        with self.assertRaisesRegex(ControllerError, "inventory.*ownership"):
-            controller_with(
-                {"id": HEX_C, "name": container["name"]}
-            )._assert_only_recorded_managed(state, expect_present=True)
+            controller_with(container)._assert_only_recorded_managed(
+                state, expect_present=True
+            )
+            with self.assertRaisesRegex(ControllerError, "inventory.*ownership"):
+                controller_with(
+                    {"id": HEX_C, "name": container["name"]}
+                )._assert_only_recorded_managed(state, expect_present=True)
 
     def test_validator_lifecycle_persists_id_waits_and_attests_without_auto_remove(self):
         with tempfile.TemporaryDirectory() as directory:

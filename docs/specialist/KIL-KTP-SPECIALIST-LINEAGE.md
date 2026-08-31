@@ -4721,3 +4721,49 @@ zero-request smoke. A central request remains prohibited until that smoke and
 its exact teardown/failure-bundle evidence pass review.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-094 — 2026-08-30 — V3B-1 inventory contract tests become CI-hermetic
+
+**Input:** Correct the two failed public PR #5 CI runs without weakening the
+production Docker-isolation contract. Three inventory-focused controller tests
+passed locally only because the ignored repository directory
+`.tools/v3b1-docker-config` already existed and was empty; a fresh CI checkout
+correctly lacked it, so `_execute` failed before the injected `FakeRunner`.
+
+**Interpretation:** These tests exercise Docker command construction, inventory
+parser totality, and exact survivor ownership. Their fixture must establish the
+same precondition required in production—an explicitly prepared, contained,
+exactly empty Docker configuration directory—rather than depending on ambient
+ignored repository state. The `_execute` isolation guard is correct and must
+remain unchanged.
+
+**Decision status:** Confirmed test-only hermetic correction complete. A shared
+`ControllerContractTest` helper now creates a fresh temporary repository root,
+copies the closed V3B profile, constructs the controller with an isolated home,
+calls `_prepare_private_roots()`, and asserts the Docker configuration directory
+is present and exactly empty. The three affected tests use that helper and
+retain their original command, parser, and ownership assertions. The failure
+was reproduced against a fresh temporary root before the correction and the
+same isolated reproduction passes afterward.
+
+**Rationale:** A fake command runner does not waive controller preconditions.
+Provisioning the production isolation boundary inside the test fixture removes
+the clean-checkout dependency while continuing to prove that Docker execution
+cannot proceed with a missing or nonempty configuration root.
+
+**Affected artifacts:**
+
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The two failures were public CI test runs, not live
+KIL demonstrations. No Docker, Colima, browser, KIL, authorization, Envoy,
+target, or central-request operation occurred. The controller remains at 174
+tests and the repository at 389 tests, so `docs/lab/V3-PROGRESS.md` requires no
+count update. No V3B-1 run is accepted, promoted, or validated by this change.
+
+**Next gate:** Commit the test-only correction, rerun the public PR checks, and
+retain the prohibition on a central request until the committed zero-request
+smoke passes with exact teardown and failure-bundle evidence.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
