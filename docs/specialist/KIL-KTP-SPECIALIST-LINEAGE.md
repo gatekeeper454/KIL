@@ -5547,3 +5547,37 @@ separate affiliation line remain optional publication decisions.
 and immutable image binding before advancing to topology schemas.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-109 — 2026-08-31 — Publication role refined from founder to creator
+
+**Input:** A second concurrent founder-owned byline refinement changed the role
+label from `Author and founder` to `Author and Creator` while retaining `Mike
+Storm, Distinguished Engineer`.
+
+**Interpretation:** `Creator` is the currently preferred publication role for
+Kinetic Infrastructure. The exact user-owned Markdown wording is preserved;
+the prior T-107 and T-108 entries remain as historical lineage and are not
+silently rewritten.
+
+**Decision status:** Confirmed latest byline preserved as `Author and Creator`
+with the name and title `Mike Storm, Distinguished Engineer`. This metadata
+change does not alter KIL architecture, protocol alignment, validation status,
+or evidence claims.
+
+**Rationale:** Authorship terminology is a founder-controlled publication
+decision. Preserving the latest explicit edit avoids substituting an inferred
+role while the technical implementation continues independently.
+
+**Affected artifacts:**
+
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Final typography may later add punctuation or place
+the professional title on a separate line; affiliation, contact address, and
+ORCID remain optional publication decisions.
+
+**Next gate:** Complete Task 2 specification and quality review, then record
+the executable-driver checkpoint before advancing to topology schemas.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
