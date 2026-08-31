@@ -7205,3 +7205,63 @@ then create the test-first implementation plan. Do not implement the page or
 run the central V3B-1 request before the applicable gates pass.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-135 — 2026-08-31 — KIL/KTP front matter added to demo design
+
+**Input:** Before the approved eight-scene incident story, introduce the
+audience to KIL, how and why it works, its relationship to KTP, and its
+relevance as ambient enforcement against ambient breach. The founder supplied
+fourteen additional graphics as possible visual direction.
+
+**Interpretation:** Restructure the demonstration into two acts: a four-part
+KIL primer followed by the eight-scene Hugging Face case study. Use the supplied
+graphics for explanatory composition, not as evidence or unmodified production
+assets. Recreate useful concepts in responsive HTML/SVG while reconciling every
+claim with the unified paper, canonical scenario, and current laboratory state.
+
+**Decision status:** Written design revised and pending renewed founder review.
+The primer now covers: ambient breach versus credential/policy checkpoints;
+KIL's ambient-enforcement reframe; KIL as a proposed KTP extension consuming
+signed, short-lived composite state under a non-expansion invariant; and the
+slow-gain, passive-decay, fast-loss, class-bound trust model. The eight-scene
+case study remains intact as Act II.
+
+**Rationale:** An audience cannot interpret the counterfactual incident cutoff
+without first understanding the authority model and the KTP/KIL boundary. The
+graphic audit prevents persuasive imagery from silently promoting modeled or
+future behavior into measured fact.
+
+**Claim corrections recorded:**
+
+- describe the comparison as a credential/policy checkpoint pattern rather
+  than claiming all zero-trust architectures are one-time or application-only;
+- use the weighted diagonal standardized distance from the paper, not a full
+  Mahalanobis claim;
+- replace microsecond, throughput, fabricated telemetry, hash, and
+  pseudo-measurement claims with unmeasured fast-path language;
+- preserve KTP veto and environmental authority and allow local evidence only
+  to reduce or withhold;
+- use modeled Phase 1 divergence `0.95` and Phase 4 divergence `0.90` from the
+  canonical scenario;
+- replace `bypass`, `irreversible`, `killed`, `for free`, absolute prevention,
+  and validated zero-byte claims with bounded, dependency-aware language; and
+- distinguish V3A modeled process evidence, pending V3B-1 local Envoy, and
+  future V3B-2 Kind/Calico rather than depicting current V3 as validated live
+  Kubernetes.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-08-31-kil-incident-presenter-audience-demo-design.md`
+- fourteen founder-supplied graphic references used for design review
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Founder approval of the revised two-act written
+design remains required before the test-first implementation plan. The V3B-1
+foreign-resource snapshot design remains a separate approval dependency, and
+the central laboratory request remains prohibited.
+
+**Next gate:** Founder reviews and approves the revised primer-plus-case-study
+design; then create the test-first implementation plan and implement the
+tracked presenter/audience page without altering laboratory evidence status.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

@@ -1,4 +1,4 @@
-# KIL Incident Presenter/Audience Demo Design
+# KIL Presenter/Audience Demo Design: Primer and Incident Case Study
 
 ## 1. Decision and scope
 
@@ -10,9 +10,14 @@ synchronized views:
 - **Audience mode** follows the presenter automatically and shows only the
   current story graphic, concise labels, evidence status, and takeaway.
 
-The principal visual is an animated branching topological timeline. Its upper
-lane reconstructs the disclosed incident path. Its lower lane shows a
-counterfactual KIL path terminating at the first mediated Kubernetes
+The demonstration has two acts. A four-part front matter introduces the
+ambient-breach problem, defines KIL, establishes its extension relationship to
+KTP, and explains why class-bound authority can decay and be reduced at an
+infrastructure boundary. The approved eight-scene incident story follows.
+
+The principal case-study visual is an animated branching topological timeline.
+Its upper lane reconstructs the disclosed incident path. Its lower lane shows
+a counterfactual KIL path terminating at the first mediated Kubernetes
 control-plane request. A persistent system topology changes with the selected
 scene so every event remains grounded in the affected component. Later scenes
 transform that incident boundary into the three-track V3 laboratory topology.
@@ -25,22 +30,37 @@ V3B-1 central run.
 ## 2. Communication objective
 
 The demonstration must let a mixed executive and technical audience answer
-four questions without reading a paper:
+seven questions without reading a paper:
 
-1. What happened in the disclosed intrusion?
-2. Why did possession of valid credentials allow the incident to expand?
-3. At which enforceable boundary could KIL conditionally change the outcome?
-4. What does the local laboratory reproduce, and what remains modeled or
+1. Why do ambient breach and agent-speed action exceed a checkpoint-only
+   defensive model?
+2. What is the Kinetic Infrastructure Layer?
+3. How does KIL extend KTP rather than replace or override it?
+4. Why can trajectory-derived, class-bound, expiring authority change the
+   enforcement result?
+5. What happened in the disclosed intrusion?
+6. At which enforceable boundary could KIL conditionally change the outcome?
+7. What does the local laboratory reproduce, and what remains modeled or
    pending?
 
-The page should tell this story in approximately five minutes. It must remain
-useful as a self-guided audience walkthrough when no presenter view is attached.
+The default presenter path should take approximately eight minutes. It must
+remain useful as a self-guided audience walkthrough when no presenter view is
+attached. A presenter may skip the front matter for an audience already
+familiar with KIL, but the case-study act always retains its evidence labels.
 
 ## 3. Evidence language
 
-Every scene carries exactly one prominent claim-status label and may include a
-secondary boundary note:
+Every prelude and case-study scene carries exactly one prominent claim-status
+label and may include a secondary boundary note:
 
+- **KTP source:** a construct grounded in the cited KTP v2.0.0 release,
+  enterprise architecture, or Constitution.
+- **Proposed KIL thesis:** the project's motivating interpretation of ambient
+  breach and ambient enforcement, presented as a design thesis rather than an
+  empirical result.
+- **Proposed KIL extension:** a KIL-specific architecture, consumption profile,
+  or governance proposal that is not represented as existing KTP v2.0.0
+  normative behavior.
 - **Observed incident:** a fact summarized from Hugging Face's public technical
   timeline. This does not imply access to raw incident telemetry.
 - **Modeled counterfactual:** a KIL input or result produced from synthetic,
@@ -61,10 +81,124 @@ evidence supports the exact claim. The primary counterfactual uses:
 Downstream phases made unreachable by an upstream deny are not counted as
 separate detections or preventions.
 
-## 4. Story architecture
+## 4. Two-act story architecture
 
-The page uses eight scenes. One scene button, previous/next controls, and the
-presenter keyboard controls all update the same scene state.
+The page uses a four-part KIL primer followed by the approved eight-scene case
+study. One scene button, previous/next controls, and the presenter keyboard
+controls all update the same state. The control surface visibly separates
+`KIL primer` from `Hugging Face case study`; it does not flatten the material
+into an undifferentiated twelve-step list.
+
+### 4.1 Act I — KIL front matter
+
+| Prelude | Visible title | Claim status | Principal visual | Story purpose |
+|---:|---|---|---|---|
+| P1 | Ambient breach requires ambient enforcement | Proposed KIL thesis | Credential checkpoint passing an authentic request while machine-speed behavior branches beyond it | Establish that cryptographic validity and policy allowance do not establish behavioral legitimacy. |
+| P2 | KIL turns authorization into a property of motion | Proposed KIL extension | Focused comparison of credential/policy checkpoints and KIL ambient enforcement | Define KIL, the question it asks, and infrastructure-level consumption of live authority. |
+| P3 | KIL is a proposed extension of KTP | KTP source; secondary: proposed KIL extension | Hybrid two-timescale architecture | Show authoritative KTP-derived signed state feeding a faster reducing-only enforcement loop. |
+| P4 | Why kinetic authority works | Proposed KIL extension; secondary: modeled parameters | One animated charge trajectory with class isolation and declared-change callouts | Explain slow replenishment, passive decay, rapid loss, per-class history, coupling, and fail-constrained change. |
+
+#### P1 — Ambient breach requires ambient enforcement
+
+The visual adapts the supplied `valid credentials hide novel behavior` graphic.
+It shows an authentic credential and allowed action crossing a conventional
+credential/policy checkpoint while the resulting machine-speed behavior fans
+into novel actions. The graphic asks two different questions:
+
+```text
+Checkpoint: Is the credential authentic and is this operation allowed?
+KIL: Does this identity's current trajectory carry enough fresh,
+class-bound authority for this action now?
+```
+
+The page must not describe zero trust generally as only an application-layer or
+one-time check. It identifies the narrower structural problem as a
+`credential/policy checkpoint pattern` and presents KIL as a proposed evolution
+of continuous enforcement into the infrastructure substrate.
+
+No invented operation rate, MITRE technique, token identifier, or anomaly trace
+from the reference graphic is retained. The takeaway is: `Valid math can
+authenticate a credential without legitimizing the behavior performed with it.`
+
+#### P2 — KIL turns authorization into a property of motion
+
+The visual adapts the supplied classic-versus-ambient comparison into four
+claim-safe rows:
+
+| Dimension | Credential/policy checkpoint pattern | KIL ambient enforcement |
+|---|---|---|
+| Primary question | Is this credential authentic and is the action allowed? | Does fresh, class-bound authority remain sufficient for this action now? |
+| Authority | Often represented by a credential, policy result, and expiry window | Consumes signed, short-lived composite KTP state and may apply reducing-only local evidence |
+| Enforcement | A decision point beside or ahead of the consequential path | A mediated infrastructure boundary that can forward, constrain, or withhold |
+| Time behavior | Authority may remain usable until policy, revocation, or expiry changes | State expires, charge decays, and high divergence can reduce effective authority before the next refresh |
+
+This is an architectural comparison, not a claim that all existing zero-trust
+systems share one implementation. The audience takeaway defines ambient
+enforcement as pervasive, continuous consumption of fresh authority at the
+boundary where actions become consequences.
+
+#### P3 — KIL is a proposed extension of KTP
+
+The visual uses the hybrid two-timescale architecture already integrated into
+the KIL paper:
+
+```text
+Authoritative loop — KTP-derived, slower
+  trajectory + standing + environment + constraints
+  -> derive and sign short-lived Q_i,c
+  -> only this loop may expose increased composite authority
+
+Fast enforcement loop — KIL consumption profile
+  request + authentic/fresh Q_i,c + veto/environment checks
+  + optional fresh local reduction
+  -> permit | constrain | deny | indeterminate
+```
+
+The page states that KIL is a proposed KTP extension profile, initially scoped
+against KTP v2.0.0 and potentially expressible through a future 2.1 or 3.0
+governance path. Existing KTP constructs remain authoritative. KIL adds the
+composition, binding, freshness, reducing-only consumption, and decision-record
+requirements needed at infrastructure enforcement points.
+
+The audience view includes a concise source footer linking the KTP v2.0.0
+release, Enterprise architecture, Constitution, and canonical `CITATION.cff`.
+The presenter view carries the fuller boundary note distinguishing KTP source
+constructs from proposed KIL behavior.
+
+The non-expansion invariant is always visible:
+
+```text
+KIL_effective_authority <= KTP_authorized_authority
+```
+
+The visual must say `fast enforcement path`, not `microsecond enforcement`,
+until measured evidence supports a latency claim.
+
+#### P4 — Why kinetic authority works
+
+The visual synthesizes the supplied trust-decay graphics into one readable
+trajectory rather than four permanent panels. It steps through:
+
+1. **Earn slowly:** confirmed low-divergence behavior can contribute only to a
+   later authentic signed state; an action never earns authority for itself.
+2. **Remain class-bound:** assigned-data read history does not subsidize a
+   first cluster-admin, token-minting, or external-egress action.
+3. **Decay passively:** silence does not preserve standing authority
+   indefinitely; charge and signed state age.
+4. **Lose quickly:** superlinear modeled loss can clamp effective authority for
+   the requested class after high divergence.
+5. **Couple carefully:** a versioned directed graph may reduce related
+   higher-consequence classes; coupling coefficients remain modeled.
+6. **Handle legitimate change:** an auditable declared-change envelope widens
+   only a bounded expected range and cannot override a KTP veto or expand an
+   undeclared authority class.
+
+The reference graphics' `bypass`, `instant irreversible`, `threat detected`,
+and universal-physics wording is rejected. Initial weights, thresholds, decay
+constants, loss rates, exponents, and coupling coefficients remain modeled
+parameters subject to sensitivity testing.
+
+### 4.2 Act II — eight-scene Hugging Face case study
 
 | Scene | Visible title | Evidence status | Story purpose |
 |---:|---|---|---|
@@ -72,10 +206,47 @@ presenter keyboard controls all update the same scene state.
 | 2 | A trusted worker becomes the foothold | Observed incident | Show the renderer-to-worker transition without claiming the current transport lab sees the local read. |
 | 3 | The first mediated divergence | Modeled counterfactual | Contrast the observed cluster/API path with KIL withholding the first privileged egress. |
 | 4 | One credential path becomes a cascade | Observed incident | Animate node privilege, bulk secret access, cross-cluster administration, mesh enrollment, forged tokens, and CI targeting. |
-| 5 | KIL changes authority in motion | Modeled counterfactual | Explain signed composite KTP state, local kinetic reduction, class-bound charge, freshness, and non-expansion. |
+| 5 | KIL changes authority in motion | Modeled counterfactual | Apply the primer's signed state, local reduction, class charge, freshness, and non-expansion concepts to the incident. |
 | 6 | The incident boundary becomes a lab boundary | Modeled lab mapping | Map incident components to request driver, Envoy, authorization service, and harmless target. |
 | 7 | Same request, three enforcement tracks | Modeled V3A + pending V3B-1 | Show baseline permit, signed-state permit, and signed-plus-local-reduction deny. |
 | 8 | What is evidence today? | Observed, modeled, pending | Close with provenance, accepted-claim rules, and the current live gate. |
+
+### 4.3 Transition into the case study
+
+After P4 the interface displays a clear act transition:
+
+> The July 2026 Hugging Face disclosure now gives us a source-cited sequence
+> against which to ask a counterfactual question: where would the modeled KIL
+> boundary first withhold authority, and what dependent actions would then be
+> unreachable?
+
+The transition adapts the supplied escalating-blast-radius graphic but does not
+call the incident a `classic zero trust failure`, claim that every credential
+was `perfectly valid`, or describe modeled cutoffs as observed physical facts.
+
+### 4.4 Supplied graphic selection and corrections
+
+The supplied graphics are design references, not evidence artifacts. The
+implementation recreates their useful explanatory structures in responsive
+HTML/SVG and applies these rules:
+
+| Reference concept | Demo use | Required correction |
+|---|---|---|
+| Valid credential crossing a checkpoint while behavior branches | P1 | Remove invented operations-per-second, technique IDs, token IDs, and synthetic traces. |
+| Checkpoint pattern versus ambient enforcement | P2 | Avoid claiming all zero-trust architectures are static, one-time, or application-only. |
+| Hybrid two-timescale loop | P3 and case-study Scene 5 | Preserve KTP authority, `Q_i,c`, expiry, and reducing-only local overlay; remove unmeasured `microsecond` language. |
+| Earn slowly, decay passively, lose quickly, isolate classes | P4 | Use the paper's weighted diagonal standardized distance, not a full Mahalanobis claim; remove `irreversible` and `bypass` language. |
+| Escalating incident blast radius | Transition and Scene 4 | Use the canonical source-cited dependency graph; do not label the whole incident a generic zero-trust failure. |
+| Phase 1 transport cutoff | Scene 3 | Label `d_t = 0.95` and the deny modeled; state that descendants are conditionally unreachable. |
+| Phase 4 bulk secret read | Scene 4 | Use canonical modeled divergence `0.90`, not `>0.99`; do not claim measured microsecond latency or validated zero-byte exfiltration. |
+| Correctly signed forged token | Scene 4 | State that signature validity is necessary but insufficient under the model; avoid the absolute slogan that trajectory always survives key theft. |
+| Single cutoff and downstream defense | Scene 4 | Replace `for free`, `killed`, and separate-prevention counts with dependency-aware reachability language. |
+| Validation ladder | Scenes 7–8 | Show V1 deterministic, V2 modeled historical replay, V3A modeled process contract, pending V3B-1 local Envoy, future V3B-2 Kind/Calico, and V4 publication; do not depict current V3B-1 as a live Kubernetes result. |
+
+Decorative ruler marks, fake telemetry windows, fabricated hashes, timestamps,
+and pseudo-measurement readouts are omitted. The engineering-drawing aesthetic
+may be retained through restrained grid, boundary, lane, and annotation motifs
+that do not imply measurement.
 
 ## 5. Primary branching timeline
 
@@ -117,9 +288,10 @@ The production graphic must:
 
 ### 5.3 Scene transitions
 
-The first render is static and complete. Scene changes animate only the path,
-node emphasis, authority-charge indicator, and reachability state. Motion never
-loops and is disabled when `prefers-reduced-motion` is active.
+When the case-study act begins, its first render is static and complete. Scene
+changes animate only the path, node emphasis, authority-charge indicator, and
+reachability state. Motion never loops and is disabled when
+`prefers-reduced-motion` is active.
 
 ## 6. Persistent incident topology
 
@@ -153,7 +325,8 @@ Envoy laboratory can block that local read.
 
 ## 7. Incident-to-lab mapping
 
-Scene 6 transforms the topology without changing the narrative meaning:
+Case-study Scene 6 transforms the topology without changing the narrative
+meaning:
 
 | Incident role | Lab representation | Meaning preserved |
 |---|---|---|
@@ -170,7 +343,7 @@ historical intrusion or production Kubernetes estate.
 
 ## 8. Three-track comparison
 
-Scene 7 displays the same normalized action across:
+Case-study Scene 7 displays the same normalized action across:
 
 1. credential-policy baseline;
 2. signed composite KTP state only; and
@@ -212,7 +385,7 @@ Audience mode contains:
 - the primary graphic and persistent topology;
 - one concise takeaway;
 - the claim-status label; and
-- progress such as `3 of 8`.
+- act-aware progress such as `Primer P3 of P4` or `Case study 3 of 8`.
 
 It hides presenter scripts, source notes, synchronization diagnostics, and
 editing controls. It remains self-guided if no presenter is connected: scene
@@ -266,22 +439,35 @@ cross-window synchronization is not claimed for opaque `file:` origins.
 ## 10. Talk-track contract
 
 Each script is 70–90 spoken words, uses plain language, and ends with a
-claim-boundary sentence. The implementation source stores each scene's title,
-takeaway, script, status, topology state, and source reference in one immutable
-scene object so visual and spoken claims cannot drift independently.
+claim-boundary sentence. The implementation source stores each prelude or
+case-study scene's act, title, takeaway, script, status, topology state, and
+source reference in one immutable scene object so visual and spoken claims
+cannot drift independently.
 
-The narrative anchors are:
+The primer anchors are:
 
-1. **Ambient breach:** valid credentials are moving at agent speed, so delayed
-   detection cannot be the sole control.
+1. **Ambient breach:** explain why cryptographic validity and policy allowance
+   do not establish behavioral legitimacy at agent speed.
+2. **KIL definition:** define ambient enforcement as continuous consumption of
+   fresh authority at the infrastructure boundary where action becomes
+   consequence.
+3. **KTP relationship:** explain that KTP remains authoritative while KIL adds
+   a proposed signed-state consumption and reducing-only enforcement profile.
+4. **Why it works:** explain slow replenishment, passive decay, rapid modeled
+   loss, class isolation, coupling, and bounded declared change.
+
+The case-study anchors are:
+
+1. **Ambient breach in the incident:** connect valid credential use at agent
+   speed to the disclosed sequence without generalizing beyond the source.
 2. **Foothold:** distinguish the disclosed application compromise from the
    transport boundary tested by the lab.
 3. **First divergence:** explain that `0.95` is modeled and that the deny is a
    conditional counterfactual.
 4. **Cascade:** show how privilege and a high-value secret read create several
    dependent branches.
-5. **KIL mechanics:** explain signed, short-lived composite KTP state and
-   reduction-only local enforcement.
+5. **KIL mechanics applied:** explain signed, short-lived composite KTP state
+   and reduction-only local enforcement in this scenario.
 6. **Lab mapping:** show that harmless components preserve the authorization
    question without recreating the breach.
 7. **Three tracks:** explain what differs between the tracks and why the third
@@ -294,9 +480,9 @@ The narrative anchors are:
 The implementation will move the durable source into the repository rather
 than treating the thread visualization directory as the only editable copy:
 
-- tracked source: `docs/demo/kil-incident-presenter-audience.html`;
+- tracked source: `docs/demo/kil-presenter-audience-demo.html`;
 - ignored standalone export:
-  `artifacts/generated/kil-incident-presenter-audience.html`; and
+  `artifacts/generated/kil-presenter-audience-demo.html`; and
 - optional thread visualization copy for inline inspection.
 
 The tracked file is self-contained, uses no remote data, and can be served by a
@@ -325,23 +511,28 @@ lab evidence.
 Implementation follows a test-first plan. At minimum, automated or browser
 checks must prove:
 
-1. every scene ID has a title, 70–90-word script, takeaway, claim status,
-   topology state, and source boundary;
-2. all eight controls select the correct scene;
-3. previous/next and keyboard navigation respect the scene bounds;
+1. every prelude and case-study ID has an act, title, 70–90-word script,
+   takeaway, claim status, visual state, and source boundary;
+2. all four primer controls and all eight case-study controls select the correct
+   state without collapsing the two acts into one unlabeled sequence;
+3. previous/next and keyboard navigation respect act and scene bounds;
 4. Presenter mode shows notes and Audience mode omits them;
 5. two same-origin pages synchronize a scene change, recover across a presenter
    reload, and reject stale, wrong-session, or unknown-type messages;
-6. the first-divergence scene labels `d_t = 0.95` modeled and does not use the
+6. the KTP-extension prelude displays the non-expansion invariant and labels
+   KIL-specific behavior proposed;
+7. the first-divergence scene labels `d_t = 0.95` modeled and does not use the
    prohibited absolute claim language;
-7. phases 2–8 become conditionally unreachable only in the counterfactual
+8. phases 2–8 become conditionally unreachable only in the counterfactual
    state;
-8. incident-to-lab mappings are complete and the non-expansion invariant is
+9. incident-to-lab mappings are complete and the non-expansion invariant is
    visible;
-9. V3A and V3B-1 statuses remain correctly separated;
-10. the page has no console error, undefined identifier, missing queried
+10. V3A, V3B-1, and future V3B-2 statuses remain correctly separated;
+11. no visual contains invented latency, throughput, telemetry, hash, anomaly,
+    validation, or production-Kubernetes claims;
+12. the page has no console error, undefined identifier, missing queried
     element, or external data request; and
-11. layouts are visually checked at 736 and 360 pixels in light and dark themes.
+13. layouts are visually checked at 736 and 360 pixels in light and dark themes.
 
 The generated export must be compared against the tracked source and opened on
 the localhost demonstration surface before handoff.
@@ -389,7 +580,10 @@ not connected.
 The founder has approved the incident-centered direction, synchronized
 Presenter/Audience model, branching visual grammar, 30–45-second scripts, and
 the first mediated privileged egress as the principal KIL counterfactual
-cutoff.
+cutoff. Founder review then added a four-part front matter covering ambient
+breach, KIL, the KTP extension boundary, and the trust-decay mechanism. This
+revision incorporates that direction and requires renewed written-design
+approval before implementation.
 
 This written specification requires founder review before implementation. After
 approval, the next gate is a test-first implementation plan. The V3B-1 foreign
