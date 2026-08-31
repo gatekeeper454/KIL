@@ -3538,193 +3538,21 @@ class _RunClock:
         self.now_ns += nanoseconds
 
 
-class _FailingRunClock(_RunClock):
-    def __init__(self, fail_call: int) -> None:
-        super().__init__()
-        self.fail_call = fail_call
-        self.calls = 0
-
-    def monotonic_ns(self) -> int:
-        self.calls += 1
-        if self.calls == self.fail_call:
-            raise ControllerError("injected monotonic bookkeeping failure")
-        return super().monotonic_ns()
-
-
-class _RunResponse:
-    def __init__(self, connection, behavior) -> None:
-        self.connection = connection
-        self.behavior = behavior
-        self.status = behavior["status"]
-
-    def read(self, size: int) -> bytes:
-        self.connection.events.append(("read", self.connection.port, size))
-        error = self.behavior.get("body_error")
-        if error is not None:
-            raise error
-        return b""
-
-    def getheader(self, name: str):
-        if name.lower() == "x-kil-decision-digest":
-            return self.behavior["digest"]
-        return None
-
-
-class _RunSocket:
-    def __init__(self, behavior, events, port) -> None:
-        self.behavior = behavior
-        self.events = events
-        self.port = port
-        self.timeouts = []
-
-    def settimeout(self, timeout) -> None:
-        self.events.append(("socket_timeout", self.port, timeout))
-        self.timeouts.append(timeout)
-        error = self.behavior.get("socket_timeout_error")
-        if error is not None:
-            raise error
-
-
-class _RunConnection:
-    def __init__(
-        self,
-        *,
-        host,
-        port,
-        timeout,
-        behavior,
-        events,
-        journal_path,
-        request_path,
-        clock,
-    ) -> None:
-        self.host = host
-        self.port = port
-        self.timeout = timeout
-        self.behavior = behavior
-        self.events = events
-        self.journal_path = journal_path
-        self.request_path = request_path
-        self.clock = clock
-        self.connected = False
-        self.closed = False
-        self.request_count = 0
-        self.sock = None
-        self.socket_object = None
-
-    def _request_states(self):
-        return {
-            key: value["status"]
-            for key, value in load_lifecycle_journal(self.journal_path)[
-                "requests"
-            ].items()
-        }
-
-    def connect(self) -> None:
-        self.events.append(
-            (
-                "connect",
-                self.port,
-                self.timeout,
-                self._request_states(),
-                self.request_path.exists(),
-            )
-        )
-        self.clock.advance(int(self.behavior.get("connect_advance_ns", 0)))
-        error = self.behavior.get("connect_error")
-        if error is not None:
-            raise error
-        self.connected = True
-        if self.behavior.get("socket_timeout_unsupported"):
-            self.sock = object()
-        else:
-            self.socket_object = _RunSocket(
-                self.behavior, self.events, self.port
-            )
-            self.sock = self.socket_object
-
-    def request(self, method, path, *, body, headers) -> None:
-        if not self.connected:
-            raise AssertionError("request occurred before explicit TCP readiness")
-        self.request_count += 1
-        self.events.append(
-            (
-                "request",
-                self.port,
-                method,
-                path,
-                dict(headers),
-                self._request_states(),
-            )
-        )
-        error = self.behavior.get("request_error")
-        if error is not None:
-            raise error
-
-    def getresponse(self):
-        self.events.append(("response_headers", self.port))
-        error = self.behavior.get("headers_error")
-        if error is not None:
-            raise error
-        return _RunResponse(self, self.behavior)
-
-    def close(self) -> None:
-        if self.closed:
-            return
-        self.events.append(("close", self.port))
-        error = self.behavior.get("close_error")
-        if error is not None and self.behavior.get("close_error_leaves_open"):
-            raise error
-        if self.behavior.get("close_unconfirmed"):
-            return
-        self.closed = True
-        self.sock = None
-        if error is not None:
-            raise error
-
-
-class _RunConnectionFactory:
-    RESPONSE = {
-        18080: (200, "1" * 64),
-        18081: (200, "2" * 64),
-        18082: (403, "3" * 64),
-    }
-
-    def __init__(self, behaviors, *, events, journal_path, request_path, clock):
-        self.behaviors = list(behaviors)
-        self.events = events
-        self.journal_path = journal_path
-        self.request_path = request_path
-        self.clock = clock
-        self.connections = []
-
-    def __call__(self, host, port, *, timeout):
-        if not self.behaviors:
-            raise AssertionError("unexpected HTTP connection construction")
-        behavior = dict(self.behaviors.pop(0))
-        status, digest = self.RESPONSE[port]
-        behavior.setdefault("status", status)
-        behavior.setdefault("digest", digest)
-        self.events.append(("factory", host, port, timeout))
-        connection = _RunConnection(
-            host=host,
-            port=port,
-            timeout=timeout,
-            behavior=behavior,
-            events=self.events,
-            journal_path=self.journal_path,
-            request_path=self.request_path,
-            clock=self.clock,
-        )
-        self.connections.append(connection)
-        return connection
-
-
 class _DriverInput(io.BytesIO):
     def __init__(self, owner, events):
         super().__init__()
         self.owner = owner
         self.events = events
+
+    def write(self, payload):
+        self.events.append(("stdin_write", self.owner.full_id, bytes(payload)))
+        if self.owner.write_error is not None:
+            raise self.owner.write_error
+        if self.owner.partial_write is not None:
+            count = min(self.owner.partial_write, len(payload))
+            super().write(payload[:count])
+            return count
+        return super().write(payload)
 
     def close(self):
         if not self.closed:
@@ -3798,6 +3626,8 @@ class _DriverProcess:
         blocking_stdout=False,
         terminate_exits=True,
         stdout_close_error=False,
+        write_error=None,
+        partial_write=None,
     ):
         self.full_id = full_id
         self.events = events
@@ -3805,6 +3635,8 @@ class _DriverProcess:
         self.wait_error = wait_error
         self.terminate_exits = terminate_exits
         self.stdout_close_error = stdout_close_error
+        self.write_error = write_error
+        self.partial_write = partial_write
         self.exited = False
         self.terminated = False
         self.killed = False
@@ -4732,14 +4564,54 @@ class DriverReadinessTest(unittest.TestCase):
                 )
 
 
-class GatewayReadinessTest(unittest.TestCase):
-    def make_controller(self, directory, behaviors):
+class DriverRequestSequencingTest(unittest.TestCase):
+    @staticmethod
+    def success_result(track):
+        status = 403 if track is LiveTrack.SIGNED_PLUS_LOCAL_REDUCE else 200
+        digest = {
+            LiveTrack.CREDENTIAL_POLICY_BASELINE: "1" * 64,
+            LiveTrack.SIGNED_STATE_ONLY: "2" * 64,
+            LiveTrack.SIGNED_PLUS_LOCAL_REDUCE: "3" * 64,
+        }[track]
+        return {
+            "attempt_count": 1,
+            "connect_monotonic_ns": 10,
+            "decision_digest": digest,
+            "receive_monotonic_ns": 30,
+            "response_status": status,
+            "retry_performed": False,
+            "schema_version": "kil.v3b1-driver-result.v1",
+            "send_monotonic_ns": 20,
+            "status": "complete",
+            "track": track.value,
+        }
+
+    @staticmethod
+    def transport_failure(track):
+        return {
+            "attempt_count": 1,
+            "connect_monotonic_ns": 10,
+            "errno": 104,
+            "errno_name": "ECONNRESET",
+            "exception_class": "ConnectionResetError",
+            "failure_monotonic_ns": 30,
+            "request_bytes_may_have_been_sent": True,
+            "retry_performed": False,
+            "schema_version": "kil.v3b1-driver-result.v1",
+            "send_monotonic_ns": 20,
+            "stage": "response_headers",
+            "status": "transport_failure",
+            "track": track.value,
+        }
+
+    def make_controller(self, directory, behavior_changes=None):
         root = Path(directory) / "repo"
         profile_path = root / "deploy/kind/v3b-profile.json"
         profile_path.parent.mkdir(parents=True)
         profile_path.write_bytes((ROOT / "deploy/kind/v3b-profile.json").read_bytes())
         events = []
         clock = _RunClock()
+        value = manifest(docker_host=f"unix://{Path(directory)}/docker.sock")
 
         class RunOnlyController(LocalEnvoyController):
             def _load_and_reverify(self):
@@ -4755,9 +4627,9 @@ class GatewayReadinessTest(unittest.TestCase):
             home=Path(directory) / "home",
             port_probe=lambda port: False,
             tool_verifier=lambda: TOOL_IDENTITIES,
+            monotonic_ns=clock.monotonic_ns,
         )
         controller._prepare_private_roots()
-        value = manifest(docker_host=controller.docker_host)
         private_manifest = controller.manifest_root / f"{value['run_id']}.json"
         private_manifest.parent.mkdir(parents=True, exist_ok=True)
         private_manifest.write_text(canonical_json(value) + "\n")
@@ -4771,1042 +4643,231 @@ class GatewayReadinessTest(unittest.TestCase):
             global_context="personal",
         )
         _bind_journal_manifest(controller.journal_path, private_manifest, value)
-        controller.bound_state = {"manifest_path": str(private_manifest)}
+        persist_active_state(controller.state_path, private_manifest, value)
+        controller.bound_state = load_bound_active_state(controller.state_path)
         controller.bound_manifest = value
         controller.run_events = events
-        request_path = _runtime_root(root, value) / "requests.jsonl"
-        factory = _RunConnectionFactory(
-            behaviors,
-            events=events,
-            journal_path=controller.journal_path,
-            request_path=request_path,
-            clock=clock,
+        drivers = {
+            item["track"]: item
+            for item in controller.bound_state["objects"]
+            if item["role"] == "driver"
+        }
+        changes = behavior_changes or {}
+        behaviors = {}
+        raw_results = {}
+        for track in LiveTrack:
+            readiness = {
+                "schema_version": "kil.v3b1-driver-readiness.v1",
+                "track": track.value,
+                "status": "ready",
+                "connect_monotonic_ns": 1,
+                "ready_monotonic_ns": 2,
+            }
+            result = self.success_result(track)
+            raw_result = (canonical_json(result) + "\n").encode()
+            raw_results[track] = raw_result
+            readiness_payload = (canonical_json(readiness) + "\n").encode()
+            behavior = {
+                "payload": (
+                    readiness_payload
+                    if behavior_changes
+                    and track is not LiveTrack.CREDENTIAL_POLICY_BASELINE
+                    else readiness_payload + raw_result
+                ),
+            }
+            behavior.update(changes.get(track.value, {}))
+            behaviors[drivers[track.value]["id"]] = behavior
+        factory = _DriverProcessFactory(behaviors, events=events, clock=clock)
+        controller.driver_process_factory = factory
+        controller.runner = _DriverStateRunner(
+            {
+                full_id: behavior.get("container_running", False)
+                for full_id, behavior in behaviors.items()
+            }
         )
-        # These assignments let the behavioral tests reach the missing feature
-        # before the constructor-injection test turns GREEN.
-        controller.connection_factory = factory
-        controller.monotonic_ns = clock.monotonic_ns
-        controller.sleeper = clock.sleep
-        return controller, factory, clock, request_path, events
-
-    def run_with_fake_http(self, controller):
-        with mock.patch(
-            "tools.v3b1_local_envoy.http.client.HTTPConnection",
-            side_effect=AssertionError("global HTTPConnection bypassed injection"),
-        ):
-            return controller.run()
+        return controller, factory, drivers, events, raw_results
 
     @staticmethod
-    def install_failing_clock(controller, factory, fail_call):
-        clock = _FailingRunClock(fail_call)
-        factory.clock = clock
-        controller.monotonic_ns = clock.monotonic_ns
-        controller.sleeper = clock.sleep
-        return clock
+    def event_positions(journal, event_name, track=None):
+        return [
+            index
+            for index, event in enumerate(journal["events"])
+            if event["event"] == event_name
+            and (track is None or event["details"].get("track") == track.value)
+        ]
 
-    def install_readiness_poison(
-        self,
-        controller,
-        *,
-        readiness_nonce=HEX_B,
-        mode=0o600,
-    ):
-        journal_event(
-            controller.journal_path,
-            "readiness_session_started",
-            {"readiness_nonce": readiness_nonce},
-        )
-        unsigned = {
-            "schema_version": "kil.v3b1-readiness-poison.v1",
-            "execution_nonce": HEX_A,
-            "readiness_nonce": readiness_nonce,
-            "reason_category": "connection_close_ambiguous",
-        }
-        value = {
-            **unsigned,
-            "binding_sha256": sha256(
-                canonical_json(unsigned).encode("utf-8")
-            ).hexdigest(),
-        }
-        path = controller.private_root / "readiness-poison.json"
-        path.write_text(canonical_json(value) + "\n")
-        path.chmod(mode)
-        return path
-
-    def test_connection_factory_clock_and_sleeper_are_injected(self):
+    def test_all_ready_then_one_exact_instruction_and_result_per_fixed_track(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory) / "repo"
-            profile = root / "deploy/kind/v3b-profile.json"
-            profile.parent.mkdir(parents=True)
-            profile.write_bytes((ROOT / "deploy/kind/v3b-profile.json").read_bytes())
-            factory = object()
-            monotonic_ns = object()
-            sleeper = object()
+            controller, factory, drivers, events, raw_results = self.make_controller(directory)
 
-            controller = LocalEnvoyController(
-                root,
-                FakeRunner(),
-                home=Path(directory) / "home",
-                port_probe=lambda port: False,
-                tool_verifier=lambda: TOOL_IDENTITIES,
-                connection_factory=factory,
-                monotonic_ns=monotonic_ns,
-                sleeper=sleeper,
-            )
+            output = controller.run()
 
-            self.assertIs(controller.connection_factory, factory)
-            self.assertIs(controller.monotonic_ns, monotonic_ns)
-            self.assertIs(controller.sleeper, sleeper)
-
-    def test_all_gateway_connections_complete_before_any_request_intent(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, factory, _, _, events = self.make_controller(
-                directory, [{}, {}, {}]
-            )
-
-            self.run_with_fake_http(controller)
-
-            connect_events = [event for event in events if event[0] == "connect"]
-            self.assertEqual([event[1] for event in connect_events], [18080, 18081, 18082])
-            self.assertTrue(all(event[2] <= 1.0 for event in connect_events))
-            self.assertTrue(
-                all(set(event[3].values()) == {"not_attempted"} for event in connect_events)
-            )
-            self.assertTrue(all(event[4] is False for event in connect_events))
-            first_request = next(index for index, event in enumerate(events) if event[0] == "request")
-            last_connect = max(index for index, event in enumerate(events) if event[0] == "connect")
-            self.assertLess(last_connect, first_request)
-            self.assertTrue(all(connection.closed for connection in factory.connections))
-
-    def test_readiness_sends_no_http_bytes_and_requests_once_per_track(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, factory, _, request_path, events = self.make_controller(
-                directory, [{}, {}, {}]
-            )
-
-            self.run_with_fake_http(controller)
-
-            request_events = [event for event in events if event[0] == "request"]
-            self.assertEqual([event[1] for event in request_events], [18080, 18081, 18082])
-            self.assertTrue(all(connection.request_count == 1 for connection in factory.connections))
-            self.assertTrue(request_path.is_file())
-            self.assertEqual(len(request_path.read_text().splitlines()), 3)
-
-    def test_failed_readiness_round_closes_every_socket_and_retries_full_order(self):
-        with tempfile.TemporaryDirectory() as directory:
-            secret = "private socket /Users/lab/.colima/secret.sock"
-            controller, factory, clock, _, events = self.make_controller(
-                directory,
-                [
-                    {},
-                    {"connect_error": ConnectionRefusedError(errno.ECONNREFUSED, secret)},
-                    {},
-                    {},
-                    {},
-                ],
-            )
-
-            self.run_with_fake_http(controller)
-
+            self.assertEqual(output, controller.root / "collected")
+            writes = [event for event in events if event[0] == "stdin_write"]
             self.assertEqual(
-                [event[2] for event in events if event[0] == "factory"],
-                [18080, 18081, 18080, 18081, 18082],
+                [event[1] for event in writes],
+                [drivers[track.value]["id"] for track in LiveTrack],
             )
-            self.assertTrue(factory.connections[0].closed)
-            self.assertTrue(factory.connections[1].closed)
-            self.assertEqual(clock.sleeps, [0.25])
-            journal = load_lifecycle_journal(controller.journal_path)
-            failures = [
-                event for event in journal["events"]
-                if event["event"] == "readiness_connect_failed"
-            ]
-            self.assertEqual(len(failures), 1)
-            self.assertEqual(failures[0]["details"]["track"], "signed_state_only")
-            self.assertNotIn(secret, controller.journal_path.read_text())
-
-    def test_readiness_exhaustion_keeps_all_tracks_unattempted_and_no_request_file(self):
-        with tempfile.TemporaryDirectory() as directory:
-            secret = "private readiness timeout"
-            controller, factory, _, request_path, events = self.make_controller(
-                directory,
-                [
-                    {
-                        "connect_error": TimeoutError(errno.ETIMEDOUT, secret),
-                        "connect_advance_ns": 30_000_000_000,
-                        "close_error": OSError(errno.EIO, "private close"),
-                    }
-                ],
-            )
-
-            with self.assertRaisesRegex(ControllerError, "readiness"):
-                self.run_with_fake_http(controller)
-
-            journal = load_lifecycle_journal(controller.journal_path)
+            first_write = events.index(writes[0])
             self.assertEqual(
-                {value["status"] for value in journal["requests"].values()},
-                {"not_attempted"},
+                len([event for event in events[:first_write] if event[0] == "stdout_readline"]),
+                3,
             )
-            session_events = [
-                event
-                for event in journal["events"]
-                if event["event"] == "readiness_session_started"
-            ]
-            completion_events = [
-                event
-                for event in journal["events"]
-                if event["event"] == "readiness_connect_complete"
-            ]
-            self.assertEqual(len(session_events), 1)
-            self.assertEqual(completion_events, [])
-            self.assertRegex(
-                session_events[0]["details"]["readiness_nonce"], r"^[a-f0-9]{64}$"
-            )
-            self.assertFalse(request_path.exists())
-            self.assertFalse(any(event[0] == "request" for event in events))
-            self.assertTrue(factory.connections[0].closed)
-            raw = controller.journal_path.read_text()
-            self.assertNotIn(secret, raw)
-            self.assertNotIn("private close", raw)
-
-    def test_clock_failure_after_third_connect_closes_the_complete_set(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, factory, _, request_path, events = self.make_controller(
-                directory, [{}, {}, {}]
-            )
-            self.install_failing_clock(controller, factory, fail_call=8)
-
-            with self.assertRaisesRegex(
-                ControllerError, "monotonic bookkeeping failure"
-            ):
-                self.run_with_fake_http(controller)
-
-            self.assertEqual(
-                [event[1] for event in events if event[0] == "close"],
-                [18080, 18081, 18082],
-            )
-            self.assertTrue(all(connection.closed for connection in factory.connections))
-            self.assertFalse(request_path.exists())
-            self.assertFalse(any(event[0] == "request" for event in events))
-            self.assertFalse(any(event[0] == "collect" for event in events))
-
-    def test_clock_failure_after_third_connect_poison_blocks_retry_on_ambiguity(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, first_factory, _, request_path, events = self.make_controller(
-                directory, [{"close_unconfirmed": True}, {}, {}]
-            )
-            self.install_failing_clock(controller, first_factory, fail_call=8)
-
-            with self.assertRaisesRegex(
-                ControllerError, "monotonic bookkeeping failure"
-            ):
-                self.run_with_fake_http(controller)
-
-            self.assertEqual(
-                [event[1] for event in events if event[0] == "close"],
-                [18080, 18081, 18082],
-            )
-            self.assertFalse(first_factory.connections[0].closed)
-            poison_events = [
-                event
-                for event in load_lifecycle_journal(controller.journal_path)["events"]
-                if event["event"] == "connection_close_failed"
-            ]
-            self.assertEqual(len(poison_events), 1)
-
-            retry_events = []
-            retry_clock = _RunClock()
-            retry_factory = _RunConnectionFactory(
-                [{}, {}, {}],
-                events=retry_events,
-                journal_path=controller.journal_path,
-                request_path=request_path,
-                clock=retry_clock,
-            )
-            controller.connection_factory = retry_factory
-            controller.monotonic_ns = retry_clock.monotonic_ns
-            controller.sleeper = retry_clock.sleep
-
-            with self.assertRaisesRegex(
-                ControllerError, "poison|teardown|manual recovery"
-            ):
-                self.run_with_fake_http(controller)
-
-            self.assertEqual(retry_factory.connections, [])
-            self.assertFalse(any(event[0] == "request" for event in retry_events))
-            self.assertFalse(any(event[0] == "collect" for event in retry_events))
-
-    def test_failure_timestamp_clock_error_closes_every_round_connection(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, factory, _, request_path, events = self.make_controller(
-                directory,
-                [
-                    {},
-                    {
-                        "connect_error": ConnectionRefusedError(
-                            errno.ECONNREFUSED, "private readiness detail"
-                        )
-                    },
-                ],
-            )
-            self.install_failing_clock(controller, factory, fail_call=5)
-
-            with self.assertRaisesRegex(
-                ControllerError, "monotonic bookkeeping failure"
-            ):
-                self.run_with_fake_http(controller)
-
-            self.assertEqual(len(factory.connections), 2)
-            self.assertEqual(
-                [event[1] for event in events if event[0] == "close"],
-                [18080, 18081],
-            )
-            self.assertTrue(all(connection.closed for connection in factory.connections))
-            self.assertFalse(request_path.exists())
-            self.assertFalse(any(event[0] == "request" for event in events))
-            self.assertFalse(any(event[0] == "collect" for event in events))
-
-    def test_complete_set_must_finish_within_the_single_readiness_deadline(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, factory, _, request_path, events = self.make_controller(
-                directory,
-                [{}, {}, {"connect_advance_ns": 30_000_000_000}],
-            )
-
-            with self.assertRaisesRegex(ControllerError, "readiness"):
-                self.run_with_fake_http(controller)
-
-            journal = load_lifecycle_journal(controller.journal_path)
-            self.assertEqual(
-                {value["status"] for value in journal["requests"].values()},
-                {"not_attempted"},
-            )
-            session_events = [
-                event
-                for event in journal["events"]
-                if event["event"] == "readiness_session_started"
-            ]
-            completion_events = [
-                event
-                for event in journal["events"]
-                if event["event"] == "readiness_connect_complete"
-            ]
-            self.assertEqual(len(session_events), 1)
-            self.assertEqual(completion_events, [])
-            self.assertFalse(request_path.exists())
-            self.assertFalse(any(event[0] == "request" for event in events))
-            self.assertTrue(all(connection.closed for connection in factory.connections))
-
-    def test_claim_persistence_failure_occurs_after_readiness_and_sends_nothing(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, factory, _, request_path, events = self.make_controller(
-                directory, [{}, {}, {}]
-            )
-
-            with mock.patch(
-                "tools.v3b1_local_envoy.claim_request_attempt",
-                side_effect=ControllerError("injected persistence failure"),
-            ):
-                with self.assertRaisesRegex(ControllerError, "persistence failure"):
-                    self.run_with_fake_http(controller)
-
-            self.assertEqual(
-                [event[1] for event in events if event[0] == "connect"],
-                [18080, 18081, 18082],
-            )
-            self.assertFalse(any(event[0] == "request" for event in events))
-            self.assertFalse(request_path.exists())
-            self.assertTrue(all(connection.closed for connection in factory.connections))
-
-    def test_readiness_journal_persistence_failure_closes_the_ready_set(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, factory, _, request_path, events = self.make_controller(
-                directory, [{}, {}, {}]
-            )
-            real_journal_event = journal_event
-
-            def fail_readiness_event(path, event, details):
-                if event == "readiness_connect_complete":
-                    raise ControllerError("injected readiness journal failure")
-                return real_journal_event(path, event, details)
-
-            with mock.patch(
-                "tools.v3b1_local_envoy.journal_event",
-                side_effect=fail_readiness_event,
-            ):
-                with self.assertRaisesRegex(ControllerError, "journal failure"):
-                    self.run_with_fake_http(controller)
-
-            self.assertFalse(any(event[0] == "request" for event in events))
-            self.assertFalse(request_path.exists())
-            self.assertTrue(all(connection.closed for connection in factory.connections))
-
-    def assert_failed_round_close_ambiguity(self, first_behavior, category):
-        with tempfile.TemporaryDirectory() as directory:
-            secret = "private close message with Bearer credential"
-            controller, factory, _, request_path, events = self.make_controller(
-                directory,
-                [
-                    first_behavior(secret),
-                    {
-                        "connect_error": ConnectionRefusedError(
-                            errno.ECONNREFUSED, "private primary detail"
-                        )
-                    },
-                    {},
-                    {},
-                    {},
-                ],
-            )
-
-            with self.assertRaisesRegex(
-                ControllerError, "readiness.*closure|closure.*readiness"
-            ):
-                self.run_with_fake_http(controller)
-
-            self.assertEqual(
-                [event[2] for event in events if event[0] == "factory"],
-                [18080, 18081],
-            )
-            self.assertFalse(any(event[0] == "request" for event in events))
-            self.assertFalse(any(event[0] == "collect" for event in events))
-            self.assertFalse(request_path.exists())
-            journal = load_lifecycle_journal(controller.journal_path)
-            self.assertEqual(
-                [event["event"] for event in journal["events"]][-2:],
-                ["readiness_connect_failed", "connection_close_failed"],
-            )
-            close_details = journal["events"][-1]["details"]
-            self.assertEqual(
-                close_details["failures"],
-                [
-                    {
-                        "track": "credential_policy_baseline",
-                        "category": category,
-                    }
-                ],
-            )
-            serialized = canonical_json(close_details)
-            self.assertNotIn(secret, serialized)
-            self.assertNotIn("private primary", serialized)
-            self.assertEqual(
-                len([event for event in events if event[0] == "close"]), 2
-            )
-
-    def test_failed_readiness_close_exception_stops_before_the_next_round(self):
-        self.assert_failed_round_close_ambiguity(
-            lambda secret: {
-                "close_error": OSError(errno.EIO, secret),
-                "close_error_leaves_open": True,
-            },
-            "close_raised",
-        )
-
-    def test_failed_readiness_unconfirmed_close_stops_before_the_next_round(self):
-        self.assert_failed_round_close_ambiguity(
-            lambda secret: {"close_unconfirmed": True},
-            "close_unconfirmed",
-        )
-
-    def test_successful_requests_do_not_collect_when_any_close_is_ambiguous(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, factory, _, _, events = self.make_controller(
-                directory,
-                [
-                    {
-                        "close_error": OSError(errno.EIO, "private close"),
-                        "close_error_leaves_open": True,
-                    },
-                    {},
-                    {},
-                ],
-            )
-
-            with self.assertRaisesRegex(ControllerError, "closure"):
-                self.run_with_fake_http(controller)
-
-            self.assertEqual(sum(item.request_count for item in factory.connections), 3)
-            self.assertEqual(
-                len([event for event in events if event[0] == "close"]), 3
-            )
-            self.assertFalse(any(event[0] == "collect" for event in events))
-            close_event = load_lifecycle_journal(controller.journal_path)["events"][-1]
-            self.assertEqual(close_event["event"], "connection_close_failed")
-            self.assertIsNone(close_event["details"]["primary_failure"])
-
-    def test_transport_primary_is_retained_when_close_is_also_ambiguous(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, factory, _, _, events = self.make_controller(
-                directory,
-                [
-                    {
-                        "request_error": BrokenPipeError(
-                            errno.EPIPE, "private request"
-                        ),
-                        "close_error": OSError(errno.EIO, "private close"),
-                        "close_error_leaves_open": True,
-                    },
-                    {},
-                    {},
-                ],
-            )
-
-            with self.assertRaisesRegex(
-                ControllerError, "request_send.*closure|closure.*request_send"
-            ):
-                self.run_with_fake_http(controller)
-
-            journal = load_lifecycle_journal(controller.journal_path)
-            self.assertEqual(journal["events"][-2]["event"], "request_send_failed")
-            self.assertEqual(journal["events"][-1]["event"], "connection_close_failed")
-            self.assertEqual(
-                journal["events"][-1]["details"]["primary_failure"],
-                "request_send",
-            )
-            self.assertEqual(
-                len([event for event in events if event[0] == "close"]), 3
-            )
-            self.assertFalse(any(event[0] == "collect" for event in events))
-
-    def test_poisoned_run_retry_sends_nothing_and_requires_teardown(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, first_factory, _, request_path, events = self.make_controller(
-                directory,
-                [
-                    {"close_unconfirmed": True},
-                    {
-                        "connect_error": ConnectionRefusedError(
-                            errno.ECONNREFUSED, "private readiness detail"
-                        )
-                    },
-                ],
-            )
-            with self.assertRaisesRegex(ControllerError, "closure"):
-                self.run_with_fake_http(controller)
-            old_socket = first_factory.connections[0]
-            self.assertFalse(old_socket.closed)
-            self.assertFalse(
-                (controller.private_root / "readiness-poison.json").exists()
-            )
-
-            retry_events = []
-            retry_clock = _RunClock()
-            retry_factory = _RunConnectionFactory(
-                [{}, {}, {}],
-                events=retry_events,
-                journal_path=controller.journal_path,
-                request_path=request_path,
-                clock=retry_clock,
-            )
-            controller.connection_factory = retry_factory
-            controller.monotonic_ns = retry_clock.monotonic_ns
-            controller.sleeper = retry_clock.sleep
-
-            with self.assertRaisesRegex(
-                ControllerError, "poison|teardown|manual recovery"
-            ):
-                self.run_with_fake_http(controller)
-
-            self.assertEqual(retry_factory.connections, [])
-            self.assertFalse(any(event[0] == "request" for event in retry_events))
-            self.assertFalse(any(event[0] == "collect" for event in retry_events))
-            self.assertFalse(old_socket.closed)
-
-    def test_double_journal_failure_persists_independent_poison_and_blocks_retry(self):
-        close_behaviors = (
-            {
-                "close_error": OSError(
-                    errno.EIO, "private close message with Bearer credential"
-                ),
-                "close_error_leaves_open": True,
-            },
-            {"close_unconfirmed": True},
-        )
-        for close_behavior in close_behaviors:
-            with (
-                self.subTest(close_behavior=close_behavior),
-                tempfile.TemporaryDirectory() as directory,
-            ):
-                controller, first_factory, _, request_path, _ = self.make_controller(
-                    directory,
-                    [
-                        close_behavior,
-                        {
-                            "connect_error": ConnectionRefusedError(
-                                errno.ECONNREFUSED,
-                                "private readiness message with signed state",
-                            )
-                        },
-                    ],
-                )
-                real_journal_event = journal_event
-
-                def fail_both_poison_appends(path, event, details):
-                    if event == "readiness_connect_failed":
-                        raise ControllerError("injected readiness journal failure")
-                    if event == "connection_close_failed":
-                        raise ControllerError("injected close journal failure")
-                    return real_journal_event(path, event, details)
-
-                with mock.patch(
-                    "tools.v3b1_local_envoy.journal_event",
-                    side_effect=fail_both_poison_appends,
-                ):
-                    with self.assertRaisesRegex(
-                        ControllerError, "readiness journal failure"
-                    ):
-                        self.run_with_fake_http(controller)
-
-                poison_path = controller.private_root / "readiness-poison.json"
-                self.assertTrue(poison_path.is_file())
-                self.assertEqual(stat.S_IMODE(poison_path.stat().st_mode), 0o600)
-                poison = json.loads(poison_path.read_text())
+            q_states = []
+            for track, event in zip(LiveTrack, writes, strict=True):
+                instruction = json.loads(event[2])
+                self.assertEqual(instruction["track"], track.value)
                 self.assertEqual(
-                    set(poison),
-                    {
-                        "schema_version",
-                        "execution_nonce",
-                        "readiness_nonce",
-                        "reason_category",
-                        "binding_sha256",
-                    },
+                    instruction["headers"]["authorization"],
+                    "Bearer v3b1-lab-credential",
                 )
-                self.assertEqual(
-                    poison_path.read_bytes(),
-                    (canonical_json(poison) + "\n").encode("utf-8"),
-                )
-                self.assertEqual(poison["execution_nonce"], HEX_A)
-                self.assertEqual(
-                    poison["reason_category"], "connection_close_ambiguous"
-                )
-                self.assertNotIn("Bearer", poison_path.read_text())
-                self.assertNotIn("signed state", poison_path.read_text())
-                self.assertFalse(first_factory.connections[0].closed)
-
-                retry_events = []
-                retry_clock = _RunClock()
-                retry_factory = _RunConnectionFactory(
-                    [{}, {}, {}],
-                    events=retry_events,
-                    journal_path=controller.journal_path,
-                    request_path=request_path,
-                    clock=retry_clock,
-                )
-                controller.connection_factory = retry_factory
-                controller.monotonic_ns = retry_clock.monotonic_ns
-                controller.sleeper = retry_clock.sleep
-
-                with self.assertRaisesRegex(
-                    ControllerError, "poison|teardown|manual recovery"
-                ):
-                    self.run_with_fake_http(controller)
-
-                self.assertEqual(retry_factory.connections, [])
-                self.assertFalse(
-                    any(event[0] == "request" for event in retry_events)
-                )
-                self.assertFalse(
-                    any(event[0] == "collect" for event in retry_events)
-                )
-
-    def test_readiness_poison_integrity_is_checked_before_connection_construction(self):
-        mutations = ("binding", "mode", "symlink")
-        for mutation in mutations:
-            with (
-                self.subTest(mutation=mutation),
-                tempfile.TemporaryDirectory() as directory,
-            ):
-                controller, factory, _, _, events = self.make_controller(
-                    directory, [{}, {}, {}]
-                )
-                poison_path = self.install_readiness_poison(controller)
-                if mutation == "binding":
-                    value = json.loads(poison_path.read_text())
-                    value["readiness_nonce"] = HEX_C
-                    poison_path.write_text(canonical_json(value) + "\n")
-                elif mutation == "mode":
-                    poison_path.chmod(0o644)
+                if track is LiveTrack.CREDENTIAL_POLICY_BASELINE:
+                    self.assertNotIn("x-kil-q-state", instruction["headers"])
                 else:
-                    outside = Path(directory) / "outside-poison.json"
-                    outside.write_bytes(poison_path.read_bytes())
-                    poison_path.unlink()
-                    poison_path.symlink_to(outside)
+                    q_states.append(instruction["headers"]["x-kil-q-state"])
+                process = next(item for item in factory.processes if item.full_id == event[1])
+                self.assertEqual(process.stdin.getvalue() if not process.stdin.closed else event[2], event[2])
+                self.assertTrue(process.stdin.closed)
+                raw_path = (
+                    controller.private_root
+                    / "driver-results"
+                    / str(controller.bound_manifest["run_id"])
+                    / f"{track.value}.json"
+                )
+                self.assertEqual(raw_path.read_bytes(), raw_results[track])
+                self.assertEqual(stat.S_IMODE(raw_path.stat().st_mode), 0o600)
 
-                with self.assertRaisesRegex(
-                    ControllerError,
-                    "poison|binding|mode|symbolic|unsafe|teardown|manual recovery",
-                ):
-                    self.run_with_fake_http(controller)
-
-                self.assertEqual(factory.connections, [])
-                self.assertFalse(any(event[0] == "request" for event in events))
-
-    def test_down_retains_poison_until_exact_absence_then_clears_it(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, _, _, _, _ = self.make_controller(
-                directory, [{}, {}, {}]
-            )
-            poison_path = self.install_readiness_poison(controller)
-            controller.runner = FakeRunner(
-                [
-                    CommandResult(
-                        0,
-                        '{"name":"kil-v3-lab","status":"Running",'
-                        '"arch":"aarch64","cpus":4,'
-                        '"memory":8589934592,"disk":64424509440,'
-                        '"runtime":"docker"}\n',
-                        "",
+            journal = load_lifecycle_journal(controller.journal_path)
+            ready_set = self.event_positions(journal, "driver_readiness_set_complete")[0]
+            for track in LiveTrack:
+                ordered = [
+                    self.event_positions(journal, name, track)[0]
+                    for name in (
+                        "request_send_intent",
+                        "driver_instruction_write_intent",
+                        "driver_result_persisted",
+                        "request_record_persisted",
+                        "request_send_complete",
                     )
                 ]
-            )
+                self.assertLess(ready_set, ordered[0])
+                self.assertEqual(ordered, sorted(ordered))
 
-            with self.assertRaisesRegex(ControllerError, "manual recovery"):
-                controller.down()
-            self.assertTrue(poison_path.exists())
-
-            controller.runner = FakeRunner(
-                [
-                    CommandResult(0, "[]\n", ""),
-                    CommandResult(0, "personal\n", ""),
-                ]
-            )
-            controller.down()
-
-            self.assertFalse(poison_path.exists())
-
-    def assert_readiness_record_failure_closes_round(self, patcher, message):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, factory, _, _, events = self.make_controller(
-                directory,
-                [
-                    {},
-                    {
-                        "connect_error": ConnectionRefusedError(
-                            errno.ECONNREFUSED, "private readiness detail"
-                        )
-                    },
-                    {},
-                    {},
-                    {},
-                ],
-            )
-
-            with patcher():
-                with self.assertRaisesRegex(ControllerError, message):
-                    self.run_with_fake_http(controller)
-
-            self.assertEqual(len(factory.connections), 2)
-            self.assertTrue(all(connection.closed for connection in factory.connections))
+            request_path = _runtime_root(controller.root, controller.bound_manifest) / "requests.jsonl"
+            records = [json.loads(line) for line in request_path.read_text().splitlines()]
+            self.assertEqual([record["track"] for record in records], [track.value for track in LiveTrack])
+            self.assertTrue(all(record["schema_version"] == "kil.v3b1-request.v2" for record in records))
             self.assertEqual(
-                len([event for event in events if event[0] == "close"]), 2
+                [record["driver_result_sha256"] for record in records],
+                [sha256(raw_results[track]).hexdigest() for track in LiveTrack],
             )
-            self.assertFalse(any(event[0] == "request" for event in events))
-            self.assertFalse(any(event[0] == "collect" for event in events))
+            serialized = controller.journal_path.read_text()
+            self.assertNotIn("Bearer v3b1-lab-credential", serialized)
+            for q_state in q_states:
+                self.assertNotIn(q_state, serialized)
+                self.assertNotIn(q_state, request_path.read_text())
+            self.assertFalse(any("authorization" in " ".join(event[1]) for event in events if event[0] == "start"))
 
-    def test_normalization_failure_still_closes_every_round_connection(self):
-        self.assert_readiness_record_failure_closes_round(
-            lambda: mock.patch(
-                "tools.v3b1_local_envoy.normalize_transport_exception",
-                side_effect=ContractError("injected normalization failure"),
-            ),
-            "transport failure is not closed",
-        )
-
-    def test_readiness_journal_failure_still_closes_every_round_connection(self):
-        real_journal_event = journal_event
-
-        def fail_connect_failure(path, event, details):
-            if event == "readiness_connect_failed":
-                raise ControllerError("injected readiness journal failure")
-            return real_journal_event(path, event, details)
-
-        self.assert_readiness_record_failure_closes_round(
-            lambda: mock.patch(
-                "tools.v3b1_local_envoy.journal_event",
-                side_effect=fail_connect_failure,
-            ),
-            "readiness journal failure",
-        )
-
-    def test_retained_sockets_receive_explicit_request_timeout(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, factory, _, _, events = self.make_controller(
-                directory, [{}, {}, {}]
+    def test_post_intent_failures_are_terminal_cancel_later_drivers_and_never_retry(self):
+        baseline = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
+        valid_result = (canonical_json(self.success_result(LiveTrack.CREDENTIAL_POLICY_BASELINE)) + "\n").encode()
+        readiness = (
+            canonical_json(
+                {
+                    "schema_version": "kil.v3b1-driver-readiness.v1",
+                    "track": baseline,
+                    "status": "ready",
+                    "connect_monotonic_ns": 1,
+                    "ready_monotonic_ns": 2,
+                }
             )
-
-            self.run_with_fake_http(controller)
-
-            self.assertEqual(
-                [event[1:] for event in events if event[0] == "socket_timeout"],
-                [(18080, 5.0), (18081, 5.0), (18082, 5.0)],
-            )
-            self.assertTrue(
-                all(connection.socket_object.timeouts == [5.0] for connection in factory.connections)
-            )
-
-    def test_near_deadline_sockets_are_reset_to_request_timeout(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, factory, _, _, events = self.make_controller(
-                directory,
-                [{"connect_advance_ns": 29_000_000_000}, {}, {}],
-            )
-
-            self.run_with_fake_http(controller)
-
-            connect_timeouts = [
-                event[3] for event in events if event[0] == "factory"
-            ]
-            self.assertEqual(connect_timeouts[0], 1.0)
-            self.assertTrue(all(0 < timeout < 1.0 for timeout in connect_timeouts[1:]))
-            self.assertTrue(
-                all(connection.socket_object.timeouts == [5.0] for connection in factory.connections)
-            )
-
-    def test_request_timeout_reset_failure_closes_all_before_intent(self):
-        for behavior in (
-            {"socket_timeout_unsupported": True},
-            {"socket_timeout_error": OSError(errno.EIO, "private timeout")},
-        ):
-            with self.subTest(behavior=behavior), tempfile.TemporaryDirectory() as directory:
-                controller, factory, _, request_path, events = self.make_controller(
-                    directory, [behavior, {}, {}]
+            + "\n"
+        ).encode()
+        transport = (canonical_json(self.transport_failure(LiveTrack.CREDENTIAL_POLICY_BASELINE)) + "\n").encode()
+        cases = {
+            "partial_write": {"partial_write": 1},
+            "broken_stdin": {"write_error": BrokenPipeError(errno.EPIPE, "private token")},
+            "invalid_result": {"payload": readiness + b"not-json\n"},
+            "missing_result": {"payload": readiness},
+            "extra_stdout": {"payload": readiness + valid_result + b"{}\n"},
+            "nonzero_exit": {"returncode": 7},
+            "timeout": {"wait_error": subprocess.TimeoutExpired("private", 1)},
+            "driver_transport_failure": {"payload": readiness + transport, "returncode": 1},
+        }
+        for name, change in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                controller, factory, drivers, events, _ = self.make_controller(
+                    directory, {baseline: change}
                 )
 
-                with self.assertRaisesRegex(ControllerError, "request timeout"):
-                    self.run_with_fake_http(controller)
+                with self.assertRaisesRegex(ControllerError, "failed|terminal|teardown"):
+                    controller.run()
 
-                self.assertEqual(
-                    [event[1] for event in events if event[0] == "socket_timeout"],
-                    (
-                        [18081, 18082]
-                        if behavior.get("socket_timeout_unsupported")
-                        else [18080, 18081, 18082]
-                    ),
-                )
-                self.assertTrue(all(connection.closed for connection in factory.connections))
-                self.assertFalse(any(event[0] == "request" for event in events))
-                self.assertFalse(any(event[0] == "collect" for event in events))
-                self.assertFalse(request_path.exists())
                 journal = load_lifecycle_journal(controller.journal_path)
+                self.assertEqual(journal["requests"][baseline]["status"], "failed")
                 self.assertEqual(
-                    {item["status"] for item in journal["requests"].values()},
-                    {"not_attempted"},
+                    [journal["requests"][track.value]["status"] for track in tuple(LiveTrack)[1:]],
+                    ["not_attempted", "not_attempted"],
                 )
+                failures = self.event_positions(
+                    journal, "request_send_failed", LiveTrack.CREDENTIAL_POLICY_BASELINE
+                )
+                self.assertEqual(len(failures), 1)
+                provenance = journal["events"][failures[0]]["details"]["provenance"]
+                self.assertTrue(provenance["request_bytes_may_have_been_sent"])
+                self.assertFalse(provenance["retry_performed"])
+                self.assertEqual(provenance["attempt_count"], 1)
+                later_ids = {drivers[track.value]["id"] for track in tuple(LiveTrack)[1:]}
+                later_writes = [
+                    event for event in events
+                    if event[0] == "stdin_write" and event[1] in later_ids
+                ]
+                self.assertEqual(later_writes, [])
+                later_processes = [item for item in factory.processes if item.full_id in later_ids]
+                self.assertTrue(all(item.stdin.closed for item in later_processes))
+                self.assertTrue(all(item.exited and item.reaped for item in later_processes))
+                self.assertEqual(len([event for event in events if event[0] == "start"]), 3)
+                self.assertFalse(any(event[0] == "collect" for event in events))
+                raw = controller.journal_path.read_text()
+                self.assertNotIn("private token", raw)
 
-    def assert_transport_stage(self, stage, behavior, expected_class, expected_errno):
+    def test_host_request_helpers_and_direct_http_request_path_are_absent(self):
+        source = (ROOT / "tools/v3b1_local_envoy.py").read_text()
+        self.assertNotIn("def _connect_ready_gateways", source)
+        self.assertNotIn("def _reset_request_timeouts", source)
+        self.assertNotIn("connection.request(", source)
+        self.assertNotIn("connection_factory", source)
+
+    def test_later_cancellation_failure_does_not_skip_remaining_ready_driver(self):
         with tempfile.TemporaryDirectory() as directory:
-            behaviors = [{}, {}, {}]
-            behaviors[0] = {
-                **behavior,
-                "close_error": OSError(errno.EIO, "private close detail"),
-            }
-            controller, factory, _, request_path, events = self.make_controller(
-                directory, behaviors
-            )
-
-            with self.assertRaisesRegex(ControllerError, stage):
-                self.run_with_fake_http(controller)
-
-            journal = load_lifecycle_journal(controller.journal_path)
-            baseline = journal["requests"]["credential_policy_baseline"]
-            self.assertEqual(baseline["status"], "failed")
-            self.assertTrue(recovery_plan(journal)["request_replay_forbidden"])
-            failures = [
-                event for event in journal["events"]
-                if event["event"] == "request_send_failed"
-            ]
-            self.assertEqual(len(failures), 1)
-            details = failures[0]["details"]
-            self.assertEqual(
-                set(details),
-                {"track", "intent_id", "record_sha256", "provenance"},
-            )
-            self.assertEqual(details["intent_id"], baseline["intent_id"])
-            self.assertIsNone(details["record_sha256"])
-            provenance = RequestFailureProvenance.from_mapping(details["provenance"])
-            self.assertEqual(provenance.stage, stage)
-            self.assertEqual(provenance.exception_class, expected_class)
-            self.assertEqual(provenance.errno, expected_errno)
-            self.assertTrue(provenance.request_bytes_may_have_been_sent)
-            self.assertEqual(provenance.attempt_count, 1)
-            self.assertFalse(provenance.retry_performed)
-            self.assertFalse(request_path.exists())
-            self.assertEqual(sum(connection.request_count for connection in factory.connections), 1)
-            self.assertTrue(all(connection.closed for connection in factory.connections))
-            serialized_details = canonical_json(details)
-            self.assertNotIn("private", serialized_details)
-            self.assertNotIn("token", serialized_details)
-            self.assertFalse(any(event[0] == "collect" for event in events))
-
-    def test_request_send_failure_has_closed_sanitized_provenance(self):
-        self.assert_transport_stage(
-            "request_send",
-            {"request_error": BrokenPipeError(errno.EPIPE, "private request token")},
-            "BrokenPipeError",
-            errno.EPIPE,
-        )
-
-    def test_response_header_failure_has_closed_sanitized_provenance(self):
-        self.assert_transport_stage(
-            "response_headers",
-            {"headers_error": http.client.RemoteDisconnected("private response")},
-            "ConnectionResetError",
-            None,
-        )
-
-    def test_response_body_failure_has_closed_sanitized_provenance(self):
-        self.assert_transport_stage(
-            "response_body",
-            {"body_error": http.client.IncompleteRead(b"private body", 100)},
-            "ConnectionError",
-            None,
-        )
-
-    def test_failed_request_replay_is_rejected_before_reconnect(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, _, _, _, _ = self.make_controller(
+            controller, factory, drivers, events, _ = self.make_controller(
                 directory,
-                [
-                    {"request_error": BrokenPipeError(errno.EPIPE, "private")},
-                    {},
-                    {},
-                ],
-            )
-            with self.assertRaises(ControllerError):
-                self.run_with_fake_http(controller)
-
-            events = []
-            clock = _RunClock()
-            request_path = _runtime_root(root=controller.root, manifest=controller.bound_manifest) / "requests.jsonl"
-            second_factory = _RunConnectionFactory(
-                [{}, {}, {}],
-                events=events,
-                journal_path=controller.journal_path,
-                request_path=request_path,
-                clock=clock,
-            )
-            controller.connection_factory = second_factory
-            controller.monotonic_ns = clock.monotonic_ns
-            controller.sleeper = clock.sleep
-
-            with self.assertRaisesRegex(ControllerError, "attempted|replay|ambiguous"):
-                self.run_with_fake_http(controller)
-
-            self.assertEqual(second_factory.connections, [])
-
-    def test_signed_state_is_issued_only_after_complete_readiness(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, _, _, _, events = self.make_controller(
-                directory, [{}, {}, {}]
-            )
-
-            def signer(claims, private_key):
-                events.append(("sign", claims.issuer))
-                return "signed-state"
-
-            with mock.patch("tools.v3b1_local_envoy.issue_q_state", side_effect=signer):
-                self.run_with_fake_http(controller)
-
-            last_connect = max(index for index, event in enumerate(events) if event[0] == "connect")
-            sign_positions = [index for index, event in enumerate(events) if event[0] == "sign"]
-            timeout_positions = [
-                index for index, event in enumerate(events)
-                if event[0] == "socket_timeout"
-            ]
-            self.assertEqual(len(sign_positions), 2)
-            self.assertEqual(len(timeout_positions), 3)
-            self.assertTrue(all(last_connect < index for index in sign_positions))
-            self.assertLess(max(timeout_positions), min(sign_positions))
-            signed_requests = [
-                event for event in events
-                if event[0] == "request" and event[1] in {18081, 18082}
-            ]
-            self.assertTrue(
-                all("x-kil-q-state" in event[4] for event in signed_requests)
-            )
-
-    def test_crash_after_readiness_before_intent_requires_fresh_readiness(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, first_factory, _, _, events = self.make_controller(
-                directory, [{}, {}, {}]
-            )
-            with mock.patch(
-                "tools.v3b1_local_envoy.claim_request_attempt",
-                side_effect=ControllerError("injected pre-intent crash"),
-            ):
-                with self.assertRaisesRegex(ControllerError, "pre-intent crash"):
-                    self.run_with_fake_http(controller)
-            self.assertTrue(all(connection.closed for connection in first_factory.connections))
-
-            second_events = []
-            second_clock = _RunClock()
-            request_path = first_factory.request_path
-            second_factory = _RunConnectionFactory(
-                [{}, {}, {}],
-                events=second_events,
-                journal_path=controller.journal_path,
-                request_path=request_path,
-                clock=second_clock,
-            )
-            controller.connection_factory = second_factory
-            controller.monotonic_ns = second_clock.monotonic_ns
-            controller.sleeper = second_clock.sleep
-            with mock.patch(
-                "tools.v3b1_local_envoy.claim_request_attempt",
-                side_effect=ControllerError("second pre-intent crash"),
-            ):
-                with self.assertRaisesRegex(ControllerError, "second pre-intent crash"):
-                    self.run_with_fake_http(controller)
-
-            self.assertEqual(
-                [event[1] for event in second_events if event[0] == "connect"],
-                [18080, 18081, 18082],
-            )
-            journal = load_lifecycle_journal(controller.journal_path)
-            self.assertEqual(
-                {value["status"] for value in journal["requests"].values()},
-                {"not_attempted"},
-            )
-            session_events = [
-                event
-                for event in journal["events"]
-                if event["event"] == "readiness_session_started"
-            ]
-            completion_events = [
-                event
-                for event in journal["events"]
-                if event["event"] == "readiness_connect_complete"
-            ]
-            self.assertEqual(len(session_events), 2)
-            self.assertEqual(len(completion_events), 2)
-            session_nonces = [
-                event["details"]["readiness_nonce"] for event in session_events
-            ]
-            completion_nonces = [
-                event["details"]["readiness_nonce"] for event in completion_events
-            ]
-            self.assertEqual(session_nonces, completion_nonces)
-            self.assertEqual(len(set(session_nonces)), 2)
-
-    def test_readiness_journal_event_schema_rejects_extra_secret_fields(self):
-        with tempfile.TemporaryDirectory() as directory:
-            controller, _, _, _, _ = self.make_controller(
-                directory, [{}, {}, {}]
-            )
-
-            with self.assertRaisesRegex(ControllerError, "readiness.*closed"):
-                journal_event(
-                    controller.journal_path,
-                    "readiness_connect_complete",
-                    {
-                        "readiness_nonce": HEX_B,
-                        "round": 1,
-                        "host": "127.0.0.1",
-                        "tracks": [track.value for track in LiveTrack],
-                        "ports": [18080, 18081, 18082],
-                        "ready_monotonic_ns": 1,
-                        "raw_message": "Bearer should-never-be-journaled",
+                {
+                    LiveTrack.CREDENTIAL_POLICY_BASELINE.value: {
+                        "partial_write": 1,
                     },
-                )
+                    LiveTrack.SIGNED_STATE_ONLY.value: {"returncode": 7},
+                },
+            )
+
+            with self.assertRaisesRegex(ControllerError, "terminal|teardown"):
+                controller.run()
+
+            later_ids = {
+                drivers[track.value]["id"] for track in tuple(LiveTrack)[1:]
+            }
+            later_processes = [
+                process for process in factory.processes
+                if process.full_id in later_ids
+            ]
+            self.assertTrue(all(process.stdin.closed for process in later_processes))
+            self.assertEqual(
+                {
+                    event[1] for event in events
+                    if event[0] == "stdin_close" and event[1] in later_ids
+                },
+                later_ids,
+            )
 
 
 def _record_test_readiness(journal_path: Path, nonce: str = HEX_B) -> str:

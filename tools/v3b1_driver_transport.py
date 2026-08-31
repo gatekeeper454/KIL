@@ -11,7 +11,7 @@ import subprocess
 import threading
 from typing import BinaryIO, Callable, Mapping, Protocol, Sequence
 
-from kil.v3b1_driver_protocol import MAX_RESULT_BYTES
+from kil.v3b1_driver_protocol import MAX_INSTRUCTION_BYTES, MAX_RESULT_BYTES
 
 
 class DriverTransportError(RuntimeError):
@@ -257,6 +257,96 @@ def close_instruction_stream(session: DriverSession) -> None:
         raise DriverTransportError("stdin_close") from None
     if not getattr(session.process.stdin, "closed", False):
         raise DriverTransportError("stdin_close_ambiguous")
+
+
+def write_instruction(
+    session: DriverSession,
+    payload: bytes,
+    *,
+    deadline_ns: int,
+    monotonic_ns: Callable[[], int],
+) -> None:
+    """Perform the one bounded instruction write, then close stdin exactly once."""
+    remaining_seconds(deadline_ns, monotonic_ns)
+    if (
+        type(payload) is not bytes
+        or not payload
+        or len(payload) > MAX_INSTRUCTION_BYTES
+        or not payload.endswith(b"\n")
+        or payload.count(b"\n") != 1
+    ):
+        raise DriverTransportError("instruction_framing")
+    try:
+        written = session.process.stdin.write(payload)
+    except Exception:
+        raise DriverTransportError("instruction_write") from None
+    if type(written) is not int or written != len(payload):
+        raise DriverTransportError("instruction_partial_write")
+    remaining_seconds(deadline_ns, monotonic_ns)
+    try:
+        close_instruction_stream(session)
+    except DriverTransportError:
+        raise DriverTransportError("instruction_close") from None
+
+
+def read_driver_result(
+    session: DriverSession,
+    *,
+    deadline_ns: int,
+    monotonic_ns: Callable[[], int],
+) -> bytes:
+    """Read the one bounded terminal result line from a commanded driver."""
+    remaining_seconds(deadline_ns, monotonic_ns)
+    payload = _readline_with_selector(session, deadline_ns, monotonic_ns)
+    remaining_seconds(deadline_ns, monotonic_ns)
+    if (
+        not payload
+        or len(payload) > MAX_RESULT_BYTES
+        or not payload.endswith(b"\n")
+        or payload.count(b"\n") != 1
+    ):
+        raise DriverTransportError("result_framing")
+    return payload
+
+
+def attest_driver_result_exit(
+    session: DriverSession,
+    *,
+    expected_exit_code: int,
+    deadline_ns: int,
+    monotonic_ns: Callable[[], int],
+) -> int:
+    """Require exact exit status and no output beyond the one result record."""
+    if type(expected_exit_code) is not int or expected_exit_code not in {0, 1}:
+        raise DriverTransportError("expected_exit_invalid")
+    timeout = remaining_seconds(deadline_ns, monotonic_ns)
+    try:
+        returncode = session.process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise DriverTransportError("process_wait_timeout") from None
+    except Exception:
+        raise DriverTransportError("process_wait") from None
+    remaining_seconds(deadline_ns, monotonic_ns)
+    try:
+        polled = session.process.poll()
+    except Exception:
+        raise DriverTransportError("process_poll") from None
+    if type(returncode) is not int or type(polled) is not int or polled != returncode:
+        raise DriverTransportError("termination_ambiguous")
+    stdout = bytes(session.pending_stdout)
+    session.pending_stdout.clear()
+    stdout += _read_remainder(
+        session.process.stdout,
+        max(0, MAX_RESULT_BYTES - len(stdout)),
+    )
+    stderr = _read_remainder(session.process.stderr, MAX_RESULT_BYTES)
+    if stdout:
+        raise DriverTransportError("extra_stdout")
+    if stderr:
+        raise DriverTransportError("stderr_present")
+    if returncode != expected_exit_code:
+        raise DriverTransportError("nonzero_exit")
+    return returncode
 
 
 def _read_remainder(stream: BinaryIO, limit: int) -> bytes:
