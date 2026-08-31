@@ -325,3 +325,25 @@ the tracked tree is clean, and report ignored private paths separately so the
 user can decide whether to include them in the offline backup.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Supersession notice — 2026-08-31
+
+The plan and checked execution record above are retained as history. The
+approved correction is the
+[V3B-1 in-network request-driver design](../specs/2026-08-31-v3b1-in-network-request-driver-design.md)
+and its
+[V3B-1 in-network request-driver plan](2026-08-31-v3b1-in-network-request-driver.md).
+The older host-published readiness and zero-request results above do not accept
+the corrected three-driver/six-network topology. Current V3B-1 has no host TCP
+publication, limits claims to `local_envoy_boundary`, and treats the driver as
+a laboratory transport witness rather than KIL enforcement.
+
+The corrected mechanism is implemented and statically approved at commits
+`75161f0` and `48bd81a`. The Task 8 implementation checkpoint passed 466
+non-runtime tests. The fresh Task 9 complete static gate passes 474 tests,
+including eight documentation tests. No corrected-topology live acceptance
+exists: request-free readiness is pending, and one central proof is conditional
+on that gate. This notice does not rewrite the historical tasks or checkboxes
+above.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

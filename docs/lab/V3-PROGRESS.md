@@ -45,15 +45,89 @@ Synthetic charge, threshold, and local-divergence values remain modeled.
 
 ## V3B-1 current status
 
-Through implementation commit
-`14ed92dfb1431fb2e4c3f588ff19ad07122f11fe`, V3B-1 implements the pinned local
-Envoy `ext_authz` boundary, the transcript-driven readiness, provenance,
-evidence-freeze, exact-inventory teardown and partial-up recovery contracts,
-and a deterministic authoritative offline presenter. Subsequent publication-
-recovery hardening closes repaired-checksum and post-validation completion
-races without changing the live boundary. Fresh static verification at the
-current branch checkpoint passed 174 controller tests and 389 repository tests,
-plus Python compilation and diff hygiene.
+The corrected in-network request-driver mechanism is implemented and statically
+approved at commits `75161f0` and `48bd81a`. Independent specification and
+quality review approved the complete lifecycle, recovery, evidence, and exact
+teardown contracts. The Task 8 implementation checkpoint passed 222 local-Envoy
+tests, 38 teardown-continuation tests, focused correction proofs, and the
+complete 466-test non-runtime repository suite. The fresh Task 9 complete static
+gate passes 474 tests, including eight documentation tests, together with Python
+compilation and diff hygiene. No Docker, Colima, network, or live laboratory
+runtime was invoked by that verification.
+
+### Implemented topology and traffic boundary
+
+V3B-1 fixes three separate tracks:
+
+1. `credential_policy_baseline`;
+2. `signed_state_only`; and
+3. `signed_plus_local_reduce`.
+
+Each track has two internal networks. Its frontend membership is exactly
+`{driver, Envoy}` and its backend membership is exactly
+`{Envoy, authz, target}`. Envoy is the only dual-homed component. There is no
+host TCP publication. The complete lifecycle owns twelve track containers—one
+driver, Envoy, authorization service, and harmless target per track—plus three
+transient validators, across six networks.
+
+Docker attach/stdin is only the host control channel used to supply one
+canonical instruction to a one-shot driver. Consequential traffic follows
+`driver -> Envoy -> authorization -> target or withhold`. The driver does not
+make a KIL decision and is a laboratory transport witness, not KIL enforcement.
+The implemented evidence scope is `local_envoy_boundary`.
+
+Moving the request origin from the host-published client to an in-network
+request driver changes transport and lifecycle mechanics only. It does not
+change the signed composite KTP state or KIL authorization semantics consumed
+by the authorization services.
+
+### Request and evidence contracts
+
+Request-free readiness starts all three attached drivers before reading any
+readiness record, sends no instruction and no HTTP request, and then performs
+three bounded cancellations. A central run uses a fresh three-driver set,
+persists request intent before sending exactly one canonical instruction per
+track, and performs no retry after intent. Any intent without a trusted terminal
+result is ambiguous and nonpromotable; cleanup still continues against exact
+recorded identities.
+
+Evidence bundle v2 publishes the exact canonical driver result for each track
+under `raw/drivers/`. Those three byte records are bound to the corresponding
+request and to nine authoritative Envoy, authorization, and target sources.
+The verifier reconstructs, hashes, and joins all twelve inputs before any
+complete result is eligible for publication. Teardown finalizes drivers first,
+freezes the unchanged nine service sources, removes drivers, Envoys,
+authorization services, targets, and validators, then proves all fifteen
+containers and all six empty networks absent through full-ID inventories.
+
+### Live status and historical boundary
+
+No live acceptance exists for the corrected request-driver topology. Earlier
+V3B-1 host-published cycles—including zero-request lifecycle work—remain
+development history for the superseded transport mechanism. They do not satisfy
+the current six-network topology, request-free attached-driver readiness,
+three-driver-result, or fifteen-container teardown contracts and therefore
+cannot be promoted as acceptance evidence for this implementation.
+
+The immediate live gate is one `preflight` / `up` / `readiness` / `down` cycle.
+It must show no instructions, no HTTP requests, three clean cancellations,
+exact evidence preservation, exact 15-container/6-network teardown, and foreign
+runtime restoration. Only after that gate passes may one central local-Envoy
+`run` be attempted. No retry is allowed after request intent.
+
+V3B-1 remains limited to the local Envoy boundary. V3B-2 is the future isolated
+Kind/Calico topology; its NetworkPolicy behavior, cluster-level transport,
+failure matrix, and measurements are unexecuted. V3C repetition and performance
+promotion are also future work. No historical-prevention or performance claim
+is made.
+
+### Historical pre-driver topology records
+
+The records in this section preserve the earlier nine-service/three-network
+host-published lifecycle exactly as development history. That topology is
+retired. Its runs cannot satisfy the current six-network request-driver
+readiness, three-driver-result, or fifteen-container teardown contracts, and no
+fact below is current driver-era live acceptance.
 
 Three exploratory local cycles were rejected and remain private. The first
 committed zero-request smoke completed from merged public source
@@ -73,23 +147,24 @@ The ignored nonpromotable bundle remains private for offline backup.
 The run safely exercised teardown and foreign-runtime restoration, but it did
 not pass the zero-request evidence-freeze gate. The durable lifecycle journal
 records all three requests as `not_attempted`; all nine sources were observed
-as zero bytes; and the three Envoy legs were copied and byte-bound. Docker
-copy failed for all six authorization and target ledgers, however, so the empty
+as zero bytes; and the three Envoy legs were copied and byte-bound. Docker copy
+failed for all six authorization and target ledgers, however, so the empty
 failure bundle does not independently prove those service sources were absent.
-No V3B-1 enforcement run has been accepted, promoted, or labeled validated.
+No enforcement run in the retired topology was accepted, promoted, or labeled
+validated.
 
-The exact-byte correction is now implemented and statically verified. If the
-normal Docker copy fails, the controller executes a fixed, no-shell exporter in
-the attested service container; bounds and opens the real ledger without
-following symlinks; requires a stable regular inode and size; emits its exact
-bytes, count, and digest in a closed canonical envelope; and requires the host
-to recheck that envelope against the independent pre-copy observation before
-freezing it. It never synthesizes an empty file from metadata. Empty, nonempty,
-malformed, mismatched, oversized, and symlink cases are covered, including
-direct subprocess execution of the real exporter. Independent review found no
-Important or Critical issue. Fresh static verification passed 180 controller
+The bounded exact-byte correction was then implemented and statically verified.
+If normal Docker copy failed, the controller executed a fixed, no-shell
+exporter in the attested service container; bounded and opened the real ledger
+without following symlinks; required a stable regular inode and size; emitted
+its exact bytes, count, and digest in a closed canonical envelope; and required
+the host to recheck that envelope against the independent pre-copy observation
+before freezing it. It never synthesized an empty file from metadata. Empty,
+nonempty, malformed, mismatched, oversized, and symlink cases were covered,
+including direct subprocess execution of the real exporter. Independent review
+found no Important or Critical issue. Static verification passed 180 controller
 tests and 396 repository tests, plus Python compilation and diff hygiene. The
-remaining risk is the real Docker path, which is the purpose of the repeated
+remaining risk was the real Docker path, which motivated the repeated
 zero-request gate.
 
 The first two post-merge launch attempts remained pre-profile and
@@ -100,10 +175,9 @@ despite advertising the boolean option in help mode. Neither attempt created
 `kil-v3-lab`, a Docker object, or a request; each journal records all request
 states as `not_attempted` and was archived through `down`. The foreign `default`
 profile was restored to its exact Running/containerd/arm64/4 CPU/4 GiB/20 GiB
-state. The minimal compatibility correction removes only that redundant false
-CLI flag. The saved-config attestation still requires
-`nestedVirtualization: false` before any service container may deploy. Static
-verification remains 180 controller tests and 396 repository tests.
+state. The minimal compatibility correction removed only that redundant false
+CLI flag. The saved-config attestation still required
+`nestedVirtualization: false` before any service container could deploy.
 
 The corrected zero-request lifecycle then passed from synchronized public main
 `6706859d265204e0a569ebb6817d187dc1728f9d` as run
@@ -111,23 +185,19 @@ The corrected zero-request lifecycle then passed from synchronized public main
 No `run` command or request intent occurred. All nine Envoy, authorization, and
 target source legs terminated `copied`; every source and copied byte count was
 zero and every digest was the empty SHA-256. All 11 public `SHA256SUMS` entries
-verified. The manifest remains intentionally `run_complete=false`,
+verified. The manifest remained intentionally `run_complete=false`,
 `promotion_status=not_promoted`, and
-`intermediate_provisional_failure_local_boundary`; it does not claim an
+`intermediate_provisional_failure_local_boundary`; it did not claim an
 enforcement result. Teardown removed nine services, three transient validators,
 three networks, and only `kil-v3-lab` before publication. No active lifecycle
-state remains, and the foreign profile was host-verified after restoration as
+state remained, and the foreign profile was host-verified after restoration as
 Running/containerd/arm64/4 CPU/4 GiB/20 GiB.
 
-This result accepts the zero-request lifecycle and evidence-freeze gate. The
-offline presenter correctly rejects the smoke because it is not an accepted
-local-boundary run; presenter acceptance remains an exit criterion for the one
-central proof.
-
-V3B-1 is limited to the local Envoy boundary. Full local-cluster transport
-validation remains V3B-2: the isolated Kind/Calico topology, approved failure
-matrix, target-side markers, and cluster-level measurements are still
-unexecuted.
+Within the retired pre-driver topology, this result accepted the zero-request
+lifecycle and evidence-freeze gate. The offline presenter correctly rejected
+the smoke because it was not an accepted local-boundary enforcement run. Those
+facts remain valid historical records, but they do not authorize or substitute
+for either pending driver-era live gate.
 
 ## Architecture
 
@@ -140,12 +210,15 @@ and the complete approved specification is
 
 ## Next gate
 
-Publish and merge the corrected zero-request smoke references. Then execute
-exactly one central V3B-1 `preflight` / `up` / `run` / `down` proof from clean
-synchronized main, with no retry after request intent. Require
-`permit / permit / deny`, HTTP `200 / 200 / 403`, target markers `1 / 1 / 0`,
-exact source joins and checksums, verified teardown, restored foreign runtime,
-and offline presenter acceptance. V3B-2 and V3C remain separate later gates,
-and all V3A output remains explicitly modeled.
+First execute one request-free V3B-1 `preflight` / `up` / `readiness` / `down`
+cycle from clean synchronized main. Require all three readiness records, three
+clean cancellations, no instruction or HTTP request, complete exact teardown,
+and foreign-runtime restoration. If and only if that gate passes, execute one
+central `preflight` / `up` / `run` / `down` proof with no retry after request
+intent. Its prospective acceptance criteria remain `permit / permit / deny`,
+HTTP `200 / 200 / 403`, target markers `1 / 1 / 0`, exact three-driver and
+nine-service-source joins, verified checksums, exact teardown, restored foreign
+runtime, and offline presenter acceptance. V3B-2 and V3C remain later gates;
+all V3A output remains explicitly modeled.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

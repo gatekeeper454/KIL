@@ -2,12 +2,50 @@
 
 V3B-1 implements three independently configured local Envoy `ext_authz` routes
 in front of harmless target workloads. Each authorization service instance
-fixes one track at startup. V3B-2 will reuse the same fixed tracks in the Kind
-topology. No V3B-1 proof has yet been accepted, promoted, or labeled validated:
+fixes one track at startup. V3B-2 may reuse the same fixed tracks in a future
+Kind/Calico topology. No driver-era V3B-1 live proof has yet been accepted,
+promoted, or labeled validated:
 
 1. `credential_policy_baseline`
 2. `signed_state_only`
 3. `signed_plus_local_reduce`
+
+## Corrected local topology
+
+Each track uses two Docker-internal networks with no host TCP publication:
+
+```text
+host control: Docker attach/stdin -> one-shot driver
+
+frontend:  driver -> Envoy
+backend:             Envoy -> authorization
+                     Envoy -> harmless target or withhold
+```
+
+The frontend membership is exactly `{driver, Envoy}` and backend membership is
+exactly `{Envoy, authz, target}`. Envoy is the sole dual-homed component. Across
+the three tracks the lifecycle owns twelve track containers plus three
+transient validators and six networks. Driver-first exact teardown freezes the
+nine Envoy, authorization, and target sources before proving all fifteen
+containers and all six networks absent.
+
+Attach/stdin does not carry consequential traffic across the enforcement
+boundary; it supplies exactly one canonical request instruction to a one-shot
+driver. That request driver then opens the track-local connection to Envoy. The
+driver is a laboratory transport witness, not KIL enforcement, and the current
+claim scope is `local_envoy_boundary`.
+
+Request-free readiness starts all three attached drivers, consumes only their
+readiness records, sends no instruction and no HTTP request, and performs three
+bounded cancellations. A central run uses fresh drivers, durably records intent
+before sending one instruction per track, and never retries after intent.
+
+The corrected mechanism and recovery contract are implemented and statically
+approved at commits `75161f0` and `48bd81a`. The Task 8 implementation
+checkpoint passed 466 non-runtime tests. The fresh Task 9 complete static gate
+passes 474 tests, including eight documentation tests. The request-free
+readiness gate and the conditional central proof have not yet run against this
+topology.
 
 The request cannot select or downgrade the active track. KIL state is a signed,
 short-lived experimental extension envelope that references KTP Trust Proof and

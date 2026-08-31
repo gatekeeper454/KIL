@@ -761,12 +761,15 @@ git commit -m "Recover and tear down V3B-1 request drivers"
 - Modify: `docs/paper/kinetic-infrastructure.md`
 - Modify: `docs/architecture/v3-envoy-live-validation.svg`
 - Modify: `docs/design-drafts/hybrid-two-timescale-architecture.html`
+- Create: `docs/architecture/hybrid-two-timescale-architecture.html`
 - Modify: `docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md`
 - Modify: `docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md`
+- Modify: `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
 - Modify: `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- Create: `tests/test_v3b1_documentation.py`
 - Modify: ignored `artifacts/generated/v3b1-task6-live-status.md`
 
-- [ ] **Step 1: Update only mechanism and pending-gate claims**
+- [x] **Step 1: Update only mechanism and pending-gate claims**
 
 Show host Docker attach/stdin control separately from consequential traffic.
 Show three tracks, each with frontend `{driver, Envoy}` and backend
@@ -778,18 +781,18 @@ Before live acceptance, state only that the mechanism is implemented and the
 readiness/central gates are pending. Do not claim validation, prevention,
 performance, Kind, or NetworkPolicy results.
 
-- [ ] **Step 2: Add supersession notes without rewriting history**
+- [x] **Step 2: Add supersession notes without rewriting history**
 
 The older specs/plans retain their execution records but link to the approved
 driver correction. Append lineage; never rewrite older entries.
 
-- [ ] **Step 3: Run independent spec and quality review**
+- [x] **Step 3: Run independent spec and quality review**
 
 Review every requirement in design sections 4-11. Resolve every Critical or
 Important issue test-first, then re-run spec review and quality/security review
 until both approve.
 
-- [ ] **Step 4: Run the complete static gate**
+- [x] **Step 4: Run the complete static gate**
 
 Run:
 
@@ -804,15 +807,17 @@ git diff --check
 
 Expected: every test PASS, compilation succeeds, and no diff error is emitted.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add README.md tools/README.md adapters/envoy/README.md docs/lab/V3-PROGRESS.md \
   docs/paper/kinetic-infrastructure.md docs/architecture/v3-envoy-live-validation.svg \
+  docs/architecture/hybrid-two-timescale-architecture.html \
   docs/design-drafts/hybrid-two-timescale-architecture.html \
   docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md \
   docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md \
-  docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md
+  docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md \
+  docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md tests/test_v3b1_documentation.py
 git commit -m "Document the V3B-1 request driver boundary"
 ```
 

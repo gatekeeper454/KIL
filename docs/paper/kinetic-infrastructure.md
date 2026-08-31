@@ -9,7 +9,8 @@
 **Protocol baseline:** Kinetic Trust Protocol v2.0.0
 
 **Evidence state:** Architecture and model proposed; historical example modeled;
-local validation in progress
+local-Envoy mechanism implemented and statically verified; live acceptance
+pending
 
 ## Executive summary
 
@@ -34,8 +35,10 @@ The architecture is hybrid and two-timescale. A slower authoritative loop
 derives, signs, expires, and refreshes `Q_i,c`. A faster enforcement loop
 evaluates each action at an infrastructure boundary. Two experimental modes
 compare consumption of signed state alone with signed state plus local
-reduction. Offline historical replay and live local-cluster validation are two
-execution rails for this architecture; they are not the two timescales.
+reduction. Offline historical replay and live infrastructure-boundary
+experiments are two execution rails for this architecture; they are not the two
+timescales. The current live implementation targets a local Envoy boundary. A
+Kind/Calico cluster boundary remains a later validation phase.
 
 This paper applies the proposed model to Hugging Face's public account of the
 July 2026 agent intrusion. The incident provides an unusually detailed example
@@ -44,6 +47,12 @@ privilege levels, and action sequences. The analysis is a counterfactual, not a
 claim of historical prevention. Reported incident facts are **observed**;
 synthetic KTP context and predicted KIL decisions are **modeled**; only behavior
 reproduced in the versioned local lab may be called **validated**.
+
+The current V3B-1 request-driver mechanism has passed static implementation and
+review gates, not live acceptance. The request-free readiness gate and the
+conditional central enforcement proof remain pending. Accordingly, this paper
+reports no current V3B-1 validated result, historical-prevention result, or
+performance result.
 
 ## 1. Introduction
 
@@ -202,14 +211,33 @@ into the deterministic decision engine. The live rail feeds locally observed
 workload actions into the same interface and connects the result to an actual
 enforcement adapter. These are execution rails—not timescales.
 
-The canonical architecture graphic is maintained as
-[hybrid-two-timescale-architecture.html](../design-drafts/hybrid-two-timescale-architecture.html).
+The standalone canonical architecture graphic is
+[hybrid-two-timescale-architecture.html](../architecture/hybrid-two-timescale-architecture.html).
+Its skill-compliant inline source is preserved separately in
+[`docs/design-drafts/hybrid-two-timescale-architecture.html`](../design-drafts/hybrid-two-timescale-architecture.html).
 
-Gate V3 instantiates the live rail through three separately configured Envoy
-external-authorization tracks. The graphical deployment view below distinguishes
-the credential-policy control, signed-state consumption, and signed state plus
-local reducing-only overlay. A validated denial requires a joined decision,
-Envoy non-forwarding record, and absence of the target invocation marker.
+Gate V3B-1 instantiates the current live rail through three separately
+configured Envoy external-authorization tracks. Each track has a frontend
+internal network containing only a one-shot request driver and Envoy, plus a
+backend internal network containing only Envoy, the authorization service, and
+the harmless target. Envoy is the sole dual-homed component. Across the three
+tracks the lifecycle owns twelve track containers, three transient validators,
+and six networks, with no host TCP publication.
+
+Docker attach/stdin is host control only: it supplies one canonical instruction
+to a driver. The consequential path is `driver -> Envoy -> authorization ->
+target or withhold`. The driver is a laboratory transport witness, not KIL
+enforcement, and the present scope is `local_envoy_boundary`. A denial could be
+promoted only after one accepted live run joins the exact driver result, KIL
+decision, Envoy non-forwarding record, and absence of the target invocation
+marker. No such V3B-1 live acceptance is claimed in this edition.
+
+Moving the request origin from the host-published client to an in-network
+request driver changes transport and lifecycle mechanics only. It does not
+change fixed-track authorization semantics: `credential_policy_baseline` is a
+credential-policy control and does not consume signed composite KTP state;
+only `signed_state_only` and `signed_plus_local_reduce` consume signed composite
+KTP state.
 
 ![Gate V3 Envoy live-validation architecture](../architecture/v3-envoy-live-validation.svg)
 
@@ -368,12 +396,26 @@ applies versioned model inputs, and emits canonical decision records. Repeating
 a run with the same commit, scenario, clock, model, and parameters must produce
 the same semantic output and integrity digest.
 
-The live rail generates benign and representative adversarial trajectories in
-an isolated local Kubernetes environment. It reuses the replay request,
-signed-state, decision, reason-code, and record schemas. The first adapter is
-selected for observable pre-execution enforcement and reproducibility. The
-project will not imply eBPF, SmartNIC, SDN, or production performance unless
-that substrate is built and measured.
+The current live rail is V3B-1, a local-Envoy boundary with six Docker-internal
+network segments and no host TCP publication. It reuses the replay request,
+signed-state, decision, reason-code, and record schemas. Three one-shot drivers
+send the same normalized action to three fixed Envoy tracks. The v2 evidence
+bundle publishes the three exact canonical driver results and nine authoritative
+Envoy, authorization, and target sources, then reconstructs, hashes, and joins
+them before a result can be considered for promotion.
+
+Request-free readiness starts all three attached drivers, reads only readiness
+records, sends no instruction and no HTTP request, and performs three bounded
+cancellations. A later central run uses fresh drivers, persists request intent
+before one instruction per track, and never retries after intent. The driver
+does not evaluate authority; Envoy and its authorization service constitute the
+tested enforcement boundary.
+
+V3B-2 is a future isolated Kind/Calico rail. Its NetworkPolicy behavior,
+cluster-level transport, failure matrix, and measurements remain unexecuted.
+The project will not imply Kubernetes, eBPF, SmartNIC, SDN, historical
+prevention, or production performance unless the relevant substrate is built
+and measured.
 
 ### 6.3 Validation gates
 
@@ -381,12 +423,31 @@ that substrate is built and measured.
 |---|---|
 | V1 — deterministic kernel | Arithmetic boundaries, decay, class isolation, monotonic reduction, coupling, freshness, and non-expansion invariants pass automated tests. |
 | V2 — historical replay | Observed events are cited, synthetic inputs are modeled, modes share action facts, and decision provenance is complete. |
-| V3 — live local validation | Benign and adversarial trajectories produce observable outcomes matching decision records; safety cases include latency distributions. |
+| V3A — process contract | The modeled three-track authorization, forwarding, harmless target, and evidence joins remain explicit process-level results. |
+| V3B-1 — local Envoy boundary | After request-free readiness passes, one central proof must join exact driver, decision, Envoy, and target records and satisfy exact teardown; this gate is pending. |
+| V3B-2 — future Kind/Calico boundary | NetworkPolicy isolation, cluster transport, failure cases, and measurements require a separate future execution. |
 | V4 — publication promotion | Every `validated` statement points to a passing immutable run bundle; negative and ambiguous results remain visible. |
 
 Run bundles contain the manifest, normalized scenario, signed states, decisions,
 metrics, summary, and SHA-256 integrity record. Paper tables, figures, and
 validated statements cite immutable run IDs.
+
+### 6.4 Current V3B-1 gate state
+
+The corrected request-driver mechanism and recovery contract are implemented
+and statically approved at commits `75161f0` and `48bd81a`. The Task 8
+implementation checkpoint passed 466 non-runtime tests. The fresh Task 9
+complete static gate passes 474 tests, including eight documentation tests.
+This establishes implementation and contract evidence only; no Docker, Colima,
+network, or live lab execution is part of that result.
+
+The next gate is one request-free `preflight` / `up` / `readiness` / `down`
+cycle that must prove no instruction or HTTP request, three clean driver
+cancellations, the unchanged nine-service evidence freeze, exact
+15-container/6-network teardown, and foreign-runtime restoration. Only if that
+gate passes may the project attempt exactly one central local-Envoy proof. The
+central proof has no retry after request intent. Until both gates produce
+accepted evidence, all V3B-1 outcome claims remain pending.
 
 ## 7. Safety, failure, and governance
 

@@ -6,8 +6,9 @@ publishable technical paper with two executable demonstrations:
 
 1. a deterministic counterfactual replay of the July 2026 Hugging Face agent
    intrusion; and
-2. a local Kubernetes proof of concept that applies the same decision model to
-   live traffic.
+2. a staged live proof that first applies the same decision model at a local
+   Envoy boundary, with Kind/Calico cluster validation reserved for a later
+   gate.
 
 The narrow extension proposal will specify only what KTP v2.0.0 does not yet
 make sufficiently concrete for this use case. KIL will not rename existing
@@ -16,28 +17,42 @@ KTP-Transport, KTP-Enforce, KTP-Gravity, or Vector Identity constructs.
 ## Status
 
 The deterministic V1 decision kernel, V2 historical replay, and V3A signed-
-state authorization core remain locally executable modeled assets. V3B-1 now
-implements the pinned local Envoy `ext_authz` boundary, a hardened transcript-
-driven lifecycle and evidence harness, and an authoritative offline presenter.
-Three exploratory local cycles were rejected and remain private. The first
-committed zero-request V3B-1 smoke from public source commit `47c0614d49ec`
-completed exact teardown and restored the foreign runtime, but it did not pass
-the evidence-freeze gate: three Envoy legs were copied while six authorization
-and target ledger copies failed after zero-byte in-container observations. Its
-empty failure bundle is nonpromotable and does not independently prove service-
-source absence.
+state authorization core remain locally executable modeled assets. The
+corrected V3B-1 local-Envoy mechanism is implemented and statically approved at
+commits `75161f0` and `48bd81a`: three one-shot request drivers communicate with
+three fixed Envoy `ext_authz` tracks over six internal networks without a host
+TCP publication. The Task 8 implementation checkpoint passed 466 non-runtime
+tests. The fresh Task 9 complete static gate passes 474 tests, including eight
+documentation tests. This is implementation evidence, not live acceptance.
 
-The harness now contains a bounded exact-byte service-ledger export correction.
-Two subsequent launch attempts stopped before profile creation because of host
-tool discovery and a Colima false-flag compatibility mismatch; both were
-durably archived without a request or KIL runtime. The minimal launch correction
-retains post-start attestation that nested virtualization is disabled. The
-corrected zero-request smoke from public main `6706859d2652` then passed: no
-request occurred, all nine zero-byte source legs were copied and byte-bound,
-exact teardown completed, and the foreign runtime was restored. The next gate
-is exactly one central local-boundary proof with no retry after request intent.
-Kind/Calico validation (V3B-2) and repetition and performance promotion (V3C)
-remain unexecuted.
+Each track has a frontend network containing only its driver and Envoy, and a
+backend network containing only Envoy, authorization service, and harmless
+target. Envoy is the sole dual-homed component. The lifecycle owns twelve track
+containers plus three transient validators and proves all fifteen containers
+and all six networks absent during exact teardown. Docker attach/stdin is only
+the host control channel that gives a driver one canonical instruction; the
+consequential path is `driver -> Envoy -> authorization -> target or withhold`.
+The driver is a laboratory transport witness, not KIL enforcement. The current
+evidence scope is `local_envoy_boundary`.
+
+No driver-era V3B-1 live gate has yet been accepted. The next gate is a
+request-free readiness cycle with no driver instruction or HTTP request and
+three clean driver cancellations. Only if that gate passes may the project run
+exactly one central local-Envoy proof, with no retry after request intent.
+Kind/Calico validation (V3B-2), repetition, and performance promotion (V3C)
+remain future work.
+
+Historical pre-driver records remain available for provenance. The rejected
+nine-service/three-network smoke ran from public source
+`47c0614d49ec1a7484cdefd04cc5d080adc73ca2` as
+`v3b1-1db8b5914ce26e2e6c60e74124bcc1b2c9ed66b7dd68c2d3cf4ea1bc0d18c9b3`.
+After intervening pre-profile launch failures, the corrected zero-request
+lifecycle ran from public source
+`6706859d265204e0a569ebb6817d187dc1728f9d` as
+`v3b1-0374c771b23adcab64060cd8c854d12b72417ff8e4713d24e6f6a550e20bdbea`
+and accepted that retired topology's lifecycle/evidence-freeze gate without an
+enforcement request. Both are pre-driver historical records; neither can
+satisfy the current six-network driver-era readiness or acceptance contracts.
 
 ## Evidence classes
 
@@ -105,6 +120,23 @@ The tool command downloads only the resolved laboratory clients into ignored
 string and deterministic Ed25519 seeds used by V3B-1 are public, non-secret
 laboratory fixtures. They must never be reused as production credentials or
 keys.
+
+### V3B-1 local-Envoy boundary
+
+The V3B-1 controller has separate lifecycle commands for `preflight`, `up`,
+request-free `readiness`, one central `run`, evidence `collect`, `down`, and an
+offline `view`. Readiness starts all three attached drivers, reads their
+request-free readiness records, and cancels all three without sending an
+instruction or HTTP request. A central run starts a fresh three-driver set,
+records durable request intent, sends exactly one canonical instruction to each
+driver, and never retries after intent.
+
+The v2 public evidence contract publishes the exact canonical result from each
+driver under `raw/drivers/`, together with nine authoritative Envoy,
+authorization, and target sources. The verifier reconstructs and hashes those
+sources before joining the same request, decision, forwarding, and target facts.
+Until the pending live gates pass, these contracts are statically verified and
+must not be described as a validated enforcement result.
 
 ## Historical replay
 

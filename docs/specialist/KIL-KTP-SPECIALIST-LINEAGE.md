@@ -6066,3 +6066,127 @@ describes the implemented six-network driver topology and labels both live
 gates as pending. Then pass the complete static documentation and code gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-117 — 2026-08-31 — Driver-era publication set reaches the final static review gate
+
+**Input:** Unify the repository overview, controller and Envoy guidance, lab
+status, Kinetic Infrastructure paper, architecture visuals, superseded design
+records, and local live board around the approved V3B-1 in-network request
+driver without overstating an unexecuted live result or erasing pre-driver
+history.
+
+**Interpretation:** Current-facing material must distinguish Docker
+attach/stdin host control from consequential `driver -> Envoy -> authorization
+-> target or withhold` traffic; show three fixed tracks over six internal
+networks; identify Envoy as the sole dual-homed component; bind three driver
+results and nine service sources; keep the driver a transport witness rather
+than KIL enforcement; and make request-free readiness the prerequisite for one
+central proof. The credential-policy baseline remains the no-signed-state
+control, while only the two KIL tracks consume signed composite KTP state.
+
+**Decision status:** Proposed publication checkpoint ready for final quality
+re-review. The narrative set now reports the Task 8 implementation checkpoint
+as 466 tests and the fresh Task 9 complete static gate as 474 tests. It preserves
+the founder-approved opening and exact `**Author and Creator** Mike Storm,
+Distinguished Engineer` byline. Detailed nine-service/three-network smoke and
+launch records remain in a labeled historical pre-driver section and cannot be
+promoted to the current six-network contract. The older 2026-08-29 design and
+2026-08-30 plan retain byte-identical original prefixes followed by append-only
+supersession notes linking the approved 2026-08-31 driver design and plan.
+
+The local-Envoy SVG now separates host control, per-track frontend and backend
+networks, the two signed-state KIL tracks, baseline control, and two independent
+evidence inputs joined before verification. The hybrid two-timescale source
+remains a passive inline fragment; a passive, self-contained UTF-8 standalone
+publication wrapper provides durable desktop and narrow-width rendering. The
+paper links the standalone hybrid architecture and embeds the local-Envoy SVG.
+Both visuals separate current V3B-1 from future Kind/Calico V3B-2 and retain the
+canonical KTP citation.
+
+**Rationale:** Static implementation and historical development records answer
+different evidentiary questions. A unified publication must show exactly what
+is built and statically proved while keeping live acceptance, historical
+prevention, performance, Kubernetes, and NetworkPolicy claims outside the
+current evidence boundary.
+
+**Affected artifacts:**
+
+- `README.md`
+- `tools/README.md`
+- `adapters/envoy/README.md`
+- `docs/lab/V3-PROGRESS.md`
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/architecture/v3-envoy-live-validation.svg`
+- `docs/design-drafts/hybrid-two-timescale-architecture.html`
+- `docs/architecture/hybrid-two-timescale-architecture.html`
+- `docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md`
+- `docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md`
+- `tests/test_v3b1_documentation.py`
+- ignored `artifacts/generated/v3b1-task6-live-status.md`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** Eight new documentation regressions and sixteen focused
+documentation, citation, canonical-semantics, and consultation tests pass. The
+request-driver suite passes 28 tests; preflight, container, and local-Envoy
+modules pass 246 tests; the complete repository passes 474 tests. Python
+compilation, `make validate`, SVG XML parsing, passive-content checks, citation
+and historical-prefix checks, ignored-board hermeticity, and diff hygiene pass.
+The standalone hybrid wrapper was visually inspected at 1440 and 360 pixels;
+the SVG was rendered and inspected after evidence-arrow correction. No Docker,
+Colima, network, or live laboratory runtime was invoked.
+
+**Unresolved questions:** Independent final quality approval remains pending.
+The request-free live gate and one conditional central proof are unexecuted.
+Future Kind/Calico V3B-2, historical prevention, repetition, and production
+performance remain unvalidated or unclaimed.
+
+**Next gate:** Obtain final Task 9 specification and quality approval, commit
+the tracked publication set while leaving the live board ignored, publish and
+merge the correction, synchronize local and public main, then execute exactly
+one request-free `preflight -> up -> readiness -> down` lifecycle.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-118 — 2026-08-31 — Unified V3B-1 publication set passes both review gates
+
+**Input:** Final independent specification and quality re-review of the Task 9
+publication set after correcting track semantics, evidence-flow geometry,
+standalone visualization rendering, test hermeticity, and plan inventory.
+
+**Interpretation:** Publication readiness requires both semantic agreement and
+durable presentation: the baseline must remain the credential-policy control;
+only the two KIL tracks consume signed composite KTP state; driver results and
+service sources must join as independent evidence; the paper must render or
+link both architecture views; and a clean clone must pass without the ignored
+local live board.
+
+**Decision status:** Confirmed Task 9 approved. Independent specification and
+quality reviewers found no remaining Critical or Important issue. The tracked
+publication set is ready to commit. The ignored live status board remains local
+and untracked by design.
+
+**Rationale:** The lab can advance only from a public record that accurately
+states what is implemented, what has merely passed static verification, and
+what remains contingent on live evidence.
+
+**Affected artifacts:** The Task 9 artifacts enumerated in T-117, plus this
+final approval record and the completed Task 9 plan checkboxes.
+
+**Verification:** Sixteen focused publication, citation, canonical-semantics,
+and consultation tests and the full 474-test repository suite pass. Python
+compilation, `make validate`, SVG XML parsing, passive-content and clean-clone
+hermeticity checks, visual inspection at desktop and 360-pixel widths, secret
+and private-path review, and diff hygiene pass. No Docker, Colima, network, or
+live laboratory runtime was invoked.
+
+**Unresolved questions:** Request-free live readiness and one conditional
+central local-Envoy proof remain unexecuted. V3B-2 Kind/Calico, historical
+prevention, repetition, and production performance remain outside the present
+claim boundary.
+
+**Next gate:** Commit and publish Task 9, require CI and merge, synchronize
+local and public main, then execute exactly one request-free live
+`preflight -> up -> readiness -> down` lifecycle with visible status updates.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
