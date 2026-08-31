@@ -5056,3 +5056,39 @@ require `permit / permit / deny`, target markers `1 / 1 / 0`, complete joins,
 checksums, exact teardown, restored foreign state, and presenter acceptance.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-099 — 2026-08-30 — Central proof pauses at clean pre-lifecycle shutdown boundary
+
+**Input:** Pause the current central-proof operation at the next safe stopping
+point so the host can shut down, and advise when shutdown is safe.
+
+**Interpretation:** The only clean pause after authorization is before `up`
+creates a lifecycle. Because the foreign `default` profile had just been
+temporarily stopped in preparation, it must be restored and host-verified before
+declaring the shutdown boundary safe.
+
+**Decision status:** Confirmed paused before the central KIL lifecycle began.
+Public main and local main are synchronized at
+`229e1b774633a5f93ab1d72a4813b127345eb433`. No KIL `up`, request intent,
+request, profile, container, network, authorization action, target action, or
+new evidence bundle was created for the central proof. The foreign `default`
+profile was restored and host-verified as Running, containerd, arm64, 4 CPU,
+4 GiB memory, and 20 GiB disk. Active KIL journal, state, and readiness-poison
+files are absent.
+
+**Rationale:** Stopping before `up` preserves the no-retry central-request
+contract and requires no lifecycle recovery after restart. Restoring the
+foreign profile returns the host to its exact pre-proof state.
+
+**Affected artifacts:**
+
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The central local-boundary proof remains authorized
+but unexecuted. No enforcement result is accepted, promoted, or validated.
+
+**Next gate:** After restart, synchronize and verify public main, record the
+foreign profile state, then resume the approved one-time central
+`preflight` / `up` / `run` / `down` proof. Do not retry after request intent.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
