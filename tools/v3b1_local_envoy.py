@@ -100,6 +100,8 @@ _BUILD_CONTEXT_FILES = (
     "src/kil/live_authz.py",
     "src/kil/q_state.py",
     "src/kil/target_http.py",
+    "src/kil/v3b1_driver_protocol.py",
+    "src/kil/v3b1_request_driver.py",
 )
 RETRY_CONTROL_HEADERS = {
     "x-envoy-hedge-on-per-try-timeout": "false",
@@ -1535,6 +1537,18 @@ def stage_build_context(repository_root: Path, staging_root: Path) -> dict[str, 
         hashes[relative] = _digest_file(destination)
     context_sha = _digest_bytes(canonical_json(hashes).encode("utf-8"))
     return {"files": list(_BUILD_CONTEXT_FILES), "file_sha256": hashes, "context_sha256": context_sha}
+
+
+def driver_bootstrap_sha256(attestation: Mapping[str, object]) -> str:
+    """Return the exact staged request-driver module digest."""
+    if type(attestation) is not dict:
+        raise ControllerError("build-context attestation is invalid")
+    hashes = attestation.get("file_sha256")
+    if type(hashes) is not dict:
+        raise ControllerError("build-context file hashes are unavailable")
+    digest = hashes.get("src/kil/v3b1_request_driver.py")
+    _require_sha256("request-driver bootstrap", digest)
+    return digest
 
 
 def validate_image_architecture(value: Mapping[str, object]) -> None:

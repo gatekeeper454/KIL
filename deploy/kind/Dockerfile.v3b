@@ -20,6 +20,8 @@ COPY src/kil/__init__.py \
     src/kil/live_authz.py \
     src/kil/q_state.py \
     src/kil/target_http.py \
+    src/kil/v3b1_driver_protocol.py \
+    src/kil/v3b1_request_driver.py \
     src/kil/
 RUN python -m pip install --no-cache-dir --no-compile --require-hashes \
     --only-binary=:all: -r deploy/kind/requirements-v3b-build.txt

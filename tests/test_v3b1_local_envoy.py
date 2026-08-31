@@ -1886,6 +1886,8 @@ class ControllerContractTest(unittest.TestCase):
                 "src/kil/live_authz.py",
                 "src/kil/q_state.py",
                 "src/kil/target_http.py",
+                "src/kil/v3b1_driver_protocol.py",
+                "src/kil/v3b1_request_driver.py",
             ):
                 path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -7176,6 +7178,8 @@ class RuntimeAttestationTest(unittest.TestCase):
                 "src/kil/live_authz.py",
                 "src/kil/q_state.py",
                 "src/kil/target_http.py",
+                "src/kil/v3b1_driver_protocol.py",
+                "src/kil/v3b1_request_driver.py",
             ):
                 path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)

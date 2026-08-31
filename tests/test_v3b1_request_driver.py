@@ -1,10 +1,13 @@
 import json
+from io import BytesIO
 from pathlib import Path
 import traceback
 import unittest
+from unittest.mock import patch
 
 from kil.canonical import canonical_json
 import kil.v3b1_driver_protocol as driver_protocol
+import kil.v3b1_request_driver as request_driver
 from kil.v3b1_driver_protocol import (
     DriverProtocolError,
     canonical_record,
@@ -12,6 +15,7 @@ from kil.v3b1_driver_protocol import (
     parse_instruction,
     parse_result,
 )
+from kil.v3b1_request_driver import execute_driver
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -382,6 +386,432 @@ class DriverProtocolTest(unittest.TestCase):
         for value in rejected:
             with self.subTest(value=value), self.assertRaises(DriverProtocolError):
                 parse_result(canonical_record(value), expected_track="signed_state_only")
+
+
+class _Clock:
+    def __init__(self, *values):
+        self.values = iter(values)
+
+    def __call__(self):
+        return next(self.values)
+
+
+class _Response:
+    def __init__(
+        self,
+        *,
+        status=200,
+        decision_digest=HEX_A,
+        body=b"",
+        header_error=None,
+        body_error=None,
+    ):
+        self.status = status
+        self.decision_digest = decision_digest
+        self.body = body
+        self.header_error = header_error
+        self.body_error = body_error
+        self.header_names = []
+        self.read_sizes = []
+
+    def getheader(self, name):
+        self.header_names.append(name)
+        if self.header_error is not None:
+            raise self.header_error
+        if name.lower() == "x-kil-decision-digest":
+            return self.decision_digest
+        return None
+
+    def read(self, size=-1):
+        self.read_sizes.append(size)
+        if self.body_error is not None:
+            raise self.body_error
+        return self.body[:size]
+
+
+class _Connection:
+    def __init__(self, response=None, *, request_error=None, response_error=None):
+        self.response = _Response() if response is None else response
+        self.request_error = request_error
+        self.response_error = response_error
+        self.connect_count = 0
+        self.close_count = 0
+        self.requests = []
+        self.getresponse_count = 0
+        self.auto_open = 1
+
+    def connect(self):
+        self.connect_count += 1
+
+    def request(self, method, path, body=None, headers=None):
+        self.requests.append((method, path, body, dict(headers or {})))
+        if self.request_error is not None:
+            raise self.request_error
+
+    def getresponse(self):
+        self.getresponse_count += 1
+        if self.response_error is not None:
+            raise self.response_error
+        return self.response
+
+    def close(self):
+        self.close_count += 1
+
+
+class _Factory:
+    def __init__(self, connection):
+        self.connection = connection
+        self.calls = []
+
+    def __call__(self, host, port, *, timeout):
+        self.calls.append((host, port, timeout))
+        return self.connection
+
+
+class _Output(BytesIO):
+    def __init__(self):
+        super().__init__()
+        self.flush_count = 0
+
+    def flush(self):
+        self.flush_count += 1
+        return super().flush()
+
+
+class _ReadGuard(BytesIO):
+    def __init__(self, payload, output):
+        super().__init__(payload)
+        self.output = output
+        self.read_sizes = []
+
+    def read(self, size=-1):
+        self.read_sizes.append(size)
+        records = self.output.getvalue().splitlines(keepends=True)
+        if len(records) != 1:
+            raise AssertionError("stdin was read before the single readiness record")
+        if self.output.flush_count != 1:
+            raise AssertionError("readiness was not flushed before stdin was read")
+        parse_result(records[0], expected_track="signed_state_only")
+        return super().read(size)
+
+
+class RequestDriverTest(unittest.TestCase):
+    def run_driver(
+        self,
+        payload,
+        *,
+        connection=None,
+        clock_values=(10, 20, 30, 40),
+        guarded_input=False,
+    ):
+        output = _Output()
+        stdin = (
+            _ReadGuard(payload, output)
+            if guarded_input
+            else BytesIO(payload)
+        )
+        connection = _Connection() if connection is None else connection
+        factory = _Factory(connection)
+        exit_code = execute_driver(
+            track="signed_state_only",
+            stdin=stdin,
+            stdout=output,
+            connection_factory=factory,
+            monotonic_ns=_Clock(*clock_values),
+        )
+        return exit_code, output.getvalue(), stdin, connection, factory
+
+    def parsed_output(self, payload):
+        records = payload.splitlines(keepends=True)
+        return [
+            parse_result(record, expected_track="signed_state_only")
+            for record in records
+        ]
+
+    def test_readiness_precedes_first_stdin_read_and_eof_cancels_silently(self):
+        exit_code, output, stdin, connection, factory = self.run_driver(
+            b"", clock_values=(10, 20), guarded_input=True
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            self.parsed_output(output),
+            [
+                {
+                    "schema_version": "kil.v3b1-driver-readiness.v1",
+                    "track": "signed_state_only",
+                    "status": "ready",
+                    "connect_monotonic_ns": 10,
+                    "ready_monotonic_ns": 20,
+                }
+            ],
+        )
+        self.assertEqual(stdin.read_sizes, [driver_protocol.MAX_INSTRUCTION_BYTES + 1])
+        self.assertEqual(output.count(b"\n"), 1)
+        self.assertEqual(factory.calls, [("envoy", 8080, 2.0)])
+        self.assertEqual(connection.connect_count, 1)
+        self.assertEqual(connection.requests, [])
+        self.assertEqual(connection.getresponse_count, 0)
+        self.assertEqual(connection.close_count, 1)
+
+    def test_valid_instruction_reuses_retained_connection_once_and_emits_success(self):
+        instruction = private_instruction()
+        response = _Response(status=200, decision_digest=HEX_A, body=b"private-body")
+        connection = _Connection(response)
+
+        exit_code, output, _, connection, factory = self.run_driver(
+            private_bytes(instruction),
+            connection=connection,
+            guarded_input=True,
+        )
+
+        self.assertEqual(exit_code, 0)
+        records = self.parsed_output(output)
+        self.assertEqual(len(records), 2)
+        self.assertEqual(
+            records[1],
+            {
+                "schema_version": "kil.v3b1-driver-result.v1",
+                "track": "signed_state_only",
+                "status": "complete",
+                "connect_monotonic_ns": 10,
+                "send_monotonic_ns": 30,
+                "receive_monotonic_ns": 40,
+                "response_status": 200,
+                "decision_digest": HEX_A,
+                "attempt_count": 1,
+                "retry_performed": False,
+            },
+        )
+        self.assertEqual(factory.calls, [("envoy", 8080, 2.0)])
+        self.assertEqual(connection.connect_count, 1)
+        self.assertEqual(connection.auto_open, 0)
+        self.assertEqual(
+            connection.requests,
+            [("POST", "/consequential/admin", b"", instruction["headers"])],
+        )
+        self.assertEqual(connection.getresponse_count, 1)
+        self.assertEqual(response.header_names, ["x-kil-decision-digest"])
+        self.assertEqual(
+            response.read_sizes,
+            [driver_protocol.MAX_RESPONSE_BODY_BYTES + 1],
+        )
+        self.assertEqual(connection.close_count, 1)
+        self.assertNotIn(b"private-body", output)
+        self.assertNotIn(instruction["headers"]["authorization"].encode(), output)
+        self.assertNotIn(instruction["headers"]["x-kil-q-state"].encode(), output)
+
+    def test_oversize_response_body_is_terminal_and_never_echoed(self):
+        sentinel = b"PRIVATE_RESPONSE_SENTINEL"
+        response = _Response(
+            body=b"x" * driver_protocol.MAX_RESPONSE_BODY_BYTES + sentinel
+        )
+        connection = _Connection(response)
+
+        exit_code, output, _, connection, factory = self.run_driver(
+            private_bytes(private_instruction()), connection=connection
+        )
+
+        self.assertEqual(exit_code, 1)
+        result = self.parsed_output(output)[1]
+        self.assertEqual(result["status"], "transport_failure")
+        self.assertEqual(result["stage"], "response_body")
+        self.assertEqual(result["exception_class"], "OSError")
+        self.assertEqual(result["errno"], None)
+        self.assertEqual(result["errno_name"], None)
+        self.assertTrue(result["request_bytes_may_have_been_sent"])
+        self.assertEqual(result["attempt_count"], 1)
+        self.assertFalse(result["retry_performed"])
+        self.assertEqual(
+            response.read_sizes,
+            [driver_protocol.MAX_RESPONSE_BODY_BYTES + 1],
+        )
+        self.assertNotIn(sentinel, output)
+        self.assertEqual(len(factory.calls), 1)
+        self.assertEqual(connection.connect_count, 1)
+        self.assertEqual(len(connection.requests), 1)
+        self.assertEqual(connection.getresponse_count, 1)
+        self.assertEqual(connection.close_count, 1)
+
+    def test_unapproved_response_header_value_is_closed_and_never_echoed(self):
+        sentinel = "PRIVATE_RESPONSE_HEADER_SENTINEL"
+        connection = _Connection(_Response(decision_digest=sentinel))
+
+        exit_code, output, _, connection, factory = self.run_driver(
+            private_bytes(private_instruction()), connection=connection
+        )
+
+        self.assertEqual(exit_code, 1)
+        result = self.parsed_output(output)[1]
+        self.assertEqual(result["status"], "transport_failure")
+        self.assertEqual(result["stage"], "response_headers")
+        self.assertEqual(result["exception_class"], "OSError")
+        self.assertNotIn(sentinel.encode(), output)
+        self.assertEqual(len(factory.calls), 1)
+        self.assertEqual(connection.connect_count, 1)
+        self.assertEqual(len(connection.requests), 1)
+        self.assertEqual(connection.getresponse_count, 1)
+        self.assertEqual(connection.close_count, 1)
+
+    def test_closed_instruction_rejections_send_no_http_and_emit_no_result(self):
+        base = private_instruction()
+        canonical = private_bytes(base)
+        duplicate = canonical.replace(
+            b'{"body_byte_count":0,',
+            b'{"body_byte_count":0,"body_byte_count":0,',
+            1,
+        )
+        changed = (
+            ("duplicate", duplicate),
+            ("unknown", private_bytes({**base, "unknown": True})),
+            ("trailing", canonical + b"\n"),
+            ("noncanonical", (json.dumps(base) + "\n").encode()),
+            ("wrong-track", private_bytes({**base, "track": "signed_plus_local_reduce"})),
+            ("wrong-path", private_bytes({**base, "path": "/other"})),
+            ("wrong-method", private_bytes({**base, "method": "GET"})),
+            ("body", private_bytes({**base, "body_byte_count": 1})),
+            (
+                "header",
+                private_bytes(
+                    {**base, "headers": {**base["headers"], "x-extra": "value"}}
+                ),
+            ),
+            ("missing-newline", canonical[:-1]),
+            ("oversize", b"x" * (driver_protocol.MAX_INSTRUCTION_BYTES + 1)),
+        )
+
+        for name, payload in changed:
+            with self.subTest(name=name):
+                exit_code, output, _, connection, factory = self.run_driver(
+                    payload, clock_values=(10, 20)
+                )
+                self.assertEqual(exit_code, 1)
+                self.assertEqual(len(self.parsed_output(output)), 1)
+                self.assertEqual(len(factory.calls), 1)
+                self.assertEqual(connection.connect_count, 1)
+                self.assertEqual(connection.requests, [])
+                self.assertEqual(connection.getresponse_count, 0)
+                self.assertEqual(connection.close_count, 1)
+
+    def test_transport_failures_are_closed_secret_free_and_never_retried(self):
+        cases = (
+            (
+                "request_send",
+                _Connection(request_error=ConnectionResetError(104, "PRIVATE send")),
+                "ConnectionResetError",
+                104,
+                "ECONNRESET",
+            ),
+            (
+                "response_headers",
+                _Connection(response_error=TimeoutError(110, "PRIVATE headers")),
+                "TimeoutError",
+                110,
+                "ETIMEDOUT",
+            ),
+            (
+                "response_body",
+                _Connection(
+                    _Response(body_error=BrokenPipeError(32, "PRIVATE body"))
+                ),
+                "BrokenPipeError",
+                32,
+                "EPIPE",
+            ),
+        )
+
+        for stage, connection, exception_class, number, name in cases:
+            with self.subTest(stage=stage):
+                exit_code, output, _, connection, factory = self.run_driver(
+                    private_bytes(private_instruction()),
+                    connection=connection,
+                )
+                self.assertEqual(exit_code, 1)
+                result = self.parsed_output(output)[1]
+                self.assertEqual(result["status"], "transport_failure")
+                self.assertEqual(result["stage"], stage)
+                self.assertEqual(result["exception_class"], exception_class)
+                self.assertEqual(result["errno"], number)
+                self.assertEqual(result["errno_name"], name)
+                self.assertTrue(result["request_bytes_may_have_been_sent"])
+                self.assertEqual(result["attempt_count"], 1)
+                self.assertFalse(result["retry_performed"])
+                self.assertNotIn(b"PRIVATE", output)
+                self.assertEqual(len(factory.calls), 1)
+                self.assertEqual(connection.connect_count, 1)
+                self.assertEqual(len(connection.requests), 1)
+                self.assertLessEqual(connection.getresponse_count, 1)
+                self.assertEqual(connection.close_count, 1)
+
+    def test_main_accepts_only_fixed_arguments_and_uses_binary_streams_silently(self):
+        class StandardStream:
+            def __init__(self):
+                self.buffer = BytesIO()
+
+        standard_input = StandardStream()
+        standard_output = StandardStream()
+        standard_error = StandardStream()
+        calls = []
+
+        def fake_execute_driver(**kwargs):
+            calls.append(kwargs)
+            return 0
+
+        with (
+            patch.object(request_driver.sys, "stdin", standard_input),
+            patch.object(request_driver.sys, "stdout", standard_output),
+            patch.object(request_driver.sys, "stderr", standard_error),
+            patch.object(request_driver, "execute_driver", fake_execute_driver),
+        ):
+            self.assertEqual(
+                request_driver.main(
+                    [
+                        "--track",
+                        "signed_state_only",
+                        "--endpoint",
+                        "envoy:8080",
+                    ]
+                ),
+                0,
+            )
+            for rejected in (
+                [],
+                ["--track", "other", "--endpoint", "envoy:8080"],
+                ["--track", "signed_state_only"],
+                ["--track", "signed_state_only", "--endpoint", "localhost:8080"],
+                ["--endpoint", "envoy:8080", "--track", "signed_state_only"],
+                ["--track", "signed_state_only", "--endpoint", "envoy:8080", "extra"],
+            ):
+                with self.subTest(rejected=rejected):
+                    self.assertEqual(request_driver.main(rejected), 2)
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["track"], "signed_state_only")
+        self.assertIs(calls[0]["stdin"], standard_input.buffer)
+        self.assertIs(calls[0]["stdout"], standard_output.buffer)
+        self.assertEqual(standard_error.buffer.getvalue(), b"")
+
+        def failing_execute_driver(**kwargs):
+            raise RuntimeError("PRIVATE main failure")
+
+        with (
+            patch.object(request_driver.sys, "stdin", standard_input),
+            patch.object(request_driver.sys, "stdout", standard_output),
+            patch.object(request_driver.sys, "stderr", standard_error),
+            patch.object(request_driver, "execute_driver", failing_execute_driver),
+        ):
+            self.assertEqual(
+                request_driver.main(
+                    [
+                        "--track",
+                        "signed_state_only",
+                        "--endpoint",
+                        "envoy:8080",
+                    ]
+                ),
+                1,
+            )
+        self.assertEqual(standard_error.buffer.getvalue(), b"")
 
 
 if __name__ == "__main__":
