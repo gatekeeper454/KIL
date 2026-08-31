@@ -40,11 +40,17 @@ _TRACK_SLUG = (
     r"(?:credential-policy-baseline|signed-state-only|signed-plus-local-reduce)"
 )
 _CONTAINER_NAME = re.compile(
-    rf"^kil-v3b1-(?:authz|target|envoy|validate)-{_TRACK_SLUG}-[a-f0-9]{{12}}$"
+    rf"^kil-v3b1-(?:authz|target|envoy|driver|validate)-{_TRACK_SLUG}-[a-f0-9]{{12}}$"
 )
-_NETWORK_NAME = re.compile(
+_LEGACY_V1_NETWORK_NAME = re.compile(
     rf"^kil-v3b1-network-{_TRACK_SLUG}-[a-f0-9]{{12}}$"
 )
+_SEGMENT_NETWORK_NAME = re.compile(
+    rf"^kil-v3b1-(?:frontend|backend)-{_TRACK_SLUG}-[a-f0-9]{{12}}$"
+)
+_NETWORK_NAME_PATTERNS = {
+    SCHEMA_VERSION: (_LEGACY_V1_NETWORK_NAME, _SEGMENT_NETWORK_NAME),
+}
 _MAX_FIXTURE_BYTES = 1_000_000
 _MAX_SOURCE_BYTES = 64 * 1024 * 1024
 _TRACKS = {
@@ -126,8 +132,12 @@ def _require_name(value: object, label: str = "Docker object name") -> str:
 
 def _require_inventory_name(value: object, kind: str) -> str:
     name = _require_name(value)
-    pattern = _CONTAINER_NAME if kind == "container" else _NETWORK_NAME
-    if pattern.fullmatch(name) is None:
+    patterns = (
+        (_CONTAINER_NAME,)
+        if kind == "container"
+        else _NETWORK_NAME_PATTERNS[SCHEMA_VERSION]
+    )
+    if not any(pattern.fullmatch(name) is not None for pattern in patterns):
         raise ContractError(f"Docker {kind} name is outside the fixed KIL pattern")
     return name
 

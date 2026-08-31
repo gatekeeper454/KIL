@@ -130,6 +130,9 @@ class HarnessIntegrationContractTest(unittest.TestCase):
         self.assertEqual(
             {case.name for case in fixture.cases if case.provenance == "reconstructed"},
             {
+                "cycle-4-backend-network-reconstructed-inventory",
+                "cycle-4-driver-container-reconstructed-inventory",
+                "cycle-4-frontend-network-reconstructed-inventory",
                 "cycle-1-observed-network-values-reconstructed-inventory",
                 "cycle-2-observed-network-values-reconstructed-inventory",
                 "cycle-3-network-not-found-replacement-inventory",
@@ -530,6 +533,21 @@ class HarnessIntegrationContractTest(unittest.TestCase):
             "network",
         )
         self.assertEqual(network.entries[0].name, network_name)
+        driver_name = "kil-v3b1-driver-signed-state-only-ffffffffffff"
+        driver = parse_inventory_rows(
+            canonical_json({"id": HEX_A, "name": driver_name}) + "\n",
+            "container",
+        )
+        self.assertEqual(driver.entries[0].name, driver_name)
+        for segment in ("frontend", "backend"):
+            segmented_name = (
+                f"kil-v3b1-{segment}-signed-state-only-ffffffffffff"
+            )
+            segmented = parse_inventory_rows(
+                canonical_json({"id": HEX_B, "name": segmented_name}) + "\n",
+                "network",
+            )
+            self.assertEqual(segmented.entries[0].name, segmented_name)
         self.assertEqual(parse_inventory_rows("", "network").entries, ())
         for rejected in (
             canonical_json({"id": "a" * 12, "name": first_name}) + "\n",
@@ -7842,6 +7860,25 @@ class EvidenceBundleTest(unittest.TestCase):
     KTP_CITATION_URL = (
         "https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff"
     )
+
+    def test_synthetic_legacy_v1_compatibility_fixture_remains_accepted(self):
+        fixture_root = ROOT / "tests/fixtures/v3b1-public-bundle-v1"
+        fixture_bundles = tuple(
+            path for path in fixture_root.iterdir() if path.is_dir()
+        )
+        self.assertEqual(len(fixture_bundles), 1)
+        self.assertTrue(fixture_bundles[0].is_dir())
+        with tempfile.TemporaryDirectory() as directory:
+            copied = Path(directory) / fixture_bundles[0].name
+            shutil.copytree(fixture_bundles[0], copied)
+            manifest = json.loads((copied / "manifest.json").read_text())
+            self.assertEqual(
+                manifest["schema_version"], "kil.v3b1-public-manifest.v1"
+            )
+            self.assertEqual(
+                local_envoy_module.verify_presenter_bundle(copied),
+                copied.resolve() / "live.html",
+            )
 
     def assert_summary_citation_is_bound(self, output, *, public):
         summary = (output / "summary.md").read_bytes()
