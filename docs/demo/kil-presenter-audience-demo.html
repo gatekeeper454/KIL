@@ -229,8 +229,19 @@
       const openAudience = app.querySelector('[data-open-audience]');
       const previous = app.querySelector('[data-prev]');
       const next = app.querySelector('[data-next]');
+      const syncStatus = app.querySelector('[data-sync-status]');
+      const rawSession = params.get('session') || (mode === 'presenter' ? crypto.randomUUID() : 'standalone');
+      const sessionId = /^[a-zA-Z0-9_-]{1,80}$/.test(rawSession) ? rawSession : 'invalid-session';
+      const presenterEpoch = mode === 'presenter' ? crypto.randomUUID() : null;
+      const audienceId = mode === 'audience' ? crypto.randomUUID() : null;
+      const channel = typeof BroadcastChannel === 'function' && mode !== 'standalone'
+        ? new BroadcastChannel(`kil-demo:${sessionId}`)
+        : null;
       let currentIndex = 0;
       let activeAct = scenes[0].act;
+      let sequence = 0;
+      let acceptedEpoch = null;
+      let acceptedSequence = -1;
 
       document.documentElement.dataset.mode = mode;
       app.querySelector('[data-mode-label]').textContent = modeNames[mode];
@@ -242,6 +253,9 @@
         previous.hidden = true;
         next.hidden = true;
       }
+      syncStatus.textContent = channel
+        ? (mode === 'presenter' ? 'Waiting for audience' : mode === 'audience' ? 'Waiting for presenter' : 'Not synchronized')
+        : 'Not synchronized';
 
       function escapeText(value) {
         return String(value).replace(/[&<>"']/g, character => ({
@@ -305,7 +319,61 @@
         renderSceneControls();
       }
 
-      function publishState() {}
+      function publishState() {
+        if (mode !== 'presenter' || !channel) return;
+        sequence += 1;
+        channel.postMessage({
+          schema_version: 'kil.presenter-state.v1',
+          message_type: 'state',
+          session_id: sessionId,
+          presenter_epoch: presenterEpoch,
+          sequence,
+          scene_id: scenes[currentIndex].id
+        });
+        syncStatus.textContent = 'Waiting for audience';
+      }
+
+      function isMessage(value, type) {
+        return value && typeof value === 'object'
+          && value.schema_version === 'kil.presenter-state.v1'
+          && value.message_type === type
+          && value.session_id === sessionId;
+      }
+
+      if (channel) {
+        channel.addEventListener('message', event => {
+          const message = event.data;
+          if (mode === 'presenter' && isMessage(message, 'request_state')) {
+            publishState();
+            return;
+          }
+          if (mode === 'presenter' && isMessage(message, 'ack')) {
+            if (message.presenter_epoch === presenterEpoch && message.sequence === sequence) {
+              syncStatus.textContent = 'Audience synchronized';
+            }
+            return;
+          }
+          if (mode !== 'audience' || !isMessage(message, 'state')) return;
+          if (typeof message.presenter_epoch !== 'string'
+              || !Number.isSafeInteger(message.sequence)
+              || typeof message.scene_id !== 'string'
+              || !byId.has(message.scene_id)) return;
+          const newEpoch = message.presenter_epoch !== acceptedEpoch;
+          if (!newEpoch && message.sequence <= acceptedSequence) return;
+          acceptedEpoch = message.presenter_epoch;
+          acceptedSequence = message.sequence;
+          selectScene(message.scene_id, {broadcast: false});
+          syncStatus.textContent = 'Synchronized';
+          channel.postMessage({
+            schema_version: 'kil.presenter-state.v1',
+            message_type: 'ack',
+            session_id: sessionId,
+            presenter_epoch: acceptedEpoch,
+            sequence: acceptedSequence,
+            audience_id: audienceId
+          });
+        });
+      }
 
       function selectScene(id, {broadcast = true} = {}) {
         const entry = byId.get(id);
@@ -323,9 +391,8 @@
         if (currentIndex < scenes.length - 1) selectScene(scenes[currentIndex + 1].id);
       });
       openAudience.addEventListener('click', () => {
-        const session = params.get('session') || crypto.randomUUID();
         const url = new URL(location.href);
-        url.search = new URLSearchParams({mode: 'audience', session}).toString();
+        url.search = new URLSearchParams({mode: 'audience', session: sessionId}).toString();
         window.open(url, '_blank', 'noopener');
       });
       document.addEventListener('keydown', event => {
@@ -335,6 +402,15 @@
       });
 
       selectScene(scenes[0].id, {broadcast: false});
+      if (mode === 'presenter') publishState();
+      if (mode === 'audience' && channel) {
+        channel.postMessage({
+          schema_version: 'kil.presenter-state.v1',
+          message_type: 'request_state',
+          session_id: sessionId,
+          audience_id: audienceId
+        });
+      }
     })();
   </script>
 </body>
