@@ -63,10 +63,13 @@ V3B-1 fixes three separate tracks:
 2. `signed_state_only`; and
 3. `signed_plus_local_reduce`.
 
-Each track has two internal networks. Its frontend membership is exactly
+Each track has two internal networks. Its frontend is configured exactly for
 `{driver, Envoy}` and its backend membership is exactly
-`{Envoy, authz, target}`. Envoy is the only dual-homed component. There is no
-host TCP publication. The complete lifecycle owns twelve track containers—one
+`{Envoy, authz, target}`. While a never-started driver is in `created` state,
+Docker exposes only `{Envoy}` in the physical frontend member inventory; after
+the endpoint materializes, membership is exactly `{driver, Envoy}`. Envoy is
+the only dual-homed component. There is no host TCP publication. The complete
+lifecycle owns twelve track containers—one
 driver, Envoy, authorization service, and harmless target per track—plus three
 transient validators, across six networks.
 
@@ -108,6 +111,19 @@ development history for the superseded transport mechanism. They do not satisfy
 the current six-network topology, request-free attached-driver readiness,
 three-driver-result, or fifteen-container teardown contracts and therefore
 cannot be promoted as acceptance evidence for this implementation.
+
+The first driver-era Task 10 attempt rejected Docker's closed null-network
+validator representation; the merged correction recovered that lifecycle
+without a request. The second attempt then rejected Docker's expanded
+image-bound disabled-healthcheck representation; PR #13 merged the closed
+correction. Bounded recovery from that attempt now rejects a distinct Docker
+endpoint-lifecycle representation before any removal: all three never-started
+drivers are exactly configured for their frontends in `created` state, but the
+physical frontend inventories contain only Envoy until driver start. The
+state-aware correction is independently approved and passes all 478 repository
+tests, but it is not yet merged and has not yet governed the isolated runtime.
+No readiness instruction, request intent, HTTP action, or central `run`
+occurred in any rejected driver-era lifecycle.
 
 The immediate live gate is one `preflight` / `up` / `readiness` / `down` cycle.
 It must show no instructions, no HTTP requests, three clean cancellations,
@@ -210,8 +226,11 @@ and the complete approved specification is
 
 ## Next gate
 
-First execute one request-free V3B-1 `preflight` / `up` / `readiness` / `down`
-cycle from clean synchronized main. Require all three readiness records, three
+First publish and merge the state-aware created-driver endpoint correction,
+synchronize clean `main`, and use it only to complete bounded recovery and
+exact foreign-state restoration for the rejected lifecycle. Then execute one
+fresh request-free V3B-1 `preflight` / `up` / `readiness` / `down` cycle.
+Require all three readiness records, three
 clean cancellations, no instruction or HTTP request, complete exact teardown,
 and foreign-runtime restoration. If and only if that gate passes, execute one
 central `preflight` / `up` / `run` / `down` proof with no retry after request

@@ -4192,10 +4192,32 @@ def _network_member_identity_options(
     ]
     if len(envoy_ids) > 1:
         raise ControllerError("frontend Envoy ownership is not unique")
+    driver_objects = [
+        item
+        for item in objects
+        if item.get("track") == track
+        and item.get("role") == "driver"
+    ]
+    if len(driver_objects) > 1:
+        raise ControllerError("frontend driver ownership is not unique")
+    unrealized_driver_ids: set[str] = set()
+    if driver_objects:
+        driver = driver_objects[0]
+        runtime_attestation = driver.get("runtime_attestation")
+        if type(runtime_attestation) is not dict:
+            raise ControllerError("frontend driver state is invalid")
+        driver_state = runtime_attestation.get("state")
+        if type(driver_state) is not str or driver_state not in {
+            "created", "running", "exited", "dead"
+        }:
+            raise ControllerError("frontend driver state is invalid")
+        if driver_state == "created":
+            unrealized_driver_ids.add(str(driver["id"]))
     base = {
         object_id: identity
         for object_id, identity in exact.items()
         if identity["role"] != "envoy"
+        and object_id not in unrealized_driver_ids
     }
     attached = dict(base)
     if envoy_ids:
@@ -11384,6 +11406,7 @@ class LocalEnvoyController:
             for attachment in envoy_attachments.values()
         ):
             raise ControllerError("active runtime lacks complete Envoy attachments")
+        current_objects: list[dict[str, object]] = []
         for record in state["objects"]:  # type: ignore[union-attr]
             driver_authority = None
             allowed_driver_states = None
@@ -11427,11 +11450,12 @@ class LocalEnvoyController:
                 current_matches = current == record
             if not current_matches:
                 raise ControllerError("recorded container attestation changed")
+            current_objects.append(current)
         for record in state["network_objects"]:  # type: ignore[union-attr]
             track = str(record["track"])
             segment = str(record.get("segment", "backend"))
             member_options = _network_member_identity_options(
-                state["objects"],  # type: ignore[arg-type]
+                current_objects,
                 manifest,
                 track,
                 segment,

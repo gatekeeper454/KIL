@@ -23,11 +23,15 @@ commits `75161f0` and `48bd81a`: three one-shot request drivers communicate with
 three fixed Envoy `ext_authz` tracks over six internal networks without a host
 TCP publication. The Task 8 implementation checkpoint passed 466 non-runtime
 tests. The fresh Task 9 complete static gate passes 474 tests, including eight
-documentation tests. This is implementation evidence, not live acceptance.
+documentation tests. The current complete static gate passes 478 tests,
+including the state-aware created-driver endpoint recovery contract. This is
+implementation evidence, not live acceptance.
 
-Each track has a frontend network containing only its driver and Envoy, and a
-backend network containing only Envoy, authorization service, and harmless
-target. Envoy is the sole dual-homed component. The lifecycle owns twelve track
+Each track has a frontend configured only for its driver and Envoy, and a
+backend containing only Envoy, authorization service, and harmless target.
+Before a never-started driver materializes its Docker endpoint, the physical
+frontend inventory contains Envoy only; after driver start it contains the
+exact same-track driver and Envoy. Envoy is the sole dual-homed component. The lifecycle owns twelve track
 containers plus three transient validators and proves all fifteen containers
 and all six networks absent during exact teardown. Docker attach/stdin is only
 the host control channel that gives a driver one canonical instruction; the

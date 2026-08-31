@@ -22,8 +22,10 @@ PYTHONPATH=src python3 tools/v3a_demo.py \
 
 `v3b1_local_envoy.py` orchestrates the corrected in-network request-driver
 boundary. It creates three isolated tracks over six internal networks. In each
-track the frontend contains `{driver, Envoy}` and the backend contains
-`{Envoy, authz, target}`; Envoy is the only dual-homed service. There is no host
+track the frontend is configured for `{driver, Envoy}` and the backend contains
+`{Envoy, authz, target}`. Docker's physical frontend inventory is exactly
+`{Envoy}` while the driver remains never-started in `created` state, then
+exactly `{driver, Envoy}` after its endpoint materializes. Envoy is the only dual-homed service. There is no host
 TCP publication. Docker attach/stdin is a host control channel only. The
 consequential request path is:
 
