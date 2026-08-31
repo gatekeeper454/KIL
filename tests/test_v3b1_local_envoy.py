@@ -3291,20 +3291,33 @@ class ControllerContractTest(unittest.TestCase):
                     LiveTrack, ("d", "e", "f"), strict=True
                 )
             ]
+            driver_authorities = {
+                item["track"]: {
+                    **local_envoy_module._driver_recovery_authority(
+                        [], str(item["track"]), str(item["id"])
+                    ),
+                    "driver_id": item["id"],
+                    "track": item["track"],
+                    "observed_state": "created",
+                }
+                for item in state["objects"]
+                if item["role"] == "driver"
+            }
 
             commands = teardown_commands(
                 state,
                 validator_objects=validator_objects,
+                driver_authorities=driver_authorities,
                 docker_binary=Path("/locked/docker"),
             )
 
             removed = [command[-1] for command in commands if "rm" in command and "network" not in command]
-            expected_order = [item["id"] for item in validator_objects] + [
+            expected_order = [
                 item["id"]
-                for role in ("envoy", "authz", "target", "driver")
+                for role in ("driver", "envoy", "authz", "target")
                 for item in state["objects"]
                 if item["role"] == role
-            ]
+            ] + [item["id"] for item in validator_objects]
             self.assertEqual(removed, expected_order)
             stop_indexes = [
                 index
@@ -3317,6 +3330,17 @@ class ControllerContractTest(unittest.TestCase):
                 if "rm" in command and "network" not in command
             ]
             self.assertLess(max(stop_indexes), min(remove_indexes))
+            driver_ids = {
+                item["id"]
+                for item in state["objects"]
+                if item["role"] == "driver"
+            }
+            self.assertFalse(
+                any(
+                    command[-1] in driver_ids and "stop" in command
+                    for command in commands
+                )
+            )
             network_removes = [command for command in commands if "network" in command and "rm" in command]
             self.assertEqual(len(network_removes), 6)
             self.assertEqual(
@@ -3351,6 +3375,7 @@ class ControllerContractTest(unittest.TestCase):
                 teardown_commands(
                     unowned,
                     validator_objects=validator_objects,
+                    driver_authorities=driver_authorities,
                     docker_binary=Path("/locked/docker"),
                 )
 
@@ -3362,8 +3387,144 @@ class ControllerContractTest(unittest.TestCase):
                 teardown_commands(
                     state,
                     validator_objects=forged_validators,
+                    driver_authorities=driver_authorities,
                     docker_binary=Path("/locked/docker"),
                 )
+
+            ambiguous_authorities = json.loads(json.dumps(driver_authorities))
+            selected_track = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
+            ambiguous_authorities[selected_track].update(
+                {
+                    "phase": "ambiguous",
+                    "allowed_states": ["created", "dead", "exited", "running"],
+                    "request_eligible": False,
+                    "terminal_source": None,
+                    "observed_state": "created",
+                }
+            )
+            with self.assertRaisesRegex(ControllerError, "driver|phase|quies"):
+                teardown_commands(
+                    state,
+                    validator_objects=validator_objects,
+                    driver_authorities=ambiguous_authorities,
+                    docker_binary=Path("/locked/docker"),
+                )
+
+    def test_driver_attestation_comparison_is_phase_scoped_not_globally_relaxed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            state_path = root / "active.json"
+            value = manifest(docker_host="unix:///tmp/kil.sock")
+            manifest_path.write_text(canonical_json(value) + "\n")
+            persist_active_state(state_path, manifest_path, value)
+            state = load_bound_active_state(state_path)
+            recorded = next(
+                item for item in state["objects"] if item["role"] == "driver"
+            )
+            self.assertFalse(
+                local_envoy_module._container_attestation_matches(
+                    recorded,
+                    recorded,
+                    allow_stopped=True,
+                    allowed_driver_states={"exited"},
+                )
+            )
+
+            for observed_state in ("running", "exited", "dead"):
+                current = json.loads(json.dumps(recorded))
+                current["runtime_attestation"]["state"] = observed_state
+                self.assertFalse(
+                    local_envoy_module._container_attestation_matches(
+                        recorded, current, allow_stopped=True
+                    )
+                )
+                self.assertTrue(
+                    local_envoy_module._container_attestation_matches(
+                        recorded,
+                        current,
+                        allow_stopped=True,
+                        allowed_driver_states={observed_state},
+                    )
+                )
+                self.assertFalse(
+                    local_envoy_module._container_attestation_matches(
+                        recorded,
+                        current,
+                        allow_stopped=True,
+                        allowed_driver_states={"created"},
+                    )
+                )
+
+            mutations = (
+                ("full_id", lambda value: value.__setitem__("id", HEX_A)),
+                ("name", lambda value: value.__setitem__("name", "replacement")),
+                (
+                    "image_reference",
+                    lambda value: value.__setitem__(
+                        "image_reference", f"sha256:{HEX_A}"
+                    ),
+                ),
+                (
+                    "command",
+                    lambda value: value["runtime_attestation"].__setitem__(
+                        "command", ["unexpected"]
+                    ),
+                ),
+                (
+                    "labels",
+                    lambda value: value.__setitem__("labels", {}),
+                ),
+                (
+                    "hardening",
+                    lambda value: value["runtime_attestation"].__setitem__(
+                        "privileged", True
+                    ),
+                ),
+                (
+                    "stdin",
+                    lambda value: value["runtime_attestation"].__setitem__(
+                        "stdin_open", False
+                    ),
+                ),
+                (
+                    "network_aliases",
+                    lambda value: value["runtime_attestation"].__setitem__(
+                        "network_aliases", {}
+                    ),
+                ),
+                (
+                    "ports",
+                    lambda value: value["runtime_attestation"].__setitem__(
+                        "port_bindings", {"80/tcp": [{"HostPort": "80"}]}
+                    ),
+                ),
+                (
+                    "mounts",
+                    lambda value: value["runtime_attestation"].__setitem__(
+                        "mounts", [{"source": "/tmp", "destination": "/mnt"}]
+                    ),
+                ),
+                (
+                    "environment",
+                    lambda value: value["runtime_attestation"].__setitem__(
+                        "environment", ["PATH=/unexpected"]
+                    ),
+                ),
+            )
+            for label, mutate in mutations:
+                with self.subTest(mutation=label):
+                    current = json.loads(json.dumps(recorded))
+                    current["runtime_attestation"]["state"] = "exited"
+                    mutate(current)
+                    self.assertFalse(
+                        local_envoy_module._container_attestation_matches(
+                            recorded,
+                            current,
+                            allow_stopped=True,
+                            allowed_driver_states={"exited"},
+                        )
+                    )
 
     def test_default_active_state_is_an_exact_ignored_repository_path(self):
         self.assertEqual(
@@ -6051,6 +6212,380 @@ class JournalRecoveryTest(unittest.TestCase):
         )
         return journal
 
+    def test_driver_recovery_authority_is_journal_phase_closed(self):
+        track = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
+        driver_id = HEX_A
+        nonce = HEX_B
+        start = {
+            "sequence": 1,
+            "event": "driver_start_intent",
+            "details": {
+                "readiness_nonce": nonce,
+                "track": track,
+                "driver_id": driver_id,
+            },
+        }
+
+        prestart = local_envoy_module._driver_recovery_authority(
+            [], track, driver_id
+        )
+        self.assertEqual(prestart["phase"], "pre_start")
+        self.assertEqual(prestart["allowed_states"], ("created",))
+        self.assertTrue(prestart["request_eligible"])
+
+        for observed_state in ("created", "running", "exited", "dead"):
+            with self.subTest(observed_state=observed_state):
+                ambiguous = local_envoy_module._driver_recovery_authority(
+                    [start], track, driver_id
+                )
+                self.assertEqual(ambiguous["phase"], "ambiguous")
+                self.assertIn(observed_state, ambiguous["allowed_states"])
+                self.assertFalse(ambiguous["request_eligible"])
+
+        synthetic_failure = {
+            "sequence": 2,
+            "event": "request_send_failed",
+            "details": {"track": track, "record_sha256": None},
+        }
+        still_ambiguous = local_envoy_module._driver_recovery_authority(
+            [start, synthetic_failure], track, driver_id
+        )
+        self.assertEqual(still_ambiguous["phase"], "ambiguous")
+        self.assertFalse(still_ambiguous["request_eligible"])
+
+        result = {
+            "sequence": 2,
+            "event": "driver_result_persisted",
+            "details": {
+                "readiness_nonce": nonce,
+                "track": track,
+                "driver_id": driver_id,
+                "intent_id": HEX_C,
+                "driver_definition_sha256": HEX_A,
+                "result_sha256": HEX_B,
+            },
+        }
+        result_without_request_terminal = (
+            local_envoy_module._driver_recovery_authority(
+                [start, result], track, driver_id
+            )
+        )
+        self.assertEqual(result_without_request_terminal["phase"], "ambiguous")
+        self.assertFalse(result_without_request_terminal["request_eligible"])
+
+        terminal = local_envoy_module._driver_recovery_authority(
+            [
+                start,
+                result,
+                {
+                    "sequence": 3,
+                    "event": "request_send_complete",
+                    "details": {"track": track, "record_sha256": HEX_C},
+                },
+            ],
+            track,
+            driver_id,
+        )
+        self.assertEqual(terminal["phase"], "trusted_terminal")
+        self.assertEqual(terminal["allowed_states"], ("dead", "exited"))
+        self.assertTrue(terminal["request_eligible"])
+
+    def test_driver_recovery_authority_rejects_identity_drift_and_duplicate_intent(self):
+        track = LiveTrack.SIGNED_STATE_ONLY.value
+        base = {
+            "readiness_nonce": HEX_B,
+            "track": track,
+            "driver_id": HEX_A,
+        }
+        for events in (
+            [
+                {"sequence": 1, "event": "driver_start_intent", "details": base},
+                {
+                    "sequence": 2,
+                    "event": "driver_start_intent",
+                    "details": base,
+                },
+            ],
+            [
+                {"sequence": 1, "event": "driver_start_intent", "details": base},
+                {
+                    "sequence": 2,
+                    "event": "readiness_cancel_complete",
+                    "details": {
+                        **base,
+                        "driver_id": HEX_C,
+                        "exit_code": 0,
+                    },
+                },
+            ],
+            [
+                {"sequence": 1, "event": "driver_start_intent", "details": base},
+                {
+                    "sequence": 2,
+                    "event": "driver_result_persisted",
+                    "details": {
+                        **base,
+                        "readiness_nonce": HEX_C,
+                        "intent_id": HEX_A,
+                        "driver_definition_sha256": HEX_B,
+                        "result_sha256": HEX_C,
+                    },
+                },
+            ],
+        ):
+            with self.subTest(events=events):
+                with self.assertRaisesRegex(ControllerError, "driver|identity|intent"):
+                    local_envoy_module._driver_recovery_authority(
+                        events, track, HEX_A
+                    )
+
+    def test_driver_stop_recovery_is_exact_and_idempotent_at_crash_boundaries(self):
+        track = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
+
+        for boundary, before_state, after_state, prior_history, stop_count in (
+            ("intent_before_stop", "running", "exited", "stop_pending", 1),
+            ("physical_stop_before_complete", "exited", "exited", "stop_pending", 0),
+            ("cleanup_client_only", "running", "exited", "cleanup_complete", 1),
+            ("complete_but_running", "running", "running", "stop_complete", 0),
+        ):
+            with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / "repo"
+                profile = root / "deploy/kind/v3b-profile.json"
+                profile.parent.mkdir(parents=True)
+                profile.write_bytes(
+                    (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+                )
+
+                class CrashBoundaryController(LocalEnvoyController):
+                    def __init__(self, *args, **kwargs):
+                        super().__init__(*args, **kwargs)
+                        self.commands = []
+
+                    def _execute(self, argv, *, timeout_s, docker=False):
+                        self.commands.append(list(argv))
+                        return CommandResult(0, "", "")
+
+                    def _inspect_container(
+                        self,
+                        identifier,
+                        manifest_value,
+                        role,
+                        track_value,
+                        *,
+                        require_running=True,
+                        envoy_attachment=None,
+                        allowed_driver_states=None,
+                    ):
+                        current = json.loads(json.dumps(item))
+                        current["runtime_attestation"]["state"] = after_state
+                        return current
+
+                controller = CrashBoundaryController(
+                    root,
+                    FakeRunner(),
+                    home=Path(directory) / "home",
+                    port_probe=lambda port: False,
+                    tool_verifier=lambda: TOOL_IDENTITIES,
+                )
+                controller._prepare_private_roots()
+                create_lifecycle_journal(
+                    controller.journal_path,
+                    private_root=controller.private_root,
+                    repository_root=root,
+                    docker_host=controller.docker_host,
+                    source_commit="d" * 40,
+                    execution_nonce=HEX_A,
+                    global_context="personal",
+                )
+                journal_event(
+                    controller.journal_path,
+                    "readiness_session_started",
+                    {"readiness_nonce": HEX_B},
+                )
+                identity = {
+                    "readiness_nonce": HEX_B,
+                    "track": track,
+                    "driver_id": HEX_A,
+                }
+                journal_event(
+                    controller.journal_path, "driver_start_intent", identity
+                )
+                if prior_history.startswith("stop_"):
+                    journal_event(
+                        controller.journal_path, "driver_stop_intent", identity
+                    )
+                if prior_history == "stop_complete":
+                    journal_event(
+                        controller.journal_path,
+                        "driver_stop_complete",
+                        identity,
+                    )
+                elif prior_history == "cleanup_complete":
+                    journal_event(
+                        controller.journal_path,
+                        "driver_cleanup_intent",
+                        identity,
+                    )
+                    journal_event(
+                        controller.journal_path,
+                        "driver_cleanup_complete",
+                        {
+                            **identity,
+                            "outcome": "terminated",
+                            "exit_code": -15,
+                        },
+                    )
+                item = {
+                    "id": HEX_A,
+                    "name": "kil-v3b1-driver-baseline-000000000000",
+                    "role": "driver",
+                    "track": track,
+                    "runtime_attestation": {"state": before_state},
+                }
+
+                if prior_history == "stop_complete":
+                    with self.assertRaisesRegex(ControllerError, "driver|running"):
+                        controller._quiesce_driver_for_teardown(item, manifest())
+                else:
+                    authority = controller._quiesce_driver_for_teardown(
+                        item, manifest()
+                    )
+                    self.assertEqual(authority["phase"], "teardown_quiesced")
+                    events = load_lifecycle_journal(
+                        controller.journal_path
+                    )["events"]
+                    self.assertEqual(
+                        sum(
+                            event["event"] == "driver_stop_intent"
+                            for event in events
+                        ),
+                        1,
+                    )
+                    self.assertEqual(
+                        sum(
+                            event["event"] == "driver_stop_complete"
+                            for event in events
+                        ),
+                        1,
+                    )
+
+                stop_commands = [
+                    command
+                    for command in controller.commands
+                    if len(command) > 5 and command[5] == "stop"
+                ]
+                self.assertEqual(len(stop_commands), stop_count)
+                if stop_commands:
+                    self.assertEqual(stop_commands[0][-1], HEX_A)
+                forbidden = {"start", "restart", "attach", "exec", "create"}
+                self.assertFalse(
+                    any(forbidden.intersection(command) for command in controller.commands)
+                )
+
+    def test_stranded_request_intents_close_conservatively_without_replay(self):
+        for instruction_intent, expected_stage, expected_bytes in (
+            (False, "instruction_write", False),
+            (True, "termination", True),
+        ):
+            with self.subTest(instruction_intent=instruction_intent), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / "repo"
+                profile = root / "deploy/kind/v3b-profile.json"
+                profile.parent.mkdir(parents=True)
+                profile.write_bytes(
+                    (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+                )
+                controller = LocalEnvoyController(
+                    root,
+                    FakeRunner(),
+                    home=Path(directory) / "home",
+                    port_probe=lambda port: False,
+                    tool_verifier=lambda: TOOL_IDENTITIES,
+                )
+                controller._prepare_private_roots()
+                create_lifecycle_journal(
+                    controller.journal_path,
+                    private_root=controller.private_root,
+                    repository_root=root,
+                    docker_host=controller.docker_host,
+                    source_commit="d" * 40,
+                    execution_nonce=HEX_A,
+                    global_context="personal",
+                )
+                journal_event(
+                    controller.journal_path,
+                    "readiness_session_started",
+                    {"readiness_nonce": HEX_B},
+                )
+                driver_ids = ("d" * 64, "e" * 64, "f" * 64)
+                for live_track, driver_id in zip(
+                    LiveTrack, driver_ids, strict=True
+                ):
+                    identity = {
+                        "readiness_nonce": HEX_B,
+                        "track": live_track.value,
+                        "driver_id": driver_id,
+                    }
+                    journal_event(
+                        controller.journal_path,
+                        "driver_start_intent",
+                        identity,
+                    )
+                    journal_event(
+                        controller.journal_path,
+                        "driver_start_complete",
+                        identity,
+                    )
+                    journal_event(
+                        controller.journal_path,
+                        "driver_readiness_complete",
+                        {**identity, "record_sha256": HEX_C},
+                    )
+                journal_event(
+                    controller.journal_path,
+                    "driver_readiness_set_complete",
+                    {
+                        "readiness_nonce": HEX_B,
+                        "tracks": [track.value for track in LiveTrack],
+                        "complete_monotonic_ns": 1,
+                    },
+                )
+                selected = LiveTrack.CREDENTIAL_POLICY_BASELINE
+                intent = claim_request_attempt(
+                    controller.journal_path,
+                    selected,
+                    readiness_nonce=HEX_B,
+                )
+                if instruction_intent:
+                    journal_event(
+                        controller.journal_path,
+                        "driver_instruction_write_intent",
+                        {
+                            "readiness_nonce": HEX_B,
+                            "track": selected.value,
+                            "driver_id": driver_ids[0],
+                            "intent_id": intent["intent_id"],
+                        },
+                    )
+
+                self.assertTrue(
+                    controller._close_stranded_request_intents(manifest())
+                )
+                loaded = load_lifecycle_journal(controller.journal_path)
+                self.assertEqual(
+                    loaded["requests"][selected.value]["status"], "failed"
+                )
+                failure = next(
+                    event
+                    for event in loaded["events"]
+                    if event["event"] == "request_send_failed"
+                )
+                provenance = failure["details"]["provenance"]
+                self.assertEqual(provenance["stage"], expected_stage)
+                self.assertIs(
+                    provenance["request_bytes_may_have_been_sent"],
+                    expected_bytes,
+                )
+
     def test_private_roots_are_resolved_contained_and_never_symlinks(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -7554,6 +8089,7 @@ class TeardownContinuationTest(unittest.TestCase):
                 *,
                 require_running=True,
                 envoy_attachment=None,
+                allowed_driver_states=None,
             ):
                 if identifier not in self.alive:
                     raise ControllerError("injected source container is absent")
@@ -9165,6 +9701,7 @@ class TeardownContinuationTest(unittest.TestCase):
                         *,
                         require_running=True,
                         envoy_attachment=None,
+                        allowed_driver_states=None,
                     ):
                         if role == "envoy":
                             self.envoy_attachment_phases.append(
@@ -9320,7 +9857,7 @@ class TeardownContinuationTest(unittest.TestCase):
                 )
                 self.assertEqual(
                     controller.frontend_attachment_phases,
-                    ["unstarted"] * 3,
+                    ["unstarted"] * 6,
                 )
                 if failure == "no_run":
                     self.assertEqual((published / "joins.jsonl").read_bytes(), b"")

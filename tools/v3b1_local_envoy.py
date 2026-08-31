@@ -203,6 +203,8 @@ _DRIVER_READINESS_CONTROLLER_STAGES = {
     "diagnostic_complete",
 }
 _DRIVER_CLEANUP_OUTCOMES = {"already_exited", "terminated", "killed"}
+_TEARDOWN_SERVICE_ROLES = ("envoy", "authz", "target")
+_TEARDOWN_REMOVAL_ROLES = ("driver", "envoy", "authz", "target")
 
 
 @dataclass(frozen=True, slots=True)
@@ -556,6 +558,30 @@ def _validate_lifecycle_event_details(
     details: Mapping[str, object],
     requests: Mapping[str, object] | None = None,
 ) -> None:
+    if event_name == "topology_absence_attested":
+        if set(details) != {
+            "container_count",
+            "network_count",
+            "container_identity_sha256",
+            "network_identity_sha256",
+            "survivor_containers",
+            "survivor_networks",
+        }:
+            raise ControllerError("topology absence fields are not closed")
+        if (
+            details["container_count"] != 15
+            or details["network_count"] != 6
+            or details["survivor_containers"] != []
+            or details["survivor_networks"] != []
+        ):
+            raise ControllerError("topology absence cardinality is invalid")
+        _require_sha256(
+            "topology container identity", details["container_identity_sha256"]
+        )
+        _require_sha256(
+            "topology network identity", details["network_identity_sha256"]
+        )
+        return
     if event_name == "partial_up_evidence_rejected":
         expected = {
             "reason_code",
@@ -1435,6 +1461,9 @@ def _validate_lifecycle_history(
                     "ready",
                     "cancel_intent",
                     "cancelled",
+                    "stop_failed",
+                    "cleaned",
+                    "cleanup_failed",
                 },
                 "driver_stop_complete": {"stop_intent"},
                 "driver_stop_failed": {"stop_intent"},
@@ -1656,6 +1685,189 @@ def _readiness_history_blocks_new_session(
                 terminal = True
                 blocked_terminal = True
     return current is not None and (not terminal or blocked_terminal)
+
+
+def _driver_recovery_authority(
+    events: Sequence[Mapping[str, object]],
+    track: str,
+    driver_id: str,
+) -> dict[str, object]:
+    """Derive one driver's allowed recovery state from durable journal facts."""
+    try:
+        LiveTrack(track)
+    except (TypeError, ValueError) as error:
+        raise ControllerError("driver recovery track is invalid") from error
+    _require_sha256("driver recovery full ID", driver_id)
+    if type(events) not in {list, tuple}:
+        raise ControllerError("driver recovery events are invalid")
+
+    starts: list[Mapping[str, object]] = []
+    output_terminals: list[Mapping[str, object]] = []
+    stop_terminals: list[Mapping[str, object]] = []
+    process_cleanup_events: list[Mapping[str, object]] = []
+    results: list[Mapping[str, object]] = []
+    request_terminals: list[Mapping[str, object]] = []
+    for event in events:
+        if type(event) is not dict or type(event.get("details")) is not dict:
+            raise ControllerError("driver recovery event is invalid")
+        event_name = event.get("event")
+        details = event["details"]
+        assert isinstance(details, dict)
+        if details.get("track") != track:
+            continue
+        if event_name == "driver_start_intent":
+            starts.append(event)
+        elif event_name == "driver_result_persisted":
+            results.append(event)
+        elif event_name == "readiness_cancel_complete":
+            output_terminals.append(event)
+        elif event_name == "driver_stop_complete":
+            stop_terminals.append(event)
+        elif event_name == "driver_cleanup_complete":
+            process_cleanup_events.append(event)
+        elif event_name in {"request_send_complete", "request_send_failed"}:
+            request_terminals.append(event)
+
+    if len(starts) > 1:
+        raise ControllerError("driver start intent is duplicated")
+    identity_events = [
+        *starts,
+        *results,
+        *output_terminals,
+        *stop_terminals,
+        *process_cleanup_events,
+    ]
+    if any(
+        event["details"].get("driver_id") != driver_id
+        for event in identity_events
+    ):
+        raise ControllerError("driver recovery identity changed")
+    if not starts:
+        if results or output_terminals or stop_terminals or process_cleanup_events:
+            raise ControllerError("driver terminal event lacks its start intent")
+        return {
+            "phase": "pre_start",
+            "allowed_states": ("created",),
+            "request_eligible": True,
+            "terminal_source": None,
+        }
+
+    readiness_nonce = starts[0]["details"].get("readiness_nonce")
+    _require_sha256("driver recovery readiness nonce", readiness_nonce)
+    if any(
+        event["details"].get("readiness_nonce") != readiness_nonce
+        for event in identity_events
+    ):
+        raise ControllerError("driver recovery readiness identity changed")
+
+    if len(results) > 1 or len(output_terminals) > 1:
+        raise ControllerError("driver terminal evidence is duplicated")
+    result_terminal = False
+    terminal_event: Mapping[str, object] | None = None
+    if results:
+        result = results[0]
+        result_sequence = result.get("sequence")
+        result_intent = result["details"].get("intent_id")
+        terminal_event = next(
+            (
+                event
+                for event in request_terminals
+                if type(event.get("sequence")) is int
+                and type(result_sequence) is int
+                and event["sequence"] > result_sequence
+            ),
+            None,
+        )
+        result_terminal = (
+            terminal_event is not None
+            and type(result_intent) is str
+            and _HEX.fullmatch(result_intent) is not None
+            and (
+                terminal_event["event"] == "request_send_complete"
+                or (
+                    terminal_event["event"] == "request_send_failed"
+                    and type(terminal_event["details"].get("provenance")) is dict
+                    and terminal_event["details"]["provenance"].get(
+                        "provenance_source"
+                    )
+                    == "linux_request_driver"
+                    and terminal_event["details"]["provenance"].get(
+                        "driver_full_id"
+                    )
+                    == driver_id
+                    and terminal_event["details"]["provenance"].get(
+                        "driver_result_sha256"
+                    )
+                    == result["details"].get("result_sha256")
+                )
+            )
+        )
+    if result_terminal:
+        return {
+            "phase": "trusted_terminal",
+            "allowed_states": ("dead", "exited"),
+            "request_eligible": True,
+            "terminal_source": "bound_driver_result",
+        }
+    if output_terminals:
+        return {
+            "phase": "trusted_terminal",
+            "allowed_states": ("dead", "exited"),
+            "request_eligible": False,
+            "terminal_source": str(output_terminals[0]["event"]),
+        }
+    if stop_terminals:
+        return {
+            "phase": "teardown_quiesced",
+            "allowed_states": ("created", "dead", "exited"),
+            "request_eligible": False,
+            "terminal_source": str(stop_terminals[-1]["event"]),
+        }
+    return {
+        "phase": "ambiguous",
+        "allowed_states": ("created", "dead", "exited", "running"),
+        "request_eligible": False,
+        "terminal_source": None,
+    }
+
+
+def _driver_stop_transition(
+    events: Sequence[Mapping[str, object]],
+    track: str,
+    driver_id: str,
+) -> str:
+    """Replay the latest exact driver stop attempt without duplicating intent."""
+    _driver_recovery_authority(events, track, driver_id)
+    transition = "unstarted"
+    for event in events:
+        if type(event) is not dict or type(event.get("details")) is not dict:
+            raise ControllerError("driver stop history is invalid")
+        event_name = event.get("event")
+        if event_name not in {
+            "driver_stop_intent",
+            "driver_stop_complete",
+            "driver_stop_failed",
+        }:
+            continue
+        details = event["details"]
+        assert isinstance(details, dict)
+        if details.get("track") != track:
+            continue
+        if details.get("driver_id") != driver_id:
+            raise ControllerError("driver stop identity changed")
+        if event_name == "driver_stop_intent":
+            if transition not in {"unstarted", "failed"}:
+                raise ControllerError("driver stop intent is duplicated")
+            transition = "pending"
+        elif event_name == "driver_stop_complete":
+            if transition != "pending":
+                raise ControllerError("driver stop completion lacks its intent")
+            transition = "complete"
+        else:
+            if transition != "pending":
+                raise ControllerError("driver stop failure lacks its intent")
+            transition = "failed"
+    return transition
 
 
 def _removal_transition(
@@ -2635,7 +2847,9 @@ def validate_container_attestation(
             or definition.get("image_id") != expected["image_id"]
             or definition.get("endpoint") != {"host": "envoy", "port": 8080}
             or definition.get("runtime_policy") != DRIVER_RUNTIME_POLICY
-            or actual["state"] != "created"
+            or expected["required_state"]
+            not in {"created", "running", "exited", "dead"}
+            or actual["state"] != expected["required_state"]
             or actual["stdin_open"] is not True
             or actual["healthcheck"] != "disabled"
         ):
@@ -2654,10 +2868,67 @@ def _container_attestation_matches(
     current: object,
     *,
     allow_stopped: bool,
+    allowed_driver_states: set[str] | frozenset[str] | None = None,
 ) -> bool:
     """Compare an owned container while totalizing a controlled service stop."""
     if current == recorded:
+        if (
+            type(recorded) is dict
+            and recorded.get("role") == "driver"
+            and allowed_driver_states is not None
+        ):
+            runtime = recorded.get("runtime_attestation")
+            return (
+                type(allowed_driver_states) in {set, frozenset}
+                and bool(allowed_driver_states)
+                and allowed_driver_states.issubset(
+                    {"created", "running", "exited", "dead"}
+                )
+                and type(runtime) is dict
+                and runtime.get("state") in allowed_driver_states
+            )
         return True
+    if (
+        allow_stopped
+        and type(recorded) is dict
+        and type(current) is dict
+        and set(recorded) == set(current)
+        and recorded.get("role") == "driver"
+        and type(allowed_driver_states) in {set, frozenset}
+        and bool(allowed_driver_states)
+        and allowed_driver_states.issubset({"created", "running", "exited", "dead"})
+    ):
+        recorded_runtime = recorded.get("runtime_attestation")
+        current_runtime = current.get("runtime_attestation")
+        if (
+            type(recorded_runtime) is dict
+            and type(current_runtime) is dict
+            and set(recorded_runtime) == set(current_runtime)
+            and recorded_runtime.get("state")
+            in {"created", "running", "exited", "dead"}
+            and current_runtime.get("state") in allowed_driver_states
+            and {
+                key: value
+                for key, value in recorded.items()
+                if key != "runtime_attestation"
+            }
+            == {
+                key: value
+                for key, value in current.items()
+                if key != "runtime_attestation"
+            }
+            and {
+                key: value
+                for key, value in recorded_runtime.items()
+                if key != "state"
+            }
+            == {
+                key: value
+                for key, value in current_runtime.items()
+                if key != "state"
+            }
+        ):
+            return True
     if (
         not allow_stopped
         or type(recorded) is not dict
@@ -4794,12 +5065,83 @@ def _closed_teardown_validators(
     return [by_track[track.value] for track in _TRACKS]
 
 
+def _closed_teardown_driver_authorities(
+    objects: Sequence[Mapping[str, object]],
+    authorities: Mapping[str, Mapping[str, object]],
+) -> None:
+    """Require journal-derived proof that every pure-plan driver is quiescent."""
+    drivers = [item for item in objects if item.get("role") == "driver"]
+    tracks = {track.value for track in _TRACKS}
+    if (
+        type(authorities) is not dict
+        or set(authorities) != tracks
+        or len(drivers) != len(tracks)
+    ):
+        raise ControllerError("driver teardown authority set is incomplete")
+    expected_fields = {
+        "phase",
+        "allowed_states",
+        "request_eligible",
+        "terminal_source",
+        "driver_id",
+        "track",
+        "observed_state",
+    }
+    for driver in drivers:
+        track = str(driver.get("track"))
+        authority = authorities.get(track)
+        if type(authority) is not dict or set(authority) != expected_fields:
+            raise ControllerError("driver teardown authority is not closed")
+        if (
+            authority["track"] != track
+            or authority["driver_id"] != driver.get("id")
+            or type(authority["allowed_states"]) is not tuple
+            or authority["observed_state"] not in authority["allowed_states"]
+        ):
+            raise ControllerError("driver teardown authority identity changed")
+        phase = authority["phase"]
+        valid = False
+        if phase == "pre_start":
+            valid = authority == {
+                "phase": "pre_start",
+                "allowed_states": ("created",),
+                "request_eligible": True,
+                "terminal_source": None,
+                "driver_id": driver["id"],
+                "track": track,
+                "observed_state": "created",
+            }
+        elif phase == "trusted_terminal":
+            source = authority["terminal_source"]
+            eligible = authority["request_eligible"]
+            valid = (
+                authority["allowed_states"] == ("dead", "exited")
+                and authority["observed_state"] in {"dead", "exited"}
+                and (
+                    (source == "bound_driver_result" and eligible is True)
+                    or (source == "readiness_cancel_complete" and eligible is False)
+                )
+            )
+        elif phase == "teardown_quiesced":
+            valid = (
+                authority["allowed_states"] == ("created", "dead", "exited")
+                and authority["observed_state"] in {"created", "dead", "exited"}
+                and authority["request_eligible"] is False
+                and authority["terminal_source"] == "driver_stop_complete"
+            )
+        if not valid:
+            raise ControllerError(
+                "driver teardown phase does not prove container quiescence"
+            )
+
+
 def teardown_commands(
     state: Mapping[str, object], *,
     validator_objects: Sequence[Mapping[str, object]],
+    driver_authorities: Mapping[str, Mapping[str, object]],
     docker_binary: Path,
 ) -> list[list[str]]:
-    """Construct exact ID-addressed cleanup; never discover deletion targets."""
+    """Plan exact cleanup only after journal-authoritative driver quiescence."""
     if state.get("profile_created") is not True:
         raise ControllerError("profile ownership is not proven")
     if state.get("colima_profile") != LAB_IDENTITY:
@@ -4819,16 +5161,17 @@ def teardown_commands(
     objects = state.get("objects")
     if type(objects) is not list or len(objects) != 12:
         raise ControllerError("exact teardown objects are unavailable")
+    _closed_teardown_driver_authorities(objects, driver_authorities)
     running = [
-        item for role in ("envoy", "authz", "target")
+        item for role in _TEARDOWN_SERVICE_ROLES
         for item in objects
         if isinstance(item, dict) and item.get("role") == role
     ]
-    ordered = list(validators) + [
-        item for role in ("envoy", "authz", "target", "driver")
+    ordered = [
+        item for role in _TEARDOWN_REMOVAL_ROLES
         for item in objects
         if isinstance(item, dict) and item.get("role") == role
-    ]
+    ] + list(validators)
     commands = [
         [*prefix, "stop", "--timeout", "10", str(item["id"])]
         for item in running
@@ -9485,6 +9828,7 @@ class LocalEnvoyController:
         *,
         require_running: bool = True,
         envoy_attachment: Mapping[str, object] | None = None,
+        allowed_driver_states: set[str] | frozenset[str] | None = None,
     ) -> dict[str, object]:
         if role not in {"authz", "target", "envoy", "driver"}:
             raise ControllerError("container role inspection is invalid")
@@ -9577,12 +9921,35 @@ class LocalEnvoyController:
             health_value.get("Status") if isinstance(health_value, dict) else "none"
         )
         running = running_value is True
+        driver_states = (
+            {"created"}
+            if allowed_driver_states is None
+            else set(allowed_driver_states)
+        )
+        if role != "driver" and allowed_driver_states is not None:
+            raise ControllerError("driver lifecycle states applied to a service")
+        if (
+            role == "driver"
+            and (
+                not driver_states
+                or not driver_states.issubset(
+                    {"created", "running", "exited", "dead"}
+                )
+            )
+        ):
+            raise ControllerError("driver lifecycle state authority is invalid")
         if (
             type(object_id) is not str
             or _HEX.fullmatch(object_id) is None
             or name != f"/{expected_name}"
             or (require_running and role != "driver" and not running)
-            or (role == "driver" and (running or state_status != "created"))
+            or (
+                role == "driver"
+                and (
+                    state_status not in driver_states
+                    or running != (state_status == "running")
+                )
+            )
             or (require_running and role not in {"envoy", "driver"} and health != "healthy")
             or (require_running and role == "envoy" and health not in {"healthy", "none"})
         ):
@@ -9774,7 +10141,9 @@ class LocalEnvoyController:
             "required_aliases": required_aliases,
             "driver_definition": driver_definition_value,
             "required_state": (
-                "created" if role == "driver" else "running" if require_running else None
+                state_status
+                if role == "driver"
+                else "running" if require_running else None
             ),
             "primary_network": str(
                 track_manifest["frontend_network"]
@@ -10503,20 +10872,36 @@ class LocalEnvoyController:
                 if resolved is None:
                     continue
                 identifier, _ = resolved
+                allowed_driver_states = None
+                if item["role"] == "driver":
+                    authority = _driver_recovery_authority(
+                        events, str(item["track"]), identifier
+                    )
+                    allowed_driver_states = set(
+                        authority["allowed_states"]  # type: ignore[arg-type]
+                    )
+                inspect_kwargs: dict[str, object] = {
+                    "require_running": False,
+                    "envoy_attachment": (
+                        envoy_attachments[str(item["track"])]
+                        if item["role"] == "envoy"
+                        else None
+                    ),
+                }
+                if allowed_driver_states is not None:
+                    inspect_kwargs["allowed_driver_states"] = allowed_driver_states
                 current = self._inspect_container(
                     identifier,
                     manifest,
                     str(item["role"]),
                     str(item["track"]),
-                    require_running=False,
-                    envoy_attachment=(
-                        envoy_attachments[str(item["track"])]
-                        if item["role"] == "envoy"
-                        else None
-                    ),
+                    **inspect_kwargs,
                 )
                 if "id" in item and not _container_attestation_matches(
-                    item, current, allow_stopped=True
+                    item,
+                    current,
+                    allow_stopped=True,
+                    allowed_driver_states=allowed_driver_states,
                 ):
                     raise ControllerError("recorded container attestation changed during recovery")
                 objects.append(current)
@@ -10553,6 +10938,7 @@ class LocalEnvoyController:
                         if segment == "frontend"
                         else None
                     ),
+                    require_complete_membership=False,
                 )
                 if "id" in item and current != item:
                     raise ControllerError("recorded network attestation changed during recovery")
@@ -10900,19 +11286,47 @@ class LocalEnvoyController:
         ):
             raise ControllerError("active runtime lacks complete Envoy attachments")
         for record in state["objects"]:  # type: ignore[union-attr]
+            driver_authority = None
+            allowed_driver_states = None
+            if record["role"] == "driver":
+                driver_authority = _driver_recovery_authority(
+                    events, str(record["track"]), str(record["id"])
+                )
+                if driver_authority["phase"] == "pre_start":
+                    allowed_driver_states = {"created"}
+                elif driver_authority["request_eligible"] is True:
+                    allowed_driver_states = {"exited"}
+                else:
+                    raise ControllerError(
+                        "driver start is ambiguous or teardown-only; down is required"
+                    )
+            inspect_kwargs: dict[str, object] = {
+                "require_running": record["role"] != "driver",
+                "envoy_attachment": (
+                    envoy_attachments[str(record["track"])]
+                    if record["role"] == "envoy"
+                    else None
+                ),
+            }
+            if allowed_driver_states is not None:
+                inspect_kwargs["allowed_driver_states"] = allowed_driver_states
             current = self._inspect_container(
                 str(record["id"]),
                 manifest,
                 str(record["role"]),
                 str(record["track"]),
-                require_running=record["role"] != "driver",
-                envoy_attachment=(
-                    envoy_attachments[str(record["track"])]
-                    if record["role"] == "envoy"
-                    else None
-                ),
+                **inspect_kwargs,
             )
-            if current != record:
+            if record["role"] == "driver":
+                current_matches = _container_attestation_matches(
+                    record,
+                    current,
+                    allow_stopped=True,
+                    allowed_driver_states=allowed_driver_states,
+                )
+            else:
+                current_matches = current == record
+            if not current_matches:
                 raise ControllerError("recorded container attestation changed")
         for record in state["network_objects"]:  # type: ignore[union-attr]
             track = str(record["track"])
@@ -11975,6 +12389,91 @@ class LocalEnvoyController:
                 {"id": item["id"], "name": item["name"]},
             )
 
+    def _quiesce_driver_for_teardown(
+        self,
+        item: Mapping[str, object],
+        manifest: dict[str, object],
+    ) -> dict[str, object]:
+        """Make one exact started driver nonrunning without ever starting it."""
+        if item.get("role") != "driver":
+            raise ControllerError("driver teardown received a non-driver")
+        track = str(item.get("track"))
+        driver_id = str(item.get("id"))
+        journal = load_lifecycle_journal(self.journal_path)
+        events = journal["events"]
+        assert isinstance(events, list)
+        authority = _driver_recovery_authority(events, track, driver_id)
+        observed_state = item.get("runtime_attestation", {}).get("state")
+        if observed_state not in authority["allowed_states"]:
+            raise ControllerError("driver state is outside journal recovery authority")
+        if authority["phase"] == "pre_start":
+            if observed_state != "created":
+                raise ControllerError("unstarted driver is not exactly created")
+            return authority
+        if authority["phase"] in {"trusted_terminal", "teardown_quiesced"}:
+            if observed_state not in {"created", "exited", "dead"}:
+                raise ControllerError("terminal driver unexpectedly remains running")
+            return authority
+
+        starts = [
+            event
+            for event in events
+            if event.get("event") == "driver_start_intent"
+            and isinstance(event.get("details"), dict)
+            and event["details"].get("track") == track
+        ]
+        if len(starts) != 1:
+            raise ControllerError("driver teardown lacks one exact start intent")
+        readiness_nonce = starts[0]["details"].get("readiness_nonce")
+        _require_sha256("driver teardown readiness nonce", readiness_nonce)
+        identity = {
+            "readiness_nonce": readiness_nonce,
+            "track": track,
+            "driver_id": driver_id,
+        }
+        transition = _driver_stop_transition(events, track, driver_id)
+        if transition == "complete":
+            if observed_state == "running":
+                raise ControllerError("completed driver stop is running")
+            return _driver_recovery_authority(events, track, driver_id)
+        if transition in {"unstarted", "failed"}:
+            journal_event(self.journal_path, "driver_stop_intent", identity)
+        if observed_state == "running":
+            try:
+                self._execute(
+                    self.docker_command("stop", "--timeout", "10", driver_id),
+                    timeout_s=30,
+                    docker=True,
+                )
+            except Exception:
+                journal_event(
+                    self.journal_path,
+                    "driver_stop_failed",
+                    {**identity, "category": "container_stop"},
+                )
+                raise
+        current = self._inspect_container(
+            driver_id,
+            manifest,
+            "driver",
+            track,
+            require_running=False,
+            allowed_driver_states={"created", "exited", "dead"},
+        )
+        if not _container_attestation_matches(
+            item,
+            current,
+            allow_stopped=True,
+            allowed_driver_states={"created", "exited", "dead"},
+        ):
+            raise ControllerError("driver changed during exact teardown stop")
+        journal_event(self.journal_path, "driver_stop_complete", identity)
+        return _driver_recovery_authority(
+            load_lifecycle_journal(self.journal_path)["events"],  # type: ignore[arg-type]
+            track,
+            driver_id,
+        )
+
     def _freeze_before_service_teardown(
         self,
         state: Mapping[str, object],
@@ -12662,6 +13161,15 @@ class LocalEnvoyController:
         if set(drivers) != {track.value for track in _TRACKS}:
             raise ControllerError("exact driver readiness identities are unavailable")
         journal = load_lifecycle_journal(self.journal_path)
+        journal_events = journal["events"]
+        assert isinstance(journal_events, list)
+        if any(
+            event["event"] == "driver_start_intent"
+            for event in journal_events
+        ):
+            raise ControllerError(
+                "driver start was already attempted; down is required"
+            )
         execution_nonce = str(journal["execution_nonce"])
         _require_sha256("driver readiness execution nonce", execution_nonce)
         readiness_nonce = secrets.token_hex(32)
@@ -13042,6 +13550,13 @@ class LocalEnvoyController:
         current_events = current["events"]
         assert isinstance(current_events, list)
         if any(
+            event["event"] == "driver_start_intent"
+            for event in current_events
+        ):
+            raise ControllerError(
+                "driver start was already attempted; down is required"
+            )
+        if any(
             event["event"] == "readiness_diagnostic_complete"
             for event in current_events
         ):
@@ -13412,6 +13927,67 @@ class LocalEnvoyController:
         )
         self._require_exact_inventory("network", networks, expected_networks)
 
+    def _attest_complete_topology_absence(
+        self, manifest: Mapping[str, object]
+    ) -> None:
+        """Bind the exact fifteen/six owned identities to final empty inventories."""
+        bound = load_bound_active_state(self.state_path)
+        events = load_lifecycle_journal(self.journal_path)["events"]
+        assert isinstance(events, list)
+        containers = [
+            {"id": str(item["id"]), "name": str(item["name"])}
+            for item in bound["objects"]  # type: ignore[union-attr]
+        ]
+        for track in _TRACKS:
+            name = (
+                f"kil-v3b1-validate-{_track_slug(track)}-"
+                f"{str(manifest['content_identity_sha256'])[:12]}"
+            )
+            transition, object_id = _creation_transition(
+                events, "validator", name
+            )
+            if transition != "complete" or object_id is None:
+                raise ControllerError("complete lifecycle lacks validator identity")
+            containers.append({"id": object_id, "name": name})
+        networks = [
+            {"id": str(item["id"]), "name": str(item["name"])}
+            for item in bound["network_objects"]  # type: ignore[union-attr]
+        ]
+        if len(containers) != 15 or len(networks) != 6:
+            raise ControllerError("complete topology identity count is invalid")
+        for identity in containers:
+            if _removal_transition(events, "container", identity) != "complete":
+                raise ControllerError("complete topology container is not absent")
+        for identity in networks:
+            if _removal_transition(events, "network", identity) != "complete":
+                raise ControllerError("complete topology network is not absent")
+        details = {
+            "container_count": 15,
+            "network_count": 6,
+            "container_identity_sha256": _digest_bytes(
+                canonical_json(
+                    sorted(containers, key=lambda item: (item["name"], item["id"]))
+                ).encode("utf-8")
+            ),
+            "network_identity_sha256": _digest_bytes(
+                canonical_json(
+                    sorted(networks, key=lambda item: (item["name"], item["id"]))
+                ).encode("utf-8")
+            ),
+            "survivor_containers": [],
+            "survivor_networks": [],
+        }
+        recorded = [
+            event
+            for event in events
+            if event.get("event") == "topology_absence_attested"
+        ]
+        if recorded:
+            if len(recorded) != 1 or recorded[0]["details"] != details:
+                raise ControllerError("topology absence attestation changed")
+            return
+        journal_event(self.journal_path, "topology_absence_attested", details)
+
     def _prepare_teardown_evidence(
         self,
         manifest: dict[str, object],
@@ -13624,6 +14200,46 @@ class LocalEnvoyController:
                 {"reason": reason},
             )
             return None, [], False, reason
+
+    def _close_stranded_request_intents(
+        self, manifest: Mapping[str, object]
+    ) -> bool:
+        """Close crash-stranded intents conservatively without any replay."""
+        journal = load_lifecycle_journal(self.journal_path)
+        requests = journal["requests"]
+        events = journal["events"]
+        assert isinstance(requests, dict)
+        assert isinstance(events, list)
+        recovered = False
+        for track in _TRACKS:
+            request = requests[track.value]
+            assert isinstance(request, dict)
+            if request["status"] != "intent_persisted":
+                continue
+            intent_id = request["intent_id"]
+            instruction_intents = [
+                event
+                for event in events
+                if event.get("event") == "driver_instruction_write_intent"
+                and isinstance(event.get("details"), dict)
+                and event["details"].get("track") == track.value
+                and event["details"].get("intent_id") == intent_id
+            ]
+            if len(instruction_intents) > 1:
+                raise ControllerError("stranded driver instruction intent is duplicated")
+            self._record_driver_control_failure(
+                track,
+                manifest=manifest,
+                stage=("termination" if instruction_intents else "instruction_write"),
+                request_bytes_may_have_been_sent=bool(instruction_intents),
+            )
+            recovered = True
+            journal = load_lifecycle_journal(self.journal_path)
+            requests = journal["requests"]
+            events = journal["events"]
+            assert isinstance(requests, dict)
+            assert isinstance(events, list)
+        return recovered
 
     def down(self) -> Path:
         journal = load_lifecycle_journal(self.journal_path)
@@ -13977,15 +14593,19 @@ class LocalEnvoyController:
         assert isinstance(objects, list)
         transient_objects = state.get("transient_objects", [])
         assert isinstance(transient_objects, list)
-        running_ordered = list(transient_objects) + [
+        drivers = [item for item in objects if item["role"] == "driver"]
+        running_ordered = [
             item
-            for role in ("envoy", "authz", "target")
+            for role in _TEARDOWN_SERVICE_ROLES
             for item in objects
             if item["role"] == role
-        ]
-        ordered = running_ordered + [
-            item for item in objects if item["role"] == "driver"
-        ]
+        ] + list(transient_objects)
+        ordered = [
+            item
+            for role in _TEARDOWN_REMOVAL_ROLES
+            for item in objects
+            if item["role"] == role
+        ] + list(transient_objects)
         lifecycle_events = journal["events"]
         assert isinstance(lifecycle_events, list)
         envoy_attachments = _envoy_attachment_expectations(
@@ -14009,6 +14629,15 @@ class LocalEnvoyController:
             up_complete_observed and partial_rejections
         ):
             raise ControllerError("partial-up evidence status is contradictory")
+        stranded_request_recovered = self._close_stranded_request_intents(
+            manifest
+        )
+        driver_authorities = {
+            str(item["track"]): self._quiesce_driver_for_teardown(
+                item, manifest
+            )
+            for item in drivers
+        }
         failure_details: dict[str, object] | None = None
         failure_intent_sequence: int | None = None
         if not up_complete_observed:
@@ -14083,10 +14712,14 @@ class LocalEnvoyController:
                     ),
                 )
         else:
-            requests_state = journal["requests"]
+            current_journal = load_lifecycle_journal(self.journal_path)
+            requests_state = current_journal["requests"]
             assert isinstance(requests_state, dict)
             attempted_complete = all(
                 item["status"] == "completed" for item in requests_state.values()
+            ) and not stranded_request_recovered and all(
+                authority["request_eligible"] is True
+                for authority in driver_authorities.values()
             )
             freeze = self._freeze_before_service_teardown(
                 state,
@@ -14104,29 +14737,48 @@ class LocalEnvoyController:
         remaining_containers = list(ordered)
         remaining_networks = list(state["network_objects"])
         for item in ordered:
-            current = (
-                self._inspect_validation_container(
+            allowed_driver_states = None
+            if item["role"] == "driver":
+                current_events = load_lifecycle_journal(
+                    self.journal_path
+                )["events"]
+                assert isinstance(current_events, list)
+                authority = _driver_recovery_authority(
+                    current_events, str(item["track"]), str(item["id"])
+                )
+                allowed_driver_states = set(
+                    authority["allowed_states"]  # type: ignore[arg-type]
+                )
+            if item["role"] == "validator":
+                current = self._inspect_validation_container(
                     str(item["id"]), manifest, LiveTrack(str(item["track"]))
                 )
-                if item["role"] == "validator"
-                else self._inspect_container(
-                    str(item["id"]),
-                    manifest,
-                    str(item["role"]),
-                    str(item["track"]),
-                    require_running=False,
-                    envoy_attachment=(
+            else:
+                inspect_kwargs: dict[str, object] = {
+                    "require_running": False,
+                    "envoy_attachment": (
                         envoy_attachments[str(item["track"])]
                         if item["role"] == "envoy"
                         else None
                     ),
+                }
+                if allowed_driver_states is not None:
+                    inspect_kwargs["allowed_driver_states"] = allowed_driver_states
+                current = self._inspect_container(
+                    str(item["id"]),
+                    manifest,
+                    str(item["role"]),
+                    str(item["track"]),
+                    **inspect_kwargs,
                 )
-            )
             if item["role"] == "validator":
                 current_matches = current == item
             else:
                 current_matches = _container_attestation_matches(
-                    item, current, allow_stopped=True
+                    item,
+                    current,
+                    allow_stopped=True,
+                    allowed_driver_states=allowed_driver_states,
                 )
             if not current_matches:
                 raise ControllerError("container changed before exact removal")
@@ -14172,6 +14824,33 @@ class LocalEnvoyController:
                 "container_remove_complete",
                 identity,
             )
+            if item["role"] == "driver":
+                frontend = next(
+                    network
+                    for network in remaining_networks
+                    if network["track"] == item["track"]
+                    and network.get("segment") == "frontend"
+                )
+                remaining_objects = [
+                    record
+                    for record in remaining_containers
+                    if record["role"] != "validator"
+                ]
+                members = _network_member_identities(
+                    remaining_objects,
+                    str(item["track"]),
+                    "frontend",
+                )
+                self._inspect_network(
+                    str(frontend["id"]),
+                    manifest,
+                    str(item["track"]),
+                    segment="frontend",
+                    expected_members=members,
+                    allowed_member_options=(members,),
+                    envoy_attachment=envoy_attachments[str(item["track"])],
+                    require_complete_membership=False,
+                )
         networks = state["network_objects"]
         assert isinstance(networks, list)
         for item in networks:
@@ -14233,6 +14912,8 @@ class LocalEnvoyController:
             "network_objects": [],
         }
         self._assert_only_recorded_managed(empty_state, expect_present=False)
+        if up_complete_observed:
+            self._attest_complete_topology_absence(manifest)
         journal_event(
             self.journal_path, "colima_stop_intent", {"profile": LAB_IDENTITY}
         )
