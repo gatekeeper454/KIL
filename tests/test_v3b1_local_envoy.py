@@ -1556,7 +1556,6 @@ class ControllerContractTest(unittest.TestCase):
                 "--network-preferred-route=false",
                 "--port-forwarder=ssh",
                 "--ssh-agent=false",
-                "--nested-virtualization=false",
                 "--mount",
                 str(ROOT / ".tools/v3b1-staging" / HEX_A),
                 "--mount-type=virtiofs",
@@ -1565,6 +1564,7 @@ class ControllerContractTest(unittest.TestCase):
         encoded_colima = canonical_json(controller.colima_start_command(HEX_A))
         self.assertNotIn("--rosetta=false", encoded_colima)
         self.assertNotIn("--host-addresses=false", encoded_colima)
+        self.assertNotIn("--nested-virtualization", encoded_colima)
         docker = controller.docker_command("image", "ls")
         self.assertEqual(
             docker[:5],

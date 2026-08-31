@@ -4917,3 +4917,70 @@ byte correction. Then repeat exactly one zero-request `preflight` / `up` /
 copied and byte-bound before authorizing any central request.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-097 — 2026-08-30 — Pre-profile launch incompatibility is isolated and corrected
+
+**Input:** Repeat the zero-request gate from merged public main after the exact-
+byte ledger correction, preserve foreign runtime state, and do not authorize or
+send a central request unless the full smoke passes.
+
+**Interpretation:** A launch failure before profile creation is not a retry of a
+central request, but it must still be treated as a durable lifecycle and closed
+through the controller's recovery path. Host dependency discovery and Colima
+CLI compatibility are execution prerequisites; neither may be worked around by
+leaving ambiguous ownership or weakening post-start configuration attestation.
+
+**Decision status:** Confirmed two pre-profile failures from public source
+commit `20a83da1f753a681671db4a8a5c06b5f709450ba`. The first stopped at
+`colima_start_intent` because the elevated host PATH did not expose the repo-
+pinned Docker CLI to Colima's dependency check. Journal
+`preprofile-ccc0510fbd4e62091d7c06ed927fe40b1dcfc3e29164121f0275f1a945bf766b`
+records `profile_created=false` and all request states `not_attempted`; `down`
+verified the dedicated profile absent and archived the lifecycle.
+
+The second attempt used an explicit PATH containing the pinned Docker CLI and
+reached Colima argument processing, where Colima v0.10.3 rejected
+`--nested-virtualization=false` before profile creation. Journal
+`preprofile-26e4cfbf7774d5313b7b5d0b1f2d93b12d33ea07060c2f6fef2e7c9cf3d88527`
+likewise records `profile_created=false` and all requests `not_attempted`; it was
+closed and archived through `down`. No KIL profile, container, network,
+authorization action, target action, or central request resulted from either
+attempt. The foreign `default` profile was restored and host-verified as
+Running, containerd, arm64, 4 CPU, 4 GiB memory, and 20 GiB disk.
+
+The minimal implementation correction removes only the explicit
+`--nested-virtualization=false` launch argument. Colima's saved configuration is
+still parsed after startup and must contain exact `nestedVirtualization: false`
+before any KIL service container may deploy. The correction passed its TDD
+contract test, 180 controller tests, 396 repository tests, Python compilation,
+and diff hygiene.
+
+**Rationale:** The false-valued CLI flag is redundant with the stronger post-
+start saved-config attestation and is not portable across the observed Colima
+launch behavior. Removing it restores compatibility without accepting an
+unknown or enabled nested-virtualization state. Durable pre-profile closure and
+exact foreign-runtime restoration preserve the lifecycle boundary.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `README.md`
+- `docs/lab/V3-PROGRESS.md`
+- `docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- `.tools/v3b1-private/completed/preprofile-*.journal.json` (ignored private
+  recovery evidence)
+
+**Unresolved questions:** The corrected command has not yet completed a real
+profile start. The next smoke must verify the saved configuration before
+deployment and must still prove all nine exact source legs. No enforcement
+result is accepted, promoted, or validated.
+
+**Next gate:** Commit, publish, pass CI, merge, and synchronize the Colima
+compatibility correction. Then stop the foreign runtime only for one new
+zero-request `preflight` / `up` / `down` smoke from clean public main. Require
+saved-config attestation, nine copied and byte-bound source legs, exact teardown,
+and foreign-runtime restoration before any central request.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

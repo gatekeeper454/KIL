@@ -28,10 +28,14 @@ empty failure bundle is nonpromotable and does not independently prove service-
 source absence.
 
 The harness now contains a bounded exact-byte service-ledger export correction.
-The next execution gate is a fresh zero-request `preflight` / `up` / `down`
-smoke from a clean public commit containing that correction. A central request
-remains prohibited until all nine source legs are copied and byte-bound. Kind/
-Calico validation (V3B-2) and repetition and performance promotion (V3C) remain
+Two subsequent launch attempts stopped before profile creation because of host
+tool discovery and a Colima false-flag compatibility mismatch; both were
+durably archived without a request or KIL runtime. The minimal launch correction
+retains post-start attestation that nested virtualization is disabled. The next
+execution gate is a fresh zero-request `preflight` / `up` / `down` smoke from a
+clean public commit containing both corrections. A central request remains
+prohibited until all nine source legs are copied and byte-bound. Kind/Calico
+validation (V3B-2) and repetition and performance promotion (V3C) remain
 unexecuted.
 
 ## Evidence classes
