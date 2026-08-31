@@ -978,6 +978,41 @@ class FakeRunner:
         return CommandResult(0, "", "")
 
 
+class _DriverStateRunner(FakeRunner):
+    STATE_FORMAT = "{{.Id}} {{.State.Running}} {{.State.Status}}"
+
+    def __init__(self, states):
+        super().__init__()
+        self.states = dict(states)
+
+    def run(self, argv, **kwargs):
+        command = list(argv)
+        self.calls.append(
+            (
+                command,
+                kwargs.get("cwd"),
+                kwargs.get("input_text"),
+                kwargs.get("env"),
+                kwargs.get("timeout_s", 30),
+            )
+        )
+        if "inspect" in command and self.STATE_FORMAT in command:
+            full_id = command[-1]
+            state = self.states[full_id]
+            if state == "malformed":
+                return CommandResult(0, "ambiguous private state\n", "")
+            running = state is True
+            status = "running" if running else "exited"
+            return CommandResult(
+                0,
+                f"{full_id} {'true' if running else 'false'} {status}\n",
+                "",
+            )
+        if "stop" in command:
+            self.states[command[-1]] = False
+        return CommandResult(0, "", "")
+
+
 class BuildRunner(FakeRunner):
     def run(self, argv, **kwargs):
         self.calls.append((list(argv), kwargs))
@@ -3823,6 +3858,7 @@ class _DriverProcessFactory:
         full_id = argv[-1]
         self.events.append(("start", argv))
         behavior = dict(self.behaviors[full_id])
+        behavior.pop("container_running", None)
         start_error = behavior.pop("start_error", None)
         if start_error is not None:
             raise start_error
@@ -3896,6 +3932,12 @@ class DriverReadinessTest(unittest.TestCase):
             behaviors[drivers[track.value]["id"]] = behavior
         factory = _DriverProcessFactory(behaviors, events=events, clock=clock)
         controller.driver_process_factory = factory
+        controller.runner = _DriverStateRunner(
+            {
+                full_id: behavior.get("container_running", False)
+                for full_id, behavior in behaviors.items()
+            }
+        )
         return controller, factory, clock, drivers, events
 
     def test_constructor_injects_driver_factory(self):
@@ -4119,6 +4161,89 @@ class DriverReadinessTest(unittest.TestCase):
                         )
                     )
 
+    def test_only_exact_ready_schema_can_complete_readiness(self):
+        success = {
+            "attempt_count": 1,
+            "connect_monotonic_ns": 1,
+            "decision_digest": HEX_A,
+            "receive_monotonic_ns": 3,
+            "response_status": 200,
+            "retry_performed": False,
+            "schema_version": "kil.v3b1-driver-result.v1",
+            "send_monotonic_ns": 2,
+            "status": "complete",
+            "track": LiveTrack.CREDENTIAL_POLICY_BASELINE.value,
+        }
+        transport_failure = {
+            "attempt_count": 1,
+            "connect_monotonic_ns": 1,
+            "errno": 111,
+            "errno_name": "ECONNREFUSED",
+            "exception_class": "ConnectionRefusedError",
+            "failure_monotonic_ns": 3,
+            "request_bytes_may_have_been_sent": False,
+            "retry_performed": False,
+            "schema_version": "kil.v3b1-driver-result.v1",
+            "send_monotonic_ns": 2,
+            "stage": "request_send",
+            "status": "transport_failure",
+            "track": LiveTrack.CREDENTIAL_POLICY_BASELINE.value,
+        }
+        control_failure = {
+            "attempt_count": 1,
+            "failure_monotonic_ns": 3,
+            "request_bytes_may_have_been_sent": False,
+            "retry_performed": False,
+            "schema_version": "kil.v3b1-driver-result.v1",
+            "stage": "instruction_write",
+            "status": "driver_control_failure",
+            "track": LiveTrack.CREDENTIAL_POLICY_BASELINE.value,
+        }
+        readiness_extra = {
+            "connect_monotonic_ns": 1,
+            "ready_monotonic_ns": 2,
+            "schema_version": "kil.v3b1-driver-readiness.v1",
+            "status": "ready",
+            "track": LiveTrack.CREDENTIAL_POLICY_BASELINE.value,
+            "unexpected": False,
+        }
+        cases = {
+            "success": (canonical_json(success) + "\n").encode(),
+            "transport_failure": (
+                canonical_json(transport_failure) + "\n"
+            ).encode(),
+            "driver_control_failure": (
+                canonical_json(control_failure) + "\n"
+            ).encode(),
+            "malformed": b"not-json\n",
+            "extra": (canonical_json(readiness_extra) + "\n").encode(),
+        }
+        for name, payload in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                controller, _, _, drivers, _ = self.make_controller(
+                    directory,
+                    {"credential_policy_baseline": {"payload": payload}},
+                )
+
+                with self.assertRaisesRegex(ControllerError, "failed closed"):
+                    controller.readiness()
+
+                journal = load_lifecycle_journal(controller.journal_path)
+                failed_id = drivers[LiveTrack.CREDENTIAL_POLICY_BASELINE.value]["id"]
+                self.assertFalse(
+                    any(
+                        item["event"] == "driver_readiness_complete"
+                        and item["details"]["driver_id"] == failed_id
+                        for item in journal["events"]
+                    )
+                )
+                self.assertFalse(
+                    any(
+                        item["event"] == "readiness_diagnostic_complete"
+                        for item in journal["events"]
+                    )
+                )
+
     def test_non_fileno_blocking_read_uses_common_deadline_and_cleans_up(self):
         with tempfile.TemporaryDirectory() as directory:
             controller, factory, _, _, _ = self.make_controller(
@@ -4169,6 +4294,7 @@ class DriverReadinessTest(unittest.TestCase):
                     "credential_policy_baseline": {
                         "wait_error": subprocess.TimeoutExpired("docker", 1),
                         "terminate_exits": False,
+                        "container_running": True,
                     }
                 },
             )
@@ -4250,6 +4376,238 @@ class DriverReadinessTest(unittest.TestCase):
             raw = controller.journal_path.read_text()
             self.assertNotIn("private close failure", raw)
 
+    def test_terminal_failure_write_cannot_prevent_independent_poison(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, _, _ = self.make_controller(
+                directory,
+                {"credential_policy_baseline": {"payload": b"not-json\n"}},
+            )
+            real_journal_event = local_envoy_module.journal_event
+            failed_once = False
+
+            def fail_terminal(path, event, details):
+                nonlocal failed_once
+                if not failed_once and event == "driver_readiness_failed":
+                    failed_once = True
+                    raise ControllerError("private terminal persistence failure")
+                return real_journal_event(path, event, details)
+
+            with mock.patch(
+                "tools.v3b1_local_envoy.journal_event", side_effect=fail_terminal
+            ):
+                with self.assertRaisesRegex(ControllerError, "failed closed"):
+                    controller.readiness()
+
+            self.assertTrue(controller.readiness_poison_path.is_file())
+            self.assertTrue(all(process.reaped for process in factory.processes))
+            with self.assertRaisesRegex(ControllerError, "poison|down|incomplete"):
+                controller.readiness()
+            self.assertNotIn(
+                "private terminal persistence failure",
+                controller.journal_path.read_text(),
+            )
+
+    def test_cleanup_event_write_failure_still_reaps_and_preserves_primary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, drivers, _ = self.make_controller(
+                directory,
+                {
+                    "credential_policy_baseline": {
+                        "advance_ns": 31_000_000_000,
+                    }
+                },
+            )
+            real_journal_event = local_envoy_module.journal_event
+            failed_once = False
+
+            def fail_cleanup_intent(path, event, details):
+                nonlocal failed_once
+                if (
+                    not failed_once
+                    and event == "driver_cleanup_intent"
+                    and details["track"]
+                    == LiveTrack.CREDENTIAL_POLICY_BASELINE.value
+                ):
+                    failed_once = True
+                    raise ControllerError("private cleanup persistence failure")
+                return real_journal_event(path, event, details)
+
+            with mock.patch(
+                "tools.v3b1_local_envoy.journal_event",
+                side_effect=fail_cleanup_intent,
+            ):
+                with self.assertRaisesRegex(ControllerError, "failed closed"):
+                    controller.readiness()
+
+            self.assertTrue(all(process.exited for process in factory.processes))
+            self.assertTrue(all(process.reaped for process in factory.processes))
+            journal = load_lifecycle_journal(controller.journal_path)
+            failure = next(
+                item for item in journal["events"]
+                if item["event"] == "driver_readiness_failed"
+            )
+            self.assertEqual(
+                failure["details"]["driver_id"],
+                drivers[LiveTrack.CREDENTIAL_POLICY_BASELINE.value]["id"],
+            )
+            self.assertEqual(failure["details"]["stage"], "readiness_record")
+            self.assertEqual(failure["details"]["category"], "deadline_expired")
+            self.assertTrue(controller.readiness_poison_path.is_file())
+
+    def test_poison_write_failure_is_aggregated_without_losing_primary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, drivers, _ = self.make_controller(
+                directory,
+                {"credential_policy_baseline": {"payload": b"not-json\n"}},
+            )
+            real_write = local_envoy_module._write_file
+
+            def fail_poison(path, payload, mode):
+                if Path(path) == controller.readiness_poison_path:
+                    raise ControllerError("private poison persistence failure")
+                return real_write(path, payload, mode)
+
+            with mock.patch(
+                "tools.v3b1_local_envoy._write_file", side_effect=fail_poison
+            ):
+                with self.assertRaisesRegex(ControllerError, "failed closed"):
+                    controller.readiness()
+
+            journal = load_lifecycle_journal(controller.journal_path)
+            failure = next(
+                item for item in journal["events"]
+                if item["event"] == "driver_readiness_failed"
+            )
+            self.assertEqual(
+                failure["details"]["driver_id"],
+                drivers[LiveTrack.CREDENTIAL_POLICY_BASELINE.value]["id"],
+            )
+            self.assertEqual(failure["details"]["stage"], "readiness_record")
+            with self.assertRaisesRegex(ControllerError, "poison|down|incomplete"):
+                controller.readiness()
+
+    def test_incomplete_prior_session_rejects_replay_without_poison_or_driver_event(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, _, _ = self.make_controller(directory)
+            journal_event(
+                controller.journal_path,
+                "readiness_session_started",
+                {"readiness_nonce": HEX_B},
+            )
+
+            with self.assertRaisesRegex(ControllerError, "incomplete|down|readiness"):
+                controller.readiness()
+
+            self.assertEqual(factory.processes, [])
+
+    def test_aggregate_persistence_failure_uses_controller_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, _, _ = self.make_controller(directory)
+            real_journal_event = local_envoy_module.journal_event
+            failed_once = False
+
+            def fail_readiness_set(path, event, details):
+                nonlocal failed_once
+                if not failed_once and event == "driver_readiness_set_complete":
+                    failed_once = True
+                    raise ControllerError("private aggregate persistence failure")
+                return real_journal_event(path, event, details)
+
+            with mock.patch(
+                "tools.v3b1_local_envoy.journal_event",
+                side_effect=fail_readiness_set,
+            ):
+                with self.assertRaisesRegex(ControllerError, "failed closed"):
+                    controller.readiness()
+
+            journal = load_lifecycle_journal(controller.journal_path)
+            failure = next(
+                item for item in journal["events"]
+                if item["event"] == "driver_readiness_failed"
+            )
+            self.assertEqual(
+                failure["details"],
+                {
+                    "readiness_nonce": failure["details"]["readiness_nonce"],
+                    "scope": "controller",
+                    "track": None,
+                    "driver_id": None,
+                    "category": "controller_persistence",
+                    "stage": "readiness_set_complete",
+                },
+            )
+
+    def test_container_state_not_client_poll_controls_exact_id_stop(self):
+        cases = {
+            "client_exited_container_running": {
+                "change": {
+                    "payload": b"not-json\n",
+                    "container_running": True,
+                },
+                "expect_stop": True,
+            },
+            "client_running_container_stopped": {
+                "change": {
+                    "wait_error": subprocess.TimeoutExpired("docker", 1),
+                    "terminate_exits": False,
+                    "container_running": False,
+                },
+                "expect_stop": False,
+            },
+        }
+        for name, case in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                controller, factory, _, drivers, _ = self.make_controller(
+                    directory,
+                    {"credential_policy_baseline": case["change"]},
+                )
+
+                with self.assertRaisesRegex(ControllerError, "failed closed"):
+                    controller.readiness()
+
+                failed_id = drivers[LiveTrack.CREDENTIAL_POLICY_BASELINE.value]["id"]
+                stops = [
+                    call[0]
+                    for call in controller.runner.calls
+                    if "stop" in call[0]
+                ]
+                self.assertEqual(bool(stops), case["expect_stop"])
+                if stops:
+                    self.assertEqual(stops[0][-1], failed_id)
+                driver_ids = {item["id"] for item in drivers.values()}
+                for call in controller.runner.calls:
+                    if "inspect" in call[0] or "stop" in call[0]:
+                        self.assertIn(call[0][-1], driver_ids)
+                self.assertTrue(all(process.reaped for process in factory.processes))
+
+    def test_ambiguous_container_state_is_sanitized_cleanup_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, drivers, _ = self.make_controller(
+                directory,
+                {
+                    "credential_policy_baseline": {
+                        "payload": b"not-json\n",
+                        "container_running": "malformed",
+                    }
+                },
+            )
+
+            with self.assertRaisesRegex(ControllerError, "failed closed"):
+                controller.readiness()
+
+            failed_id = drivers[LiveTrack.CREDENTIAL_POLICY_BASELINE.value]["id"]
+            journal = load_lifecycle_journal(controller.journal_path)
+            cleanup_failure = next(
+                item for item in journal["events"]
+                if item["event"] == "driver_cleanup_failed"
+                and item["details"]["driver_id"] == failed_id
+            )
+            self.assertEqual(
+                cleanup_failure["details"]["category"], "container_inspect"
+            )
+            self.assertNotIn("ambiguous private state", controller.journal_path.read_text())
+            self.assertTrue(all(process.reaped for process in factory.processes))
+
     def test_later_driver_start_failures_retain_exact_primary_attribution(self):
         for failed_track in (
             LiveTrack.SIGNED_STATE_ONLY,
@@ -4277,6 +4635,7 @@ class DriverReadinessTest(unittest.TestCase):
                     failure["details"],
                     {
                         "readiness_nonce": failure["details"]["readiness_nonce"],
+                        "scope": "driver",
                         "track": failed_track.value,
                         "driver_id": drivers[failed_track.value]["id"],
                         "category": "process_start",
