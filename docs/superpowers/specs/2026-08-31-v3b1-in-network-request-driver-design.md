@@ -113,8 +113,11 @@ Runtime attestation requires:
 
 The three existing validators remain transient and explicit. A complete
 `up` therefore owns three validators, twelve track containers, and six internal
-networks. Frontend membership must be exactly driver plus Envoy; backend
-membership must be exactly Envoy plus authorization service plus target.
+networks. The frontend is configured exactly for driver plus Envoy. Its
+physical inventory must be Envoy-only while the exact driver is never-started
+in `created` state, then exactly driver plus Envoy after endpoint
+materialization. Backend membership must be exactly Envoy plus authorization
+service plus target.
 Recovery and exact inventories must recognize the driver and both network
 segments as first-class owned objects rather than infer ownership from names.
 
@@ -264,8 +267,9 @@ Implementation is test-first. Static tests must prove:
 - the fixed `envoy:8080` frontend alias is independent of run-derived
   names/labels, and changing only those runtime attestations cannot change the
   content-identity preimage;
-- exact created-state driver attestation, two-member frontend membership, and
-  three-member backend membership;
+- exact created-state driver attachment with an unrealized endpoint, Envoy-only
+  physical frontend membership before first start, exact two-member frontend
+  membership after start, and three-member backend membership;
 - all three retained driver connections are ready before request intent;
 - no instruction or HTTP request on readiness failure;
 - signed state travels only through bounded stdin after intent;

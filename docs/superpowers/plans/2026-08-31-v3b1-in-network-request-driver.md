@@ -446,7 +446,9 @@ Add exact tests requiring:
 - three driver `docker create` commands with interactive stdin, no TTY,
   `--no-healthcheck`, no mount, no publication, and no backend network;
 - Envoy attached to backend and frontend, with fixed frontend alias `envoy`;
-- frontend membership exactly `{driver, envoy}`;
+- frontend configuration exactly `{driver, envoy}`, with physical membership
+  exactly `{envoy}` while the driver is never-started/`created` and exactly
+  `{driver, envoy}` after its endpoint materializes;
 - backend membership exactly `{envoy, authz, target}`;
 - driver state `created`; Envoy/authz/target states `running`;
 - `HostConfig.PortBindings == {}` and live published ports empty/null; and
@@ -772,9 +774,10 @@ git commit -m "Recover and tear down V3B-1 request drivers"
 - [x] **Step 1: Update only mechanism and pending-gate claims**
 
 Show host Docker attach/stdin control separately from consequential traffic.
-Show three tracks, each with frontend `{driver, Envoy}` and backend
-`{Envoy, authz, target}`, Envoy dual-homing, no host publication, and evidence
-joins. The hybrid diagram must separate current local-Envoy V3B-1 from future
+Show three tracks, each with frontend configured for `{driver, Envoy}` and
+backend `{Envoy, authz, target}`; distinguish created-state physical
+`{Envoy}` from materialized `{driver, Envoy}`. Show Envoy dual-homing, no host
+publication, and evidence joins. The hybrid diagram must separate current local-Envoy V3B-1 from future
 Kind/Calico V3B-2.
 
 Before live acceptance, state only that the mechanism is implemented and the

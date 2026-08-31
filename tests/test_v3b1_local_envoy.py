@@ -2316,6 +2316,233 @@ class ControllerContractTest(unittest.TestCase):
                             ):
                                 controller._load_for_down()
 
+    def test_created_driver_uses_only_realized_frontend_membership(self):
+        value = manifest()
+        track = LiveTrack.CREDENTIAL_POLICY_BASELINE
+        track_value = next(
+            item for item in value["tracks"] if item["track"] == track.value
+        )
+        envoy_id = "1" * 64
+        driver_id = "2" * 64
+        frontend_id = "3" * 64
+        objects = [
+            {
+                "id": envoy_id,
+                "name": track_value["envoy_container"],
+                "role": "envoy",
+                "track": track.value,
+                "state": "running",
+            },
+            {
+                "id": driver_id,
+                "name": track_value["driver_container"],
+                "role": "driver",
+                "track": track.value,
+                "runtime_attestation": {"state": "created"},
+            },
+        ]
+        attachment = {
+            "track": track.value,
+            "phase": "complete",
+            "container_id": envoy_id,
+            "container_name": track_value["envoy_container"],
+            "network_id": frontend_id,
+            "network_name": track_value["frontend_network"],
+            "alias": "envoy",
+        }
+        envoy_member = {
+            envoy_id: {
+                "name": track_value["envoy_container"],
+                "role": "envoy",
+            }
+        }
+
+        self.assertEqual(
+            local_envoy_module._network_member_identity_options(
+                objects,
+                value,
+                track.value,
+                "frontend",
+                attachment,
+            ),
+            (envoy_member,),
+        )
+
+        attachment["phase"] = "pending"
+        self.assertEqual(
+            local_envoy_module._network_member_identity_options(
+                objects,
+                value,
+                track.value,
+                "frontend",
+                attachment,
+            ),
+            ({}, envoy_member),
+        )
+
+        attachment["phase"] = "complete"
+        realized_members = {
+            **envoy_member,
+            driver_id: {
+                "name": track_value["driver_container"],
+                "role": "driver",
+            },
+        }
+        for state in ("running", "exited", "dead"):
+            with self.subTest(state=state):
+                objects[1]["runtime_attestation"]["state"] = state
+                self.assertEqual(
+                    local_envoy_module._network_member_identity_options(
+                        objects,
+                        value,
+                        track.value,
+                        "frontend",
+                        attachment,
+                    ),
+                    (realized_members,),
+                )
+
+        for state in (None, "paused", True, [], {}):
+            with self.subTest(invalid_state=state):
+                objects[1]["runtime_attestation"]["state"] = state
+                with self.assertRaisesRegex(
+                    ControllerError, "frontend driver state is invalid"
+                ):
+                    local_envoy_module._network_member_identity_options(
+                        objects,
+                        value,
+                        track.value,
+                        "frontend",
+                        attachment,
+                    )
+
+    def test_reverify_uses_fresh_driver_state_for_frontend_membership(self):
+        value = manifest()
+        track = LiveTrack.CREDENTIAL_POLICY_BASELINE
+        track_value = next(
+            item for item in value["tracks"] if item["track"] == track.value
+        )
+        envoy_id = "4" * 64
+        driver_id = "5" * 64
+        frontend_id = "6" * 64
+        envoy = {
+            "id": envoy_id,
+            "name": track_value["envoy_container"],
+            "role": "envoy",
+            "track": track.value,
+            "runtime_attestation": {"state": "running"},
+        }
+        recorded_driver = {
+            "id": driver_id,
+            "name": track_value["driver_container"],
+            "role": "driver",
+            "track": track.value,
+            "runtime_attestation": {"state": "created"},
+        }
+        current_driver = {
+            **recorded_driver,
+            "runtime_attestation": {"state": "exited"},
+        }
+        network = {
+            "id": frontend_id,
+            "name": track_value["frontend_network"],
+            "track": track.value,
+            "segment": "frontend",
+        }
+        state = {
+            "manifest": value,
+            "objects": [envoy, recorded_driver],
+            "network_objects": [network],
+        }
+        attachments = {
+            item.value: {
+                "track": item.value,
+                "phase": "complete",
+                "container_id": (
+                    envoy_id if item is track else str(item.value)[0] * 64
+                ),
+                "container_name": next(
+                    track_item["envoy_container"]
+                    for track_item in value["tracks"]
+                    if track_item["track"] == item.value
+                ),
+                "network_id": (
+                    frontend_id if item is track else "9" * 64
+                ),
+                "network_name": next(
+                    track_item["frontend_network"]
+                    for track_item in value["tracks"]
+                    if track_item["track"] == item.value
+                ),
+                "alias": "envoy",
+            }
+            for item in LiveTrack
+        }
+        controller = LocalEnvoyController(
+            ROOT,
+            FakeRunner(),
+            home=Path("/Users/lab"),
+            port_probe=lambda port: False,
+            tool_verifier=lambda: TOOL_IDENTITIES,
+        )
+
+        def inspect_container(_identifier, _manifest, role, _track, **_kwargs):
+            return current_driver if role == "driver" else envoy
+
+        inspect_network = mock.Mock(return_value=network)
+        with (
+            mock.patch.object(
+                local_envoy_module,
+                "load_bound_active_state",
+                return_value=state,
+            ),
+            mock.patch.object(
+                local_envoy_module,
+                "load_lifecycle_journal",
+                return_value={"events": []},
+            ),
+            mock.patch.object(
+                local_envoy_module,
+                "_envoy_attachment_expectations",
+                return_value=attachments,
+            ),
+            mock.patch.object(
+                local_envoy_module,
+                "_driver_recovery_authority",
+                return_value={"phase": "complete", "request_eligible": True},
+            ),
+            mock.patch.object(
+                local_envoy_module,
+                "_container_attestation_matches",
+                return_value=True,
+            ),
+            mock.patch.object(
+                controller,
+                "_inspect_container",
+                side_effect=inspect_container,
+            ),
+            mock.patch.object(
+                controller,
+                "_inspect_network",
+                inspect_network,
+            ),
+        ):
+            controller._load_and_reverify()
+
+        self.assertEqual(
+            inspect_network.call_args.kwargs["expected_members"],
+            {
+                envoy_id: {
+                    "name": track_value["envoy_container"],
+                    "role": "envoy",
+                },
+                driver_id: {
+                    "name": track_value["driver_container"],
+                    "role": "driver",
+                },
+            },
+        )
+
     def test_cli_exposes_only_the_seven_approved_subcommands(self):
         parser = make_parser()
 
@@ -3831,6 +4058,7 @@ class _BlockingDriverOutput(_DriverOutput):
     def __init__(self, owner, payload, events, factory, clock, advance_ns):
         super().__init__(owner, payload, events, factory, clock, advance_ns)
         self.release = threading.Event()
+        self.read_started = threading.Event()
 
     def fileno(self):
         raise io.UnsupportedOperation("no descriptor")
@@ -3839,6 +4067,7 @@ class _BlockingDriverOutput(_DriverOutput):
         self.events.append(("stdout_readline_blocking", self.owner.full_id, size))
         if len(self.factory.processes) != 3:
             raise AssertionError("readiness was consumed before all drivers started")
+        self.read_started.set()
         self.clock.advance(self.advance_ns)
         self.release.wait()
         if self.closed:
@@ -3933,6 +4162,7 @@ class _DriverProcessFactory:
         self.events = events
         self.clock = clock
         self.processes = []
+        self.all_started = threading.Event()
 
     def start(self, command):
         argv = list(command)
@@ -3951,6 +4181,8 @@ class _DriverProcessFactory:
             **behavior,
         )
         self.processes.append(process)
+        if len(self.processes) == len(self.behaviors):
+            self.all_started.set()
         return process
 
 
@@ -4346,13 +4578,20 @@ class DriverReadinessTest(unittest.TestCase):
 
             worker = threading.Thread(target=invoke_readiness, daemon=True)
             worker.start()
-            worker.join(0.5)
+            self.assertTrue(factory.all_started.wait(5))
+            blocking = next(
+                process.stdout
+                for process in factory.processes
+                if isinstance(process.stdout, _BlockingDriverOutput)
+            )
+            self.assertTrue(blocking.read_started.wait(5))
+            worker.join(5)
             completed_under_deadline = not worker.is_alive()
             if worker.is_alive():
                 for process in factory.processes:
                     process.kill()
                     process.stdout.close()
-                worker.join(0.5)
+                worker.join(5)
 
             self.assertTrue(completed_under_deadline)
             self.assertEqual(len(result), 1)
@@ -8219,7 +8458,11 @@ class TeardownContinuationTest(unittest.TestCase):
                         raise ControllerError("partial frontend identity changed")
                     expected = (
                         {}
-                        if self.expected_driver["id"] in self.removed_ids
+                        if (
+                            self.expected_driver["id"] in self.removed_ids
+                            or self.live_driver["runtime_attestation"]["state"]
+                            == "created"
+                        )
                         else {
                             self.expected_driver["id"]: {
                                 "name": self.expected_driver["name"],
@@ -8339,16 +8582,7 @@ class TeardownContinuationTest(unittest.TestCase):
                 )
                 self.assertEqual(
                     controller.member_attestations,
-                    [
-                        {
-                            driver["id"]: {
-                                "name": driver["name"],
-                                "role": "driver",
-                            }
-                        },
-                        {},
-                        {},
-                    ],
+                    [{}, {}, {}],
                 )
                 public_manifest = json.loads(
                     (published / "manifest.json").read_text()
@@ -12820,6 +13054,67 @@ class RuntimeAttestationTest(unittest.TestCase):
                 envoy_attachment=frontend_attachment,
             )
             self.assertEqual(inspected_frontend["segment"], "frontend")
+
+            created_options = local_envoy_module._network_member_identity_options(
+                [
+                    {
+                        "id": "4" * 64,
+                        "name": track_value["driver_container"],
+                        "role": "driver",
+                        "track": track.value,
+                        "runtime_attestation": {"state": "created"},
+                    },
+                    {
+                        "id": "5" * 64,
+                        "name": track_value["envoy_container"],
+                        "role": "envoy",
+                        "track": track.value,
+                        "runtime_attestation": {"state": "running"},
+                    },
+                ],
+                value,
+                track.value,
+                "frontend",
+                frontend_attachment,
+            )
+            self.assertEqual(
+                created_options,
+                (
+                    {
+                        "5" * 64: {
+                            "name": track_value["envoy_container"],
+                            "role": "envoy",
+                        }
+                    },
+                ),
+            )
+            created_frontend = {
+                **frontend,
+                "Containers": {
+                    "5" * 64: member(track_value["envoy_container"])
+                },
+            }
+            controller.runner = NetworkRunner(created_frontend)
+            controller._inspect_network(
+                "b" * 64,
+                value,
+                track.value,
+                segment="frontend",
+                expected_members=created_options[0],
+                allowed_member_options=created_options,
+                envoy_attachment=frontend_attachment,
+            )
+            controller.runner = NetworkRunner(frontend)
+            with self.assertRaisesRegex(ControllerError, "membership"):
+                controller._inspect_network(
+                    "b" * 64,
+                    value,
+                    track.value,
+                    segment="frontend",
+                    expected_members=created_options[0],
+                    allowed_member_options=created_options,
+                    envoy_attachment=frontend_attachment,
+                )
 
             bypass = {
                 **frontend,

@@ -6374,3 +6374,108 @@ The central `run` command remains prohibited until a complete Task 10 record is
 public, reviewed, merged, and synchronized.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-121 — 2026-08-31 — Created driver attachment is distinct from a materialized frontend endpoint
+
+**Input:** After PR #13 merged the image-bound disabled-healthcheck contract,
+resume bounded recovery of rejected Task 10 lifecycle
+`v3b1-05211715589b45f79dac4ebe5700004831c07b28af7ca42bce5111db47007801`
+without starting a driver or invoking readiness, an instruction, a request
+intent, an HTTP action, or the central `run` command.
+
+**Interpretation:** Docker's container-side network configuration and its
+network-side physical endpoint inventory are related but not identical. A
+never-started driver in exact `created` state may be configured for the exact
+same-track frontend and alias while its endpoint IDs and addresses remain
+unrealized and the frontend network's `Containers` map contains only Envoy.
+Recovery must distinguish that closed state from a missing, cross-track, or
+post-start endpoint.
+
+**Decision status:** Confirmed rejected recovery attempt; narrow correction
+implemented and locally verified but not yet published. PR #13 merged as
+`1c4707b6c5cec0049399e15584f61618625a1b48`, its required CI checks passed,
+and local `main`, `origin/main`, and GitHub `main` were synchronized and clean.
+The corrected `down` re-attested the owned Colima profile, then failed closed
+before any removal transition with `cross-track or incomplete frontend network
+membership`.
+
+Read-only inspection proved the same state on all three tracks. Every driver
+remained never-started in `created` state with exact full ID, name, image,
+labels, fixed frontend name and alias, and empty endpoint/network/address
+fields. Each corresponding frontend network contained exactly the journal-
+bound Envoy full ID and name and no driver endpoint. All six network identities,
+all twelve service/driver identities, all three retained validator identities,
+and the durable journal remained intact. There were zero driver-start,
+instruction, request-intent, HTTP, removal, or central-run transitions.
+
+The isolated correction makes frontend physical membership singular and
+state-derived: an exactly attested `created` driver is omitted because its
+endpoint is not materialized; `running`, `exited`, or `dead` requires the exact
+same-track driver endpoint. Malformed or missing driver runtime state fails
+closed. Envoy attachment phases remain journal-bound, backend membership stays
+exact, and unknown, cross-track, missing required, or extra members remain
+rejected. Reverification now derives membership from the freshly inspected
+container records rather than persisted pre-readiness state, so an executed
+driver cannot later inherit the created-state omission.
+
+The first PR #14 CI pair exposed an independent pre-existing test-fixture
+race: one runner failed and its twin stalled in
+`test_non_fileno_blocking_read_uses_common_deadline_and_cleans_up`. The test
+used a 0.5-second host-scheduler join to infer success before proving that its
+synthetic blocking read had started. The fixture now exposes exact
+`all_started` and `read_started` events, waits boundedly for those causal
+milestones, and only then evaluates the controller's simulated common
+deadline. Production transport and deadline behavior are unchanged.
+
+**Rationale:** Treating configured attachment as physical membership made the
+pinned Docker representation impossible to recover, while broadly permitting
+subsets would hide real topology drift. Binding the sole accepted physical
+shape to a fresh, exact driver lifecycle state preserves the configured
+network/alias attestation and full-ID ownership while matching the runtime's
+actual endpoint lifecycle.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `README.md`
+- `adapters/envoy/README.md`
+- `tools/README.md`
+- `docs/lab/V3-PROGRESS.md`
+- `docs/superpowers/specs/2026-08-31-v3b1-in-network-request-driver-design.md`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/architecture/v3-envoy-live-validation.svg`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- ignored `artifacts/generated/v3b1-task6-live-status.md`
+- private rejected lifecycle `v3b1-05211715589b45f79dac4ebe5700004831c07b28af7ca42bce5111db47007801`
+
+**Verification:** The exact live mismatch was independently reproduced by
+three read-only audits. A RED regression first showed that complete Envoy
+attachment plus a created driver incorrectly required the unrealized driver
+endpoint. The corrected state table proves `created -> {Envoy}` and
+`running|exited|dead -> {driver, Envoy}`, rejects invalid states, and proves
+active reverification uses fresh exited state instead of the persisted created
+record. All 29 controller-contract tests and all 226 local-Envoy tests pass.
+Independent specification and quality reviews approved the correction with no
+Critical or Important finding. All 478 repository tests, Python compilation,
+and diff hygiene passed before publication. The scheduler-sensitive deadline
+test passes 20 consecutive event-synchronized repetitions, and the full
+478-test repository suite plus diff hygiene pass again after that fixture-only
+correction. Public CI must rerun on the new commit.
+
+**Unresolved questions:** The correction must pass public CI, merge, and
+synchronize before it may touch the isolated runtime. Bounded recovery must
+then prove exact evidence classification, checksum validity, complete
+owned-object/profile
+absence, no active journal/state/poison, and exact restoration of the foreign
+stopped `default` profile. The fresh request-free Task 10 lifecycle and later
+central proof remain pending.
+
+**Next gate:** Publish and merge the state-aware endpoint correction,
+synchronize all `main` references, and resume only the bounded `down`. If
+recovery and foreign-state restoration pass, start a fresh request-free
+`preflight -> up -> readiness -> down`
+lifecycle. The central `run` command remains prohibited until that gate's
+public-safe record is reviewed and merged.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
