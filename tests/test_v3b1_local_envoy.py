@@ -1504,6 +1504,61 @@ class ControllerContractTest(unittest.TestCase):
                 controller.state_path, private_manifest, value
             )
             bound = load_bound_active_state(controller.state_path)
+            for item in bound["network_objects"]:
+                journal_event(
+                    controller.journal_path,
+                    "network_create_intent",
+                    {"name": item["name"]},
+                )
+                journal_event(
+                    controller.journal_path,
+                    "network_create_complete",
+                    {"id": item["id"], "name": item["name"]},
+                )
+            for item in bound["objects"]:
+                journal_event(
+                    controller.journal_path,
+                    "container_create_intent",
+                    {"name": item["name"]},
+                )
+                journal_event(
+                    controller.journal_path,
+                    "container_create_complete",
+                    {"id": item["id"], "name": item["name"]},
+                )
+            for track in LiveTrack:
+                track_value = next(
+                    item
+                    for item in value["tracks"]
+                    if item["track"] == track.value
+                )
+                envoy = next(
+                    item
+                    for item in bound["objects"]
+                    if item["name"] == track_value["envoy_container"]
+                )
+                frontend = next(
+                    item
+                    for item in bound["network_objects"]
+                    if item["name"] == track_value["frontend_network"]
+                )
+                details = {
+                    "container_id": envoy["id"],
+                    "container_name": envoy["name"],
+                    "network_id": frontend["id"],
+                    "network_name": frontend["name"],
+                    "alias": "envoy",
+                }
+                journal_event(
+                    controller.journal_path,
+                    "network_connect_intent",
+                    details,
+                )
+                journal_event(
+                    controller.journal_path,
+                    "network_connect_complete",
+                    details,
+                )
             removed = bound["objects"][0]
             identity = {"id": removed["id"], "name": removed["name"]}
 
@@ -1781,6 +1836,317 @@ class ControllerContractTest(unittest.TestCase):
                         ),
                         "complete",
                     )
+
+    def test_partial_up_envoy_attachment_recovery_is_journal_phase_exact(self):
+        scenarios = (
+            ("no_intent_backend", "unstarted", "backend", True),
+            ("no_intent_dual", "unstarted", "dual", False),
+            ("pending_before_effect", "pending", "backend", True),
+            ("pending_after_effect", "pending", "dual", True),
+            ("pending_wrong_alias", "pending", "wrong_alias", False),
+            ("pending_cross_id", "pending", "cross_id", False),
+            ("complete_dual", "complete", "dual", True),
+            ("complete_backend", "complete", "backend", False),
+        )
+        for track_index, track in enumerate(LiveTrack):
+            for scenario, phase, observed_shape, accepted in scenarios:
+                with (
+                    self.subTest(
+                        track=track.value,
+                        scenario=scenario,
+                    ),
+                    tempfile.TemporaryDirectory() as directory,
+                ):
+                    root = Path(directory) / "repo"
+                    profile_path = root / "deploy/kind/v3b-profile.json"
+                    profile_path.parent.mkdir(parents=True)
+                    profile_path.write_bytes(
+                        (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+                    )
+                    controller = LocalEnvoyController(
+                        root,
+                        FakeRunner(),
+                        home=Path(directory) / "home",
+                        port_probe=lambda port: False,
+                        tool_verifier=lambda: TOOL_IDENTITIES,
+                    )
+                    controller._prepare_private_roots()
+                    value = manifest(
+                        docker_host=controller.docker_host,
+                        execution_nonce=HEX_A,
+                    )
+                    materialize_run_inputs(root, value)
+                    track_value = next(
+                        item
+                        for item in value["tracks"]
+                        if item["track"] == track.value
+                    )
+                    container_id = str(track_index + 1) * 64
+                    backend_id = chr(ord("a") + track_index) * 64
+                    frontend_id = chr(ord("d") + track_index) * 64
+                    cross_id = "f" * 64 if frontend_id != "f" * 64 else "9" * 64
+                    envoy_name = track_value["envoy_container"]
+                    backend_name = track_value["backend_network"]
+                    frontend_name = track_value["frontend_network"]
+                    runtime_labels = {
+                        "kil.v3b1.managed": "true",
+                        "kil.v3b1.run-id": value["run_id"],
+                        "kil.v3b1.role": "envoy",
+                        "kil.v3b1.track": track.value,
+                    }
+                    network_labels = {
+                        "kil.v3b1.managed": "true",
+                        "kil.v3b1.run-id": value["run_id"],
+                        "kil.v3b1.track": track.value,
+                    }
+                    immutable_labels = {
+                        "org.opencontainers.image.version": "22.04"
+                    }
+                    dual_homed = observed_shape in {
+                        "dual", "wrong_alias", "cross_id"
+                    }
+                    aliases = (
+                        ["not-envoy", container_id[:12]]
+                        if observed_shape == "wrong_alias"
+                        else ["envoy", container_id[:12]]
+                    )
+                    raw_networks = {
+                        backend_name: {
+                            "Aliases": [envoy_name, container_id[:12]]
+                        }
+                    }
+                    if dual_homed:
+                        raw_networks[frontend_name] = {"Aliases": aliases}
+                    config_path = (
+                        _runtime_root(root, value) / track.value / "envoy.json"
+                    )
+                    container_raw = {
+                        "Id": container_id,
+                        "Name": f"/{envoy_name}",
+                        "Image": value["envoy_image_id"],
+                        "Config": {
+                            "Image": value["envoy_image_digest"],
+                            "Labels": {**immutable_labels, **runtime_labels},
+                            "User": "65532:65532",
+                            "StopTimeout": 10,
+                            "Entrypoint": ["/usr/local/bin/envoy"],
+                            "Cmd": [
+                                "--config-path",
+                                "/etc/envoy/envoy.json",
+                                "--disable-hot-restart",
+                                "--concurrency",
+                                "1",
+                            ],
+                            "Env": ["PATH=/usr/local/bin"],
+                            "OpenStdin": False,
+                            "Tty": False,
+                        },
+                        "HostConfig": {
+                            "Privileged": False,
+                            "NetworkMode": backend_name,
+                            "PidMode": "",
+                            "IpcMode": "private",
+                            "UTSMode": "",
+                            "UsernsMode": "",
+                            "CgroupnsMode": "private",
+                            "ReadonlyRootfs": True,
+                            "CapDrop": ["ALL"],
+                            "SecurityOpt": ["no-new-privileges"],
+                            "NanoCpus": 500_000_000,
+                            "Memory": 268_435_456,
+                            "MemorySwap": 268_435_456,
+                            "PidsLimit": 128,
+                            "RestartPolicy": {"Name": "no"},
+                            "LogConfig": {
+                                "Type": "json-file",
+                                "Config": {
+                                    "max-file": "1",
+                                    "max-size": "1m",
+                                },
+                            },
+                            "Tmpfs": {
+                                "/tmp": (
+                                    "rw,noexec,nosuid,nodev,size=16777216,"
+                                    "uid=65532,gid=65532,mode=448"
+                                )
+                            },
+                            "PortBindings": {},
+                        },
+                        "State": {"Running": True, "Status": "running"},
+                        "NetworkSettings": {
+                            "Networks": raw_networks,
+                            "Ports": None,
+                        },
+                        "Mounts": [
+                            {
+                                "Source": str(config_path.resolve()),
+                                "Destination": "/etc/envoy/envoy.json",
+                                "RW": False,
+                            }
+                        ],
+                    }
+                    image_raw = {
+                        "Os": "linux",
+                        "Architecture": "arm64",
+                        "Config": {
+                            "Env": ["PATH=/usr/local/bin"],
+                            "Labels": immutable_labels,
+                        },
+                    }
+
+                    def endpoint(name):
+                        return {
+                            "Name": name,
+                            "EndpointID": "e" * 64,
+                            "MacAddress": "02:42:ac:12:00:02",
+                            "IPv4Address": "172.18.0.2/16",
+                            "IPv6Address": "",
+                        }
+
+                    network_raw = {
+                        backend_id: {
+                            "Id": backend_id,
+                            "Name": backend_name,
+                            "Driver": "bridge",
+                            "Internal": True,
+                            "Labels": network_labels,
+                            "Containers": {
+                                container_id: endpoint(envoy_name)
+                            },
+                        },
+                        frontend_id: {
+                            "Id": frontend_id,
+                            "Name": frontend_name,
+                            "Driver": "bridge",
+                            "Internal": True,
+                            "Labels": network_labels,
+                            "Containers": (
+                                {
+                                    (
+                                        cross_id
+                                        if observed_shape == "cross_id"
+                                        else container_id
+                                    ): endpoint(envoy_name)
+                                }
+                                if dual_homed
+                                else {}
+                            ),
+                        },
+                    }
+
+                    class AttachmentRunner(FakeRunner):
+                        def run(self, argv, **kwargs):
+                            self.calls.append((list(argv), kwargs))
+                            if argv[5:7] == ["image", "inspect"]:
+                                return CommandResult(
+                                    0, canonical_json(image_raw) + "\n", ""
+                                )
+                            if argv[5:7] == ["network", "inspect"]:
+                                return CommandResult(
+                                    0,
+                                    canonical_json(network_raw[argv[-1]]) + "\n",
+                                    "",
+                                )
+                            if argv[5] == "inspect":
+                                return CommandResult(
+                                    0, canonical_json(container_raw) + "\n", ""
+                                )
+                            raise AssertionError(f"unexpected command: {argv}")
+
+                    controller.runner = AttachmentRunner()
+                    private_manifest = (
+                        controller.private_root / "manifests/run.json"
+                    )
+                    private_manifest.write_text(canonical_json(value) + "\n")
+                    create_lifecycle_journal(
+                        controller.journal_path,
+                        private_root=controller.private_root,
+                        repository_root=root,
+                        docker_host=controller.docker_host,
+                        source_commit="d" * 40,
+                        execution_nonce=HEX_A,
+                        global_context="personal",
+                    )
+                    _bind_journal_manifest(
+                        controller.journal_path, private_manifest, value
+                    )
+                    for kind, name, object_id in (
+                        ("network", backend_name, backend_id),
+                        ("network", frontend_name, frontend_id),
+                        ("container", envoy_name, container_id),
+                    ):
+                        journal_event(
+                            controller.journal_path,
+                            f"{kind}_create_intent",
+                            {"name": name},
+                        )
+                        journal_event(
+                            controller.journal_path,
+                            f"{kind}_create_complete",
+                            {"name": name, "id": object_id},
+                        )
+                    connect_details = {
+                        "container_id": container_id,
+                        "container_name": envoy_name,
+                        "network_id": frontend_id,
+                        "network_name": frontend_name,
+                        "alias": "envoy",
+                    }
+                    if phase in {"pending", "complete"}:
+                        journal_event(
+                            controller.journal_path,
+                            "network_connect_intent",
+                            connect_details,
+                        )
+                    if phase == "complete":
+                        journal_event(
+                            controller.journal_path,
+                            "network_connect_complete",
+                            connect_details,
+                        )
+                    containers = parse_inventory_rows(
+                        canonical_json(
+                            {"id": container_id, "name": envoy_name}
+                        )
+                        + "\n",
+                        "container",
+                        schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
+                    )
+                    networks = parse_inventory_rows(
+                        "".join(
+                            canonical_json({"id": object_id, "name": name})
+                            + "\n"
+                            for object_id, name in (
+                                (backend_id, backend_name),
+                                (frontend_id, frontend_name),
+                            )
+                        ),
+                        "network",
+                        schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
+                    )
+                    with mock.patch.object(
+                        controller,
+                        "_docker_inventory",
+                        side_effect=lambda kind: (
+                            containers if kind == "container" else networks
+                        ),
+                    ):
+                        if accepted:
+                            recovered, _, _ = controller._load_for_down()
+                            attachment = recovered["envoy_attachments"][track.value]
+                            self.assertEqual(attachment["phase"], phase)
+                            self.assertEqual(
+                                attachment["container_id"], container_id
+                            )
+                            self.assertEqual(
+                                attachment["network_id"], frontend_id
+                            )
+                        else:
+                            with self.assertRaisesRegex(
+                                ControllerError,
+                                "attachment|alias|membership|network",
+                            ):
+                                controller._load_for_down()
 
     def test_cli_exposes_only_the_six_approved_subcommands(self):
         parser = make_parser()
@@ -5877,6 +6243,7 @@ class TeardownContinuationTest(unittest.TestCase):
                 track,
                 *,
                 require_running=True,
+                envoy_attachment=None,
             ):
                 if identifier not in self.alive:
                     raise ControllerError("injected source container is absent")
@@ -7386,6 +7753,8 @@ class TeardownContinuationTest(unittest.TestCase):
                         self.bound_manifest = None
                         self.request_records = []
                         self.removed_ids = set()
+                        self.envoy_attachment_phases = []
+                        self.frontend_attachment_phases = []
 
                     def _execute(self, argv, *, timeout_s, docker=False):
                         self.commands.append(list(argv))
@@ -7468,7 +7837,20 @@ class TeardownContinuationTest(unittest.TestCase):
                             load_lifecycle_journal(self.journal_path),
                         )
 
-                    def _inspect_container(self, identifier, manifest_value, role, track, *, require_running=True):
+                    def _inspect_container(
+                        self,
+                        identifier,
+                        manifest_value,
+                        role,
+                        track,
+                        *,
+                        require_running=True,
+                        envoy_attachment=None,
+                    ):
+                        if role == "envoy":
+                            self.envoy_attachment_phases.append(
+                                envoy_attachment["phase"]
+                            )
                         return next(
                             item
                             for item in self.bound_state["objects"]
@@ -7485,7 +7867,13 @@ class TeardownContinuationTest(unittest.TestCase):
                         expected_members=None,
                         require_complete_membership=True,
                         require_empty_membership=False,
+                        allowed_member_options=None,
+                        envoy_attachment=None,
                     ):
+                        if segment == "frontend":
+                            self.frontend_attachment_phases.append(
+                                envoy_attachment["phase"]
+                            )
                         return next(
                             item
                             for item in self.bound_state["network_objects"]
@@ -7595,6 +7983,14 @@ class TeardownContinuationTest(unittest.TestCase):
                 )
                 self.assertFalse(public_manifest["run_complete"])
                 self.assertIn("failure", public_manifest["bundle_class"])
+                self.assertEqual(
+                    controller.envoy_attachment_phases,
+                    ["unstarted"] * 6,
+                )
+                self.assertEqual(
+                    controller.frontend_attachment_phases,
+                    ["unstarted"] * 3,
+                )
                 if failure == "no_run":
                     self.assertEqual((published / "joins.jsonl").read_bytes(), b"")
 
@@ -7997,6 +8393,15 @@ class RuntimeAttestationTest(unittest.TestCase):
                 "kil.v3b1.track": track.value,
             }
             immutable_labels = {"org.opencontainers.image.version": "22.04"}
+            attachment = {
+                "track": track.value,
+                "phase": "complete",
+                "container_id": "9" * 64,
+                "container_name": track_value["envoy_container"],
+                "network_id": "8" * 64,
+                "network_name": track_value["frontend_network"],
+                "alias": "envoy",
+            }
 
             def inspections(
                 *,
@@ -8090,13 +8495,17 @@ class RuntimeAttestationTest(unittest.TestCase):
                     CommandResult(0, canonical_json(image) + "\n", ""),
                 ]
 
+            def inspect_envoy():
+                return controller._inspect_container(
+                    "9" * 64,
+                    value,
+                    "envoy",
+                    track.value,
+                    envoy_attachment=attachment,
+                )
+
             controller.runner = FakeRunner(inspections())
-            inspected = controller._inspect_container(
-                "9" * 64,
-                value,
-                "envoy",
-                track.value,
-            )
+            inspected = inspect_envoy()
             self.assertEqual(inspected["labels"], runtime_labels)
             self.assertEqual(
                 inspected["runtime_attestation"]["networks"],
@@ -8145,12 +8554,7 @@ class RuntimeAttestationTest(unittest.TestCase):
             }
             controller.runner = FakeRunner(inspections(image_labels=conflict_labels))
             with self.assertRaisesRegex(ControllerError, "label.*conflict"):
-                controller._inspect_container(
-                    "9" * 64,
-                    value,
-                    "envoy",
-                    track.value,
-                )
+                inspect_envoy()
 
             for reserved_labels in (
                 {
@@ -8169,12 +8573,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                     with self.assertRaisesRegex(
                         ControllerError, "reserved.*label|label.*namespace"
                     ):
-                        controller._inspect_container(
-                            "9" * 64,
-                            value,
-                            "envoy",
-                            track.value,
-                        )
+                        inspect_envoy()
 
             controller.runner = FakeRunner(
                 inspections(
@@ -8186,12 +8585,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                 )
             )
             with self.assertRaisesRegex(ControllerError, "labels.*exact|label.*extra"):
-                controller._inspect_container(
-                    "9" * 64,
-                    value,
-                    "envoy",
-                    track.value,
-                )
+                inspect_envoy()
 
             published = inspections()[0]
             raw = json.loads(published.stdout)
@@ -8207,9 +8601,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                 ]
             )
             with self.assertRaisesRegex(ControllerError, "public|port"):
-                controller._inspect_container(
-                    "9" * 64, value, "envoy", track.value
-                )
+                inspect_envoy()
 
             for field, mutated_value in (
                 ("Privileged", True),
@@ -8234,9 +8626,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                     with self.assertRaisesRegex(
                         ControllerError, "privileged|network|namespace|mode"
                     ):
-                        controller._inspect_container(
-                            "9" * 64, value, "envoy", track.value
-                        )
+                        inspect_envoy()
             for field in (
                 "Privileged",
                 "NetworkMode",
@@ -8260,9 +8650,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                     with self.assertRaisesRegex(
                         ControllerError, "required fields|missing"
                     ):
-                        controller._inspect_container(
-                            "9" * 64, value, "envoy", track.value
-                        )
+                        inspect_envoy()
                 with self.subTest(wrong_type=field):
                     broken = json.loads(inspections()[0].stdout)
                     broken["HostConfig"][field] = None
@@ -8277,9 +8665,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                     with self.assertRaisesRegex(
                         ControllerError, "privileged|network|namespace|mode"
                     ):
-                        controller._inspect_container(
-                            "9" * 64, value, "envoy", track.value
-                        )
+                        inspect_envoy()
             reserved_backend_alias = json.loads(inspections()[0].stdout)
             reserved_backend_alias["NetworkSettings"]["Networks"][
                 track_value["backend_network"]
@@ -8293,9 +8679,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                 ]
             )
             with self.assertRaisesRegex(ControllerError, "alias"):
-                controller._inspect_container(
-                    "9" * 64, value, "envoy", track.value
-                )
+                inspect_envoy()
 
             for label, mutate in (
                 ("mounts", lambda item: item.__setitem__("Mounts", [None])),
@@ -8343,9 +8727,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                         ControllerError,
                         "inspection|required|mount|state|process|network|port|alias",
                     ):
-                        controller._inspect_container(
-                            "9" * 64, value, "envoy", track.value
-                        )
+                        inspect_envoy()
 
     def test_stopped_driver_attests_created_state_exact_command_and_frontend_only(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -9078,6 +9460,15 @@ class RuntimeAttestationTest(unittest.TestCase):
                     zip(frontend_members, ("driver", "envoy"), strict=True)
                 )
             }
+            frontend_attachment = {
+                "track": track.value,
+                "phase": "complete",
+                "container_id": "5" * 64,
+                "container_name": track_value["envoy_container"],
+                "network_id": "b" * 64,
+                "network_name": track_value["frontend_network"],
+                "alias": "envoy",
+            }
             controller.runner = NetworkRunner(frontend)
             inspected_frontend = controller._inspect_network(
                 "b" * 64,
@@ -9085,6 +9476,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                 track.value,
                 segment="frontend",
                 expected_members=frontend_expected,
+                envoy_attachment=frontend_attachment,
             )
             self.assertEqual(inspected_frontend["segment"], "frontend")
 
@@ -9103,6 +9495,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                     track.value,
                     segment="frontend",
                     expected_members=frontend_expected,
+                    envoy_attachment=frontend_attachment,
                 )
 
             for label, containers in (

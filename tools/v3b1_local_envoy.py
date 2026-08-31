@@ -2954,6 +2954,164 @@ def _network_member_identities(
     return result
 
 
+def _envoy_attachment_expectations(
+    events: Sequence[Mapping[str, object]],
+    manifest: Mapping[str, object],
+) -> dict[str, dict[str, object]]:
+    """Replay each Envoy/frontend attachment from exact durable identities."""
+    expectations: dict[str, dict[str, object]] = {}
+    by_container_name: dict[str, str] = {}
+    by_network_name: dict[str, str] = {}
+    for track in _TRACKS:
+        track_value = _track_manifest(manifest, track)
+        container_name = str(track_value["envoy_container"])
+        network_name = str(track_value["frontend_network"])
+        expectations[track.value] = {
+            "track": track.value,
+            "phase": "unstarted",
+            "container_id": None,
+            "container_name": container_name,
+            "network_id": None,
+            "network_name": network_name,
+            "alias": "envoy",
+        }
+        by_container_name[container_name] = track.value
+        by_network_name[network_name] = track.value
+    for event in events:
+        if type(event) is not dict:
+            raise ControllerError("Envoy attachment history is invalid")
+        event_name = event.get("event")
+        details = event.get("details")
+        if type(details) is not dict:
+            raise ControllerError("Envoy attachment history is invalid")
+        if event_name == "container_create_complete":
+            track = by_container_name.get(str(details.get("name")))
+            if track is not None:
+                object_id = details.get("id")
+                if type(object_id) is not str or _HEX.fullmatch(object_id) is None:
+                    raise ControllerError("Envoy attachment container ID is invalid")
+                expectations[track]["container_id"] = object_id
+        elif event_name == "network_create_complete":
+            track = by_network_name.get(str(details.get("name")))
+            if track is not None:
+                object_id = details.get("id")
+                if type(object_id) is not str or _HEX.fullmatch(object_id) is None:
+                    raise ControllerError("Envoy attachment network ID is invalid")
+                expectations[track]["network_id"] = object_id
+        elif event_name in {"network_connect_intent", "network_connect_complete"}:
+            container_track = by_container_name.get(
+                str(details.get("container_name"))
+            )
+            network_track = by_network_name.get(str(details.get("network_name")))
+            if container_track is None or container_track != network_track:
+                raise ControllerError("Envoy attachment crosses track identities")
+            expectation = expectations[container_track]
+            if (
+                details.get("alias") != "envoy"
+                or details.get("container_id") != expectation["container_id"]
+                or details.get("network_id") != expectation["network_id"]
+            ):
+                raise ControllerError("Envoy attachment durable identity changed")
+            required_phase = (
+                "unstarted"
+                if event_name == "network_connect_intent"
+                else "pending"
+            )
+            if expectation["phase"] != required_phase:
+                raise ControllerError("Envoy attachment phase transition is invalid")
+            expectation["phase"] = (
+                "pending"
+                if event_name == "network_connect_intent"
+                else "complete"
+            )
+    for expectation in expectations.values():
+        if expectation["phase"] != "unstarted" and (
+            expectation["container_id"] is None
+            or expectation["network_id"] is None
+        ):
+            raise ControllerError("Envoy attachment lacks exact durable identities")
+    return expectations
+
+
+def _validate_envoy_attachment_expectation(
+    value: Mapping[str, object],
+    manifest: Mapping[str, object],
+    track: str,
+) -> dict[str, object]:
+    fields = {
+        "track",
+        "phase",
+        "container_id",
+        "container_name",
+        "network_id",
+        "network_name",
+        "alias",
+    }
+    if type(value) is not dict or set(value) != fields:
+        raise ControllerError("Envoy attachment expectation is not closed")
+    track_value = _track_manifest(manifest, LiveTrack(track))
+    if (
+        value["track"] != track
+        or value["phase"] not in {"unstarted", "pending", "complete"}
+        or value["container_name"] != track_value["envoy_container"]
+        or value["network_name"] != track_value["frontend_network"]
+        or value["alias"] != "envoy"
+    ):
+        raise ControllerError("Envoy attachment expectation identity is invalid")
+    for field in ("container_id", "network_id"):
+        object_id = value[field]
+        if object_id is not None and (
+            type(object_id) is not str or _HEX.fullmatch(object_id) is None
+        ):
+            raise ControllerError("Envoy attachment expectation ID is invalid")
+    if value["phase"] != "unstarted" and (
+        value["container_id"] is None or value["network_id"] is None
+    ):
+        raise ControllerError("Envoy attachment expectation lacks its IDs")
+    return dict(value)
+
+
+def _network_member_identity_options(
+    objects: Sequence[Mapping[str, object]],
+    manifest: Mapping[str, object],
+    track: str,
+    segment: str,
+    attachment: Mapping[str, object],
+) -> tuple[dict[str, dict[str, str]], ...]:
+    exact = _network_member_identities(objects, track, segment)
+    if segment == "backend":
+        return (exact,)
+    if segment != "frontend":
+        raise ControllerError("network member segment is invalid")
+    expectation = _validate_envoy_attachment_expectation(
+        attachment, manifest, track
+    )
+    envoy_ids = [
+        object_id
+        for object_id, identity in exact.items()
+        if identity["role"] == "envoy"
+    ]
+    if len(envoy_ids) > 1:
+        raise ControllerError("frontend Envoy ownership is not unique")
+    base = {
+        object_id: identity
+        for object_id, identity in exact.items()
+        if identity["role"] != "envoy"
+    }
+    attached = dict(base)
+    if envoy_ids:
+        envoy_id = envoy_ids[0]
+        if expectation["container_id"] != envoy_id:
+            raise ControllerError("frontend Envoy ID is not journal-bound")
+        attached[envoy_id] = exact[envoy_id]
+    phase = expectation["phase"]
+    if phase == "unstarted":
+        return (base,)
+    if phase == "pending" and attached != base:
+        return (base, attached)
+    return (attached,)
+
+
 def materialize_run_inputs(root: Path, manifest: dict[str, object]) -> MaterializedInputs:
     """Write deterministic, read-only service configs and central fixtures."""
     _validate_manifest(manifest)
@@ -7507,6 +7665,7 @@ class LocalEnvoyController:
         track: str,
         *,
         require_running: bool = True,
+        envoy_attachment: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
         if role not in {"authz", "target", "envoy", "driver"}:
             raise ControllerError("container role inspection is invalid")
@@ -7726,10 +7885,35 @@ class LocalEnvoyController:
             "cgroupns_mode": cgroupns_mode,
         }
         if role == "envoy":
-            expected_networks = [
+            if envoy_attachment is None:
+                raise ControllerError("Envoy attachment expectation is required")
+            attachment = _validate_envoy_attachment_expectation(
+                envoy_attachment, manifest, track
+            )
+            if attachment["container_id"] != object_id:
+                raise ControllerError("Envoy attachment container ID changed")
+            backend_networks = [str(track_manifest["backend_network"])]
+            dual_networks = [
                 str(track_manifest["backend_network"]),
                 str(track_manifest["frontend_network"]),
             ]
+            network_options = (
+                [backend_networks]
+                if attachment["phase"] == "unstarted"
+                else [backend_networks, dual_networks]
+                if attachment["phase"] == "pending"
+                else [dual_networks]
+            )
+            matching_options = [
+                option
+                for option in network_options
+                if sorted(option) == actual["networks"]
+            ]
+            if len(matching_options) != 1:
+                raise ControllerError(
+                    "Envoy attachment network shape is not journal-authorized"
+                )
+            expected_networks = matching_options[0]
         elif role == "driver":
             expected_networks = [str(track_manifest["frontend_network"])]
         else:
@@ -7805,6 +7989,10 @@ class LocalEnvoyController:
         *,
         segment: str = "backend",
         expected_members: Mapping[str, Mapping[str, str]],
+        allowed_member_options: Sequence[
+            Mapping[str, Mapping[str, str]]
+        ] | None = None,
+        envoy_attachment: Mapping[str, object] | None = None,
         require_complete_membership: bool = True,
         require_empty_membership: bool = False,
     ) -> dict[str, object]:
@@ -7863,6 +8051,14 @@ class LocalEnvoyController:
             raise ControllerError(
                 "network identity/label/internal type attestation failed"
             )
+        if segment == "frontend":
+            if envoy_attachment is None:
+                raise ControllerError("Envoy attachment expectation is required")
+            attachment = _validate_envoy_attachment_expectation(
+                envoy_attachment, manifest, track
+            )
+            if attachment["network_id"] != object_id:
+                raise ControllerError("Envoy attachment frontend network ID changed")
         if type(containers) is not dict:
             raise ControllerError("network membership shape is invalid")
         endpoint_fields = {
@@ -7888,38 +8084,73 @@ class LocalEnvoyController:
         )
         if type(expected_members) is not dict:
             raise ControllerError("expected network membership is invalid")
-        expected_pairs: dict[str, str] = {}
-        expected_names: set[str] = set()
-        expected_member_roles: set[str] = set()
-        for container_id, identity in expected_members.items():
+        def validate_expected(
+            candidate: Mapping[str, Mapping[str, str]],
+        ) -> tuple[dict[str, str], set[str]]:
+            if type(candidate) is not dict:
+                raise ControllerError("expected network membership is invalid")
+            pairs: dict[str, str] = {}
+            names: set[str] = set()
+            roles: set[str] = set()
+            for container_id, identity in candidate.items():
+                if (
+                    type(container_id) is not str
+                    or _HEX.fullmatch(container_id) is None
+                    or type(identity) is not dict
+                    or set(identity) != {"name", "role"}
+                    or type(identity["name"]) is not str
+                    or type(identity["role"]) is not str
+                    or identity["role"] not in expected_roles
+                    or identity["name"]
+                    != str(track_value[f"{identity['role']}_container"])
+                    or identity["name"] in names
+                ):
+                    raise ControllerError(
+                        "expected network member identity is invalid"
+                    )
+                pairs[container_id] = identity["name"]
+                names.add(identity["name"])
+                roles.add(identity["role"])
+            return pairs, roles
+
+        expected_pairs, expected_member_roles = validate_expected(
+            expected_members
+        )
+        allowed_pairs: list[dict[str, str]] | None = None
+        if allowed_member_options is not None:
             if (
-                type(container_id) is not str
-                or _HEX.fullmatch(container_id) is None
-                or type(identity) is not dict
-                or set(identity) != {"name", "role"}
-                or type(identity["name"]) is not str
-                or type(identity["role"]) is not str
-                or identity["role"] not in expected_roles
-                or identity["name"]
-                != str(track_value[f"{identity['role']}_container"])
-                or identity["name"] in expected_names
+                type(allowed_member_options) not in {list, tuple}
+                or not 1 <= len(allowed_member_options) <= 2
             ):
-                raise ControllerError("expected network member identity is invalid")
-            expected_pairs[container_id] = identity["name"]
-            expected_names.add(identity["name"])
-            expected_member_roles.add(identity["role"])
+                raise ControllerError("allowed network membership is invalid")
+            allowed_pairs = [
+                validate_expected(option)[0]
+                for option in allowed_member_options
+            ]
+            if expected_pairs != allowed_pairs[0] or len(
+                {canonical_json(option) for option in allowed_pairs}
+            ) != len(allowed_pairs):
+                raise ControllerError("allowed network membership is not closed")
         actual_pairs = {
             container_id: endpoint["Name"]
             for container_id, endpoint in containers.items()
         }
         if (
             len(members) != len(set(members))
-            or any(
-                expected_pairs.get(container_id) != member_name
-                for container_id, member_name in actual_pairs.items()
+            or (
+                allowed_pairs is not None
+                and actual_pairs not in allowed_pairs
             )
             or (
-                require_complete_membership
+                allowed_pairs is None
+                and any(
+                    expected_pairs.get(container_id) != member_name
+                    for container_id, member_name in actual_pairs.items()
+                )
+            )
+            or (
+                allowed_pairs is None
+                and require_complete_membership
                 and (
                     actual_pairs != expected_pairs
                     or expected_member_roles != expected_roles
@@ -8113,6 +8344,10 @@ class LocalEnvoyController:
     def _attest_runtime(
         self, manifest: dict[str, object]
     ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        journal = load_lifecycle_journal(self.journal_path)
+        events = journal["events"]
+        assert isinstance(events, list)
+        envoy_attachments = _envoy_attachment_expectations(events, manifest)
         deadline = time.monotonic() + 60
         while True:
             try:
@@ -8125,6 +8360,11 @@ class LocalEnvoyController:
                             str(item["role"]),
                             str(item["track"]),
                             require_running=item["role"] != "driver",
+                            envoy_attachment=(
+                                envoy_attachments[str(item["track"])]
+                                if item["role"] == "envoy"
+                                else None
+                            ),
                         )
                     )
                 break
@@ -8132,20 +8372,32 @@ class LocalEnvoyController:
                 if time.monotonic() >= deadline:
                     raise
                 time.sleep(0.25)
-        networks = [
-            self._inspect_network(
-                str(item["name"]),
+        networks = []
+        for item in _runtime_networks(manifest):
+            track = str(item["track"])
+            segment = _network_segment(item)
+            member_options = _network_member_identity_options(
+                objects,
                 manifest,
-                str(item["track"]),
-                segment=_network_segment(item),
-                expected_members=_network_member_identities(
-                    objects,
-                    str(item["track"]),
-                    _network_segment(item),
-                ),
+                track,
+                segment,
+                envoy_attachments[track],
             )
-            for item in _runtime_networks(manifest)
-        ]
+            networks.append(
+                self._inspect_network(
+                    str(item["name"]),
+                    manifest,
+                    track,
+                    segment=segment,
+                    expected_members=member_options[0],
+                    allowed_member_options=member_options,
+                    envoy_attachment=(
+                        envoy_attachments[track]
+                        if segment == "frontend"
+                        else None
+                    ),
+                )
+            )
         return objects, networks
 
     def _run_validator_command(
@@ -8336,6 +8588,11 @@ class LocalEnvoyController:
             candidate_networks = []
         events = journal["events"]
         assert isinstance(events, list)
+        envoy_attachments = (
+            _envoy_attachment_expectations(events, manifest)
+            if manifest is not None
+            else {}
+        )
         container_inventory = self._inventory_mapping(
             self._docker_inventory("container")
         )
@@ -8433,6 +8690,11 @@ class LocalEnvoyController:
                     str(item["role"]),
                     str(item["track"]),
                     require_running=False,
+                    envoy_attachment=(
+                        envoy_attachments[str(item["track"])]
+                        if item["role"] == "envoy"
+                        else None
+                    ),
                 )
                 if "id" in item and not _container_attestation_matches(
                     item, current, allow_stopped=True
@@ -8451,17 +8713,27 @@ class LocalEnvoyController:
                 if resolved is None:
                     continue
                 identifier, _ = resolved
+                segment = str(item.get("segment", "backend"))
+                track = str(item["track"])
+                member_options = _network_member_identity_options(
+                    objects,
+                    manifest,
+                    track,
+                    segment,
+                    envoy_attachments[track],
+                )
                 current = self._inspect_network(
                     identifier,
                     manifest,
-                    str(item["track"]),
-                    segment=str(item.get("segment", "backend")),
-                    expected_members=_network_member_identities(
-                        objects,
-                        str(item["track"]),
-                        str(item.get("segment", "backend")),
+                    track,
+                    segment=segment,
+                    expected_members=member_options[0],
+                    allowed_member_options=member_options,
+                    envoy_attachment=(
+                        envoy_attachments[track]
+                        if segment == "frontend"
+                        else None
                     ),
-                    require_complete_membership=False,
                 )
                 if "id" in item and current != item:
                     raise ControllerError("recorded network attestation changed during recovery")
@@ -8513,6 +8785,7 @@ class LocalEnvoyController:
             "objects": objects,
             "transient_objects": transient_objects,
             "network_objects": networks,
+            "envoy_attachments": envoy_attachments,
             "profile_created": journal["profile_created"],
             "colima_profile": LAB_IDENTITY,
             "docker_host": self.docker_host,
@@ -8798,6 +9071,15 @@ class LocalEnvoyController:
         state = load_bound_active_state(self.state_path)
         manifest = state["manifest"]
         assert isinstance(manifest, dict)
+        journal = load_lifecycle_journal(self.journal_path)
+        events = journal["events"]
+        assert isinstance(events, list)
+        envoy_attachments = _envoy_attachment_expectations(events, manifest)
+        if any(
+            attachment["phase"] != "complete"
+            for attachment in envoy_attachments.values()
+        ):
+            raise ControllerError("active runtime lacks complete Envoy attachments")
         for record in state["objects"]:  # type: ignore[union-attr]
             current = self._inspect_container(
                 str(record["id"]),
@@ -8805,19 +9087,35 @@ class LocalEnvoyController:
                 str(record["role"]),
                 str(record["track"]),
                 require_running=record["role"] != "driver",
+                envoy_attachment=(
+                    envoy_attachments[str(record["track"])]
+                    if record["role"] == "envoy"
+                    else None
+                ),
             )
             if current != record:
                 raise ControllerError("recorded container attestation changed")
         for record in state["network_objects"]:  # type: ignore[union-attr]
+            track = str(record["track"])
+            segment = str(record.get("segment", "backend"))
+            member_options = _network_member_identity_options(
+                state["objects"],  # type: ignore[arg-type]
+                manifest,
+                track,
+                segment,
+                envoy_attachments[track],
+            )
             current = self._inspect_network(
                 str(record["id"]),
                 manifest,
-                str(record["track"]),
-                segment=str(record.get("segment", "backend")),
-                expected_members=_network_member_identities(
-                    state["objects"],  # type: ignore[arg-type]
-                    str(record["track"]),
-                    str(record.get("segment", "backend")),
+                track,
+                segment=segment,
+                expected_members=member_options[0],
+                allowed_member_options=member_options,
+                envoy_attachment=(
+                    envoy_attachments[track]
+                    if segment == "frontend"
+                    else None
                 ),
             )
             if current != record:
@@ -9119,12 +9417,21 @@ class LocalEnvoyController:
         if path.is_symlink() or path.exists():
             raise ControllerError("unfinished source path requires recovery handling")
         try:
+            envoy_attachment = None
+            if item["role"] == "envoy":
+                journal = load_lifecycle_journal(self.journal_path)
+                events = journal["events"]
+                assert isinstance(events, list)
+                envoy_attachment = _envoy_attachment_expectations(
+                    events, manifest
+                )[track.value]
             current = self._inspect_container(
                 str(item["id"]),
                 manifest,
                 str(item["role"]),
                 track.value,
                 require_running=source != "envoy_access",
+                envoy_attachment=envoy_attachment,
             )
             if not _container_attestation_matches(
                 item,
@@ -9542,6 +9849,8 @@ class LocalEnvoyController:
         self,
         item: Mapping[str, object],
         manifest: dict[str, object],
+        *,
+        envoy_attachment: Mapping[str, object] | None = None,
     ) -> None:
         if item["role"] == "validator":
             current = self._inspect_validation_container(
@@ -9554,6 +9863,9 @@ class LocalEnvoyController:
                 str(item["role"]),
                 str(item["track"]),
                 require_running=False,
+                envoy_attachment=(
+                    envoy_attachment if item["role"] == "envoy" else None
+                ),
             )
         if item["role"] == "validator":
             current_matches = current == item
@@ -9610,6 +9922,9 @@ class LocalEnvoyController:
                     str(item["role"]),
                     str(item["track"]),
                     require_running=False,
+                    envoy_attachment=(
+                        envoy_attachment if item["role"] == "envoy" else None
+                    ),
                 )
             if item["role"] == "validator":
                 after_matches = after == item
@@ -9632,13 +9947,23 @@ class LocalEnvoyController:
         *,
         attempted_complete: bool,
         transient_objects: Sequence[Mapping[str, object]],
+        envoy_attachments: Mapping[str, Mapping[str, object]] | None = None,
     ) -> EvidenceFreezeResult:
         objects = state["objects"]
         if type(objects) is not list:
             raise ControllerError("runtime object state is invalid")
+        if envoy_attachments is None:
+            journal = load_lifecycle_journal(self.journal_path)
+            events = journal["events"]
+            assert isinstance(events, list)
+            envoy_attachments = _envoy_attachment_expectations(events, manifest)
         for item in objects:
             if item["role"] == "envoy":
-                self._stop_and_attest_container(item, manifest)
+                self._stop_and_attest_container(
+                    item,
+                    manifest,
+                    envoy_attachment=envoy_attachments[str(item["track"])],
+                )
         freeze = self._freeze_sources(
             state, manifest, attempted_complete=attempted_complete
         )
@@ -10894,6 +11219,15 @@ class LocalEnvoyController:
         ]
         lifecycle_events = journal["events"]
         assert isinstance(lifecycle_events, list)
+        envoy_attachments = _envoy_attachment_expectations(
+            lifecycle_events, manifest
+        )
+        recorded_attachments = state.get("envoy_attachments")
+        if (
+            recorded_attachments is not None
+            and recorded_attachments != envoy_attachments
+        ):
+            raise ControllerError("recovered Envoy attachment state changed")
         up_complete_observed = any(
             event["event"] == "up_complete" for event in lifecycle_events
         )
@@ -10970,7 +11304,15 @@ class LocalEnvoyController:
                     )
                 failure_intent_sequence = int(failure_intent["sequence"])
             for item in running_ordered:
-                self._stop_and_attest_container(item, manifest)
+                self._stop_and_attest_container(
+                    item,
+                    manifest,
+                    envoy_attachment=(
+                        envoy_attachments[str(item["track"])]
+                        if item["role"] == "envoy"
+                        else None
+                    ),
+                )
         else:
             requests_state = journal["requests"]
             assert isinstance(requests_state, dict)
@@ -10982,6 +11324,7 @@ class LocalEnvoyController:
                 manifest,
                 attempted_complete=attempted_complete,
                 transient_objects=transient_objects,
+                envoy_attachments=envoy_attachments,
             )
             output, source_attestations, completed, evidence_rejection = (
                 self._prepare_teardown_evidence(
@@ -11003,6 +11346,11 @@ class LocalEnvoyController:
                     str(item["role"]),
                     str(item["track"]),
                     require_running=False,
+                    envoy_attachment=(
+                        envoy_attachments[str(item["track"])]
+                        if item["role"] == "envoy"
+                        else None
+                    ),
                 )
             )
             if item["role"] == "validator":
@@ -11064,6 +11412,12 @@ class LocalEnvoyController:
                 str(item["track"]),
                 segment=str(item.get("segment", "backend")),
                 expected_members={},
+                allowed_member_options=({},),
+                envoy_attachment=(
+                    envoy_attachments[str(item["track"])]
+                    if str(item.get("segment", "backend")) == "frontend"
+                    else None
+                ),
                 require_complete_membership=False,
                 require_empty_membership=True,
             )
