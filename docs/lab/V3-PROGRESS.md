@@ -116,14 +116,26 @@ The first driver-era Task 10 attempt rejected Docker's closed null-network
 validator representation; the merged correction recovered that lifecycle
 without a request. The second attempt then rejected Docker's expanded
 image-bound disabled-healthcheck representation; PR #13 merged the closed
-correction. Bounded recovery from that attempt now rejects a distinct Docker
+correction. Bounded recovery from that attempt rejected a distinct Docker
 endpoint-lifecycle representation before any removal: all three never-started
-drivers are exactly configured for their frontends in `created` state, but the
-physical frontend inventories contain only Envoy until driver start. The
-state-aware correction is independently approved and passes all 478 repository
-tests, but it is not yet merged and has not yet governed the isolated runtime.
-No readiness instruction, request intent, HTTP action, or central `run`
-occurred in any rejected driver-era lifecycle.
+drivers were exactly configured for their frontends in `created` state, but the
+physical frontend inventories contained only Envoy until driver start. The
+state-aware correction passed public CI and merged as
+`7677052f6fd2b4287f419dc01ec9a1a859191777`. Recovery under that commit
+accepted the created-driver topology, classified the partial-up evidence as
+nonpromotable, and cleanly stopped the baseline Envoy, then failed closed before
+stop completion because Docker changed the unbound exposed-port projection from
+`{"10000/tcp":null}` to `{}` together with `running -> exited`. Read-only audit
+confirmed that the other 34 normalized runtime fields were unchanged and that
+the six running authorization/target services have the corresponding fixed
+`{"8080/tcp":null}` shape. A role-bound correction now accepts only those exact
+one-way controlled-stop representations while preserving every other identity,
+hardening, topology, and no-publication check; its 228-test controller suite is
+green, the complete 480-test repository gate passes, and independent
+specification and quality/security reviews report no Critical or Important
+finding. Public CI, merge, and synchronization are still pending. No readiness
+instruction, request intent, HTTP action, or central `run` occurred in any
+rejected driver-era lifecycle.
 
 The immediate live gate is one `preflight` / `up` / `readiness` / `down` cycle.
 It must show no instructions, no HTTP requests, three clean cancellations,
@@ -226,9 +238,9 @@ and the complete approved specification is
 
 ## Next gate
 
-First publish and merge the state-aware created-driver endpoint correction,
-synchronize clean `main`, and use it only to complete bounded recovery and
-exact foreign-state restoration for the rejected lifecycle. Then execute one
+First publish and merge the role-bound stopped-port correction, synchronize
+clean `main`, and use it only to complete bounded recovery and exact foreign-
+state restoration for the rejected lifecycle. Then execute one
 fresh request-free V3B-1 `preflight` / `up` / `readiness` / `down` cycle.
 Require all three readiness records, three
 clean cancellations, no instruction or HTTP request, complete exact teardown,

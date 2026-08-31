@@ -11596,6 +11596,186 @@ class RuntimeAttestationTest(unittest.TestCase):
             )
         )
 
+    def test_controlled_stop_comparison_totalizes_only_unbound_exposed_port_collapse(self):
+        value = manifest()
+        running = local_envoy_module._synthetic_state_object(
+            value,
+            next(item for item in value["containers"] if item["role"] == "envoy"),
+        )
+        running["runtime_attestation"]["published_ports"] = {
+            "10000/tcp": None,
+        }
+        stopped = json.loads(json.dumps(running))
+        stopped["runtime_attestation"]["state"] = "exited"
+        stopped["runtime_attestation"]["published_ports"] = {}
+
+        self.assertTrue(
+            local_envoy_module._container_attestation_matches(
+                running, stopped, allow_stopped=True
+            )
+        )
+        self.assertFalse(
+            local_envoy_module._container_attestation_matches(
+                running, stopped, allow_stopped=False
+            )
+        )
+        for role, port in (
+            ("authz", "8080/tcp"),
+            ("target", "8080/tcp"),
+            ("envoy", "10000/tcp"),
+        ):
+            with self.subTest(accepted_role=role):
+                service = local_envoy_module._synthetic_state_object(
+                    value,
+                    next(
+                        item
+                        for item in value["containers"]
+                        if item["role"] == role
+                    ),
+                )
+                service["runtime_attestation"]["published_ports"] = {
+                    port: None,
+                }
+                service_stopped = json.loads(json.dumps(service))
+                service_stopped["runtime_attestation"]["state"] = "exited"
+                service_stopped["runtime_attestation"]["published_ports"] = {}
+                self.assertTrue(
+                    local_envoy_module._container_attestation_matches(
+                        service, service_stopped, allow_stopped=True
+                    )
+                )
+
+        still_running = json.loads(json.dumps(stopped))
+        still_running["runtime_attestation"]["state"] = "running"
+        bound_before_stop = json.loads(json.dumps(running))
+        bound_before_stop["runtime_attestation"]["published_ports"] = {
+            "10000/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18080"}],
+        }
+        wrong_recorded_port = json.loads(json.dumps(running))
+        wrong_recorded_port["runtime_attestation"]["published_ports"] = {
+            "10001/tcp": None,
+        }
+        unknown_role = json.loads(json.dumps(running))
+        unknown_role["role"] = "unknown"
+        unknown_role["runtime_attestation"]["published_ports"] = None
+        unknown_role_stopped = json.loads(json.dumps(unknown_role))
+        unknown_role_stopped["runtime_attestation"]["state"] = "exited"
+        unknown_role_stopped["runtime_attestation"]["published_ports"] = {}
+        missing_role = json.loads(json.dumps(unknown_role))
+        missing_role.pop("role")
+        missing_role_stopped = json.loads(json.dumps(unknown_role_stopped))
+        missing_role_stopped.pop("role")
+        unhashable_role = json.loads(json.dumps(unknown_role))
+        unhashable_role["role"] = ["authz"]
+        unhashable_role_stopped = json.loads(json.dumps(unknown_role_stopped))
+        unhashable_role_stopped["role"] = ["authz"]
+        altered_after_stop = json.loads(json.dumps(stopped))
+        altered_after_stop["runtime_attestation"]["published_ports"] = {
+            "10001/tcp": None,
+        }
+        unrelated_change = json.loads(json.dumps(stopped))
+        unrelated_change["runtime_attestation"]["networks"] = []
+        for name, recorded, current in (
+            ("still_running", running, still_running),
+            ("bound_before_stop", bound_before_stop, stopped),
+            ("wrong_recorded_port", wrong_recorded_port, stopped),
+            ("unknown_role", unknown_role, unknown_role_stopped),
+            ("missing_role", missing_role, missing_role_stopped),
+            ("unhashable_role", unhashable_role, unhashable_role_stopped),
+            ("altered_after_stop", running, altered_after_stop),
+            ("unrelated_change", running, unrelated_change),
+        ):
+            with self.subTest(name=name):
+                self.assertFalse(
+                    local_envoy_module._container_attestation_matches(
+                        recorded, current, allow_stopped=True
+                    )
+                )
+
+    def test_exact_stop_attests_the_closed_docker_exposed_port_transition(self):
+        value = manifest()
+        running = local_envoy_module._synthetic_state_object(
+            value,
+            next(item for item in value["containers"] if item["role"] == "envoy"),
+        )
+        running["runtime_attestation"]["published_ports"] = {
+            "10000/tcp": None,
+        }
+        stopped = json.loads(json.dumps(running))
+        stopped["runtime_attestation"]["state"] = "exited"
+        stopped["runtime_attestation"]["published_ports"] = {}
+
+        class StopController:
+            journal_path = Path("/ignored/journal.json")
+
+            def __init__(self, after):
+                self.inspections = iter((running, after))
+                self.running_states = iter(("true\n", "false\n"))
+                self.commands = []
+
+            @staticmethod
+            def docker_command(*parts):
+                return list(parts)
+
+            def _inspect_container(self, *args, **kwargs):
+                return next(self.inspections)
+
+            def _execute(self, argv, *, timeout_s, docker=False):
+                command = list(argv)
+                self.commands.append(command)
+                if command[0] == "inspect":
+                    return CommandResult(0, next(self.running_states), "")
+                if command[0] == "stop":
+                    return CommandResult(0, running["id"] + "\n", "")
+                raise AssertionError(f"unexpected exact-stop command: {command}")
+
+        events = []
+        controller = StopController(stopped)
+        with mock.patch.object(
+            local_envoy_module,
+            "journal_event",
+            side_effect=lambda path, event, details: events.append((event, details)),
+        ):
+            LocalEnvoyController._stop_and_attest_container(
+                controller,
+                running,
+                value,
+                envoy_attachment={},
+            )
+        self.assertEqual(
+            [event for event, _ in events],
+            ["container_stop_intent", "container_stop_complete"],
+        )
+        self.assertEqual(
+            [command[0] for command in controller.commands],
+            ["inspect", "stop", "inspect"],
+        )
+
+        changed = json.loads(json.dumps(stopped))
+        changed["runtime_attestation"]["networks"] = []
+        rejected_events = []
+        rejected = StopController(changed)
+        with mock.patch.object(
+            local_envoy_module,
+            "journal_event",
+            side_effect=lambda path, event, details: rejected_events.append(
+                (event, details)
+            ),
+        ):
+            with self.assertRaisesRegex(
+                ControllerError, "container changed after exact stop"
+            ):
+                LocalEnvoyController._stop_and_attest_container(
+                    rejected,
+                    running,
+                    value,
+                    envoy_attachment={},
+                )
+        self.assertEqual(
+            [event for event, _ in rejected_events],
+            ["container_stop_intent"],
+        )
+
     def test_minimal_staged_build_context_is_exact_and_hashed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "repo"
