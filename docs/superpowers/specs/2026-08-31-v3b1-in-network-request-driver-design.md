@@ -113,11 +113,12 @@ Runtime attestation requires:
 
 The three existing validators remain transient and explicit. A complete
 `up` therefore owns three validators, twelve track containers, and six internal
-networks. The frontend is configured exactly for driver plus Envoy. Its
-physical inventory must be Envoy-only while the exact driver is never-started
-in `created` state, then exactly driver plus Envoy after endpoint
-materialization. Backend membership must be exactly Envoy plus authorization
-service plus target.
+networks. The frontend is configured exactly for driver plus Envoy. Physical
+membership is derived from fresh runtime state and contains only running roles:
+with Envoy running, a created, exited, or dead driver yields Envoy-only
+membership and a running driver yields driver plus Envoy. A stopped Envoy is
+absent from both physical networks. The nominal running backend is Envoy plus
+authorization service plus target, with each stopped role absent.
 Recovery and exact inventories must recognize the driver and both network
 segments as first-class owned objects rather than infer ownership from names.
 
@@ -269,7 +270,8 @@ Implementation is test-first. Static tests must prove:
   content-identity preimage;
 - exact created-state driver attachment with an unrealized endpoint, Envoy-only
   physical frontend membership before first start, exact two-member frontend
-  membership after start, and three-member backend membership;
+  membership only while both roles run, nominal three-member running backend
+  membership, and stopped-role endpoint omission;
 - all three retained driver connections are ready before request intent;
 - no instruction or HTTP request on readiness failure;
 - signed state travels only through bounded stdin after intent;

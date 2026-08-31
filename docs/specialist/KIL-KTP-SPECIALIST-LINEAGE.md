@@ -6575,3 +6575,113 @@ central `run` command remains prohibited until that gate's public-safe record
 is reviewed, merged, and synchronized.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-123 — 2026-08-31 — Physical network membership is derived from fresh running state during exact recovery
+
+**Input:** After PR #15 merged as
+`3dce7cbd0153716b9e52cae791b97f50131989f7`, synchronize `main` and resume
+only the bounded `down` for rejected Task 10 lifecycle
+`v3b1-05211715589b45f79dac4ebe5700004831c07b28af7ca42bce5111db47007801`.
+Keep all request drivers unstarted and prohibit readiness, instruction,
+request-intent, HTTP, and central `run` transitions.
+
+**Interpretation:** Docker network configuration and Docker's physical endpoint
+inventory are distinct facts. A container remains configured for its networks
+after it stops, but Docker removes that stopped container from each network's
+`.Containers` map. Logical ownership therefore remains the exact configured
+topology, while physical membership must be reconstructed from fresh container
+state: only a `running` role contributes an endpoint.
+
+**Decision status:** Confirmed rejected recovery and locally verified narrow
+correction; publication is pending. The PR #15 recovery wrote only the exact
+Colima recovery attestation at journal sequence 75, then failed closed before
+another lifecycle mutation with `cross-track or incomplete frontend network
+membership`. Read-only inspection showed the stopped baseline Envoy absent
+from both of its physical network inventories. Its backend contained only the
+running authorization and target services and its frontend was empty. The two
+untouched tracks retained their running Envoy, authorization, and target
+backend endpoints and their Envoy-only frontend endpoints. All drivers
+remained never-started in `created` state, all request states remained
+`not_attempted`, and journal sequence 74 remained the sole pending baseline
+Envoy stop intent.
+
+The correction preserves `_network_member_identities` as the exact logical
+ownership projection and derives physical membership only from a fresh,
+closed runtime attestation whose state is one of `created`, `running`,
+`exited`, or `dead`. `running` contributes the exact full-ID endpoint;
+`created`, `exited`, and `dead` contribute none. Missing, malformed, paused,
+unknown, cross-track, extra, or stale endpoints fail closed. The journal-bound
+Envoy identity and attachment phase remain mandatory even when the Envoy is
+stopped.
+
+Controlled service stopping is now exact and replayable. Stop intent is bound
+to the prior exact creation and role; completion is bound to its exact intent.
+The replay matrix permits `unstarted/running`, `pending/running`,
+`pending/stopped`, and `complete/stopped` recovery without duplicating an
+intent or stop, while `complete/running` fails closed. The pending sequence-74
+baseline stop will therefore be completed without a second Docker stop.
+
+Independent review identified one important stale-snapshot issue before
+publication: teardown stopped services, but its later removal projection still
+used pre-stop runtime attestations. The final implementation freshly
+re-inspects every post-stop driver, service, and validator before the first
+removal, exact-compares those attestations, uses that fresh set for network
+projection, and re-inspects each candidate again immediately before exact
+removal. This ensures stopped Envoy endpoints are absent from the projected
+physical topology and prevents a state change from inheriting stale authority.
+
+**Rationale:** Accepting any configured member as a physical endpoint makes
+recovery impossible after a legitimate exact stop; accepting arbitrary
+subsets would conceal topology drift. Deriving the sole accepted physical
+shape from fresh, closed, exact runtime state matches Docker's endpoint
+lifecycle while preserving journal-bound ownership, full-ID identity, fixed
+same-track aliases, and fail-closed rejection of every unmodeled shape. This
+entry supersedes only T-121's provisional claim that exited or dead drivers
+remain physical members; their configured ownership remains, but their
+physical endpoints are absent.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `README.md`
+- `adapters/envoy/README.md`
+- `tools/README.md`
+- `docs/lab/V3-PROGRESS.md`
+- `docs/superpowers/specs/2026-08-31-v3b1-in-network-request-driver-design.md`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/architecture/v3-envoy-live-validation.svg`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- ignored `artifacts/generated/v3b1-task6-live-status.md`
+- private rejected lifecycle `v3b1-05211715589b45f79dac4ebe5700004831c07b28af7ca42bce5111db47007801`
+
+**Verification:** The observed stopped-baseline shape is covered directly:
+backend `{authz, target}` and empty frontend. State-table tests prove that only
+running drivers and services contribute endpoints, invalid states fail closed,
+and stale stopped endpoints are rejected. Stop-history tests prove exact
+creation binding, closed fields, identity and role stability, duplicate and
+orphan rejection, and the five replay rows. A complete-down regression derives
+network membership independently from the freshly transitioned service state
+and first failed before the post-stop refresh was implemented. The corrected
+implementation passes all 232 local controller tests and all 484 repository
+tests through `make validate`; Python bytecode compilation and diff hygiene
+also pass. Three independent specification, ledger/replay, and documentation/
+test reviews report no Critical or Important finding after the stale-snapshot
+correction.
+
+**Unresolved questions:** The correction must pass public CI, merge, and exact
+local/remote synchronization before governing the live runtime. One bounded
+recovery `down` must then prove complete owned container/network/profile
+absence, exact evidence classification and checksums, no residual active
+state or poison, and restoration of the foreign stopped `default` profile.
+The fresh request-free Task 10 lifecycle and its public gate record remain
+pending.
+
+**Next gate:** Publish the stopped-endpoint correction, merge it only after
+both public CI jobs pass, synchronize all `main` references, update the visible
+live board, and execute exactly one bounded recovery `down`. Only after clean
+recovery may a fresh request-free `preflight -> up -> readiness -> down`
+lifecycle begin. The central `run` command remains prohibited until that gate
+record is public, reviewed, merged, and synchronized.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

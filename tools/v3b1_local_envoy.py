@@ -687,6 +687,25 @@ def _validate_lifecycle_event_details(
         except HarnessContractError as error:
             raise ControllerError("validator execution identity is invalid") from error
         return
+    if event_name in {"container_stop_intent", "container_stop_complete"}:
+        expected = {"id", "name", "role"} if event_name.endswith("_intent") else {"id", "name"}
+        if set(details) != expected:
+            raise ControllerError("container stop fields are not closed")
+        try:
+            DockerInventoryEntry.from_mapping(
+                {"id": details["id"], "name": details["name"]},
+                "container",
+                schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
+        except (HarnessContractError, KeyError) as error:
+            raise ControllerError("container stop identity is invalid") from error
+        if event_name.endswith("_intent"):
+            role = details["role"]
+            if type(role) is not str or role not in {
+                "envoy", "authz", "target", "validator"
+            }:
+                raise ControllerError("container stop role is invalid")
+        return
     if event_name in {
         "container_remove_intent",
         "container_remove_complete",
@@ -1179,6 +1198,7 @@ def _validate_lifecycle_history(
     creations: dict[tuple[str, str], str] = {}
     creation_ids: dict[tuple[str, str], str] = {}
     validations: dict[tuple[str, str], str] = {}
+    container_stops: dict[tuple[str, str], tuple[str, str]] = {}
     network_connections: dict[tuple[str, str], tuple[str, Mapping[str, object]]] = {}
     for event in events:
         event_name = event["event"]
@@ -1233,6 +1253,30 @@ def _validate_lifecycle_history(
                         "validator execution completion lacks its exact intent"
                     )
                 validations[key] = "complete"
+            continue
+        if event_name in {"container_stop_intent", "container_stop_complete"}:
+            key = (str(details["id"]), str(details["name"]))
+            if event_name.endswith("_intent"):
+                role = str(details["role"])
+                creation_kind = "validator" if role == "validator" else "container"
+                creation_key = (creation_kind, key[1])
+                if (
+                    creations.get(creation_key) != "complete"
+                    or creation_ids.get(creation_key) != key[0]
+                ):
+                    raise ControllerError(
+                        "container stop intent lacks its exact created identity"
+                    )
+                if key in container_stops:
+                    raise ControllerError("container stop intent is duplicated")
+                container_stops[key] = ("pending", role)
+            else:
+                transition = container_stops.get(key)
+                if transition is None or transition[0] != "pending":
+                    raise ControllerError(
+                        "container stop completion lacks its exact intent"
+                    )
+                container_stops[key] = ("complete", transition[1])
             continue
         if event_name in {"network_connect_intent", "network_connect_complete"}:
             key = (str(details["container_id"]), str(details["network_id"]))
@@ -1867,6 +1911,62 @@ def _driver_stop_transition(
             if transition != "pending":
                 raise ControllerError("driver stop failure lacks its intent")
             transition = "failed"
+    return transition
+
+
+def _container_stop_transition(
+    events: Sequence[Mapping[str, object]],
+    identity: Mapping[str, object],
+) -> str:
+    """Replay one exact service or validator stop without duplicating intent."""
+    if type(identity) is not dict or set(identity) != {"id", "name", "role"}:
+        raise ControllerError("container stop identity is not closed")
+    role = identity["role"]
+    if type(role) is not str or role not in {
+        "envoy", "authz", "target", "validator"
+    }:
+        raise ControllerError("container stop role is invalid")
+    try:
+        expected = DockerInventoryEntry.from_mapping(
+            {"id": identity["id"], "name": identity["name"]},
+            "container",
+            schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
+        )
+    except HarnessContractError as error:
+        raise ControllerError("container stop identity is invalid") from error
+    creation_kind = "validator" if role == "validator" else "container"
+    creation, created_id = _creation_transition(
+        events, creation_kind, expected.name
+    )
+    if creation != "complete" or created_id != expected.object_id:
+        raise ControllerError("container stop lacks its exact created identity")
+    transition = "unstarted"
+    for event in events:
+        if type(event) is not dict or event.get("event") not in {
+            "container_stop_intent", "container_stop_complete"
+        }:
+            continue
+        details = event.get("details")
+        if type(details) is not dict:
+            raise ControllerError("container stop history is invalid")
+        observed_id = details.get("id")
+        observed_name = details.get("name")
+        if observed_id != expected.object_id and observed_name != expected.name:
+            continue
+        if observed_id != expected.object_id or observed_name != expected.name:
+            raise ControllerError("container stop identity changed")
+        if event["event"] == "container_stop_intent":
+            if set(details) != {"id", "name", "role"} or details.get("role") != role:
+                raise ControllerError("container stop intent identity changed")
+            if transition != "unstarted":
+                raise ControllerError("container stop intent is duplicated")
+            transition = "pending"
+        else:
+            if set(details) != {"id", "name"}:
+                raise ControllerError("container stop completion identity changed")
+            if transition != "pending":
+                raise ControllerError("container stop completion lacks its intent")
+            transition = "complete"
     return transition
 
 
@@ -4206,8 +4306,36 @@ def _network_member_identity_options(
     attachment: Mapping[str, object],
 ) -> tuple[dict[str, dict[str, str]], ...]:
     exact = _network_member_identities(objects, track, segment)
+    endpoint_states: dict[str, str] = {}
+    for object_id in exact:
+        matches = [
+            item
+            for item in objects
+            if item.get("track") == track and item.get("id") == object_id
+        ]
+        if len(matches) != 1:
+            raise ControllerError("network member ownership is invalid")
+        runtime_attestation = matches[0].get("runtime_attestation")
+        state_error = (
+            "frontend driver state is invalid"
+            if exact[object_id]["role"] == "driver"
+            else "network member state is invalid"
+        )
+        if type(runtime_attestation) is not dict:
+            raise ControllerError(state_error)
+        state = runtime_attestation.get("state")
+        if type(state) is not str or state not in {
+            "created", "running", "exited", "dead"
+        }:
+            raise ControllerError(state_error)
+        endpoint_states[object_id] = state
+    physical = {
+        object_id: identity
+        for object_id, identity in exact.items()
+        if endpoint_states[object_id] == "running"
+    }
     if segment == "backend":
-        return (exact,)
+        return (physical,)
     if segment != "frontend":
         raise ControllerError("network member segment is invalid")
     expectation = _validate_envoy_attachment_expectation(
@@ -4228,7 +4356,6 @@ def _network_member_identity_options(
     ]
     if len(driver_objects) > 1:
         raise ControllerError("frontend driver ownership is not unique")
-    unrealized_driver_ids: set[str] = set()
     if driver_objects:
         driver = driver_objects[0]
         runtime_attestation = driver.get("runtime_attestation")
@@ -4239,20 +4366,18 @@ def _network_member_identity_options(
             "created", "running", "exited", "dead"
         }:
             raise ControllerError("frontend driver state is invalid")
-        if driver_state == "created":
-            unrealized_driver_ids.add(str(driver["id"]))
     base = {
         object_id: identity
-        for object_id, identity in exact.items()
+        for object_id, identity in physical.items()
         if identity["role"] != "envoy"
-        and object_id not in unrealized_driver_ids
     }
     attached = dict(base)
     if envoy_ids:
         envoy_id = envoy_ids[0]
         if expectation["container_id"] != envoy_id:
             raise ControllerError("frontend Envoy ID is not journal-bound")
-        attached[envoy_id] = exact[envoy_id]
+        if endpoint_states[envoy_id] == "running":
+            attached[envoy_id] = exact[envoy_id]
     phase = expectation["phase"]
     if phase == "unstarted":
         return (base,)
@@ -10043,12 +10168,13 @@ class LocalEnvoyController:
             type(object_id) is not str
             or _HEX.fullmatch(object_id) is None
             or name != f"/{expected_name}"
+            or state_status not in {"created", "running", "exited", "dead"}
+            or running != (state_status == "running")
             or (require_running and role != "driver" and not running)
             or (
                 role == "driver"
                 and (
                     state_status not in driver_states
-                    or running != (state_status == "running")
                 )
             )
             or (require_running and role not in {"envoy", "driver"} and health != "healthy")
@@ -12475,6 +12601,15 @@ class LocalEnvoyController:
             )
         if not current_matches:
             raise ControllerError("container changed before exact stop")
+        stop_identity = {
+            "id": item["id"],
+            "name": item["name"],
+            "role": item["role"],
+        }
+        journal = load_lifecycle_journal(self.journal_path)
+        events = journal["events"]
+        assert isinstance(events, list)
+        transition = _container_stop_transition(events, stop_identity)
         running = self._execute(
             self.docker_command(
                 "inspect", "--format", "{{.State.Running}}", str(item["id"])
@@ -12484,16 +12619,19 @@ class LocalEnvoyController:
         ).stdout.strip()
         if running not in {"true", "false"}:
             raise ControllerError("container running state is invalid")
+        if transition == "complete":
+            if running == "true":
+                raise ControllerError("completed container stop is running")
+            return
+        if transition == "unstarted" and running == "false":
+            return
         if running == "true":
-            journal_event(
-                self.journal_path,
-                "container_stop_intent",
-                {
-                    "id": item["id"],
-                    "name": item["name"],
-                    "role": item["role"],
-                },
-            )
+            if transition == "unstarted":
+                journal_event(
+                    self.journal_path,
+                    "container_stop_intent",
+                    stop_identity,
+                )
             self._execute(
                 self.docker_command("stop", "--timeout", "10", str(item["id"])),
                 timeout_s=30,
@@ -12534,6 +12672,7 @@ class LocalEnvoyController:
                 )
             if not after_matches:
                 raise ControllerError("container changed after exact stop")
+        if transition == "pending" or running == "true":
             journal_event(
                 self.journal_path,
                 "container_stop_complete",
@@ -14931,54 +15070,68 @@ class LocalEnvoyController:
                 )
             )
 
-        remaining_containers = list(ordered)
-        remaining_networks = list(state["network_objects"])
-        for item in ordered:
+        def inspect_removal_candidate(
+            record: Mapping[str, object],
+        ) -> dict[str, object]:
             allowed_driver_states = None
-            if item["role"] == "driver":
+            if record["role"] == "driver":
                 current_events = load_lifecycle_journal(
                     self.journal_path
                 )["events"]
                 assert isinstance(current_events, list)
                 authority = _driver_recovery_authority(
-                    current_events, str(item["track"]), str(item["id"])
+                    current_events,
+                    str(record["track"]),
+                    str(record["id"]),
                 )
                 allowed_driver_states = set(
                     authority["allowed_states"]  # type: ignore[arg-type]
                 )
-            if item["role"] == "validator":
+            if record["role"] == "validator":
                 current = self._inspect_validation_container(
-                    str(item["id"]), manifest, LiveTrack(str(item["track"]))
+                    str(record["id"]),
+                    manifest,
+                    LiveTrack(str(record["track"])),
                 )
             else:
                 inspect_kwargs: dict[str, object] = {
                     "require_running": False,
                     "envoy_attachment": (
-                        envoy_attachments[str(item["track"])]
-                        if item["role"] == "envoy"
+                        envoy_attachments[str(record["track"])]
+                        if record["role"] == "envoy"
                         else None
                     ),
                 }
                 if allowed_driver_states is not None:
                     inspect_kwargs["allowed_driver_states"] = allowed_driver_states
                 current = self._inspect_container(
-                    str(item["id"]),
+                    str(record["id"]),
                     manifest,
-                    str(item["role"]),
-                    str(item["track"]),
+                    str(record["role"]),
+                    str(record["track"]),
                     **inspect_kwargs,
                 )
-            if item["role"] == "validator":
-                current_matches = current == item
-            else:
-                current_matches = _container_attestation_matches(
-                    item,
+            current_matches = (
+                current == record
+                if record["role"] == "validator"
+                else _container_attestation_matches(
+                    record,
                     current,
                     allow_stopped=True,
                     allowed_driver_states=allowed_driver_states,
                 )
+            )
             if not current_matches:
                 raise ControllerError("container changed before exact removal")
+            return current
+
+        fresh_ordered = [
+            inspect_removal_candidate(item) for item in ordered
+        ]
+        remaining_containers = list(fresh_ordered)
+        remaining_networks = list(state["network_objects"])
+        for item in fresh_ordered:
+            inspect_removal_candidate(item)
             identity = {"id": item["id"], "name": item["name"]}
             transition = _removal_transition(
                 load_lifecycle_journal(self.journal_path)["events"],  # type: ignore[arg-type]
@@ -15033,18 +15186,20 @@ class LocalEnvoyController:
                     for record in remaining_containers
                     if record["role"] != "validator"
                 ]
-                members = _network_member_identities(
+                member_options = _network_member_identity_options(
                     remaining_objects,
+                    manifest,
                     str(item["track"]),
                     "frontend",
+                    envoy_attachments[str(item["track"])],
                 )
                 self._inspect_network(
                     str(frontend["id"]),
                     manifest,
                     str(item["track"]),
                     segment="frontend",
-                    expected_members=members,
-                    allowed_member_options=(members,),
+                    expected_members=member_options[0],
+                    allowed_member_options=member_options,
                     envoy_attachment=envoy_attachments[str(item["track"])],
                     require_complete_membership=False,
                 )

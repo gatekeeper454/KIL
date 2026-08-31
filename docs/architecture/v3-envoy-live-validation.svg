@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1360" viewBox="0 0 1600 1360" role="img" aria-labelledby="title desc">
   <title id="title">KIL Gate V3 architecture: current V3B-1 local Envoy boundary and future V3B-2 Kind and Calico boundary</title>
-  <desc id="desc">The implemented V3B-1 mechanism uses three isolated tracks and six internal networks. In each track a request driver and Envoy are configured on a frontend network, while Envoy, authorization, and a harmless target share a backend network. A never-started created driver has no materialized Docker endpoint, so physical frontend membership is Envoy-only until first start and exactly driver plus Envoy afterward. Envoy is the sole dual-homed service. Host Docker attach and standard input control are dotted and distinct from solid consequential request traffic. The transport witness does not change authorization semantics and is not KIL enforcement. credential_policy_baseline is a credential-policy control and does not consume signed composite KTP state; only signed_state_only and signed_plus_local_reduce consume signed composite KTP state. Three driver results and nine service sources enter a visible evidence join independently before the verifier. Request-free readiness and one central live gate remain pending. A separate future panel reserves Kind/Calico for V3B-2.</desc>
+  <desc id="desc">The implemented V3B-1 mechanism uses three isolated tracks and six internal networks. In each track a request driver and Envoy are configured on a frontend network, while Envoy, authorization, and a harmless target share a backend network. Physical membership contains only running roles: with Envoy running, a created, exited, or dead driver yields Envoy-only membership and a running driver yields driver plus Envoy; a stopped Envoy contributes no endpoint. Envoy is the sole configured dual-homed service. Host Docker attach and standard input control are dotted and distinct from solid consequential request traffic. The transport witness does not change authorization semantics and is not KIL enforcement. credential_policy_baseline is a credential-policy control and does not consume signed composite KTP state; only signed_state_only and signed_plus_local_reduce consume signed composite KTP state. Three driver results and nine service sources enter a visible evidence join independently before the verifier. Request-free readiness and one central live gate remain pending. A separate future panel reserves Kind/Calico for V3B-2.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#07121e"/>
@@ -84,7 +84,7 @@
     <rect x="815" y="246" width="690" height="108" rx="12" class="back"/>
     <text x="1208" y="267" class="small">BACKEND {Envoy, authz, target}</text>
     <rect x="385" y="280" width="190" height="55" rx="10" class="node"/>
-    <text x="404" y="303" class="boxTitle">Request driver</text><text x="397" y="323" class="tiny">created → endpoint on start</text>
+    <text x="404" y="303" class="boxTitle">Request driver</text><text x="397" y="323" class="tiny">physical endpoint iff running</text>
     <rect x="760" y="276" width="190" height="63" rx="10" class="envoy"/>
     <text x="808" y="301" class="boxTitle">Envoy</text><text x="784" y="322" class="tiny">sole dual-homed node</text>
     <rect x="1035" y="280" width="180" height="55" rx="10" class="authz"/>
@@ -104,7 +104,7 @@
     <rect x="815" y="436" width="690" height="108" rx="12" class="back"/>
     <text x="1208" y="457" class="small">BACKEND {Envoy, authz, target}</text>
     <rect x="385" y="470" width="190" height="55" rx="10" class="node"/>
-    <text x="404" y="493" class="boxTitle">Request driver</text><text x="397" y="513" class="tiny">created → endpoint on start</text>
+    <text x="404" y="493" class="boxTitle">Request driver</text><text x="397" y="513" class="tiny">physical endpoint iff running</text>
     <rect x="760" y="466" width="190" height="63" rx="10" class="envoy"/>
     <text x="808" y="491" class="boxTitle">Envoy</text><text x="784" y="512" class="tiny">sole dual-homed node</text>
     <rect x="1035" y="470" width="180" height="55" rx="10" class="authz"/>
@@ -124,7 +124,7 @@
     <rect x="815" y="626" width="690" height="108" rx="12" class="back"/>
     <text x="1208" y="647" class="small">BACKEND {Envoy, authz, target}</text>
     <rect x="385" y="660" width="190" height="55" rx="10" class="node"/>
-    <text x="404" y="683" class="boxTitle">Request driver</text><text x="397" y="703" class="tiny">created → endpoint on start</text>
+    <text x="404" y="683" class="boxTitle">Request driver</text><text x="397" y="703" class="tiny">physical endpoint iff running</text>
     <rect x="760" y="656" width="190" height="63" rx="10" class="envoy"/>
     <text x="808" y="681" class="boxTitle">Envoy</text><text x="784" y="702" class="tiny">sole dual-homed node</text>
     <rect x="1035" y="660" width="180" height="55" rx="10" class="authz"/>

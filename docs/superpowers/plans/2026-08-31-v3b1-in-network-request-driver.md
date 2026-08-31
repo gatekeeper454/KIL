@@ -447,9 +447,10 @@ Add exact tests requiring:
   `--no-healthcheck`, no mount, no publication, and no backend network;
 - Envoy attached to backend and frontend, with fixed frontend alias `envoy`;
 - frontend configuration exactly `{driver, envoy}`, with physical membership
-  exactly `{envoy}` while the driver is never-started/`created` and exactly
-  `{driver, envoy}` after its endpoint materializes;
-- backend membership exactly `{envoy, authz, target}`;
+  containing only running roles: `{envoy}` for a created/exited/dead driver and
+  `{driver, envoy}` only while the driver is running;
+- nominal running backend membership exactly `{envoy, authz, target}`, with
+  stopped roles absent;
 - driver state `created`; Envoy/authz/target states `running`;
 - `HostConfig.PortBindings == {}` and live published ports empty/null; and
 - no command contains `--publish`, `-p`, a host port, or a non-internal segment.
@@ -841,10 +842,14 @@ local static gate to pass, resolve review findings, merge, fast-forward local
 PR #14 completed this step for the created-driver endpoint correction and
 merged as `7677052f6fd2b4287f419dc01ec9a1a859191777`. The first merged-source
 recovery stop exposed one additional engine representation: an exact service
-stop collapses an unbound exposed-port map to `{}`. The role-bound correction
-must independently pass this same publish/CI/merge/synchronize gate before the
-bounded `down` may resume. The stopped container is owned and journal-anchored;
-no request-side action occurred.
+stop collapses an unbound exposed-port map to `{}`. PR #15 closed that exact
+role-bound transition and merged as
+`3dce7cbd0153716b9e52cae791b97f50131989f7`. Its recovery then exposed Docker's
+physical endpoint rule: a stopped container remains configured for its
+networks but is absent from each network's `Containers` map. The current
+state-derived membership correction must pass this same publish/CI/merge/
+synchronize gate before bounded `down` resumes. The stopped container is owned
+and journal-anchored; no request-side action occurred.
 
 - [x] **Step 2: Record exact host state and run preflight**
 

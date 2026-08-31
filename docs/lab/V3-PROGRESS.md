@@ -64,11 +64,13 @@ V3B-1 fixes three separate tracks:
 3. `signed_plus_local_reduce`.
 
 Each track has two internal networks. Its frontend is configured exactly for
-`{driver, Envoy}` and its backend membership is exactly
-`{Envoy, authz, target}`. While a never-started driver is in `created` state,
-Docker exposes only `{Envoy}` in the physical frontend member inventory; after
-the endpoint materializes, membership is exactly `{driver, Envoy}`. Envoy is
-the only dual-homed component. There is no host TCP publication. The complete
+`{driver, Envoy}` and its backend is configured exactly for
+`{Envoy, authz, target}`. Physical membership is state-derived and includes
+only running roles: with Envoy running, a `created`, `exited`, or `dead` driver
+yields `{Envoy}`, while a running driver yields `{driver, Envoy}`. A stopped
+Envoy is absent from both physical networks, and a stopped backend service is
+absent from the backend inventory. Envoy is the only configured dual-homed
+component. There is no host TCP publication. The complete
 lifecycle owns twelve track containers—one
 driver, Envoy, authorization service, and harmless target per track—plus three
 transient validators, across six networks.
@@ -128,12 +130,19 @@ stop completion because Docker changed the unbound exposed-port projection from
 `{"10000/tcp":null}` to `{}` together with `running -> exited`. Read-only audit
 confirmed that the other 34 normalized runtime fields were unchanged and that
 the six running authorization/target services have the corresponding fixed
-`{"8080/tcp":null}` shape. A role-bound correction now accepts only those exact
+`{"8080/tcp":null}` shape. A role-bound correction accepts only those exact
 one-way controlled-stop representations while preserving every other identity,
-hardening, topology, and no-publication check; its 228-test controller suite is
-green, the complete 480-test repository gate passes, and independent
-specification and quality/security reviews report no Critical or Important
-finding. Public CI, merge, and synchronization are still pending. No readiness
+hardening, topology, and no-publication check; its 228-test controller suite
+and complete 480-test repository gate passed, independent reviews found no
+Critical or Important issue, and PR #15 merged as
+`3dce7cbd0153716b9e52cae791b97f50131989f7`. The next bounded recovery accepted
+that port normalization without issuing another stop, then failed before any
+mutation because the stopped Envoy was absent from Docker network `Containers`.
+Read-only inspection confirmed the baseline backend contained only its running
+authz and target endpoints and its frontend was empty, while both untouched
+tracks retained their exact running endpoints. The current correction derives
+physical membership only from freshly attested `running` state and durably
+completes an already-effective pending stop without repeating it. No readiness
 instruction, request intent, HTTP action, or central `run` occurred in any
 rejected driver-era lifecycle.
 
