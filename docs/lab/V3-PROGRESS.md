@@ -78,6 +78,20 @@ copy failed for all six authorization and target ledgers, however, so the empty
 failure bundle does not independently prove those service sources were absent.
 No V3B-1 enforcement run has been accepted, promoted, or labeled validated.
 
+The exact-byte correction is now implemented and statically verified. If the
+normal Docker copy fails, the controller executes a fixed, no-shell exporter in
+the attested service container; bounds and opens the real ledger without
+following symlinks; requires a stable regular inode and size; emits its exact
+bytes, count, and digest in a closed canonical envelope; and requires the host
+to recheck that envelope against the independent pre-copy observation before
+freezing it. It never synthesizes an empty file from metadata. Empty, nonempty,
+malformed, mismatched, oversized, and symlink cases are covered, including
+direct subprocess execution of the real exporter. Independent review found no
+Important or Critical issue. Fresh static verification passed 180 controller
+tests and 396 repository tests, plus Python compilation and diff hygiene. The
+remaining risk is the real Docker path, which is the purpose of the repeated
+zero-request gate.
+
 V3B-1 is limited to the local Envoy boundary. Full local-cluster transport
 validation remains V3B-2: the isolated Kind/Calico topology, approved failure
 matrix, target-side markers, and cluster-level measurements are still
@@ -94,11 +108,11 @@ and the complete approved specification is
 
 ## Next gate
 
-Publish an exact-byte service-ledger export correction, then execute a fresh
-zero-request `preflight` / `up` / `down` smoke from the clean synchronized
-commit. Require all nine source legs to be copied and byte-bound, along with
-exact teardown and foreign-runtime restoration. A central request remains
-prohibited until that gate passes. V3B-2 and V3C remain separate later gates,
-and all V3A output remains explicitly modeled.
+Publish and merge the exact-byte service-ledger export correction, then execute
+a fresh zero-request `preflight` / `up` / `down` smoke from clean synchronized
+main. Require all nine source legs to be copied and byte-bound, along with exact
+teardown and foreign-runtime restoration. A central request remains prohibited
+until that gate passes. V3B-2 and V3C remain separate later gates, and all V3A
+output remains explicitly modeled.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

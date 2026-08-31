@@ -238,6 +238,11 @@ observations. The failure bundle is nonpromotable and does not independently
 prove service-source absence. Correct the exact-byte export and repeat Task 6;
 Task 7 remains prohibited.
 
+The bounded exact-byte fallback is implemented and statically verified at 180
+controller tests and 396 repository tests, with an independent no-finding
+review. Task 6 remains open until the correction is merged and all nine source
+legs pass the repeated live zero-request freeze.
+
 ### Task 7: Execute one accepted local Envoy proof and presenter bundle
 
 **Files:**

@@ -141,6 +141,8 @@ _EVIDENCE_FILES = (
     "summary.md",
     "live.html",
 )
+_KTP_CITATION_URL = "https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff"
+_KTP_CITATION = f"KTP citation: [canonical `CITATION.cff`]({_KTP_CITATION_URL}).\n"
 _FREEZE_SOURCES = ("envoy_access", "authz_decisions", "target_markers")
 _LEDGER_PATH = {
     "authz_decisions": "/evidence/decisions.jsonl",
@@ -173,6 +175,31 @@ _LEDGER_PROBE = (
     "    if not b:break\n"
     "    n+=len(b);h.update(b)\n"
     "  r['byte_count']=n;r['sha256']=h.hexdigest()\n"
+    "print(json.dumps(r,sort_keys=True,separators=(',',':')))"
+)
+_MAX_LEDGER_EXPORT_BYTES = 128 * 1024 + 1
+_MAX_LEDGER_EXPORT_OUTPUT_BYTES = 2 * _MAX_LEDGER_EXPORT_BYTES + 256
+_LEDGER_EXPORT = (
+    "import hashlib,json,os,stat,sys;"
+    "p=sys.argv[1];m=int(sys.argv[2]);"
+    "fd=os.open(p,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0));"
+    "\ntry:\n"
+    " s=os.fstat(fd)\n"
+    " if not stat.S_ISREG(s.st_mode):raise RuntimeError('not_regular')\n"
+    " b=b''\n"
+    " while len(b)<=m:\n"
+    "  c=os.read(fd,min(65536,m+1-len(b)))\n"
+    "  if not c:break\n"
+    "  b+=c\n"
+    " e=os.fstat(fd)\n"
+    "\nfinally:os.close(fd)\n"
+    "c=os.lstat(p);"
+    "\nif (s.st_dev,s.st_ino)!=(e.st_dev,e.st_ino) or "
+    "(s.st_dev,s.st_ino)!=(c.st_dev,c.st_ino) or "
+    "s.st_size!=e.st_size or e.st_size!=len(b) or len(b)>m:"
+    "raise RuntimeError('changed_or_oversize')\n"
+    "r={'byte_count':len(b),'payload_hex':b.hex(),"
+    "'sha256':hashlib.sha256(b).hexdigest()};"
     "print(json.dumps(r,sort_keys=True,separators=(',',':')))"
 )
 
@@ -3453,7 +3480,8 @@ def _summary(manifest: Mapping[str, object], joins: Sequence[Mapping[str, object
         f"- Teardown: {teardown['status']}\n\n"
         "This bundle is limited to the local pinned Envoy authorization boundary. "
         "It does not establish cluster orchestration, past-event causality, or "
-        "workload benchmarking.\n"
+        "workload benchmarking.\n\n"
+        f"{_KTP_CITATION}"
     )
 
 
@@ -4968,7 +4996,8 @@ def _public_summary(public_manifest: Mapping[str, object]) -> str:
         "This is a provisional, non-promoted observation of the pinned local Envoy "
         "authorization boundary. Inputs are modeled and outputs are observed. It does "
         "not establish cluster orchestration, past-event guarantees, workload "
-        "benchmarking, or cross-track network-policy enforcement.\n"
+        "benchmarking, or cross-track network-policy enforcement.\n\n"
+        f"{_KTP_CITATION}"
     )
 
 
@@ -5755,7 +5784,8 @@ def _prepare_failure_provisional(
         output / "summary.md",
         (
             "# KIL V3B-1 incomplete private lifecycle evidence\n\n"
-            "This provisional bundle is non-promotable and awaits verified teardown.\n"
+            "This provisional bundle is non-promotable and awaits verified teardown.\n\n"
+            f"{_KTP_CITATION}"
         ).encode("utf-8"),
         0o444,
     )
@@ -7485,6 +7515,45 @@ class LocalEnvoyController:
         return True, count, digest  # type: ignore[return-value]
 
     @staticmethod
+    def _parse_ledger_export(payload: str) -> tuple[bytes, int, str]:
+        try:
+            encoded = payload.encode("utf-8")
+        except UnicodeError as error:
+            raise ControllerError("ledger export contains invalid Unicode") from error
+        if len(encoded) > _MAX_LEDGER_EXPORT_OUTPUT_BYTES:
+            raise ControllerError("ledger export exceeds the closed output bound")
+        export = _load_json_bytes(encoded, "ledger export")
+        try:
+            canonical_export = _canonical_bytes(export)
+        except (TypeError, ValueError, UnicodeError, RecursionError) as error:
+            raise ControllerError("ledger export canonicalization failed") from error
+        if encoded != canonical_export or set(export) != {
+            "byte_count",
+            "payload_hex",
+            "sha256",
+        }:
+            raise ControllerError("ledger export is not closed canonical JSON")
+        byte_count = export["byte_count"]
+        payload_hex = export["payload_hex"]
+        digest = export["sha256"]
+        if (
+            type(byte_count) is not int
+            or not 0 <= byte_count <= _MAX_LEDGER_EXPORT_BYTES
+            or type(payload_hex) is not str
+            or len(payload_hex) != byte_count * 2
+            or re.fullmatch(r"[0-9a-f]*", payload_hex) is None
+        ):
+            raise ControllerError("ledger export byte payload is invalid")
+        _require_sha256("ledger export sha256", digest)
+        try:
+            exported = bytes.fromhex(payload_hex)
+        except ValueError as error:
+            raise ControllerError("ledger export byte payload is invalid") from error
+        if len(exported) != byte_count or _digest_bytes(exported) != digest:
+            raise ControllerError("ledger export self-attestation is invalid")
+        return exported, byte_count, digest  # type: ignore[return-value]
+
+    @staticmethod
     def _source_malformed_class(
         payload: bytes,
         *,
@@ -7733,6 +7802,17 @@ class LocalEnvoyController:
                     copied_sha256=None,
                     error_class="source_missing",
                 )
+            assert source_count is not None and source_sha is not None
+            if source_count > _MAX_LEDGER_EXPORT_BYTES:
+                return SourceCollectionStatus(
+                    **identity,
+                    status="copy_error",
+                    source_byte_count=source_count,
+                    source_sha256=source_sha,
+                    copied_byte_count=None,
+                    copied_sha256=None,
+                    error_class="command_failed",
+                )
             try:
                 self._execute(
                     self.docker_command(
@@ -7749,15 +7829,48 @@ class LocalEnvoyController:
             except (ControllerError, OSError, UnicodeError):
                 if path.is_symlink() or path.exists():
                     self._quarantine_unattested_frozen_path(path)
-                return SourceCollectionStatus(
-                    **identity,
-                    status="copy_error",
-                    source_byte_count=source_count,
-                    source_sha256=source_sha,
-                    copied_byte_count=None,
-                    copied_sha256=None,
-                    error_class="command_failed",
-                )
+                try:
+                    export = self._execute(
+                        self.docker_command(
+                            "exec",
+                            str(item["id"]),
+                            "/usr/local/bin/python",
+                            "-c",
+                            _LEDGER_EXPORT,
+                            source_path,
+                            str(_MAX_LEDGER_EXPORT_BYTES),
+                        ),
+                        timeout_s=60,
+                        docker=True,
+                    )
+                    exported_bytes, exported_count, exported_sha = (
+                        self._parse_ledger_export(export.stdout)
+                    )
+                    if (
+                        exported_count != source_count
+                        or exported_sha != source_sha
+                    ):
+                        raise ControllerError(
+                            "ledger export changed after source observation"
+                        )
+                    _write_file(path, exported_bytes, 0o400)
+                    copied_bytes = self._read_attested_frozen_bytes(
+                        path,
+                        byte_count=exported_count,
+                        sha256_digest=exported_sha,
+                    )
+                except (ControllerError, OSError, UnicodeError):
+                    if path.is_symlink() or path.exists():
+                        self._quarantine_unattested_frozen_path(path)
+                    return SourceCollectionStatus(
+                        **identity,
+                        status="copy_error",
+                        source_byte_count=source_count,
+                        source_sha256=source_sha,
+                        copied_byte_count=None,
+                        copied_sha256=None,
+                        error_class="command_failed",
+                    )
         copied_count = len(copied_bytes)
         copied_sha = _digest_bytes(copied_bytes)
         if copied_count != source_count:

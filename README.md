@@ -27,8 +27,9 @@ and target ledger copies failed after zero-byte in-container observations. Its
 empty failure bundle is nonpromotable and does not independently prove service-
 source absence.
 
-The next execution gate is a published exact-byte export correction followed
-by a fresh zero-request `preflight` / `up` / `down` smoke. A central request
+The harness now contains a bounded exact-byte service-ledger export correction.
+The next execution gate is a fresh zero-request `preflight` / `up` / `down`
+smoke from a clean public commit containing that correction. A central request
 remains prohibited until all nine source legs are copied and byte-bound. Kind/
 Calico validation (V3B-2) and repetition and performance promotion (V3C) remain
 unexecuted.
