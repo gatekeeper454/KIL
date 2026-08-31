@@ -4254,3 +4254,58 @@ unchanged.
 committed zero-request live smoke before the single accepted proof run.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-086 — 2026-08-30 — Accepted V3B-1 bundles include an authoritative offline presenter
+
+**Input:** Add the smallest deterministic offline presenter for the V3B-1
+local Envoy harness without changing KIL, authorization, Envoy routing, target,
+or live-runtime semantics. Make the page part of the authoritative evidence
+set, and provide a read-only CLI verifier that accepts only the completed local
+permit/permit/deny proof.
+
+**Interpretation:** A demonstrator may derive presentation only from the
+accepted public manifest plus canonical decision and join records. The derived
+page is evidence only when its bytes are frozen before `SHA256SUMS`, included
+in the authoritative and public artifact hashes, deterministically reproduced
+at teardown and publication, and re-derived by an offline verifier from one
+bounded snapshot of an exact closed bundle.
+
+**Decision status:** Confirmed harness-only implementation complete, pending
+independent review and the final full-suite gate. `live.html` is now a
+deterministic UTF-8 page with a deny-by-default content-security policy, inline
+CSS only, no scripts or external assets, escaped projected values, and fixed
+`local`, `intermediate`, `not promoted`, modeled-input/observed-output, and
+claim-exclusion labels. Completed evidence renders only the exact
+permit/permit/deny, 200/200/403, 1/1/0 result with fixed causal reasons;
+incomplete evidence renders only `INCOMPLETE · NOT PRESENTABLE`. The new
+`view --bundle PATH` path executes before controller construction, performs no
+writes or browser/runtime interaction, verifies the exact public file and
+directory set, stable regular-file identities, checksums, closed final public
+manifest, deterministic summary, canonical decision/join semantics and digest
+bindings, and exact presenter bytes, then prints only the resolved presenter
+path. Repaired checksums do not authorize altered claims, causal reasons,
+digests, track order, summary, or page bytes.
+
+**Rationale:** A standalone HTML file is easy to demonstrate offline, but it
+must not become a second mutable source of claims. Deriving and rechecking it
+from already accepted records preserves the bundle's evidence boundary while
+making the result legible, portable, and checksum-complete. Closed snapshot
+and semantic verification prevents a locally edited page or recomputed hash
+file from being reported as an accepted run.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker, Colima, browser, KIL, Envoy, authz,
+or target operation was performed. The page and verifier establish only the
+already bounded local intermediate evidence claim; installed-runtime smoke and
+the single accepted proof run remain separate gates.
+
+**Next gate:** Independent Task 5b review, then the committed zero-request
+smoke and single accepted proof run before public evidence publication and the
+offline backup.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

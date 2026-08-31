@@ -2,6 +2,7 @@ from dataclasses import FrozenInstanceError
 import errno
 from hashlib import sha256
 import http.client
+import io
 import json
 import os
 from pathlib import Path
@@ -1492,11 +1493,14 @@ class ControllerContractTest(unittest.TestCase):
                         "complete",
                     )
 
-    def test_cli_exposes_only_the_five_approved_subcommands(self):
+    def test_cli_exposes_only_the_six_approved_subcommands(self):
         parser = make_parser()
 
         for name in ("preflight", "up", "run", "collect", "down"):
             self.assertEqual(parser.parse_args([name]).command, name)
+        view = parser.parse_args(["view", "--bundle", "/tmp/evidence"])
+        self.assertEqual(view.command, "view")
+        self.assertEqual(view.bundle, Path("/tmp/evidence"))
         with self.assertRaises(SystemExit):
             parser.parse_args(["destroy"])
 
@@ -7310,7 +7314,693 @@ class RuntimeAttestationTest(unittest.TestCase):
         with self.assertRaisesRegex(ControllerError, "architecture"):
             validate_image_architecture({"Os": "linux", "Architecture": "amd64"})
 
+
+def presenter_source_attestations(provisional, envoy, targets):
+    def payload(records):
+        return b"".join(
+            (canonical_json(record) + "\n").encode("utf-8")
+            for record in records
+        )
+
+    return [
+        {
+            "track": track.value,
+            "container_ids": {
+                "authz": f"{index + 1}" * 64,
+                "target": f"{index + 4}" * 64,
+                "envoy": f"{index + 7}" * 64,
+            },
+            "image_ids": {
+                "authz": KIL_IMAGE_ID,
+                "target": KIL_IMAGE_ID,
+                "envoy": f"sha256:{HEX_B}",
+            },
+            "config_sha256": {
+                "authz": HEX_A,
+                "target": HEX_A,
+                "envoy": HEX_A,
+            },
+            "raw_decisions_sha256": sha256(
+                (
+                    provisional
+                    / "raw/decisions"
+                    / f"{track.value}.jsonl"
+                ).read_bytes()
+            ).hexdigest(),
+            "raw_decision_count": 1,
+            "raw_envoy_sha256": sha256(
+                payload([item for item in envoy if item["track"] == track.value])
+            ).hexdigest(),
+            "raw_envoy_count": 1,
+            "raw_targets_sha256": sha256(
+                payload([item for item in targets if item["track"] == track.value])
+            ).hexdigest(),
+            "raw_target_count": 0 if index == 2 else 1,
+        }
+        for index, track in enumerate(LiveTrack)
+    ]
+
+
+def published_presenter_bundle(root, *, completed=True):
+    value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+    if completed:
+        joins = join_evidence(value, requests, decisions, envoy, targets)
+        provisional = write_evidence_bundle(
+            root / "private",
+            value,
+            requests=requests,
+            decisions=decisions,
+            envoy=envoy,
+            targets=targets,
+            joins=joins,
+        )
+        source_attestations = presenter_source_attestations(
+            provisional, envoy, targets
+        )
+    else:
+        provisional = _prepare_failure_provisional(
+            root / "private", value, reset=True
+        )
+        source_attestations = []
+    authority = authoritative_bundle_attestation(provisional)
+    published = finalize_publication(
+        provisional,
+        root / "public",
+        value,
+        source_attestations=source_attestations,
+        tool_identities=TOOL_IDENTITIES,
+        engine_provenance=ENGINE_PROVENANCE,
+        global_context_before="personal",
+        global_context_after="personal",
+        completed=completed,
+        authoritative_attestation=authority,
+    )
+    return published
+
+
+def rewrite_public_bundle_hashes(bundle):
+    manifest_path = bundle / "manifest.json"
+    manifest_path.chmod(0o600)
+    public_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for relative in tuple(public_manifest["artifact_sha256"]):
+        public_manifest["artifact_sha256"][relative] = sha256(
+            (bundle / relative).read_bytes()
+        ).hexdigest()
+    manifest_path.write_text(canonical_json(public_manifest) + "\n", encoding="utf-8")
+    manifest_path.chmod(0o444)
+    local_envoy_module._write_sums(bundle)
+
+
 class EvidenceBundleTest(unittest.TestCase):
+    def test_public_manifest_and_final_sha_cover_live_exactly_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            manifest_value = json.loads(
+                (published / "manifest.json").read_text(encoding="utf-8")
+            )
+            live_digest = sha256((published / "live.html").read_bytes()).hexdigest()
+            checksum_lines = (
+                published / "SHA256SUMS"
+            ).read_text(encoding="ascii").splitlines()
+
+            self.assertEqual(manifest_value["artifact_sha256"]["live.html"], live_digest)
+            self.assertEqual(
+                [line for line in checksum_lines if line.endswith("  live.html")],
+                [f"{live_digest}  live.html"],
+            )
+            verify_public_checksums(published)
+
+    def test_view_rejects_untrusted_header_reason_with_repaired_hashes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            decisions_path = published / "decisions.jsonl"
+            decisions = [
+                json.loads(line)
+                for line in decisions_path.read_text(encoding="utf-8").splitlines()
+            ]
+            decisions[0]["untrusted_header_names"] = ["x-kil-mode"]
+            source = {
+                "schema_version": decisions[0]["source_schema_version"],
+                **{
+                    key: value
+                    for key, value in decisions[0].items()
+                    if key not in {
+                        "schema_version", "source_schema_version",
+                        "source_record_sha256", "run_id_provenance", "run_id",
+                    }
+                },
+            }
+            decisions[0]["source_record_sha256"] = sha256(
+                canonical_json(source).encode("utf-8")
+            ).hexdigest()
+            decisions_path.chmod(0o600)
+            decisions_path.write_bytes(
+                b"".join(
+                    (canonical_json(item) + "\n").encode("utf-8")
+                    for item in decisions
+                )
+            )
+            decisions_path.chmod(0o444)
+            rewrite_public_bundle_hashes(published)
+
+            with self.assertRaisesRegex(ControllerError, "untrusted"):
+                local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_rejects_wrong_causal_reason_with_repaired_page_and_hashes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            decisions_path = published / "decisions.jsonl"
+            decisions = [
+                json.loads(line)
+                for line in decisions_path.read_text(encoding="utf-8").splitlines()
+            ]
+            decisions[0]["adapter_reasons"] = ["credential_invalid"]
+            source = {
+                "schema_version": decisions[0]["source_schema_version"],
+                **{
+                    key: value
+                    for key, value in decisions[0].items()
+                    if key
+                    not in {
+                        "schema_version",
+                        "source_schema_version",
+                        "source_record_sha256",
+                        "run_id_provenance",
+                        "run_id",
+                    }
+                },
+            }
+            decisions[0]["source_record_sha256"] = sha256(
+                canonical_json(source).encode("utf-8")
+            ).hexdigest()
+            decisions_path.chmod(0o600)
+            decisions_path.write_bytes(
+                b"".join(
+                    (canonical_json(item) + "\n").encode("utf-8")
+                    for item in decisions
+                )
+            )
+            decisions_path.chmod(0o444)
+            live = published / "live.html"
+            live.chmod(0o600)
+            live.write_bytes(
+                live.read_bytes().replace(
+                    b"baseline_permitted", b"credential_invalid"
+                )
+            )
+            live.chmod(0o444)
+            rewrite_public_bundle_hashes(published)
+
+            with self.assertRaisesRegex(ControllerError, "causal"):
+                local_envoy_module.verify_presenter_bundle(published)
+
+    def test_presenter_is_durable_before_sha256sums_is_written(self):
+        value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+        joins = join_evidence(value, requests, decisions, envoy, targets)
+        observed = []
+        original_write_sums = local_envoy_module._write_sums
+
+        def observe_presenter(output):
+            live = output / "live.html"
+            observed.append(
+                (
+                    live.is_file(),
+                    stat.S_IMODE(live.stat().st_mode),
+                    sha256(live.read_bytes()).hexdigest(),
+                )
+            )
+            return original_write_sums(output)
+
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(
+            local_envoy_module, "_write_sums", side_effect=observe_presenter
+        ):
+            output = write_evidence_bundle(
+                Path(directory),
+                value,
+                requests=requests,
+                decisions=decisions,
+                envoy=envoy,
+                targets=targets,
+                joins=joins,
+            )
+
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(observed[0][:2], (True, 0o444))
+        self.assertRegex(observed[0][2], r"^[a-f0-9]{64}$")
+
+    def test_repaired_checksum_cannot_hide_presenter_change_after_authority(self):
+        value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+        joins = join_evidence(value, requests, decisions, envoy, targets)
+        with tempfile.TemporaryDirectory() as directory:
+            output = write_evidence_bundle(
+                Path(directory),
+                value,
+                requests=requests,
+                decisions=decisions,
+                envoy=envoy,
+                targets=targets,
+                joins=joins,
+            )
+            authority = authoritative_bundle_attestation(output)
+            live = output / "live.html"
+            live.chmod(0o600)
+            live.write_bytes(live.read_bytes() + b"<!-- changed -->\n")
+            live.chmod(0o444)
+            local_envoy_module._write_sums(output)
+
+            with self.assertRaisesRegex(ControllerError, "authoritative.*changed"):
+                local_envoy_module._reattest_authoritative_bundle(
+                    output, authority
+                )
+
+    def test_view_cli_failure_is_closed_and_does_not_echo_private_path_or_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            private = Path(directory) / "Users/mistorm/private-bundle"
+            private.mkdir(parents=True)
+            (private / "secret.txt").write_text("Bearer do-not-echo\n")
+            with self.assertRaises(SystemExit) as caught, mock.patch.object(
+                local_envoy_module,
+                "LocalEnvoyController",
+                side_effect=AssertionError("view constructed runtime controller"),
+            ):
+                local_envoy_module.main(["view", "--bundle", str(private)])
+
+            message = str(caught.exception)
+            self.assertIn("v3b1-local-envoy:", message)
+            self.assertNotIn(str(private), message)
+            self.assertNotIn("mistorm", message)
+            self.assertNotIn("Bearer", message)
+            self.assertNotIn("do-not-echo", message)
+
+    def test_presenter_escapes_projected_strings_and_rejects_private_tokens(self):
+        value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+        joins = join_evidence(value, requests, decisions, envoy, targets)
+        normalized = local_envoy_module._normalized_decision_records(
+            value, decisions
+        )
+        model = local_envoy_module._presenter_model(value, normalized, joins)
+        first = model.tracks[0]
+        hostile = local_envoy_module.PresenterModel(
+            model.run_id,
+            model.request_id,
+            model.evidence_scope,
+            model.source_commit,
+            (
+                local_envoy_module.PresenterTrack(
+                    first.track,
+                    first.outcome,
+                    first.http_status,
+                    first.target_marker_count,
+                    first.forwarded,
+                    first.decision_digest,
+                    ('<reason data-x="1">&',),
+                    first.engine_reasons,
+                ),
+                *model.tracks[1:],
+            ),
+            model.complete,
+        )
+
+        rendered = local_envoy_module._render_live_html(
+            hostile
+        ).decode("utf-8")
+
+        self.assertIn("&lt;reason data-x=&quot;1&quot;&gt;&amp;", rendered)
+        self.assertNotIn('<reason data-x="1">&', rendered)
+        for private_value in (
+            "/Users/example/private",
+            "/home/example/private",
+            "C:\\Users\\example\\private",
+            "unix:///private/docker.sock",
+            "Bearer private-token",
+            "v3b1-lab-credential",
+        ):
+            with self.subTest(private_value=private_value):
+                poisoned = dict(value)
+                poisoned["request_id"] = private_value
+                with self.assertRaisesRegex(ControllerError, "private material"):
+                    local_envoy_module._presenter_model(
+                        poisoned, normalized, joins
+                    )
+
+    def test_view_rejects_file_replacement_during_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            original_reader = local_envoy_module._read_stable_public_file
+            replaced = False
+
+            def replacing_reader(path, *, maximum_bytes=64 * 1024 * 1024):
+                nonlocal replaced
+                result = original_reader(path, maximum_bytes=maximum_bytes)
+                if path.name == "live.html" and not replaced:
+                    replaced = True
+                    local_envoy_module._write_file(path, result[0], 0o444)
+                return result
+
+            with mock.patch.object(
+                local_envoy_module,
+                "_read_stable_public_file",
+                side_effect=replacing_reader,
+            ):
+                with self.assertRaisesRegex(ControllerError, "changed after snapshot"):
+                    local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_rejects_malformed_overlong_wrong_result_and_digest_jsonl(self):
+        for mutation in (
+            "malformed",
+            "overlong",
+            "wrong_result",
+            "invalid_digest",
+            "digest_mismatch",
+            "decision_join_digest_mismatch",
+        ):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                published = published_presenter_bundle(Path(directory))
+                joins_path = published / "joins.jsonl"
+                if mutation == "malformed":
+                    payload = b"{not-json}\n"
+                elif mutation == "overlong":
+                    payload = b"[" + (b"0," * 70_000) + b"0]\n"
+                else:
+                    joins = [
+                        json.loads(line)
+                        for line in joins_path.read_text(encoding="utf-8").splitlines()
+                    ]
+                    original_digest = joins[0]["decision_digest"]
+                    if mutation == "wrong_result":
+                        joins[2]["outcome"] = "permit"
+                        joins[2]["http_status"] = 200
+                        joins[2]["target_marker_count"] = 1
+                    elif mutation == "invalid_digest":
+                        joins[0]["decision_digest"] = "not-a-digest"
+                        joins[0]["envoy_decision_digest"] = "not-a-digest"
+                        joins[0]["client_decision_digest"] = "not-a-digest"
+                    elif mutation == "digest_mismatch":
+                        joins[0]["decision_digest"] = HEX_A
+                    else:
+                        joins[0]["decision_digest"] = HEX_A
+                        joins[0]["envoy_decision_digest"] = HEX_A
+                        joins[0]["client_decision_digest"] = HEX_A
+                    payload = b"".join(
+                        (canonical_json(item) + "\n").encode("utf-8")
+                        for item in joins
+                    )
+                joins_path.chmod(0o600)
+                joins_path.write_bytes(payload)
+                joins_path.chmod(0o444)
+                if mutation in {
+                    "invalid_digest",
+                    "digest_mismatch",
+                    "decision_join_digest_mismatch",
+                }:
+                    live = published / "live.html"
+                    live.chmod(0o600)
+                    live.write_bytes(
+                        live.read_bytes().replace(
+                            original_digest.encode("ascii"),
+                            joins[0]["decision_digest"].encode("ascii"),
+                        )
+                    )
+                    live.chmod(0o444)
+                rewrite_public_bundle_hashes(published)
+
+                with self.assertRaises(ControllerError):
+                    local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_rejects_join_track_order_even_with_repaired_public_hashes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            joins_path = published / "joins.jsonl"
+            joins = joins_path.read_text(encoding="utf-8").splitlines()
+            joins_path.chmod(0o600)
+            joins_path.write_text("\n".join(reversed(joins)) + "\n", encoding="utf-8")
+            joins_path.chmod(0o444)
+            rewrite_public_bundle_hashes(published)
+
+            with self.assertRaisesRegex(ControllerError, "track order"):
+                local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_rejects_incomplete_failure_bundle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(
+                Path(directory), completed=False
+            )
+
+            with self.assertRaisesRegex(ControllerError, "accepted local boundary"):
+                local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_rejects_wrong_scope_promotion_policy_and_claim_exclusions(self):
+        mutations = (
+            ("evidence_scope", "kind_cluster_validated"),
+            ("promotion_status", "promoted"),
+            ("evidence_policy", {"inputs": "observed", "outputs": "observed"}),
+            ("claim_exclusions", []),
+            ("bundle_class", "validated_cluster_boundary"),
+            ("run_complete", False),
+            ("teardown", {"status": "pending", "verified_before_publication": False}),
+        )
+        for field, replacement in mutations:
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                published = published_presenter_bundle(Path(directory))
+                path = published / "manifest.json"
+                value = json.loads(path.read_text(encoding="utf-8"))
+                value[field] = replacement
+                path.chmod(0o600)
+                path.write_text(canonical_json(value) + "\n", encoding="utf-8")
+                path.chmod(0o444)
+                local_envoy_module._write_sums(published)
+
+                with self.assertRaises(ControllerError):
+                    local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_rejects_missing_extra_symlink_and_checksum_mismatched_presenter(self):
+        mutations = ("missing", "extra", "extra_directory", "symlink", "checksum")
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                published = published_presenter_bundle(root)
+                live = published / "live.html"
+                if mutation == "missing":
+                    live.unlink()
+                elif mutation == "extra":
+                    (published / "unchecked.txt").write_text("unchecked\n")
+                elif mutation == "extra_directory":
+                    (published / "unchecked").mkdir()
+                elif mutation == "symlink":
+                    outside = root / "outside.html"
+                    outside.write_bytes(live.read_bytes())
+                    live.unlink()
+                    live.symlink_to(outside)
+                else:
+                    live.chmod(0o600)
+                    live.write_bytes(live.read_bytes() + b"\n")
+                    live.chmod(0o444)
+
+                with self.assertRaises(ControllerError):
+                    local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_rejects_deterministic_outputs_with_repaired_public_hashes(self):
+        for relative, original, replacement in (
+            ("live.html", b"PERMIT / PERMIT / DENY", b"PERMIT / PERMIT / PERMIT"),
+            ("summary.md", b"not_promoted", b"promoted____"),
+        ):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as directory:
+                published = published_presenter_bundle(Path(directory))
+                path = published / relative
+                path.chmod(0o600)
+                path.write_bytes(path.read_bytes().replace(original, replacement))
+                path.chmod(0o444)
+                rewrite_public_bundle_hashes(published)
+
+                with self.assertRaises(ControllerError):
+                    local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_cli_prints_only_verified_path_without_constructing_controller(self):
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            stdout = io.StringIO()
+            with mock.patch.object(
+                local_envoy_module,
+                "LocalEnvoyController",
+                side_effect=AssertionError("view constructed runtime controller"),
+            ), mock.patch.object(local_envoy_module.sys, "stdout", stdout), mock.patch(
+                "webbrowser.open",
+                side_effect=AssertionError("view opened a browser"),
+            ):
+                status_code = local_envoy_module.main(
+                    ["view", "--bundle", str(published)]
+                )
+
+            self.assertEqual(status_code, 0)
+            self.assertEqual(
+                stdout.getvalue(),
+                f"accepted presenter {(published / 'live.html').resolve()}\n",
+            )
+
+    def test_view_accepts_only_complete_local_boundary_bundle_read_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            before = {
+                path.relative_to(published).as_posix(): (
+                    path.read_bytes(), stat.S_IMODE(path.stat().st_mode)
+                )
+                for path in published.rglob("*")
+                if path.is_file()
+            }
+
+            presenter = local_envoy_module.verify_presenter_bundle(published)
+
+            self.assertEqual(presenter, (published / "live.html").resolve())
+            after = {
+                path.relative_to(published).as_posix(): (
+                    path.read_bytes(), stat.S_IMODE(path.stat().st_mode)
+                )
+                for path in published.rglob("*")
+                if path.is_file()
+            }
+            self.assertEqual(after, before)
+
+    def test_teardown_finalization_rerenders_presenter_instead_of_rewriting_it(self):
+        value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+        joins = join_evidence(value, requests, decisions, envoy, targets)
+        with tempfile.TemporaryDirectory() as directory:
+            output = write_evidence_bundle(
+                Path(directory),
+                value,
+                requests=requests,
+                decisions=decisions,
+                envoy=envoy,
+                targets=targets,
+                joins=joins,
+            )
+            live = output / "live.html"
+            live.chmod(0o600)
+            live.write_bytes(live.read_bytes().replace(b"PERMIT / PERMIT / DENY", b"DENY"))
+            live.chmod(0o444)
+
+            with self.assertRaisesRegex(ControllerError, "presenter"):
+                finalize_teardown_evidence(output, value["run_id"])
+
+    def test_publication_rerenders_presenter_from_public_records_before_rename(self):
+        value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+        joins = join_evidence(value, requests, decisions, envoy, targets)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provisional = write_evidence_bundle(
+                root / "private",
+                value,
+                requests=requests,
+                decisions=decisions,
+                envoy=envoy,
+                targets=targets,
+                joins=joins,
+            )
+            live = provisional / "live.html"
+            live.chmod(0o600)
+            live.write_text(
+                live.read_text(encoding="utf-8").replace(
+                    "PERMIT / PERMIT / DENY", "PERMIT / PERMIT / PERMIT"
+                ),
+                encoding="utf-8",
+            )
+            live.chmod(0o444)
+            sums = provisional / "SHA256SUMS"
+            sums.chmod(0o600)
+            local_envoy_module._write_sums(provisional)
+            authority = authoritative_bundle_attestation(provisional)
+
+            with self.assertRaisesRegex(ControllerError, "presenter"):
+                finalize_publication(
+                    provisional,
+                    root / "public",
+                    value,
+                    source_attestations=presenter_source_attestations(
+                        provisional, envoy, targets
+                    ),
+                    tool_identities=TOOL_IDENTITIES,
+                    engine_provenance=ENGINE_PROVENANCE,
+                    global_context_before="personal",
+                    global_context_after="personal",
+                    completed=True,
+                    authoritative_attestation=authority,
+                )
+            self.assertFalse((root / "public" / value["run_id"]).exists())
+
+    def test_incomplete_bundle_emits_only_nonpresentable_authoritative_page(self):
+        value = manifest()
+        with tempfile.TemporaryDirectory() as directory:
+            output = _prepare_failure_provisional(
+                Path(directory), value, reset=True
+            )
+
+            text = (output / "live.html").read_text(encoding="utf-8")
+            self.assertIn("INCOMPLETE · NOT PRESENTABLE", text)
+            self.assertIn("No partial outcome", text)
+            self.assertNotIn("PERMIT / PERMIT / DENY", text)
+            self.assertNotIn('<article class="track-card">', text)
+            authority = authoritative_bundle_attestation(output)
+            self.assertEqual(
+                authority["file_sha256"]["live.html"],
+                sha256((output / "live.html").read_bytes()).hexdigest(),
+            )
+
+    def test_live_html_is_authoritative_deterministic_offline_and_claim_bounded(self):
+        value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+        joins = join_evidence(value, requests, decisions, envoy, targets)
+        with tempfile.TemporaryDirectory() as first_directory, tempfile.TemporaryDirectory() as second_directory:
+            first = write_evidence_bundle(
+                Path(first_directory),
+                value,
+                requests=requests,
+                decisions=decisions,
+                envoy=envoy,
+                targets=targets,
+                joins=joins,
+            )
+            second = write_evidence_bundle(
+                Path(second_directory),
+                value,
+                requests=list(reversed(requests)),
+                decisions=list(reversed(decisions)),
+                envoy=list(reversed(envoy)),
+                targets=list(reversed(targets)),
+                joins=list(reversed(joins)),
+            )
+
+            live = (first / "live.html").read_bytes()
+            self.assertEqual(live, (second / "live.html").read_bytes())
+            self.assertTrue(live.endswith(b"\n"))
+            text = live.decode("utf-8")
+            self.assertIn("KIL V3B-1 — Local Envoy Boundary", text)
+            self.assertIn("OBSERVED · LOCAL ENVOY AUTHORIZATION BOUNDARY", text)
+            self.assertIn("INTERMEDIATE · NOT PROMOTED", text)
+            self.assertIn("MODELED INPUTS · OBSERVED OUTPUTS", text)
+            self.assertIn("DERIVED PRESENTER · JSONL + manifest.json + SHA256SUMS CONTROL", text)
+            self.assertIn("PERMIT / PERMIT / DENY", text)
+            self.assertIn("1 / 1 / 0", text)
+            self.assertIn("default-src &#x27;none&#x27;", text)
+            for forbidden in (
+                "<script",
+                " src=",
+                " href=",
+                "url(",
+                "http://",
+                "https://",
+                "<img",
+                "/Users/",
+                "unix:///",
+                "Bearer ",
+                "v3b1-lab-credential",
+                "KIND ORCHESTRATION VALIDATED",
+            ):
+                self.assertNotIn(forbidden, text)
+            sums = (first / "SHA256SUMS").read_text(encoding="ascii")
+            self.assertEqual(sums.count("  live.html\n"), 1)
+            authority = authoritative_bundle_attestation(first)
+            self.assertEqual(
+                authority["file_sha256"]["live.html"], sha256(live).hexdigest()
+            )
+
     def test_bundle_is_canonical_complete_checksummed_and_claim_bounded(self):
         value, requests, decisions, envoy, targets = JoinContractTest().all_records()
         joins = join_evidence(value, requests, decisions, envoy, targets)
@@ -7338,6 +8028,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     "joins.jsonl",
                     "manifest.json",
                     "summary.md",
+                    "live.html",
                     "SHA256SUMS",
                     "raw",
                 },
@@ -7389,7 +8080,7 @@ class EvidenceBundleTest(unittest.TestCase):
             ):
                 self.assertNotIn(forbidden, summary)
             sums = (output / "SHA256SUMS").read_text().splitlines()
-            self.assertEqual(len(sums), 10)
+            self.assertEqual(len(sums), 11)
             for line in sums:
                 digest, name = line.split("  ", 1)
                 self.assertEqual(

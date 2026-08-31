@@ -6,6 +6,7 @@ from base64 import urlsafe_b64encode
 from dataclasses import dataclass
 from decimal import Decimal
 from hashlib import sha256
+from html import escape
 import http.client
 import json
 import os
@@ -136,6 +137,7 @@ _EVIDENCE_FILES = (
     "joins.jsonl",
     "manifest.json",
     "summary.md",
+    "live.html",
 )
 _FREEZE_SOURCES = ("envoy_access", "authz_decisions", "target_markers")
 _LEDGER_PATH = {
@@ -175,6 +177,28 @@ _LEDGER_PROBE = (
 
 class ControllerError(RuntimeError):
     """Raised when the closed controller cannot preserve its invariants."""
+
+
+@dataclass(frozen=True, slots=True)
+class PresenterTrack:
+    track: str
+    outcome: str
+    http_status: int
+    target_marker_count: int
+    forwarded: bool
+    decision_digest: str
+    adapter_reasons: tuple[str, ...]
+    engine_reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PresenterModel:
+    run_id: str
+    request_id: str
+    evidence_scope: str
+    source_commit: str
+    tracks: tuple[PresenterTrack, ...]
+    complete: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -3388,6 +3412,238 @@ def _summary(manifest: Mapping[str, object], joins: Sequence[Mapping[str, object
     )
 
 
+_PRESENTER_CSP = (
+    "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; "
+    "font-src 'none'; media-src 'none'; object-src 'none'; script-src 'none'; "
+    "connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+)
+_PRESENTER_FORBIDDEN = (
+    "/Users/",
+    "/home/",
+    "C:\\Users\\",
+    "unix:///",
+    "Bearer ",
+    "v3b1-lab-credential",
+    "compact_jws",
+)
+
+
+def _presenter_safe_text(label: str, value: object) -> str:
+    if type(value) is not str or not value:
+        raise ControllerError(f"presenter {label} is invalid")
+    if any(token.lower() in value.lower() for token in _PRESENTER_FORBIDDEN):
+        raise ControllerError(f"presenter {label} contains private material")
+    return value
+
+
+def _presenter_model(
+    manifest: Mapping[str, object],
+    decisions: Sequence[Mapping[str, object]],
+    joins: Sequence[Mapping[str, object]],
+) -> PresenterModel:
+    run_id = _presenter_safe_text("run_id", manifest.get("run_id"))
+    request_id = _presenter_safe_text("request_id", manifest.get("request_id"))
+    evidence_scope = _presenter_safe_text(
+        "evidence_scope", manifest.get("evidence_scope")
+    )
+    source_commit = _presenter_safe_text(
+        "source_commit", manifest.get("source_commit")
+    )
+    if evidence_scope != EVIDENCE_SCOPE:
+        raise ControllerError("presenter evidence scope is invalid")
+    if re.fullmatch(r"v3b1-[a-f0-9]{64}", run_id) is None:
+        raise ControllerError("presenter run_id is invalid")
+    if re.fullmatch(r"[a-f0-9]{40}", source_commit) is None:
+        raise ControllerError("presenter source commit is invalid")
+    if not joins:
+        return PresenterModel(
+            run_id, request_id, evidence_scope, source_commit, (), False
+        )
+    decisions_by_track = {
+        str(item.get("track")): item for item in decisions
+    }
+    joins_by_track = {str(item.get("track")): item for item in joins}
+    if (
+        len(decisions_by_track) != len(decisions)
+        or len(joins_by_track) != len(joins)
+        or set(decisions_by_track) != {track.value for track in _TRACKS}
+        or set(joins_by_track) != {track.value for track in _TRACKS}
+    ):
+        raise ControllerError("presenter records do not cover fixed tracks exactly")
+    tracks: list[PresenterTrack] = []
+    for track in _TRACKS:
+        decision = decisions_by_track[track.value]
+        join = joins_by_track[track.value]
+        if (
+            join.get("run_id") != run_id
+            or join.get("request_id") != request_id
+            or join.get("valid") is not True
+            or decision.get("run_id") != run_id
+            or decision.get("request_id") != request_id
+        ):
+            raise ControllerError("presenter record identity or validity is invalid")
+        if decision.get("untrusted_header_names") != []:
+            raise ControllerError("presenter decision contains untrusted headers")
+        outcome = _presenter_safe_text("outcome", join.get("outcome"))
+        http_status = join.get("http_status")
+        marker_count = join.get("target_marker_count")
+        decision_digest = _presenter_safe_text(
+            "decision_digest", join.get("decision_digest")
+        )
+        normalized_decision_digest = _exact_digest(
+            "presenter normalized decision_digest",
+            decision.get("decision_digest"),
+        )
+        if (
+            decision_digest != normalized_decision_digest
+            or decision.get("outcome") != outcome
+            or decision.get("http_status") != http_status
+        ):
+            raise ControllerError("presenter decision and join do not match")
+        upstream = join.get("upstream_host")
+        adapter_reasons = decision.get("adapter_reasons")
+        engine_reasons = decision.get("engine_reasons")
+        if (
+            type(http_status) is not int
+            or type(marker_count) is not int
+            or upstream is not None and type(upstream) is not str
+            or type(adapter_reasons) is not list
+            or type(engine_reasons) is not list
+            or any(type(item) is not str for item in adapter_reasons)
+            or any(type(item) is not str for item in engine_reasons)
+        ):
+            raise ControllerError("presenter record values are invalid")
+        safe_adapter = tuple(
+            _presenter_safe_text("adapter reason", item) for item in adapter_reasons
+        )
+        safe_engine = tuple(
+            _presenter_safe_text("engine reason", item) for item in engine_reasons
+        )
+        tracks.append(
+            PresenterTrack(
+                track.value,
+                outcome,
+                http_status,
+                marker_count,
+                upstream is not None,
+                decision_digest,
+                safe_adapter,
+                safe_engine,
+            )
+        )
+    expected = (
+        ("permit", 200, 1, True),
+        ("permit", 200, 1, True),
+        ("deny", 403, 0, False),
+    )
+    observed = tuple(
+        (
+            item.outcome,
+            item.http_status,
+            item.target_marker_count,
+            item.forwarded,
+        )
+        for item in tracks
+    )
+    if observed != expected:
+        raise ControllerError("presenter result is not the fixed local boundary proof")
+    causal = tuple(
+        (item.adapter_reasons, item.engine_reasons) for item in tracks
+    )
+    if causal != (
+        (("baseline_permitted",), ()),
+        ((), ("permitted",)),
+        ((), ("insufficient_charge",)),
+    ):
+        raise ControllerError("presenter causal reasons are not the fixed proof")
+    return PresenterModel(
+        run_id, request_id, evidence_scope, source_commit, tuple(tracks), True
+    )
+
+
+def _render_live_html(model: PresenterModel) -> bytes:
+    if not isinstance(model, PresenterModel):
+        raise ControllerError("presenter model is invalid")
+    run_id = escape(_presenter_safe_text("run_id", model.run_id), quote=True)
+    source_commit = escape(
+        _presenter_safe_text("source_commit", model.source_commit), quote=True
+    )
+    if model.complete:
+        cards = []
+        for item in model.tracks:
+            reasons = ", ".join((*item.adapter_reasons, *item.engine_reasons)) or "none"
+            cards.append(
+                "<article class=\"track-card\">"
+                f"<h2>{escape(item.track, quote=True)}</h2>"
+                f"<p class=\"outcome\">{escape(item.outcome.upper(), quote=True)}</p>"
+                f"<dl><dt>HTTP</dt><dd>{item.http_status}</dd>"
+                f"<dt>Target markers</dt><dd>{item.target_marker_count}</dd>"
+                f"<dt>Upstream</dt><dd>{'forwarded' if item.forwarded else 'withheld'}</dd>"
+                f"<dt>Reason</dt><dd>{escape(reasons, quote=True)}</dd>"
+                f"<dt>Decision digest</dt><dd><code>{escape(item.decision_digest, quote=True)}</code></dd>"
+                "</dl></article>"
+            )
+        result = (
+            "<p class=\"result\">PERMIT / PERMIT / DENY</p>"
+            "<p class=\"markers\">TARGET MARKERS · 1 / 1 / 0</p>"
+            f"<section class=\"tracks\">{''.join(cards)}</section>"
+        )
+    else:
+        result = (
+            "<section class=\"incomplete\"><h2>INCOMPLETE · NOT PRESENTABLE</h2>"
+            "<p>No partial outcome is represented by this derived page.</p></section>"
+        )
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="{escape(_PRESENTER_CSP, quote=True)}">
+<title>KIL V3B-1 — Local Envoy Boundary</title>
+<style>
+:root {{ color-scheme: dark; }}
+body {{ margin: 0; background: #07131f; color: #e2e8f0; }}
+main {{ max-width: 1180px; margin: 0 auto; padding: 36px 24px 60px; }}
+h1 {{ margin-bottom: 8px; }}
+.badges {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+.badge {{ border: 1px solid #38bdf8; border-radius: 999px; padding: 7px 11px; font-weight: 700; }}
+.warning {{ border-color: #f59e0b; color: #fde68a; }}
+.result {{ color: #a7f3d0; font-size: 28px; font-weight: 900; }}
+.markers {{ color: #bae6fd; font-weight: 800; }}
+.tracks {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }}
+.track-card {{ border: 1px solid #334155; border-radius: 14px; padding: 16px; background: #0b1f33; overflow-wrap: anywhere; }}
+.outcome {{ font-size: 24px; font-weight: 900; }}
+dt {{ color: #94a3b8; margin-top: 8px; }} dd {{ margin-left: 0; }}
+.boundary, .incomplete {{ margin-top: 24px; border: 1px solid #f59e0b; padding: 16px; border-radius: 12px; }}
+code {{ overflow-wrap: anywhere; }}
+@media (max-width: 820px) {{ .tracks {{ grid-template-columns: 1fr; }} }}
+</style>
+</head>
+<body><main>
+<h1>KIL V3B-1 — Local Envoy Boundary</h1>
+<div class="badges">
+<span class="badge">OBSERVED · LOCAL ENVOY AUTHORIZATION BOUNDARY</span>
+<span class="badge warning">INTERMEDIATE · NOT PROMOTED</span>
+<span class="badge">MODELED INPUTS · OBSERVED OUTPUTS</span>
+</div>
+<p>Run <code>{run_id}</code> · source <code>{source_commit}</code></p>
+{result}
+<section class="boundary">
+<strong>DERIVED PRESENTER · JSONL + manifest.json + SHA256SUMS CONTROL</strong>
+<p>VERIFY THE BUNDLE BEFORE PRESENTATION; THIS PAGE DOES NOT ATTEST TEARDOWN BY ITSELF.</p>
+<p>DOES NOT ESTABLISH KIND ORCHESTRATION, KUBERNETES NETWORKPOLICY, HISTORICAL INCIDENT PREVENTION, OR PRODUCTION PERFORMANCE.</p>
+</section>
+</main></body></html>
+"""
+    payload = html.encode("utf-8")
+    if len(payload) > 256 * 1024:
+        raise ControllerError("presenter output exceeds its byte bound")
+    encoded = html.lower()
+    if any(token.lower() in encoded for token in _PRESENTER_FORBIDDEN):
+        raise ControllerError("presenter output contains private material")
+    return payload
+
+
 def _write_sums(output: Path) -> None:
     paths = [output / name for name in _EVIDENCE_FILES]
     raw_root = output / "raw/decisions"
@@ -3464,6 +3720,330 @@ def verify_public_checksums(output: Path) -> None:
         raise ControllerError("public checksum entries are not sorted")
     if recorded != expected_files:
         raise ControllerError("public checksum set is incomplete: unchecked file or omission")
+
+
+def _read_stable_public_file(
+    path: Path, *, maximum_bytes: int = 64 * 1024 * 1024
+) -> tuple[bytes, tuple[int, int, int, int, int]]:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise ControllerError("public evidence file is missing or unsafe") from error
+    try:
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or opened.st_size > maximum_bytes:
+            raise ControllerError("public evidence file is not a bounded regular file")
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(descriptor, min(1024 * 1024, maximum_bytes + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > maximum_bytes:
+                raise ControllerError("public evidence file exceeds its byte bound")
+        finished = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    try:
+        current = os.stat(path, follow_symlinks=False)
+    except OSError as error:
+        raise ControllerError("public evidence file changed during snapshot") from error
+    identity = (
+        opened.st_dev,
+        opened.st_ino,
+        opened.st_size,
+        opened.st_mtime_ns,
+        opened.st_ctime_ns,
+    )
+    if (
+        identity
+        != (
+            finished.st_dev,
+            finished.st_ino,
+            finished.st_size,
+            finished.st_mtime_ns,
+            finished.st_ctime_ns,
+        )
+        or identity
+        != (
+            current.st_dev,
+            current.st_ino,
+            current.st_size,
+            current.st_mtime_ns,
+            current.st_ctime_ns,
+        )
+    ):
+        raise ControllerError("public evidence file changed during snapshot")
+    return b"".join(chunks), identity
+
+
+def _public_bundle_snapshot(
+    output: Path,
+) -> dict[str, bytes]:
+    if output.is_symlink() or not output.is_dir():
+        raise ControllerError("public evidence directory is missing or unsafe")
+    expected = _authoritative_file_names()
+    actual: set[str] = set()
+    directories: set[str] = set()
+    for path in output.rglob("*"):
+        relative = path.relative_to(output).as_posix()
+        if path.is_symlink():
+            raise ControllerError("public evidence contains a symbolic link")
+        if path.is_file():
+            actual.add(relative)
+        elif path.is_dir():
+            directories.add(relative)
+        else:
+            raise ControllerError("public evidence contains an unsafe object")
+    if actual != expected or directories != {"raw", "raw/decisions"}:
+        raise ControllerError("public evidence artifact set is not closed")
+    payloads: dict[str, bytes] = {}
+    identities: dict[str, tuple[int, int, int, int, int]] = {}
+    for relative in sorted(expected):
+        maximum = 1024 * 1024 if relative in {"SHA256SUMS", "manifest.json", "live.html"} else 64 * 1024 * 1024
+        payloads[relative], identities[relative] = _read_stable_public_file(
+            output / relative, maximum_bytes=maximum
+        )
+    try:
+        checksum_text = payloads["SHA256SUMS"].decode("ascii")
+    except UnicodeError as error:
+        raise ControllerError("public checksum file is not closed ASCII") from error
+    lines = checksum_text.splitlines()
+    recorded: list[str] = []
+    for line in lines:
+        if "  " not in line:
+            raise ControllerError("public checksum line is malformed")
+        digest, relative = line.split("  ", 1)
+        _require_sha256("public checksum", digest)
+        if relative not in expected or relative == "SHA256SUMS":
+            raise ControllerError("public checksum path is invalid")
+        if _digest_bytes(payloads[relative]) != digest:
+            raise ControllerError("public checksum mismatch")
+        recorded.append(relative)
+    if recorded != sorted(expected - {"SHA256SUMS"}):
+        raise ControllerError("public checksum set is incomplete or unsorted")
+    for relative, identity in identities.items():
+        try:
+            current = os.stat(output / relative, follow_symlinks=False)
+        except OSError as error:
+            raise ControllerError("public evidence changed after snapshot") from error
+        if identity != (
+            current.st_dev,
+            current.st_ino,
+            current.st_size,
+            current.st_mtime_ns,
+            current.st_ctime_ns,
+        ):
+            raise ControllerError("public evidence changed after snapshot")
+    return payloads
+
+
+def _validate_public_manifest(
+    value: Mapping[str, object], payloads: Mapping[str, bytes]
+) -> None:
+    expected = {
+        "schema_version", "run_id", "request_id", "evidence_scope",
+        "bundle_class", "promotion_status", "run_complete", "platform",
+        "source_commit", "content_identity_sha256", "private_manifest_sha256",
+        "immutable_images", "build_inputs", "verified_tool_identities",
+        "docker_engine_provenance", "global_context_attestation",
+        "evidence_policy", "source_attestations", "artifact_hash_rule",
+        "artifact_sha256", "authoritative_bundle_sha256", "teardown",
+        "claim_exclusions",
+    }
+    if type(value) is not dict or set(value) != expected:
+        raise ControllerError("public manifest fields are not closed")
+    if (
+        value["schema_version"] != "kil.v3b1-public-manifest.v1"
+        or type(value["run_id"]) is not str
+        or re.fullmatch(r"v3b1-[a-f0-9]{64}", value["run_id"]) is None
+        or value["request_id"] != REQUEST_ID
+        or value["evidence_scope"] != EVIDENCE_SCOPE
+        or value["bundle_class"] != "intermediate_provisional_local_boundary"
+        or value["promotion_status"] != "not_promoted"
+        or value["run_complete"] is not True
+        or value["platform"] != PLATFORM
+        or type(value["source_commit"]) is not str
+        or re.fullmatch(r"[a-f0-9]{40}", value["source_commit"]) is None
+    ):
+        raise ControllerError("public manifest is not an accepted local boundary run")
+    for name in (
+        "content_identity_sha256", "private_manifest_sha256",
+        "authoritative_bundle_sha256",
+    ):
+        _require_sha256(f"public manifest {name}", value[name])
+    immutable = value["immutable_images"]
+    if type(immutable) is not dict or set(immutable) != {
+        "python", "envoy_digest", "envoy_image_id", "kil_image_id",
+        "kil_archive_sha256",
+    }:
+        raise ControllerError("public immutable image fields are not closed")
+    _require_digest_ref("public python image", immutable["python"])
+    _require_digest_ref("public Envoy digest", immutable["envoy_digest"])
+    for name in ("envoy_image_id", "kil_image_id"):
+        if type(immutable[name]) is not str or _IMAGE_ID.fullmatch(immutable[name]) is None:
+            raise ControllerError("public image ID is invalid")
+    _require_sha256("public KIL archive", immutable["kil_archive_sha256"])
+    build = value["build_inputs"]
+    if type(build) is not dict or set(build) != {
+        "dockerfile_sha256", "dockerignore_sha256", "build_context_sha256",
+        "context_strategy",
+    } or build["context_strategy"] != "controller_exact_allowlist_for_legacy_builder":
+        raise ControllerError("public build inputs are not closed")
+    for name in ("dockerfile_sha256", "dockerignore_sha256", "build_context_sha256"):
+        _require_sha256(f"public build input {name}", build[name])
+    tools = value["verified_tool_identities"]
+    engine = value["docker_engine_provenance"]
+    if type(tools) is not dict or type(engine) is not dict:
+        raise ControllerError("public provenance is invalid")
+    _validate_public_provenance(tools, engine)
+    context = value["global_context_attestation"]
+    if type(context) is not dict or set(context) != {"before", "after", "unchanged"} or context["unchanged"] is not True or context["before"] != context["after"] or type(context["before"]) is not str:
+        raise ControllerError("public global context attestation is invalid")
+    if value["evidence_policy"] != {"inputs": "modeled", "outputs": "observed"}:
+        raise ControllerError("public evidence policy is invalid")
+    sources = value["source_attestations"]
+    if type(sources) is not list:
+        raise ControllerError("public source attestations are invalid")
+    _validate_source_attestations(sources, completed=True)
+    if value["artifact_hash_rule"] != "sha256_excludes_manifest_summary_and_SHA256SUMS":
+        raise ControllerError("public artifact hash rule is invalid")
+    hashes = value["artifact_sha256"]
+    hash_names = _authoritative_file_names() - {
+        "manifest.json", "summary.md", "SHA256SUMS"
+    }
+    if type(hashes) is not dict or set(hashes) != hash_names:
+        raise ControllerError("public artifact hash map is incomplete")
+    for relative in sorted(hash_names):
+        _require_sha256("public artifact digest", hashes[relative])
+        if hashes[relative] != _digest_bytes(payloads[relative]):
+            raise ControllerError("public artifact digest mismatch")
+    teardown = value["teardown"]
+    if teardown != {"status": "complete", "verified_before_publication": True}:
+        raise ControllerError("public teardown attestation is incomplete")
+    if value["claim_exclusions"] != [
+        "kind_cluster_validated", "historical_prevention",
+        "production_performance", "network_policy_validation",
+    ]:
+        raise ControllerError("public claim exclusions are invalid")
+    _reject_public_secrets(value)
+
+
+def _normalized_presenter_decision_closed(record: Mapping[str, object]) -> None:
+    if (
+        record.get("schema_version") != "kil.v3b1-collected-decision.v1"
+        or record.get("run_id_provenance") != "manifest_attested_enrichment"
+        or type(record.get("source_schema_version")) is not str
+    ):
+        raise ControllerError("presenter decision provenance is invalid")
+    source = {
+        "schema_version": record["source_schema_version"],
+        **{
+            key: value for key, value in record.items()
+            if key not in {
+                "schema_version", "source_schema_version", "source_record_sha256",
+                "run_id_provenance", "run_id",
+            }
+        },
+    }
+    _decision_closed(source)
+    if record.get("source_record_sha256") != _digest_bytes(
+        canonical_json(source).encode("utf-8")
+    ):
+        raise ControllerError("presenter decision source digest is invalid")
+
+
+def _presenter_join_closed(record: Mapping[str, object]) -> None:
+    expected = {
+        "schema_version", "run_id", "request_id", "track", "outcome",
+        "http_status", "decision_digest", "envoy_decision_digest",
+        "upstream_host", "upstream_service_time_ms", "client_response_status",
+        "client_decision_digest", "target_marker_count", "valid",
+    }
+    if set(record) != expected or record.get("schema_version") != JOIN_SCHEMA:
+        raise ControllerError("presenter join fields are not closed")
+    if (
+        record.get("track") not in {track.value for track in _TRACKS}
+        or record.get("outcome") not in {"permit", "deny"}
+        or type(record.get("http_status")) is not int
+        or type(record.get("client_response_status")) is not int
+        or type(record.get("target_marker_count")) is not int
+        or record.get("valid") is not True
+    ):
+        raise ControllerError("presenter join values are invalid")
+    decision_digest = _exact_digest(
+        "presenter decision_digest", record["decision_digest"]
+    )
+    envoy_digest = _exact_digest(
+        "presenter Envoy decision_digest", record["envoy_decision_digest"]
+    )
+    client_digest = _exact_digest(
+        "presenter client decision_digest", record["client_decision_digest"]
+    )
+    if not decision_digest == envoy_digest == client_digest:
+        raise ControllerError("presenter join decision digests do not match")
+    if record["client_response_status"] != record["http_status"]:
+        raise ControllerError("presenter join response statuses do not match")
+    if record["outcome"] == "permit":
+        if (
+            record["http_status"] != 200
+            or record["target_marker_count"] != 1
+            or type(record["upstream_host"]) is not str
+            or not record["upstream_host"]
+            or type(record["upstream_service_time_ms"]) is not int
+            or record["upstream_service_time_ms"] < 0
+        ):
+            raise ControllerError("presenter permit join is invalid")
+        _presenter_safe_text("upstream host", record["upstream_host"])
+    elif (
+        record["http_status"] != 403
+        or record["target_marker_count"] != 0
+        or record["upstream_host"] is not None
+        or record["upstream_service_time_ms"] is not None
+    ):
+        raise ControllerError("presenter deny join is invalid")
+
+
+def verify_presenter_bundle(output: Path) -> Path:
+    """Verify one accepted immutable bundle and return its offline presenter."""
+    candidate = Path(os.path.abspath(output))
+    if candidate.is_symlink():
+        raise ControllerError("public evidence directory is missing or unsafe")
+    try:
+        bundle = candidate.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ControllerError(
+            "public evidence directory is missing or unsafe"
+        ) from error
+    payloads = _public_bundle_snapshot(bundle)
+    manifest = _load_json_bytes(payloads["manifest.json"], "public manifest")
+    _validate_public_manifest(manifest, payloads)
+    if payloads["summary.md"] != _public_summary(manifest).encode("utf-8"):
+        raise ControllerError("public summary does not match accepted evidence")
+    decisions = _parse_jsonl_bytes(
+        payloads["decisions.jsonl"],
+        "presenter decisions",
+        _normalized_presenter_decision_closed,
+        allow_empty=False,
+    )
+    joins = _parse_jsonl_bytes(
+        payloads["joins.jsonl"],
+        "presenter joins",
+        _presenter_join_closed,
+        allow_empty=False,
+    )
+    fixed_order = tuple(track.value for track in _TRACKS)
+    if tuple(item["track"] for item in decisions) != fixed_order or tuple(
+        item["track"] for item in joins
+    ) != fixed_order:
+        raise ControllerError("presenter track order is invalid")
+    expected = _render_live_html(_presenter_model(manifest, decisions, joins))
+    if payloads["live.html"] != expected:
+        raise ControllerError("public presenter does not match accepted evidence")
+    return bundle / "live.html"
 
 
 _AUTHORITATIVE_BUNDLE_SCHEMA = "kil.v3b1-authoritative-bundle.v1"
@@ -3948,6 +4528,23 @@ def finalize_publication(
     expected_summary = _public_summary(staged_manifest).encode("utf-8")
     if (staging / "summary.md").read_bytes() != expected_summary:
         raise ControllerError("staged public summary changed before publication")
+    staged_decisions = _parse_jsonl_bytes(
+        (staging / "decisions.jsonl").read_bytes(),
+        "staged presenter decisions",
+        lambda record: None,
+        allow_empty=not completed,
+    )
+    staged_joins = _parse_jsonl_bytes(
+        (staging / "joins.jsonl").read_bytes(),
+        "staged presenter joins",
+        lambda record: None,
+        allow_empty=not completed,
+    )
+    expected_presenter = _render_live_html(
+        _presenter_model(staged_manifest, staged_decisions, staged_joins)
+    )
+    if (staging / "live.html").read_bytes() != expected_presenter:
+        raise ControllerError("staged public presenter changed before publication")
     _write_sums(staging)
     verify_public_checksums(staging)
     _require_contained(publication_root, safety_root, "private publication staging")
@@ -4018,6 +4615,11 @@ def write_evidence_bundle(
     _write_file(output / "joins.jsonl", _jsonl_payload(joins), 0o444)
     _write_file(output / "manifest.json", _canonical_bytes(manifest), 0o444)
     _write_file(output / "summary.md", _summary(manifest, joins).encode("utf-8"), 0o444)
+    _write_file(
+        output / "live.html",
+        _render_live_html(_presenter_model(manifest, normalized_decisions, joins)),
+        0o444,
+    )
     _write_sums(output)
     _verify_sums(output)
     return output
@@ -4110,6 +4712,16 @@ def _prepare_failure_provisional(
         ).encode("utf-8"),
         0o444,
     )
+    normalized = (
+        _normalized_decision_records(manifest, parsed_decisions)
+        if parsed_decisions
+        else []
+    )
+    _write_file(
+        output / "live.html",
+        _render_live_html(_presenter_model(manifest, normalized, [])),
+        0o444,
+    )
     _write_sums(output)
     _verify_sums(output)
     return output
@@ -4138,6 +4750,17 @@ def finalize_teardown_evidence(output: Path, run_id: str) -> None:
         lambda record: None,
         allow_empty=False,
     )
+    decisions = _parse_jsonl_bytes(
+        (output / "decisions.jsonl").read_bytes(),
+        "presenter decisions",
+        lambda record: None,
+        allow_empty=False,
+    )
+    expected_presenter = _render_live_html(
+        _presenter_model(manifest, decisions, joins)
+    )
+    if (output / "live.html").read_bytes() != expected_presenter:
+        raise ControllerError("teardown presenter changed before finalization")
     _write_file(manifest_path, _canonical_bytes(manifest), 0o444)
     _write_file(output / "summary.md", _summary(manifest, joins).encode("utf-8"), 0o444)
     _write_sums(output)
@@ -7911,13 +8534,19 @@ def make_parser() -> ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     for command in ("preflight", "up", "run", "collect", "down"):
         subparsers.add_parser(command)
+    view = subparsers.add_parser("view")
+    view.add_argument("--bundle", required=True, type=Path)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = make_parser().parse_args(argv)
-    controller = LocalEnvoyController()
     try:
+        if arguments.command == "view":
+            presenter = verify_presenter_bundle(arguments.bundle)
+            print(f"accepted presenter {presenter}")
+            return 0
+        controller = LocalEnvoyController()
         result = getattr(controller, arguments.command)()
     except ControllerError as error:
         raise SystemExit(f"v3b1-local-envoy: {error}") from error
