@@ -5479,3 +5479,37 @@ and immutable image/build-context attestation. Then repeat independent
 specification and quality review before advancing schemas.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-107 — 2026-08-31 — White paper identifies its author and founder
+
+**Input:** Add the founder's name to `kinetic-infrastructure.md` as author and
+founder while the laboratory implementation continues.
+
+**Interpretation:** The official manuscript needs visible authorship and
+founder attribution in its title metadata. The repository's established Git
+author identity is `Storm`, so that exact existing form is used without
+inferring a longer legal or institutional name.
+
+**Decision status:** Confirmed publication metadata change. The manuscript now
+states `Author and founder: Storm` directly below the subtitle. This change does
+not alter KIL architecture, protocol semantics, evidence status, or validation
+claims.
+
+**Rationale:** Prominent and unambiguous attribution preserves authorship in
+Markdown, generated handouts, and future PDF renderings without coupling the
+technical paper to unconfirmed affiliation details.
+
+**Affected artifacts:**
+
+- `docs/paper/kinetic-infrastructure.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Whether the publication form should later use a full
+legal name, institutional affiliation, contact address, ORCID, or separate KTP
+and KIL founder titles remains unconfirmed.
+
+**Next gate:** Continue Task 2 of the approved V3B-1 request-driver plan. Before
+final PDF publication, confirm the preferred full author byline and any
+affiliation metadata.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

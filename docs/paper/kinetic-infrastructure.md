@@ -2,6 +2,8 @@
 
 ## Ambient Enforcement for Agent-Speed Cybersecurity
 
+**Author and founder:** Storm
+
 **Status:** Official KIL white-paper manuscript, prevalidation edition
 
 **Protocol baseline:** Kinetic Trust Protocol v2.0.0
