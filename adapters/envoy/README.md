@@ -22,10 +22,12 @@ backend:             Envoy -> authorization
                      Envoy -> harmless target or withhold
 ```
 
-The frontend is configured exactly for `{driver, Envoy}`. Its physical member
-inventory is exactly `{Envoy}` while the driver remains never-started in
-`created` state, then exactly `{driver, Envoy}` after endpoint materialization.
-Backend membership is exactly `{Envoy, authz, target}`. Envoy is the sole dual-homed component. Across
+The frontend is configured exactly for `{driver, Envoy}`. Physical membership
+is state-derived: with Envoy running it is `{Envoy}` while the driver is
+`created`, `exited`, or `dead`, and `{driver, Envoy}` only while the driver is
+`running`. A stopped Envoy has no physical endpoint. The nominal running
+backend is `{Envoy, authz, target}`; each stopped role is absent from its
+physical inventory. Envoy is the sole configured dual-homed component. Across
 the three tracks the lifecycle owns twelve track containers plus three
 transient validators and six networks. Driver-first exact teardown freezes the
 nine Envoy, authorization, and target sources before proving all fifteen

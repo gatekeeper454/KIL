@@ -1827,6 +1827,89 @@ class ControllerContractTest(unittest.TestCase):
                 ["container_remove_intent", "container_remove_complete"],
             )
 
+    def test_container_stop_history_is_creation_bound_exact_and_totalized(self):
+        name = "kil-v3b1-envoy-credential-policy-baseline-bbbbbbbbbbbb"
+        identity = {"id": HEX_B, "name": name, "role": "envoy"}
+        creation = [
+            {"event": "container_create_intent", "details": {"name": name}},
+            {
+                "event": "container_create_complete",
+                "details": {"id": HEX_B, "name": name},
+            },
+        ]
+        intent = {"event": "container_stop_intent", "details": identity}
+        completion = {
+            "event": "container_stop_complete",
+            "details": {"id": HEX_B, "name": name},
+        }
+
+        self.assertEqual(
+            local_envoy_module._container_stop_transition(creation, identity),
+            "unstarted",
+        )
+        self.assertEqual(
+            local_envoy_module._container_stop_transition(
+                [*creation, intent], identity
+            ),
+            "pending",
+        )
+        self.assertEqual(
+            local_envoy_module._container_stop_transition(
+                [*creation, intent, completion], identity
+            ),
+            "complete",
+        )
+
+        invalid_histories = (
+            [intent],
+            [*creation, completion],
+            [*creation, intent, intent],
+            [
+                creation[0],
+                {
+                    "event": "container_create_complete",
+                    "details": {"id": HEX_C, "name": name},
+                },
+            ],
+            [
+                *creation,
+                {
+                    "event": "container_stop_intent",
+                    "details": {**identity, "id": HEX_C},
+                },
+            ],
+            [
+                *creation,
+                {
+                    "event": "container_stop_intent",
+                    "details": {
+                        **identity,
+                        "name": name.replace("envoy", "authz"),
+                    },
+                },
+            ],
+            [
+                *creation,
+                {
+                    "event": "container_stop_intent",
+                    "details": {**identity, "role": "authz"},
+                },
+            ],
+        )
+        for history in invalid_histories:
+            with self.subTest(history=history):
+                with self.assertRaises(ControllerError):
+                    local_envoy_module._container_stop_transition(history, identity)
+
+        with self.assertRaises(ControllerError):
+            local_envoy_module._container_stop_transition(
+                creation, {**identity, "role": []}
+            )
+        with self.assertRaises(ControllerError):
+            local_envoy_module._validate_lifecycle_event_details(
+                "container_stop_intent", {**identity, "role": []}
+            )
+
     def test_partial_up_and_validator_recovery_use_durable_fixed_names(self):
         for case in ("service", "validator"):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
@@ -2007,17 +2090,25 @@ class ControllerContractTest(unittest.TestCase):
 
     def test_partial_up_envoy_attachment_recovery_is_journal_phase_exact(self):
         scenarios = (
-            ("no_intent_backend", "unstarted", "backend", True),
-            ("no_intent_dual", "unstarted", "dual", False),
-            ("pending_before_effect", "pending", "backend", True),
-            ("pending_after_effect", "pending", "dual", True),
-            ("pending_wrong_alias", "pending", "wrong_alias", False),
-            ("pending_cross_id", "pending", "cross_id", False),
-            ("complete_dual", "complete", "dual", True),
-            ("complete_backend", "complete", "backend", False),
+            ("no_intent_backend", "unstarted", "backend", "running", True),
+            ("no_intent_dual", "unstarted", "dual", "running", False),
+            ("pending_before_effect", "pending", "backend", "running", True),
+            ("pending_after_effect", "pending", "dual", "running", True),
+            ("pending_wrong_alias", "pending", "wrong_alias", "running", False),
+            ("pending_cross_id", "pending", "cross_id", "running", False),
+            ("complete_dual", "complete", "dual", "running", True),
+            ("complete_backend", "complete", "backend", "running", False),
+            ("complete_stopped", "complete", "stopped", "exited", True),
+            (
+                "complete_stopped_stale_endpoint",
+                "complete",
+                "stopped_stale",
+                "exited",
+                False,
+            ),
         )
         for track_index, track in enumerate(LiveTrack):
-            for scenario, phase, observed_shape, accepted in scenarios:
+            for scenario, phase, observed_shape, runtime_state, accepted in scenarios:
                 with (
                     self.subTest(
                         track=track.value,
@@ -2071,8 +2162,10 @@ class ControllerContractTest(unittest.TestCase):
                         "org.opencontainers.image.version": "22.04"
                     }
                     dual_homed = observed_shape in {
-                        "dual", "wrong_alias", "cross_id"
+                        "dual", "wrong_alias", "cross_id", "stopped",
+                        "stopped_stale",
                     }
+                    stale_endpoint = observed_shape == "stopped_stale"
                     aliases = (
                         ["not-envoy", container_id[:12]]
                         if observed_shape == "wrong_alias"
@@ -2140,10 +2233,13 @@ class ControllerContractTest(unittest.TestCase):
                             },
                             "PortBindings": {},
                         },
-                        "State": {"Running": True, "Status": "running"},
+                        "State": {
+                            "Running": runtime_state == "running",
+                            "Status": runtime_state,
+                        },
                         "NetworkSettings": {
                             "Networks": raw_networks,
-                            "Ports": None,
+                            "Ports": None if runtime_state == "running" else {},
                         },
                         "Mounts": [
                             {
@@ -2178,9 +2274,11 @@ class ControllerContractTest(unittest.TestCase):
                             "Driver": "bridge",
                             "Internal": True,
                             "Labels": network_labels,
-                            "Containers": {
-                                container_id: endpoint(envoy_name)
-                            },
+                            "Containers": (
+                                {container_id: endpoint(envoy_name)}
+                                if runtime_state == "running" or stale_endpoint
+                                else {}
+                            ),
                         },
                         frontend_id: {
                             "Id": frontend_id,
@@ -2197,6 +2295,7 @@ class ControllerContractTest(unittest.TestCase):
                                     ): endpoint(envoy_name)
                                 }
                                 if dual_homed
+                                and (runtime_state == "running" or stale_endpoint)
                                 else {}
                             ),
                         },
@@ -2331,7 +2430,7 @@ class ControllerContractTest(unittest.TestCase):
                 "name": track_value["envoy_container"],
                 "role": "envoy",
                 "track": track.value,
-                "state": "running",
+                "runtime_attestation": {"state": "running"},
             },
             {
                 "id": driver_id,
@@ -2388,8 +2487,20 @@ class ControllerContractTest(unittest.TestCase):
                 "role": "driver",
             },
         }
-        for state in ("running", "exited", "dead"):
-            with self.subTest(state=state):
+        objects[1]["runtime_attestation"]["state"] = "running"
+        self.assertEqual(
+            local_envoy_module._network_member_identity_options(
+                objects,
+                value,
+                track.value,
+                "frontend",
+                attachment,
+            ),
+            (realized_members,),
+        )
+
+        for state in ("created", "exited", "dead"):
+            with self.subTest(unrealized_state=state):
                 objects[1]["runtime_attestation"]["state"] = state
                 self.assertEqual(
                     local_envoy_module._network_member_identity_options(
@@ -2399,7 +2510,7 @@ class ControllerContractTest(unittest.TestCase):
                         "frontend",
                         attachment,
                     ),
-                    (realized_members,),
+                    (envoy_member,),
                 )
 
         for state in (None, "paused", True, [], {}):
@@ -2413,6 +2524,128 @@ class ControllerContractTest(unittest.TestCase):
                         value,
                         track.value,
                         "frontend",
+                        attachment,
+                    )
+
+    def test_stopped_services_are_owned_without_physical_network_endpoints(self):
+        value = manifest()
+        track = LiveTrack.CREDENTIAL_POLICY_BASELINE
+        track_value = next(
+            item for item in value["tracks"] if item["track"] == track.value
+        )
+        ids = {
+            "authz": "4" * 64,
+            "target": "5" * 64,
+            "envoy": "6" * 64,
+            "driver": "7" * 64,
+        }
+        objects = [
+            {
+                "id": ids[role],
+                "name": track_value[f"{role}_container"],
+                "role": role,
+                "track": track.value,
+                "runtime_attestation": {
+                    "state": (
+                        "exited"
+                        if role == "envoy"
+                        else "created"
+                        if role == "driver"
+                        else "running"
+                    )
+                },
+            }
+            for role in ("authz", "target", "envoy", "driver")
+        ]
+        attachment = {
+            "track": track.value,
+            "phase": "complete",
+            "container_id": ids["envoy"],
+            "container_name": track_value["envoy_container"],
+            "network_id": "8" * 64,
+            "network_name": track_value["frontend_network"],
+            "alias": "envoy",
+        }
+        backend_members = {
+            ids[role]: {
+                "name": track_value[f"{role}_container"],
+                "role": role,
+            }
+            for role in ("authz", "target")
+        }
+
+        self.assertEqual(
+            local_envoy_module._network_member_identity_options(
+                objects,
+                value,
+                track.value,
+                "backend",
+                attachment,
+            ),
+            (backend_members,),
+        )
+        self.assertEqual(
+            local_envoy_module._network_member_identity_options(
+                objects,
+                value,
+                track.value,
+                "frontend",
+                attachment,
+            ),
+            ({},),
+        )
+
+        next(item for item in objects if item["role"] == "target")[
+            "runtime_attestation"
+        ]["state"] = "dead"
+        self.assertEqual(
+            local_envoy_module._network_member_identity_options(
+                objects,
+                value,
+                track.value,
+                "backend",
+                attachment,
+            ),
+            ({
+                ids["authz"]: {
+                    "name": track_value["authz_container"],
+                    "role": "authz",
+                },
+            },),
+        )
+
+        next(item for item in objects if item["role"] == "envoy")[
+            "runtime_attestation"
+        ]["state"] = "running"
+        self.assertEqual(
+            local_envoy_module._network_member_identity_options(
+                objects,
+                value,
+                track.value,
+                "frontend",
+                attachment,
+            ),
+            ({
+                ids["envoy"]: {
+                    "name": track_value["envoy_container"],
+                    "role": "envoy",
+                },
+            },),
+        )
+
+        next(item for item in objects if item["role"] == "envoy")[
+            "runtime_attestation"
+        ]["state"] = "paused"
+        for segment in ("backend", "frontend"):
+            with self.subTest(invalid_segment_state=segment):
+                with self.assertRaisesRegex(
+                    ControllerError, "network member state is invalid"
+                ):
+                    local_envoy_module._network_member_identity_options(
+                        objects,
+                        value,
+                        track.value,
+                        segment,
                         attachment,
                     )
 
@@ -2535,10 +2768,6 @@ class ControllerContractTest(unittest.TestCase):
                 envoy_id: {
                     "name": track_value["envoy_container"],
                     "role": "envoy",
-                },
-                driver_id: {
-                    "name": track_value["driver_container"],
-                    "role": "driver",
                 },
             },
         )
@@ -7416,6 +7645,22 @@ class JournalRecoveryTest(unittest.TestCase):
                     details = {
                         "name": "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa"
                     }
+                elif phase == "container_stop":
+                    details = {
+                        "id": HEX_A,
+                        "name": "kil-v3b1-authz-credential-policy-baseline-aaaaaaaaaaaa",
+                        "role": "authz",
+                    }
+                    journal_event(
+                        journal,
+                        "container_create_intent",
+                        {"name": details["name"]},
+                    )
+                    journal_event(
+                        journal,
+                        "container_create_complete",
+                        {"id": details["id"], "name": details["name"]},
+                    )
                 elif phase == "network_create":
                     details = {
                         "name": "kil-v3b1-backend-credential-policy-baseline-aaaaaaaaaaaa"
@@ -7691,10 +7936,21 @@ class TeardownContinuationTest(unittest.TestCase):
                 if item is None or item["track"] != track or item["segment"] != segment:
                     raise ControllerError("complete network identity changed")
                 remaining = self._remaining_objects()
-                exact = local_envoy_module._network_member_identities(
+                owned = local_envoy_module._network_member_identities(
                     remaining, track, segment
                 )
-                if expected_members != exact or (require_empty_membership and exact):
+                states = {
+                    item["id"]: item["runtime_attestation"]["state"]
+                    for item in remaining
+                }
+                physical = {
+                    object_id: identity
+                    for object_id, identity in owned.items()
+                    if states[object_id] == "running"
+                }
+                if expected_members != physical or (
+                    require_empty_membership and physical
+                ):
                     raise ControllerError("complete network membership changed")
                 return self._copy(item)
 
@@ -9408,6 +9664,39 @@ class TeardownContinuationTest(unittest.TestCase):
                 controller.running_ids = {
                     item["id"] for item in [*objects, *transients]
                 }
+                for item in objects:
+                    journal_event(
+                        controller.journal_path,
+                        "container_create_intent",
+                        {"name": item["name"]},
+                    )
+                    journal_event(
+                        controller.journal_path,
+                        "container_create_complete",
+                        {"id": item["id"], "name": item["name"]},
+                    )
+                for item in transients:
+                    journal_event(
+                        controller.journal_path,
+                        "validator_create_intent",
+                        {"name": item["name"]},
+                    )
+                    journal_event(
+                        controller.journal_path,
+                        "validator_create_complete",
+                        {"id": item["id"], "name": item["name"]},
+                    )
+                for item in networks:
+                    journal_event(
+                        controller.journal_path,
+                        "network_create_intent",
+                        {"name": item["name"]},
+                    )
+                    journal_event(
+                        controller.journal_path,
+                        "network_create_complete",
+                        {"id": item["id"], "name": item["name"]},
+                    )
 
                 published = controller.down()
 
@@ -9697,6 +9986,20 @@ class TeardownContinuationTest(unittest.TestCase):
                 path.chmod(0o600)
         persist_active_state(controller.state_path, private_manifest, value)
         controller.bound_state = load_bound_active_state(controller.state_path)
+        for item in controller.bound_state["objects"]:
+            creation_prefix = (
+                "validator" if item["role"] == "validator" else "container"
+            )
+            journal_event(
+                controller.journal_path,
+                f"{creation_prefix}_create_intent",
+                {"name": item["name"]},
+            )
+            journal_event(
+                controller.journal_path,
+                f"{creation_prefix}_create_complete",
+                {"id": item["id"], "name": item["name"]},
+            )
         controller.running = {
             item["id"]
             for item in controller.bound_state["objects"]
@@ -11228,6 +11531,59 @@ class TeardownContinuationTest(unittest.TestCase):
                     controller.state_path
                 )
                 controller.bound_manifest = value
+                for item in controller.bound_state["network_objects"]:
+                    journal_event(
+                        controller.journal_path,
+                        "network_create_intent",
+                        {"name": item["name"]},
+                    )
+                    journal_event(
+                        controller.journal_path,
+                        "network_create_complete",
+                        {"id": item["id"], "name": item["name"]},
+                    )
+                for item in controller.bound_state["objects"]:
+                    journal_event(
+                        controller.journal_path,
+                        "container_create_intent",
+                        {"name": item["name"]},
+                    )
+                    journal_event(
+                        controller.journal_path,
+                        "container_create_complete",
+                        {"id": item["id"], "name": item["name"]},
+                    )
+                for track in LiveTrack:
+                    track_value = local_envoy_module._track_manifest(value, track)
+                    envoy = next(
+                        item
+                        for item in controller.bound_state["objects"]
+                        if item["track"] == track.value
+                        and item["role"] == "envoy"
+                    )
+                    frontend = next(
+                        item
+                        for item in controller.bound_state["network_objects"]
+                        if item["track"] == track.value
+                        and item["segment"] == "frontend"
+                    )
+                    attachment = {
+                        "container_id": envoy["id"],
+                        "container_name": track_value["envoy_container"],
+                        "network_id": frontend["id"],
+                        "network_name": track_value["frontend_network"],
+                        "alias": "envoy",
+                    }
+                    journal_event(
+                        controller.journal_path,
+                        "network_connect_intent",
+                        attachment,
+                    )
+                    journal_event(
+                        controller.journal_path,
+                        "network_connect_complete",
+                        attachment,
+                    )
                 requests = [request_record(value, track) for track in LiveTrack]
                 controller.request_records = requests
                 if failure != "no_run":
@@ -11293,11 +11649,11 @@ class TeardownContinuationTest(unittest.TestCase):
                 self.assertIn("failure", public_manifest["bundle_class"])
                 self.assertEqual(
                     controller.envoy_attachment_phases,
-                    ["unstarted"] * 6,
+                    ["complete"] * 9,
                 )
                 self.assertEqual(
                     controller.frontend_attachment_phases,
-                    ["unstarted"] * 6,
+                    ["complete"] * 6,
                 )
                 if failure == "no_run":
                     self.assertEqual((published / "joins.jsonl").read_bytes(), b"")
@@ -11731,7 +12087,21 @@ class RuntimeAttestationTest(unittest.TestCase):
 
         events = []
         controller = StopController(stopped)
+        creation_history = [
+            {
+                "event": "container_create_intent",
+                "details": {"name": running["name"]},
+            },
+            {
+                "event": "container_create_complete",
+                "details": {"id": running["id"], "name": running["name"]},
+            },
+        ]
         with mock.patch.object(
+            local_envoy_module,
+            "load_lifecycle_journal",
+            return_value={"events": creation_history},
+        ), mock.patch.object(
             local_envoy_module,
             "journal_event",
             side_effect=lambda path, event, details: events.append((event, details)),
@@ -11757,6 +12127,10 @@ class RuntimeAttestationTest(unittest.TestCase):
         rejected = StopController(changed)
         with mock.patch.object(
             local_envoy_module,
+            "load_lifecycle_journal",
+            return_value={"events": creation_history},
+        ), mock.patch.object(
+            local_envoy_module,
             "journal_event",
             side_effect=lambda path, event, details: rejected_events.append(
                 (event, details)
@@ -11775,6 +12149,189 @@ class RuntimeAttestationTest(unittest.TestCase):
             [event for event, _ in rejected_events],
             ["container_stop_intent"],
         )
+
+    def test_exact_stop_completes_a_pending_intent_for_an_already_stopped_container(self):
+        value = manifest()
+        running = local_envoy_module._synthetic_state_object(
+            value,
+            next(item for item in value["containers"] if item["role"] == "envoy"),
+        )
+        running["runtime_attestation"]["published_ports"] = {"10000/tcp": None}
+        stopped = json.loads(json.dumps(running))
+        stopped["runtime_attestation"]["state"] = "exited"
+        stopped["runtime_attestation"]["published_ports"] = {}
+        history = [
+            {
+                "event": "container_create_intent",
+                "details": {"name": running["name"]},
+            },
+            {
+                "event": "container_create_complete",
+                "details": {"id": running["id"], "name": running["name"]},
+            },
+            {
+                "event": "container_stop_intent",
+                "details": {
+                    "id": running["id"],
+                    "name": running["name"],
+                    "role": running["role"],
+                },
+            },
+        ]
+
+        class PendingStopController:
+            journal_path = Path("/ignored/journal.json")
+
+            def __init__(self):
+                self.commands = []
+
+            @staticmethod
+            def docker_command(*parts):
+                return list(parts)
+
+            def _inspect_container(self, *args, **kwargs):
+                return stopped
+
+            def _execute(self, argv, *, timeout_s, docker=False):
+                command = list(argv)
+                self.commands.append(command)
+                if command[0] == "inspect":
+                    return CommandResult(0, "false\n", "")
+                raise AssertionError(f"unexpected recovery command: {command}")
+
+        events = []
+        controller = PendingStopController()
+        with mock.patch.object(
+            local_envoy_module,
+            "load_lifecycle_journal",
+            return_value={"events": history},
+        ), mock.patch.object(
+            local_envoy_module,
+            "journal_event",
+            side_effect=lambda path, event, details: events.append((event, details)),
+        ):
+            LocalEnvoyController._stop_and_attest_container(
+                controller,
+                running,
+                value,
+                envoy_attachment={},
+            )
+
+        self.assertEqual([event for event, _ in events], ["container_stop_complete"])
+        self.assertEqual(controller.commands, [[
+            "inspect", "--format", "{{.State.Running}}", running["id"]
+        ]])
+
+    def test_exact_stop_replay_matrix_is_idempotent_at_crash_boundaries(self):
+        value = manifest()
+        running = local_envoy_module._synthetic_state_object(
+            value,
+            next(item for item in value["containers"] if item["role"] == "envoy"),
+        )
+        running["runtime_attestation"]["published_ports"] = {"10000/tcp": None}
+        stopped = json.loads(json.dumps(running))
+        stopped["runtime_attestation"]["state"] = "exited"
+        stopped["runtime_attestation"]["published_ports"] = {}
+        creation = [
+            {
+                "event": "container_create_intent",
+                "details": {"name": running["name"]},
+            },
+            {
+                "event": "container_create_complete",
+                "details": {"id": running["id"], "name": running["name"]},
+            },
+        ]
+        intent = {
+            "event": "container_stop_intent",
+            "details": {
+                "id": running["id"],
+                "name": running["name"],
+                "role": running["role"],
+            },
+        }
+        completion = {
+            "event": "container_stop_complete",
+            "details": {"id": running["id"], "name": running["name"]},
+        }
+
+        class ReplayStopController:
+            journal_path = Path("/ignored/journal.json")
+
+            def __init__(self, initial):
+                self.current = json.loads(json.dumps(initial))
+                self.commands = []
+
+            @staticmethod
+            def docker_command(*parts):
+                return list(parts)
+
+            def _inspect_container(self, *args, **kwargs):
+                return json.loads(json.dumps(self.current))
+
+            def _execute(self, argv, *, timeout_s, docker=False):
+                command = list(argv)
+                self.commands.append(command)
+                if command[0] == "inspect":
+                    is_running = self.current["runtime_attestation"]["state"] == "running"
+                    return CommandResult(0, ("true" if is_running else "false") + "\n", "")
+                if command[0] == "stop":
+                    self.current = json.loads(json.dumps(stopped))
+                    return CommandResult(0, running["id"] + "\n", "")
+                raise AssertionError(f"unexpected replay command: {command}")
+
+        scenarios = (
+            ("unstarted_running", creation, running, False, [
+                "container_stop_intent", "container_stop_complete"
+            ], 1),
+            ("pending_running", [*creation, intent], running, False, [
+                "container_stop_complete"
+            ], 1),
+            ("pending_stopped", [*creation, intent], stopped, False, [
+                "container_stop_complete"
+            ], 0),
+            ("complete_stopped", [*creation, intent, completion], stopped, False, [], 0),
+            ("complete_running", [*creation, intent, completion], running, True, [], 0),
+        )
+        for name, history, initial, rejected, expected_events, stop_count in scenarios:
+            with self.subTest(name=name):
+                emitted = []
+                controller = ReplayStopController(initial)
+                with mock.patch.object(
+                    local_envoy_module,
+                    "load_lifecycle_journal",
+                    return_value={"events": history},
+                ), mock.patch.object(
+                    local_envoy_module,
+                    "journal_event",
+                    side_effect=lambda path, event, details: emitted.append(
+                        (event, details)
+                    ),
+                ):
+                    if rejected:
+                        with self.assertRaisesRegex(
+                            ControllerError, "completed container stop is running"
+                        ):
+                            LocalEnvoyController._stop_and_attest_container(
+                                controller,
+                                running,
+                                value,
+                                envoy_attachment={},
+                            )
+                    else:
+                        LocalEnvoyController._stop_and_attest_container(
+                            controller,
+                            running,
+                            value,
+                            envoy_attachment={},
+                        )
+                self.assertEqual(
+                    [event for event, _ in emitted], expected_events
+                )
+                self.assertEqual(
+                    sum(command[0] == "stop" for command in controller.commands),
+                    stop_count,
+                )
 
     def test_minimal_staged_build_context_is_exact_and_hashed(self):
         with tempfile.TemporaryDirectory() as directory:
