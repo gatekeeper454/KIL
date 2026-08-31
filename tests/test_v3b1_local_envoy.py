@@ -4297,6 +4297,236 @@ class JournalRecoveryTest(unittest.TestCase):
 
 
 class TeardownContinuationTest(unittest.TestCase):
+    def test_partial_up_failure_intent_precedes_profile_delete_and_recovers_absent(
+        self,
+    ):
+        for crash_stage in (
+            "after_profile_delete_intent",
+            "after_profile_disappearance",
+            "after_profile_delete_complete",
+        ):
+            with (
+                self.subTest(crash_stage=crash_stage),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory) / "repo"
+                profile_path = root / "deploy/kind/v3b-profile.json"
+                profile_path.parent.mkdir(parents=True)
+                profile_path.write_bytes(
+                    (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+                )
+
+                class DeleteCrashController(LocalEnvoyController):
+                    def __init__(self, *args, **kwargs):
+                        super().__init__(*args, **kwargs)
+                        self.commands = []
+                        self.deleted = False
+                        self.crashed = False
+
+                    def _execute(self, argv, *, timeout_s, docker=False):
+                        self.commands.append(list(argv))
+                        if list(argv[:3]) == ["colima", "list", "--json"]:
+                            return CommandResult(
+                                0,
+                                "[]\n"
+                                if self.deleted
+                                else (
+                                    '{"name":"kil-v3-lab","status":"Running",'
+                                    '"arch":"aarch64","cpus":4,'
+                                    '"memory":8589934592,"disk":64424509440,'
+                                    '"runtime":"docker"}\n'
+                                ),
+                                "",
+                            )
+                        if argv[0:2] == ["colima", "delete"]:
+                            if (
+                                crash_stage == "after_profile_delete_intent"
+                                and not self.crashed
+                            ):
+                                self.crashed = True
+                                raise ControllerError(
+                                    "injected crash after profile delete intent"
+                                )
+                            self.deleted = True
+                            if (
+                                crash_stage == "after_profile_disappearance"
+                                and not self.crashed
+                            ):
+                                self.crashed = True
+                                raise ControllerError(
+                                    "injected crash after profile disappearance"
+                                )
+                            return CommandResult(0, "", "")
+                        if "context" in argv and "show" in argv:
+                            return CommandResult(0, "personal\n", "")
+                        if len(argv) > 5 and argv[5] == "ps":
+                            return CommandResult(0, "", "")
+                        if len(argv) > 6 and argv[5:7] == ["network", "ls"]:
+                            return CommandResult(0, "", "")
+                        return CommandResult(0, "", "")
+
+                    def _attest_colima_after_start(self, execution_nonce=None):
+                        return {"test_attestation": True}
+
+                    def _capture_global_context(self):
+                        if (
+                            crash_stage == "after_profile_delete_complete"
+                            and self.deleted
+                            and not self.crashed
+                            and any(
+                                event["event"] == "colima_delete_complete"
+                                for event in load_lifecycle_journal(
+                                    self.journal_path
+                                )["events"]
+                            )
+                        ):
+                            self.crashed = True
+                            raise ControllerError(
+                                "injected crash after profile delete completion"
+                            )
+                        return super()._capture_global_context()
+
+                controller = DeleteCrashController(
+                    root,
+                    FakeRunner(),
+                    home=Path(directory) / "home",
+                    port_probe=lambda port: False,
+                    tool_verifier=lambda: TOOL_IDENTITIES,
+                )
+                controller._prepare_private_roots()
+                value = manifest(
+                    docker_host=controller.docker_host,
+                    execution_nonce=HEX_A,
+                )
+                private_manifest = controller.private_root / "manifests/run.json"
+                private_manifest.write_text(canonical_json(value) + "\n")
+                create_lifecycle_journal(
+                    controller.journal_path,
+                    private_root=controller.private_root,
+                    repository_root=root,
+                    docker_host=controller.docker_host,
+                    source_commit="d" * 40,
+                    execution_nonce=HEX_A,
+                    global_context="personal",
+                )
+                journal_event(
+                    controller.journal_path,
+                    "preflight_complete",
+                    {
+                        "tool_identities": TOOL_IDENTITIES,
+                        "ports": list(controller.profile.gateway_ports),
+                        "dedicated_profile_absent": True,
+                    },
+                )
+                journal_event(
+                    controller.journal_path,
+                    "colima_attestation_complete",
+                    {"profile": "kil-v3-lab", "attestation": {}},
+                )
+                journal_event(
+                    controller.journal_path,
+                    "engine_provenance_observed",
+                    ENGINE_PROVENANCE,
+                )
+                _bind_journal_manifest(
+                    controller.journal_path, private_manifest, value
+                )
+
+                with self.assertRaisesRegex(ControllerError, "injected crash"):
+                    controller.down()
+
+                interrupted = load_lifecycle_journal(controller.journal_path)
+                failure_intents = [
+                    event
+                    for event in interrupted["events"]
+                    if event["event"] == "post_teardown_failure_bundle_intent"
+                ]
+                self.assertEqual(len(failure_intents), 1)
+                partial_rejection = next(
+                    event
+                    for event in interrupted["events"]
+                    if event["event"] == "partial_up_evidence_rejected"
+                )
+                delete_intent = next(
+                    event
+                    for event in interrupted["events"]
+                    if event["event"] == "colima_delete_intent"
+                )
+                stop_intent = next(
+                    event
+                    for event in interrupted["events"]
+                    if event["event"] == "colima_stop_intent"
+                )
+                self.assertEqual(
+                    failure_intents[0]["details"],
+                    {
+                        "run_id": value["run_id"],
+                        "evidence_rejection": "partial_up:up_complete_absent",
+                        "replacement": "deterministic_empty_failure_v1",
+                    },
+                )
+                self.assertLess(
+                    partial_rejection["sequence"],
+                    failure_intents[0]["sequence"],
+                )
+                self.assertLess(
+                    failure_intents[0]["sequence"], stop_intent["sequence"]
+                )
+                self.assertLess(
+                    failure_intents[0]["sequence"], delete_intent["sequence"]
+                )
+                self.assertFalse(
+                    any(
+                        event["event"] == "post_teardown_failure_bundle_prepared"
+                        for event in interrupted["events"]
+                    )
+                )
+                self.assertFalse(
+                    (
+                        controller._private_provisional_root()
+                        / str(value["run_id"])
+                    ).exists()
+                )
+
+                published = controller.down()
+
+                public_manifest = json.loads(
+                    (published / "manifest.json").read_text()
+                )
+                self.assertFalse(public_manifest["run_complete"])
+                self.assertEqual(
+                    public_manifest["promotion_status"], "not_promoted"
+                )
+                self.assertIn("failure", public_manifest["bundle_class"])
+                archived_path = (
+                    controller._private_completed_root()
+                    / f"{value['run_id']}.journal.json"
+                )
+                self.assertTrue(archived_path.is_file())
+                archived = load_lifecycle_journal(archived_path)
+                archived_intents = [
+                    event
+                    for event in archived["events"]
+                    if event["event"] == "post_teardown_failure_bundle_intent"
+                ]
+                self.assertEqual(archived_intents, failure_intents)
+                prepared = [
+                    event
+                    for event in archived["events"]
+                    if event["event"] == "post_teardown_failure_bundle_prepared"
+                ]
+                self.assertEqual(len(prepared), 1)
+                self.assertEqual(
+                    prepared[0]["details"]["intent_sequence"],
+                    failure_intents[0]["sequence"],
+                )
+                self.assertEqual(
+                    public_manifest["authoritative_bundle_sha256"],
+                    prepared[0]["details"]["authoritative_attestation"][
+                        "binding_sha256"
+                    ],
+                )
+
     def test_partial_up_down_retry_keeps_initial_rejection_and_cleans_exact_remainder(
         self,
     ):

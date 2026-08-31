@@ -7600,6 +7600,8 @@ class LocalEnvoyController:
             up_complete_observed and partial_rejections
         ):
             raise ControllerError("partial-up evidence status is contradictory")
+        failure_details: dict[str, object] | None = None
+        failure_intent_sequence: int | None = None
         if not up_complete_observed:
             if not partial_rejections:
                 survivor_identities = {
@@ -7632,12 +7634,37 @@ class LocalEnvoyController:
                         ),
                     },
                 )
-            for item in ordered:
-                self._stop_and_attest_container(item, manifest)
             output = None
             source_attestations = []
             completed = False
             evidence_rejection = "partial_up:up_complete_absent"
+            failure_details = {
+                "run_id": manifest["run_id"],
+                "evidence_rejection": evidence_rejection,
+                "replacement": _FAILURE_BUNDLE_REPLACEMENT,
+            }
+            failure_transition = _post_teardown_failure_transition(
+                load_lifecycle_journal(self.journal_path)["events"],  # type: ignore[arg-type]
+                str(manifest["run_id"]),
+            )
+            if failure_transition is None:
+                intent_journal = journal_event(
+                    self.journal_path,
+                    "post_teardown_failure_bundle_intent",
+                    failure_details,
+                )
+                intent_events = intent_journal["events"]
+                assert isinstance(intent_events, list)
+                failure_intent_sequence = len(intent_events)
+            else:
+                failure_intent, _ = failure_transition
+                if failure_intent["details"] != failure_details:
+                    raise ControllerError(
+                        "partial-up failure replacement provenance changed"
+                    )
+                failure_intent_sequence = int(failure_intent["sequence"])
+            for item in ordered:
+                self._stop_and_attest_container(item, manifest)
         else:
             requests_state = journal["requests"]
             assert isinstance(requests_state, dict)
@@ -7795,19 +7822,21 @@ class LocalEnvoyController:
         if global_after != journal["global_context_before"]:
             raise ControllerError("global Docker context changed during lifecycle")
         if output is None:
-            failure_details = {
-                "run_id": manifest["run_id"],
-                "evidence_rejection": evidence_rejection,
-                "replacement": _FAILURE_BUNDLE_REPLACEMENT,
-            }
-            intent_journal = journal_event(
-                self.journal_path,
-                "post_teardown_failure_bundle_intent",
-                failure_details,
-            )
-            intent_events = intent_journal["events"]
-            assert isinstance(intent_events, list)
-            intent_sequence = len(intent_events)
+            if failure_details is None:
+                failure_details = {
+                    "run_id": manifest["run_id"],
+                    "evidence_rejection": evidence_rejection,
+                    "replacement": _FAILURE_BUNDLE_REPLACEMENT,
+                }
+                intent_journal = journal_event(
+                    self.journal_path,
+                    "post_teardown_failure_bundle_intent",
+                    failure_details,
+                )
+                intent_events = intent_journal["events"]
+                assert isinstance(intent_events, list)
+                failure_intent_sequence = len(intent_events)
+            assert failure_intent_sequence is not None
             output = _prepare_failure_provisional(
                 self._private_provisional_root(), manifest, reset=True
             )
@@ -7819,7 +7848,7 @@ class LocalEnvoyController:
                 "post_teardown_failure_bundle_prepared",
                 {
                     **failure_details,
-                    "intent_sequence": intent_sequence,
+                    "intent_sequence": failure_intent_sequence,
                     "authoritative_attestation": authoritative,
                 },
             )

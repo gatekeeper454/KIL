@@ -4205,3 +4205,52 @@ unchanged.
 committed zero-request live smoke before the single accepted proof run.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-085 — 2026-08-30 — Partial-up failure replacement is authorized before profile deletion
+
+**Input:** Close the final partial-up publication recovery gap by persisting
+failure-bundle replacement intent before any profile mutation, then prove
+recovery across crashes after profile delete intent, after actual profile
+disappearance, and after durable delete completion but before preparation or
+publication.
+
+**Interpretation:** The partial-up rejection establishes that no promotable
+source evidence exists. Before teardown can make the dedicated profile
+unavailable, the journal must durably authorize the one permitted replacement:
+the deterministic empty failure bundle. That intent is provenance, while the
+authoritative provisional attestation can only be created later from the
+materialized replacement bytes.
+
+**Decision status:** Confirmed harness-only correction complete, pending
+independent re-review. Immediately after the partial-up path sets `output` to
+none, the controller writes or reuses one closed
+`post_teardown_failure_bundle_intent`, bound to the run ID, fixed partial-up
+rejection reason, and fixed replacement class. Its sequence precedes container,
+network, and profile mutation. After verified profile absence, either the same
+invocation or the absent-profile recovery path materializes the deterministic
+failure provisional, derives its authoritative attestation, binds preparation
+to the original intent sequence, publishes a truthful incomplete/nonpromotable
+bundle, and archives the lifecycle journal.
+
+**Rationale:** If profile deletion wins the race before replacement intent is
+durable, recovery has neither source evidence nor authority to manufacture a
+failure artifact and incorrectly depends on an attestation that cannot exist.
+Separating early authorization from later byte attestation makes every crash
+boundary recoverable without inventing evidence.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker or Colima operation was performed.
+Installed-runtime deletion timing remains gated on independent review and the
+committed zero-request smoke. KIL, signed composite state, authorization,
+Envoy routing, target behavior, and evidence acceptance semantics are
+unchanged.
+
+**Next gate:** Independent Task 4 publication-order re-review, then the
+committed zero-request live smoke before the single accepted proof run.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
