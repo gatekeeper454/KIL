@@ -6965,3 +6965,35 @@ prohibited until the merged v3 snapshot contract passes a fresh request-free
 publication gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-129 — 2026-08-31 — Audience walkthrough exported and opened as an interactive browser page
+
+**Input:** Provide the live-demo walkthrough as an interactive page rather
+than Markdown.
+
+**Interpretation:** Export the verified audience walkthrough to a standalone
+document inside the KIL repository's generated-artifact area and present it in
+the in-app browser with all seven stages interactive.
+
+**Decision status:** Confirmed presentation export. The standalone page is
+available at `artifacts/generated/kil-live-demo-walkthrough.html` and was opened
+through a localhost-only browser session. Stage interaction was rechecked before
+handoff. This export does not change the evidence status of the laboratory.
+
+**Rationale:** A presenter needs a directly operable page, while the document
+must continue to distinguish the observed request-free lifecycle, the modeled
+V3A outcome, and the pending V3B-1 central enforcement result.
+
+**Affected artifacts:**
+
+- ignored generated export `artifacts/generated/kil-live-demo-walkthrough.html`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The standalone page is a walkthrough, not an accepted
+live evidence bundle. The v3 snapshot specification still awaits founder review.
+
+**Next gate:** Approve the written v3 snapshot specification, produce the
+test-first implementation plan, and keep the central `run` prohibited until a
+fresh merged request-free v3 publication gate passes.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
