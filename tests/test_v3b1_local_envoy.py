@@ -4536,6 +4536,93 @@ class DriverReadinessTest(unittest.TestCase):
                         all(process.reaped for process in factory.processes)
                     )
 
+    def test_diagnostic_post_session_oserrors_fail_closed_without_raw_text(self):
+        baseline = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
+        for name in ("readiness_persistence", "deadline_creation"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                controller, factory, _, drivers, events = self.make_controller(directory)
+                real_journal_event = local_envoy_module.journal_event
+                failed_once = False
+
+                def fail_readiness_persistence(path, event, details):
+                    nonlocal failed_once
+                    if (
+                        name == "readiness_persistence"
+                        and not failed_once
+                        and event == "driver_readiness_complete"
+                        and details.get("track") == baseline
+                    ):
+                        failed_once = True
+                        raise OSError("PRIVATE diagnostic persistence failure")
+                    return real_journal_event(path, event, details)
+
+                with ExitStack() as stack:
+                    stack.enter_context(
+                        mock.patch(
+                            "tools.v3b1_local_envoy.journal_event",
+                            side_effect=fail_readiness_persistence,
+                        )
+                    )
+                    if name == "deadline_creation":
+                        stack.enter_context(
+                            mock.patch.object(
+                                controller,
+                                "_monotonic_now",
+                                side_effect=OSError(
+                                    "PRIVATE diagnostic deadline failure"
+                                ),
+                            )
+                        )
+                    with self.assertRaisesRegex(ControllerError, "failed closed|down"):
+                        controller.readiness()
+
+                journal = load_lifecycle_journal(controller.journal_path)
+                self.assertEqual(
+                    {request["status"] for request in journal["requests"].values()},
+                    {"not_attempted"},
+                )
+                self.assertTrue(controller.readiness_poison_path.is_file())
+                failure = next(
+                    event for event in journal["events"]
+                    if event["event"] == "driver_readiness_failed"
+                )["details"]
+                if name == "readiness_persistence":
+                    self.assertEqual(
+                        failure,
+                        {
+                            "readiness_nonce": failure["readiness_nonce"],
+                            "scope": "driver",
+                            "track": baseline,
+                            "driver_id": drivers[baseline]["id"],
+                            "category": "controller_persistence",
+                            "stage": "readiness_complete",
+                        },
+                    )
+                else:
+                    self.assertEqual(
+                        failure,
+                        {
+                            "readiness_nonce": failure["readiness_nonce"],
+                            "scope": "controller",
+                            "track": None,
+                            "driver_id": None,
+                            "category": "clock_failure",
+                            "stage": "readiness_deadline",
+                        },
+                    )
+                self.assertTrue(all(process.stdin.closed for process in factory.processes))
+                self.assertTrue(all(process.exited for process in factory.processes))
+                self.assertTrue(all(process.reaped for process in factory.processes))
+                raw = controller.journal_path.read_text()
+                self.assertNotIn("PRIVATE diagnostic persistence failure", raw)
+                self.assertNotIn("PRIVATE diagnostic deadline failure", raw)
+                starts = len([event for event in events if event[0] == "start"])
+                with self.assertRaisesRegex(ControllerError, "poison|incomplete|down"):
+                    controller.readiness()
+                self.assertEqual(
+                    len([event for event in events if event[0] == "start"]), starts
+                )
+
     def test_cli_exposes_readiness_subcommand(self):
         self.assertEqual(make_parser().parse_args(["readiness"]).command, "readiness")
 
@@ -4959,6 +5046,91 @@ class DriverRequestSequencingTest(unittest.TestCase):
                 raw = controller.journal_path.read_text()
                 self.assertNotIn("private malformed readiness", raw)
                 self.assertNotIn("private readiness persistence failure", raw)
+                starts = len([event for event in events if event[0] == "start"])
+                with self.assertRaisesRegex(ControllerError, "poison|incomplete|down"):
+                    controller.run()
+                self.assertEqual(
+                    len([event for event in events if event[0] == "start"]), starts
+                )
+
+    def test_run_post_session_oserrors_fail_closed_without_raw_text(self):
+        baseline = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
+        for name in ("readiness_persistence", "deadline_creation"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                controller, factory, drivers, events, _ = self.make_controller(directory)
+                real_journal_event = local_envoy_module.journal_event
+                failed_once = False
+
+                def fail_readiness_persistence(path, event, details):
+                    nonlocal failed_once
+                    if (
+                        name == "readiness_persistence"
+                        and not failed_once
+                        and event == "driver_readiness_complete"
+                        and details.get("track") == baseline
+                    ):
+                        failed_once = True
+                        raise OSError("PRIVATE run persistence failure")
+                    return real_journal_event(path, event, details)
+
+                with ExitStack() as stack:
+                    stack.enter_context(
+                        mock.patch(
+                            "tools.v3b1_local_envoy.journal_event",
+                            side_effect=fail_readiness_persistence,
+                        )
+                    )
+                    if name == "deadline_creation":
+                        stack.enter_context(
+                            mock.patch.object(
+                                controller,
+                                "_monotonic_now",
+                                side_effect=OSError("PRIVATE run deadline failure"),
+                            )
+                        )
+                    with self.assertRaisesRegex(ControllerError, "failed closed|down"):
+                        controller.run()
+
+                journal = load_lifecycle_journal(controller.journal_path)
+                self.assertEqual(
+                    {request["status"] for request in journal["requests"].values()},
+                    {"not_attempted"},
+                )
+                self.assertTrue(controller.readiness_poison_path.is_file())
+                failure = next(
+                    event for event in journal["events"]
+                    if event["event"] == "driver_readiness_failed"
+                )["details"]
+                if name == "readiness_persistence":
+                    self.assertEqual(
+                        failure,
+                        {
+                            "readiness_nonce": failure["readiness_nonce"],
+                            "scope": "driver",
+                            "track": baseline,
+                            "driver_id": drivers[baseline]["id"],
+                            "category": "controller_persistence",
+                            "stage": "readiness_complete",
+                        },
+                    )
+                else:
+                    self.assertEqual(
+                        failure,
+                        {
+                            "readiness_nonce": failure["readiness_nonce"],
+                            "scope": "controller",
+                            "track": None,
+                            "driver_id": None,
+                            "category": "clock_failure",
+                            "stage": "readiness_deadline",
+                        },
+                    )
+                self.assertTrue(all(process.stdin.closed for process in factory.processes))
+                self.assertTrue(all(process.exited for process in factory.processes))
+                self.assertTrue(all(process.reaped for process in factory.processes))
+                raw = controller.journal_path.read_text()
+                self.assertNotIn("PRIVATE run persistence failure", raw)
+                self.assertNotIn("PRIVATE run deadline failure", raw)
                 starts = len([event for event in events if event[0] == "start"])
                 with self.assertRaisesRegex(ControllerError, "poison|incomplete|down"):
                     controller.run()

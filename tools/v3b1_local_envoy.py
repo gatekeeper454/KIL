@@ -186,6 +186,7 @@ _DRIVER_READINESS_FAILURE_CATEGORIES = {
     "termination_ambiguous",
 }
 _DRIVER_READINESS_FAILURE_STAGES = {
+    "readiness_deadline",
     "start_intent",
     "process_start",
     "start_complete",
@@ -197,6 +198,7 @@ _DRIVER_READINESS_FAILURE_STAGES = {
     "diagnostic_complete",
 }
 _DRIVER_READINESS_CONTROLLER_STAGES = {
+    "readiness_deadline",
     "readiness_set_complete",
     "diagnostic_complete",
 }
@@ -862,8 +864,13 @@ def _validate_lifecycle_event_details(
                 raise ControllerError(
                     "controller readiness failure identity is not closed"
                 )
+            expected_category = (
+                "clock_failure"
+                if details["stage"] == "readiness_deadline"
+                else "controller_persistence"
+            )
             if (
-                details["category"] != "controller_persistence"
+                details["category"] != expected_category
                 or details["stage"] not in _DRIVER_READINESS_CONTROLLER_STAGES
             ):
                 raise ControllerError(
@@ -10801,14 +10808,18 @@ class LocalEnvoyController:
             else set()
         )
         if primary is None:
+            if isinstance(error, DriverTransportError):
+                primary_error = error
+            elif active_identity[3] == "readiness_deadline":
+                primary_error = DriverTransportError("clock_failure")
+            else:
+                primary_error = DriverTransportError("controller_persistence")
             primary = (
                 active_identity[0],
                 active_identity[1],
                 active_identity[2],
                 active_identity[3],
-                error
-                if isinstance(error, DriverTransportError)
-                else DriverTransportError("controller_persistence"),
+                primary_error,
             )
         failed_scope, failed_track, failed_id, failed_stage, primary_error = primary
         category = primary_error.category
@@ -11031,7 +11042,7 @@ class LocalEnvoyController:
             "readiness_session_started",
             {"readiness_nonce": readiness_nonce},
         )
-        deadline_ns = self._monotonic_now() + _READINESS_DEADLINE_NS
+        deadline_ns = 0
         sessions: dict[LiveTrack, DriverSession] = {}
         cancellation_intents: set[LiveTrack] = set()
         cancellation_attempts: set[LiveTrack] = set()
@@ -11040,13 +11051,14 @@ class LocalEnvoyController:
             str, LiveTrack | None, str | None, str, DriverTransportError
         ] | None = None
         active_identity: tuple[str, LiveTrack | None, str | None, str] = (
-            "driver",
-            _TRACKS[0],
-            str(drivers[_TRACKS[0].value]["id"]),
-            "start_intent",
+            "controller",
+            None,
+            None,
+            "readiness_deadline",
         )
 
         try:
+            deadline_ns = self._monotonic_now() + _READINESS_DEADLINE_NS
             for track in _TRACKS:
                 record = drivers[track.value]
                 full_id = str(record["id"])
@@ -11210,7 +11222,7 @@ class LocalEnvoyController:
                 "readiness_nonce": readiness_nonce,
                 "ready_tracks": [track.value for track in _TRACKS],
             }
-        except (ControllerError, DriverTransportError) as error:
+        except Exception as error:
             self._fail_driver_readiness_sessions(
                 execution_nonce=execution_nonce,
                 readiness_nonce=readiness_nonce,
@@ -11248,18 +11260,19 @@ class LocalEnvoyController:
             "readiness_session_started",
             {"readiness_nonce": readiness_nonce},
         )
-        deadline_ns = self._monotonic_now() + _READINESS_DEADLINE_NS
+        deadline_ns = 0
         sessions: dict[LiveTrack, DriverSession] = {}
         primary: tuple[
             str, LiveTrack | None, str | None, str, DriverTransportError
         ] | None = None
         active_identity: tuple[str, LiveTrack | None, str | None, str] = (
-            "driver",
-            _TRACKS[0],
-            str(drivers[_TRACKS[0].value]["id"]),
-            "start_intent",
+            "controller",
+            None,
+            None,
+            "readiness_deadline",
         )
         try:
+            deadline_ns = self._monotonic_now() + _READINESS_DEADLINE_NS
             for track in _TRACKS:
                 full_id = str(drivers[track.value]["id"])
                 identity = {
@@ -11345,7 +11358,7 @@ class LocalEnvoyController:
                 },
             )
             return readiness_nonce, deadline_ns, sessions
-        except (ControllerError, DriverProtocolError, DriverTransportError) as error:
+        except Exception as error:
             self._fail_driver_readiness_sessions(
                 execution_nonce=execution_nonce,
                 readiness_nonce=readiness_nonce,
