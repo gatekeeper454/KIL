@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 import shutil
 import stat
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -5240,6 +5242,24 @@ class TeardownContinuationTest(unittest.TestCase):
                         else "target_markers"
                     )
                     key = (item["track"], source)
+                    script = command[command.index("-c") + 1]
+                    if "payload_hex" in script:
+                        injection = self.injections.get(key)
+                        if injection == "export_error":
+                            raise ControllerError("injected ledger export failure")
+                        if injection == "export_invalid":
+                            return CommandResult(0, "not-json\n", "")
+                        payload = self.payloads[key]
+                        if injection == "export_digest_mismatch":
+                            payload = payload[:-1] + b"x" if payload else b"x"
+                        elif injection == "export_size_mismatch":
+                            payload += b"x"
+                        export = {
+                            "byte_count": len(payload),
+                            "payload_hex": payload.hex(),
+                            "sha256": sha256(payload).hexdigest(),
+                        }
+                        return CommandResult(0, canonical_json(export) + "\n", "")
                     if self.injections.get(key) == "probe_failed":
                         raise ControllerError("injected probe failure")
                     if self.injections.get(key) == "missing":
@@ -5272,7 +5292,13 @@ class TeardownContinuationTest(unittest.TestCase):
                         else "target_markers"
                     )
                     key = (item["track"], source)
-                    if self.injections.get(key) == "copy_error":
+                    if self.injections.get(key) in {
+                        "copy_error",
+                        "export_error",
+                        "export_invalid",
+                        "export_digest_mismatch",
+                        "export_size_mismatch",
+                    }:
                         raise ControllerError("injected copy failure")
                     payload = self.payloads[key]
                     if self.injections.get(key) == "malformed":
@@ -5347,7 +5373,7 @@ class TeardownContinuationTest(unittest.TestCase):
     def test_freeze_persists_nonce_bound_epoch_and_all_nine_terminal_legs(self):
         injections = {
             ("credential_policy_baseline", "authz_decisions"): "missing",
-            ("signed_state_only", "target_markers"): "copy_error",
+            ("signed_state_only", "target_markers"): "export_error",
             ("signed_plus_local_reduce", "envoy_access"): "malformed",
         }
         with tempfile.TemporaryDirectory() as directory:
@@ -5437,6 +5463,201 @@ class TeardownContinuationTest(unittest.TestCase):
                 all("/usr/local/bin/python" in command and "-c" in command for command in probes)
             )
             self.assertTrue(all("sh" not in command and "bash" not in command for command in probes))
+
+    def test_failed_docker_cp_exports_exact_zero_byte_ledgers_in_container(self):
+        ledger_keys = {
+            (track.value, source)
+            for track in LiveTrack
+            for source in ("authz_decisions", "target_markers")
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(
+                directory,
+                no_run=True,
+                injections={key: "copy_error" for key in ledger_keys},
+            )
+
+            result = controller._freeze_sources(
+                state, value, attempted_complete=False
+            )
+
+            ledger_statuses = [
+                status
+                for status in result.statuses
+                if status.source != "envoy_access"
+            ]
+            self.assertFalse(result.complete)
+            self.assertTrue(
+                all(status.status == "copied" for status in result.statuses)
+            )
+            self.assertEqual(len(ledger_statuses), 6)
+            self.assertTrue(all(status.status == "copied" for status in ledger_statuses))
+            self.assertTrue(
+                all(
+                    status.source_byte_count == status.copied_byte_count == 0
+                    and status.source_sha256
+                    == status.copied_sha256
+                    == sha256(b"").hexdigest()
+                    for status in ledger_statuses
+                )
+            )
+            exports = [
+                command
+                for command in controller.commands
+                if "exec" in command and "payload_hex" in command[command.index("-c") + 1]
+            ]
+            self.assertEqual(len(exports), 6)
+            self.assertTrue(
+                all(
+                    command[-1] == str(128 * 1024 + 1)
+                    and command[-2]
+                    in {"/evidence/decisions.jsonl", "/evidence/targets.jsonl"}
+                    and "/usr/local/bin/python" in command
+                    and "-c" in command
+                    for command in exports
+                )
+            )
+            self.assertTrue(
+                all("sh" not in command and "bash" not in command for command in exports)
+            )
+
+    def test_failed_docker_cp_exports_exact_nonempty_ledger_bytes(self):
+        key = ("credential_policy_baseline", "authz_decisions")
+        with tempfile.TemporaryDirectory() as directory:
+            controller, state, value = self.make_freeze_controller(
+                directory, injections={key: "copy_error"}
+            )
+            expected = controller.payloads[key]
+
+            result = controller._freeze_sources(
+                state, value, attempted_complete=True
+            )
+
+            status = next(
+                item
+                for item in result.statuses
+                if (item.track, item.source) == key
+            )
+            self.assertTrue(result.complete)
+            self.assertEqual(status.status, "copied")
+            self.assertEqual(status.source_byte_count, len(expected))
+            self.assertEqual(status.copied_sha256, sha256(expected).hexdigest())
+            self.assertEqual(result.raw_paths[key].read_bytes(), expected)
+
+    def test_real_ledger_export_script_is_exact_bounded_and_nofollow(self):
+        maximum = local_envoy_module._MAX_LEDGER_EXPORT_BYTES
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ledger = root / "ledger.jsonl"
+            for payload in (b"", b'{"track":"credential_policy_baseline"}\n'):
+                with self.subTest(payload=payload):
+                    ledger.write_bytes(payload)
+                    completed = subprocess.run(
+                        [
+                            sys.executable,
+                            "-c",
+                            local_envoy_module._LEDGER_EXPORT,
+                            str(ledger),
+                            str(maximum),
+                        ],
+                        text=True,
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertEqual(completed.stderr, "")
+                    exported, byte_count, digest = (
+                        LocalEnvoyController._parse_ledger_export(
+                            completed.stdout
+                        )
+                    )
+                    self.assertEqual(exported, payload)
+                    self.assertEqual(byte_count, len(payload))
+                    self.assertEqual(digest, sha256(payload).hexdigest())
+                    self.assertEqual(
+                        completed.stdout,
+                        canonical_json(
+                            {
+                                "byte_count": len(payload),
+                                "payload_hex": payload.hex(),
+                                "sha256": sha256(payload).hexdigest(),
+                            }
+                        )
+                        + "\n",
+                    )
+
+            ledger.write_bytes(b"x" * (maximum + 1))
+            oversize = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    local_envoy_module._LEDGER_EXPORT,
+                    str(ledger),
+                    str(maximum),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(oversize.returncode, 0)
+            self.assertEqual(oversize.stdout, "")
+
+            target = root / "target.jsonl"
+            target.write_bytes(b"{}\n")
+            ledger.unlink()
+            ledger.symlink_to(target)
+            symlink = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    local_envoy_module._LEDGER_EXPORT,
+                    str(ledger),
+                    str(maximum),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(symlink.returncode, 0)
+            self.assertEqual(symlink.stdout, "")
+
+    def test_ledger_export_preserves_malformed_source_but_rejects_bad_exports(self):
+        key = ("credential_policy_baseline", "authz_decisions")
+        cases = (
+            ("export_digest_mismatch", None),
+            ("export_size_mismatch", None),
+            ("export_invalid", None),
+            ("export_error", None),
+            ("copy_error", b"not-json\n"),
+            ("copy_error", b"x" * (128 * 1024 + 2)),
+        )
+        for injection, override in cases:
+            with self.subTest(injection=injection, override_size=None if override is None else len(override)):
+                with tempfile.TemporaryDirectory() as directory:
+                    controller, state, value = self.make_freeze_controller(
+                        directory,
+                        injections={key: injection},
+                        payload_overrides={} if override is None else {key: override},
+                    )
+
+                    result = controller._freeze_sources(
+                        state, value, attempted_complete=True
+                    )
+
+                    status = next(
+                        item
+                        for item in result.statuses
+                        if (item.track, item.source) == key
+                    )
+                    if override == b"not-json\n":
+                        self.assertEqual(status.status, "malformed")
+                        self.assertEqual(status.error_class, "invalid_json")
+                        self.assertEqual(result.raw_paths[key].read_bytes(), override)
+                    else:
+                        self.assertEqual(status.status, "copy_error")
+                        self.assertEqual(status.error_class, "command_failed")
+                        self.assertFalse(result.raw_paths[key].exists())
+                    self.assertFalse(result.complete)
 
     def test_freeze_preserves_malformed_bytes_and_hash_binds_copy_mismatches(self):
         injections = {
@@ -7618,6 +7839,90 @@ def interrupted_published_recovery(root, *, completed):
 
 
 class EvidenceBundleTest(unittest.TestCase):
+    KTP_CITATION_URL = (
+        "https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff"
+    )
+
+    def assert_summary_citation_is_bound(self, output, *, public):
+        summary = (output / "summary.md").read_bytes()
+        self.assertEqual(summary.count(self.KTP_CITATION_URL.encode("ascii")), 1)
+        summary_sha256 = sha256(summary).hexdigest()
+        sums = dict(
+            line.split("  ", 1)[::-1]
+            for line in (output / "SHA256SUMS").read_text(encoding="ascii").splitlines()
+        )
+        self.assertEqual(sums["summary.md"], summary_sha256)
+        if public:
+            public_manifest = json.loads(
+                (output / "manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                public_manifest["public_commitment_sha256"],
+                local_envoy_module._public_commitment_from_output(
+                    output, public_manifest
+                ),
+            )
+        else:
+            first = authoritative_bundle_attestation(output)
+            second = authoritative_bundle_attestation(output)
+            self.assertEqual(first, second)
+            self.assertEqual(first["file_sha256"]["summary.md"], summary_sha256)
+
+    def test_complete_summary_cites_ktp_before_private_and_public_binding(self):
+        value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+        joins = join_evidence(value, requests, decisions, envoy, targets)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provisional = write_evidence_bundle(
+                root / "private",
+                value,
+                requests=requests,
+                decisions=decisions,
+                envoy=envoy,
+                targets=targets,
+                joins=joins,
+            )
+            self.assert_summary_citation_is_bound(provisional, public=False)
+            authoritative = authoritative_bundle_attestation(provisional)
+            published = finalize_publication(
+                provisional,
+                root / "public",
+                value,
+                source_attestations=presenter_source_attestations(
+                    provisional, envoy, targets
+                ),
+                tool_identities=TOOL_IDENTITIES,
+                engine_provenance=ENGINE_PROVENANCE,
+                global_context_before="personal",
+                global_context_after="personal",
+                completed=True,
+                authoritative_attestation=authoritative,
+            )
+            self.assert_summary_citation_is_bound(published, public=True)
+
+    def test_failure_summary_cites_ktp_before_private_and_public_binding(self):
+        value = manifest()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provisional = _prepare_failure_provisional(
+                root / "private", value, reset=True
+            )
+            self.assert_summary_citation_is_bound(provisional, public=False)
+            authoritative = authoritative_bundle_attestation(provisional)
+            published = finalize_publication(
+                provisional,
+                root / "public",
+                value,
+                source_attestations=[],
+                tool_identities=TOOL_IDENTITIES,
+                engine_provenance=ENGINE_PROVENANCE,
+                global_context_before="personal",
+                global_context_after="personal",
+                completed=False,
+                authoritative_attestation=authoritative,
+            )
+            self.assert_summary_citation_is_bound(published, public=True)
+
     def assert_postvalidation_publication_mutation_is_rejected(
         self, *, completed
     ):

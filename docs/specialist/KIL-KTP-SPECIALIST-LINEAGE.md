@@ -4767,3 +4767,153 @@ retain the prohibition on a central request until the committed zero-request
 smoke passes with exact teardown and failure-bundle evidence.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-095 — 2026-08-30 — Zero-request V3B-1 smoke exposes service-ledger freeze gap
+
+**Input:** Execute the approved zero-request `preflight` / `up` / `down` gate
+from synchronized public main, publish no failed evidence, restore the foreign
+runtime, and determine whether one central V3B-1 proof may proceed.
+
+**Interpretation:** This gate tests lifecycle safety, evidence freeze, exact
+ownership teardown, publication recovery, and ambient-runtime restoration. It
+must never call `run` and therefore cannot establish enforcement behavior. A
+passing result is intentionally incomplete and nonpromotable: all request and
+downstream evidence records must remain empty while their absence is preserved
+truthfully.
+
+**Decision status:** Confirmed zero-request smoke completed but did not pass the
+evidence-freeze gate from public source
+commit `47c0614d49ec1a7484cdefd04cc5d080adc73ca2`. After an initial fail-closed
+refusal observed the foreign `default` profile running, that profile was
+temporarily stopped under the prior authorization. The single owned cycle then
+created exactly three internal networks and nine attested service containers
+under run
+`v3b1-1db8b5914ce26e2e6c60e74124bcc1b2c9ed66b7dd68c2d3cf4ea1bc0d18c9b3`.
+No request command was invoked. `down` attempted to freeze all nine source legs
+before service removal and produced zero-byte request, normalized-decision,
+Envoy, target, join, and three raw-decision JSONLs.
+
+The public-safe smoke manifest is `run_complete=false`,
+`promotion_status=not_promoted`, class
+`intermediate_provisional_failure_local_boundary`, and records teardown
+complete and verified before publication. Its manifest SHA-256 is
+`24176666cc860cfe0b66a67f8a63d0f63d66b4f91329e06464b1475eb84e55c4`; its
+`SHA256SUMS` file SHA-256 is
+`45ed57ddf1603f965fb971cf09a22f4a1380b6cf498262f5dc8b4e63dbf043b7`.
+All checksums verified. The lifecycle left no active state, readiness poison,
+or active journal; nine service containers, three transient validator
+containers, three networks, and only `kil-v3-lab` were removed. An escalated
+host-state read confirmed the foreign `default` profile restored to Running,
+containerd, arm64, 4 CPU, 4 GiB memory, and 20 GiB disk.
+
+The durable journal records all three request states as `not_attempted`, no
+readiness or request events, and nine source observations of zero bytes with
+the empty SHA-256. The three Envoy legs were copied and byte-bound.
+All six authorization and target ledger legs instead terminated
+`copy_error(command_failed)` with no copied-byte binding, and the public
+manifest consequently contains no source attestations.
+
+**Rationale:** The request-state journal and in-container observations support
+the conclusion that no central action was attempted, while exact removal and
+restored foreign state demonstrate lifecycle safety. The empty failure bundle
+does not independently prove authorization or target source absence because
+six ledger copies failed. A central request therefore remains prohibited. The
+first unmutating `up` refusal separately confirms the non-dedicated-profile
+guard operates at the mutation boundary.
+
+**Affected artifacts:**
+
+- `README.md`
+- `docs/lab/V3-PROGRESS.md`
+- `docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- `artifacts/generated/v3b1-local-envoy/v3b1-1db8b5914ce26e2e6c60e74124bcc1b2c9ed66b7dd68c2d3cf4ea1bc0d18c9b3/`
+  (ignored private nonpromotable smoke bundle)
+
+**Unresolved questions:** The exact reason Docker copy failed after successful
+zero-byte service-ledger probes must be corrected with a bounded byte-preserving
+export, without synthesizing evidence from metadata. No enforcement result is
+accepted, promoted, or validated. Kind, NetworkPolicy, historical prevention,
+and production performance remain excluded. The temporary sandboxed Colima
+read misreported the restored foreign profile as `Broken`; the subsequent
+authorized host-level read confirmed it was running, so host-process state must
+continue to be read outside the sandbox.
+
+**Next gate:** Implement, test, review, publish, and merge the bounded exact-byte
+service-ledger export correction. From synchronized public main, repeat exactly
+one zero-request `preflight` / `up` / `down` smoke and require all nine source
+legs to be copied and byte-bound. Only then may one central proof be attempted.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-096 — 2026-08-30 — Exact-byte service-ledger export correction is statically verified
+
+**Input:** Correct the six authorization and target ledger copy failures exposed
+by the first committed zero-request smoke without weakening the evidence-freeze
+gate, reconstructing evidence from metadata, or authorizing a central request.
+Also ensure generated private and public evidence summaries carry the canonical
+KTP citation before checksum and commitment binding.
+
+**Interpretation:** The existing in-container probes established that the real
+service ledgers existed and were zero bytes, but a failed Docker copy left no
+host-held byte binding. A safe correction must transfer the real ledger bytes
+through an independent bounded path, compare them to the pre-copy observation,
+and preserve all existing fail-closed and recovery behavior. It must not turn a
+size and digest observation into a synthetic empty file.
+
+**Decision status:** Confirmed implementation and static verification. After a
+normal Docker copy failure, the controller may invoke a fixed no-shell Python
+exporter inside the attested authorization or target container. The exporter
+opens the exact ledger with `O_NOFOLLOW`, requires a stable regular inode and
+size, reads no more than the 131,073-byte closed one-record limit, and emits a
+canonical ASCII envelope containing the exact lowercase-hex bytes, byte count,
+and SHA-256. The host bounds and parses the envelope, recomputes its digest,
+requires its count and digest to equal the independent pre-copy probe, then
+performs an atomic, fsynced private write and inode/digest reattestation before
+the leg can be recorded as `copied`. Invalid, oversized, altered, truncated, or
+failed exports leave no active frozen source and remain `copy_error`; exact
+malformed bytes remain preserved and classified malformed.
+
+Complete private, incomplete private, and public generated summaries now emit
+the canonical KTP citation before `SHA256SUMS`, authoritative-attestation, and
+public-commitment binding. The citation scan excludes only the two immutable
+summary paths from the already-closed first smoke; future runtime summaries
+remain subject to the citation requirement.
+
+The implementation passed 180 controller tests and 396 repository tests,
+Python compilation, and diff hygiene. Direct subprocess tests execute the real
+exporter for empty and nonempty exact round trips and for fail-closed oversized
+and symlink inputs. An independent read-only review found no Important or
+Critical issue and confirmed that successful fallback status derives from the
+actual service bytes rather than metadata reconstruction.
+
+**Rationale:** The dual observation and export bindings close the gap without
+changing the authority or claim model. A copied leg is earned only when actual
+source bytes survive two independently parsed measurements and host-side
+reattestation. The immutable prior smoke remains unchanged and nonpromotable;
+the correction applies prospectively to a new public-source run.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `tests/test_document_citation.py`
+- `README.md`
+- `docs/lab/V3-PROGRESS.md`
+- `docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The correction is statically and directly
+subprocess-tested but has not yet traversed the actual Docker copy failure in a
+fresh live cycle. The subprocess runner buffers output before the semantic host
+bound is checked; under the present pinned trusted image and fixed exporter this
+is a low residual risk, but a future hostile-container threat model should use
+a hard bounded stream reader. No central enforcement result is accepted,
+promoted, or validated.
+
+**Next gate:** Commit, publish, pass public CI, merge, and synchronize the exact-
+byte correction. Then repeat exactly one zero-request `preflight` / `up` /
+`down` smoke from clean public main and require all nine source legs to be
+copied and byte-bound before authorizing any central request.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

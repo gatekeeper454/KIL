@@ -19,13 +19,20 @@ The deterministic V1 decision kernel, V2 historical replay, and V3A signed-
 state authorization core remain locally executable modeled assets. V3B-1 now
 implements the pinned local Envoy `ext_authz` boundary, a hardened transcript-
 driven lifecycle and evidence harness, and an authoritative offline presenter.
-Three exploratory local cycles were rejected and remain private. No V3B-1 run
-has been accepted, promoted, or labeled validated.
+Three exploratory local cycles were rejected and remain private. The first
+committed zero-request V3B-1 smoke from public source commit `47c0614d49ec`
+completed exact teardown and restored the foreign runtime, but it did not pass
+the evidence-freeze gate: three Envoy legs were copied while six authorization
+and target ledger copies failed after zero-byte in-container observations. Its
+empty failure bundle is nonpromotable and does not independently prove service-
+source absence.
 
-The next execution gate is exactly one committed zero-request `preflight` / `up`
-/ `down` smoke. A central request remains prohibited until that smoke passes.
-Kind/Calico validation (V3B-2) and repetition and performance promotion (V3C)
-remain unexecuted.
+The harness now contains a bounded exact-byte service-ledger export correction.
+The next execution gate is a fresh zero-request `preflight` / `up` / `down`
+smoke from a clean public commit containing that correction. A central request
+remains prohibited until all nine source legs are copied and byte-bound. Kind/
+Calico validation (V3B-2) and repetition and performance promotion (V3C) remain
+unexecuted.
 
 ## Evidence classes
 
