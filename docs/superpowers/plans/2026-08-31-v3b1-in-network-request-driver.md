@@ -498,7 +498,7 @@ git commit -m "Build the isolated V3B-1 driver topology"
 - Modify: `tests/test_v3b1_local_envoy.py`
 - Modify: `tests/fixtures/v3b1-integration-contract.json`
 
-- [ ] **Step 1: Write RED host-session tests**
+- [x] **Step 1: Write RED host-session tests**
 
 Define an injected adapter:
 
@@ -519,7 +519,7 @@ request intent; one common deadline applies; malformed/extra output, nonzero
 exit, or ambiguous termination fails closed; and no stderr bytes reach the
 journal.
 
-- [ ] **Step 2: Write RED readiness-only tests**
+- [x] **Step 2: Write RED readiness-only tests**
 
 Require the new CLI command `readiness` to:
 
@@ -532,12 +532,12 @@ Require the new CLI command `readiness` to:
 - leave all request states `not_attempted`; and
 - mark the lifecycle diagnostic-only so `run` is prohibited before `down`.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run `DriverReadinessTest` and the CLI subcommand test. Expect import and missing
 subcommand failures.
 
-- [ ] **Step 4: Implement the bounded attached-process adapter**
+- [x] **Step 4: Implement the bounded attached-process adapter**
 
 Use the exact command vector
 `[docker_binary, "start", "--attach", "--interactive", driver_full_id]`
@@ -550,7 +550,7 @@ Replace socket readiness poison with driver-control/termination categories.
 EOF cancellation is successful only when stdout is exhausted and exit status is
 zero. Any ambiguity poisons readiness and prohibits `run`.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run driver readiness, journal replay, CLI, compilation, and diff checks.
 

@@ -5777,3 +5777,73 @@ zero request intent/HTTP bytes, and poison the lifecycle on malformed output or
 nonzero cancellation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-113 — 2026-08-31 — Request-free attached-driver readiness lifecycle approved
+
+**Input:** Continue from the approved split topology into an observable but
+request-free driver lifecycle before permitting any consequential lab traffic.
+
+**Interpretation:** All three stopped drivers must start through exact attached
+processes before the controller waits on any one of them. One common deadline,
+closed readiness records, deterministic EOF cancellation, exact cleanup, and a
+permanent diagnostic-only lifecycle must prove the transport path without
+creating request intent or sending HTTP bytes.
+
+**Decision status:** Confirmed Task 5 complete after specification and quality
+approval. Commits `3c6424d049bdb4c9680572ae864334578f0bfa67`,
+`11bea32429b31ef91b0cfd41892f5dd7975db735`, and
+`94c76fffc07810d18bdd69f8748f86efd74af324` add the bounded host transport
+adapter, exact `docker start --attach --interactive <full-id>` sessions, the
+`readiness` CLI lifecycle, closed v2 driver-lifecycle fixture records, and
+failure cleanup/replay hardening. Legacy v1 integration fixtures remain
+unchanged and reject driver-era records.
+
+All three processes start before any readiness read. One common monotonic
+deadline governs selector and non-file-descriptor streams. Success requires an
+exact readiness schema/status for each bound full ID and track, then EOF to all
+stdin streams, no later stdout or stderr, and zero exits. Requests remain
+`not_attempted`; no instruction or request intent is created; the lifecycle is
+durably diagnostic-only and `run` is forbidden until `down`.
+
+Review corrections added bounded terminate/kill/reap cleanup, exact primary
+failure attribution before each mutation, independent first-failure poison,
+replay rejection after any incomplete prior readiness session, controller-
+scoped aggregate failures, strict readiness schema discrimination, and exact
+container-state inspection before stop decisions. Local attached-client exit
+is never treated as proof the driver container stopped. Exact-ID stop and
+post-stop reinspection proceed even when cleanup journaling fails, while raw
+stdout/stderr and persistence exception text remain excluded.
+
+**Rationale:** A request-free readiness run is valuable only if failure cannot
+leave a retained credential-capable socket or permit a second attempt. The
+controller must prove process, container, journal, and diagnostic state as one
+closed lifecycle while sending zero consequential traffic.
+
+**Affected artifacts:**
+
+- `tools/v3b1_driver_transport.py`
+- `tools/v3b1_local_envoy.py`
+- `tools/v3b1_harness_contract.py`
+- `tests/test_v3b1_local_envoy.py`
+- `tests/fixtures/v3b1-driver-topology-integration-contract.json`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final implementation sweep passed 21 readiness tests,
+150 focused lifecycle tests, 459 repository tests, compilation, diff hygiene,
+and a real OS-pipe selector smoke test. Independent quality re-review passed
+215 local-Envoy tests and manually confirmed terminal-plus-poison double-fault
+cleanup/replay behavior, with no remaining Critical or Important finding. No
+Docker, Colima, network, or live laboratory runtime was invoked.
+
+**Unresolved questions:** Task 6 has not yet replaced the legacy direct-host
+request path with driver instructions. Driver result evidence, phase-aware
+post-request recovery/teardown, documentation, the request-free live run, and
+the one accepted central proof remain.
+
+**Next gate:** Execute Task 6 test-first: after all three readiness records are
+durable, write exactly one bounded canonical instruction per track under a
+durable request intent, collect one closed result, abort later tracks after any
+post-intent failure, and never reconnect, restart, replace, or retry a driver.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
