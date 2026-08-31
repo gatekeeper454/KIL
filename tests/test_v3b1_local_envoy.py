@@ -11222,6 +11222,106 @@ class TeardownContinuationTest(unittest.TestCase):
 
 
 class RuntimeAttestationTest(unittest.TestCase):
+    def test_healthcheck_classification_accepts_closed_disabled_shapes(self):
+        image_healthcheck = {
+            "Test": ["CMD", "python", "-c", "raise SystemExit(0)"],
+            "Interval": 10_000_000_000,
+            "Timeout": 3_000_000_000,
+            "StartPeriod": 5_000_000_000,
+            "Retries": 3,
+        }
+        expanded_disabled = {
+            **image_healthcheck,
+            "Test": ["NONE"],
+        }
+
+        self.assertEqual(
+            local_envoy_module._classify_inspected_healthcheck(
+                expanded_disabled, image_healthcheck
+            ),
+            "disabled",
+        )
+        self.assertEqual(
+            local_envoy_module._classify_inspected_healthcheck(
+                {"Test": ["NONE"]}, None
+            ),
+            "disabled",
+        )
+        self.assertIsNone(
+            local_envoy_module._classify_inspected_healthcheck(
+                None, image_healthcheck
+            )
+        )
+        self.assertEqual(
+            local_envoy_module._classify_inspected_healthcheck(
+                image_healthcheck, image_healthcheck
+            ),
+            "configured",
+        )
+
+    def test_healthcheck_classification_rejects_open_or_unbound_disabled_shapes(self):
+        image_healthcheck = {
+            "Test": ["CMD", "python", "-c", "raise SystemExit(0)"],
+            "Interval": 10_000_000_000,
+            "Timeout": 3_000_000_000,
+            "StartPeriod": 5_000_000_000,
+            "Retries": 3,
+        }
+        expanded_disabled = {
+            **image_healthcheck,
+            "Test": ["NONE"],
+        }
+        rejected = []
+
+        missing = dict(expanded_disabled)
+        missing.pop("Timeout")
+        rejected.append(missing)
+
+        extra = dict(expanded_disabled)
+        extra["StartInterval"] = 1_000_000_000
+        rejected.append(extra)
+
+        changed = dict(expanded_disabled)
+        changed["Interval"] = 9_000_000_000
+        rejected.append(changed)
+
+        changed_retries = dict(expanded_disabled)
+        changed_retries["Retries"] = 4
+        rejected.append(changed_retries)
+
+        wrong_type = dict(expanded_disabled)
+        wrong_type["Retries"] = True
+        rejected.append(wrong_type)
+
+        non_none = dict(expanded_disabled)
+        non_none["Test"] = ["CMD", "false"]
+        rejected.append(non_none)
+
+        malformed_images = [
+            None,
+            {key: value for key, value in image_healthcheck.items() if key != "Timeout"},
+            {**image_healthcheck, "Retries": True},
+            {**image_healthcheck, "Test": ["NONE"]},
+            {**image_healthcheck, "Unexpected": 1},
+        ]
+
+        for actual in rejected:
+            with self.subTest(actual=actual):
+                self.assertEqual(
+                    local_envoy_module._classify_inspected_healthcheck(
+                        actual, image_healthcheck
+                    ),
+                    "configured",
+                )
+        for immutable in malformed_images:
+            with self.subTest(immutable=immutable):
+                self.assertEqual(
+                    local_envoy_module._classify_inspected_healthcheck(
+                        expanded_disabled, immutable
+                    ),
+                    "configured",
+                )
+
     def test_controlled_stop_comparison_allows_only_service_state_transition(self):
         value = manifest()
         service = local_envoy_module._synthetic_state_object(
@@ -11849,7 +11949,13 @@ class RuntimeAttestationTest(unittest.TestCase):
                     "Env": ["PATH=/usr/local/bin"],
                     "OpenStdin": True,
                     "Tty": False,
-                    "Healthcheck": {"Test": ["NONE"]},
+                    "Healthcheck": {
+                        "Test": ["NONE"],
+                        "Interval": 10_000_000_000,
+                        "Timeout": 3_000_000_000,
+                        "StartPeriod": 5_000_000_000,
+                        "Retries": 3,
+                    },
                 },
                 "HostConfig": {
                     "Privileged": False,
@@ -11893,6 +11999,13 @@ class RuntimeAttestationTest(unittest.TestCase):
                 "Config": {
                     "Env": ["PATH=/usr/local/bin"],
                     "Labels": immutable_labels,
+                    "Healthcheck": {
+                        "Test": ["CMD", "python", "-c", "raise SystemExit(0)"],
+                        "Interval": 10_000_000_000,
+                        "Timeout": 3_000_000_000,
+                        "StartPeriod": 5_000_000_000,
+                        "Retries": 3,
+                    },
                 },
             }
             controller = LocalEnvoyController(
