@@ -5092,3 +5092,264 @@ foreign profile state, then resume the approved one-time central
 `preflight` / `up` / `run` / `down` proof. Do not retry after request intent.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-100 — 2026-08-31 — Central proof stops before request intent; Docker suppresses the internal-network publication
+
+**Input:** Resume the approved central V3B-1 proof after host restart, verify
+GitHub authentication when requested, continue visibly, preserve the no-retry
+contract, and diagnose any pre-request failure without weakening the KIL
+authorization design.
+
+**Interpretation:** A `run` invocation that fails during zero-payload TCP
+readiness and before request intent is not enforcement evidence. It must be
+closed as a nonpromotable lifecycle, followed by a bounded request-free
+diagnostic that distinguishes the Envoy listener, Docker guest publication,
+and Colima host-forward boundaries. No readiness workaround may silently alter
+the KIL trust or authorization semantics.
+
+**Decision status:** Confirmed GitHub CLI authentication was already active for
+`gatekeeper454` with repository and workflow access. The authentication check
+interrupted run
+`v3b1-f61f5d84f7130895222ada03b51a8f494380655f7141314685e45556c9f21f` only
+after `up`; it was torn down without `run`, readiness, or request intent and is
+nonpromotable.
+
+The central lifecycle from synchronized public source commit
+`47e1eecf351e71ff64b404b5c75b64eb3c248fa3` was invoked once as run
+`v3b1-df61bc558ba506191439f60b0b317c61c654a27aec3b8db243647f7cd3c9f21f`.
+All nine service containers and three networks passed creation and running-state
+attestation. Readiness then produced 115 `ECONNREFUSED` observations plus its
+terminal deadline observation against `127.0.0.1:18080` over approximately
+30 seconds. Every observation records that no request bytes may have been sent;
+all three lifecycle requests remained `not_attempted`. `down` removed all owned
+objects, published a checksum-valid nonpromotable failure bundle, and restored
+the pre-existing `default` profile to its restart baseline of Stopped.
+
+A separate request-free diagnostic lifecycle,
+`v3b1-395c5ccab37d6112ade63bea0ef968fff60b3f83ea93272db5522b20ac357d53`,
+proved the exact failed boundary. A zero-payload TCP connection from the track's
+authorization container reached the Envoy listener at its internal address on
+port 8080. Docker reported the requested
+`HostConfig.PortBindings` value of `127.0.0.1:18080 -> 8080`, but the live
+`NetworkSettings.Ports` entries for ports 8080 and 10000 were both null; `docker
+ps` exposed no host mapping, macOS had no listening process on port 18080, and a
+macOS zero-payload TCP connection was refused. The Envoy container's internal
+network record also had an empty gateway, consistent with the intentionally
+`--internal` Docker bridge. The diagnostic was torn down without `run`,
+readiness, or request intent. Its public bundle verifies all checksums and is
+nonpromotable.
+
+**Rationale:** The failure is below KIL enforcement logic: Envoy is healthy and
+reachable inside the isolated track, while Docker does not instantiate the
+requested published port for the internal-only bridge. The current `up`
+attestation verifies requested `HostConfig.PortBindings` but not effective
+`NetworkSettings.Ports`, so it incorrectly declares the host boundary ready for
+later probing. Retrying the same topology cannot produce valid evidence. The
+fix must preserve per-track isolation and add an effective-boundary attestation
+before any request intent.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py` (diagnosed; not yet changed)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- `artifacts/generated/v3b1-local-envoy/v3b1-f61f5d84f7130895222ada03b51a8f494380655f7141314685e45556c9f21f/`
+  (ignored private nonpromotable interruption bundle)
+- `artifacts/generated/v3b1-local-envoy/v3b1-df61bc558ba506191439f60b0b317c61c654a27aec3b8db243647f7cd3c9f21f/`
+  (ignored private nonpromotable readiness-failure bundle)
+- `artifacts/generated/v3b1-local-envoy/v3b1-395c5ccab37d6112ade63bea0ef968fff60b3f83ea93272db5522b20ac357d53/`
+  (ignored private request-free diagnostic bundle)
+- `.tools/v3b1-private/completed/*.journal.json` (ignored private lifecycle
+  journals)
+
+**Unresolved questions:** The replacement request path must be selected before
+implementation. Options include a dedicated in-network request driver, a
+controller-owned loopback SSH forward into the internal bridge, or a second
+non-internal frontend network with additional egress controls. No central
+enforcement result is accepted, promoted, or validated.
+
+**Next gate:** Approve a replacement request-boundary design that preserves the
+internal per-track networks. Write and commit its focused design and execution
+plan, implement it test-first, require a request-free live boundary proof, and
+publish that correction before authorizing a new central enforcement sequence.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-101 — 2026-08-31 — In-network one-shot request-driver design approved and specified
+
+**Input:** Approve the recommended replacement for the failed host publication:
+a dedicated request driver inside each isolated V3B-1 track.
+
+**Interpretation:** Approval selects the request-driver approach over an SSH
+tunnel or a second non-internal frontend network. The design must remove host
+publication without changing KIL trust, signed composite KTP enforcement state,
+Envoy authorization, or target semantics, and it must preserve the pre-intent
+zero-byte readiness and post-intent no-retry contracts.
+
+**Decision status:** Confirmed architecture decision. Each track gains one
+controller-owned, pre-created, one-shot driver container attached only to its
+existing internal bridge. At `run`, all three drivers start concurrently,
+connect to their fixed Envoy aliases, emit closed readiness records, and retain
+their TCP connections. Only after all are ready does the controller persist one
+request intent per track and transmit the bounded request instruction through
+stdin. Each driver sends exactly one HTTP request, emits one non-secret closed
+result, closes, and exits. Envoy has no published host port, and no driver may
+restart, reconnect, or retry after request intent.
+
+The written design also requires immutable created-state driver attestation,
+four-member per-track network membership, a new content-identity schema,
+closed driver-control failure provenance, exact driver lifecycle recovery,
+private binding of raw driver output, public normalized response hashes, old-
+bundle verification compatibility, twelve-container teardown, and a separate
+request-free live driver-readiness gate before a new central proof.
+
+**Rationale:** Moving the laboratory client inside the existing isolated track
+preserves the internal-network security property that suppressed Docker host
+publication. It removes the failed Colima forwarding dependency without giving
+Envoy an egress-capable network or introducing a separate SSH-tunnel lifecycle.
+The driver remains a transport witness and cannot become an authorization or
+trust-computation component.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-08-31-v3b1-in-network-request-driver-design.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Implementation has not begun. The written design must
+pass the user review gate, after which a test-first implementation plan will
+define exact schema migrations, driver protocol fixtures, recovery tests, live
+readiness-only execution, documentation/diagram updates, review, and
+publication checkpoints.
+
+**Next gate:** Commit and publish the design checkpoint for user review. After
+explicit written-spec approval, create the implementation plan; do not change
+production code before that approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-102 — 2026-08-31 — Independent review closes five request-driver design gaps
+
+**Input:** Independently review the approved written request-driver design for
+lifecycle, isolation, recovery, content-identity, and offline-evidence gaps
+before committing it.
+
+**Interpretation:** The selected in-network driver remains approved, but its
+written form must prevent direct driver access to the authorization service or
+target, avoid circular content identity, define whole-run failure behavior,
+make readiness-only cancellation deterministic, and give the offline verifier
+the actual bytes behind every claimed result binding.
+
+**Decision status:** Confirmed five Important design issues and no Critical
+issue. The corrected design now splits every track into two internal segments:
+a driver/Envoy frontend and an Envoy/authorization/target backend. Envoy is the
+only dual-homed component, so topology makes it the sole driver path to the
+consequential services. A non-circular `driver_definition` containing only
+pre-runtime facts enters content identity; Docker IDs and run-derived
+names/labels remain later runtime attestations.
+
+Any post-intent failure now aborts every later track, cancels uncommanded ready
+drivers by EOF, and leaves their requests `not_attempted`. EOF before an
+instruction is the sole successful readiness-only cancellation: it sends no
+HTTP bytes, emits no additional stdout, exits zero, and requires a durable
+`readiness_cancel_complete` record. Successful driver result records are exact,
+canonical, secret-free public bundle files, checksummed and reconstructible by
+the offline verifier rather than supported by opaque private-only hashes.
+
+The closed topology is therefore twelve track containers, three validators,
+and six internal networks, with exact two-member frontend and three-member
+backend membership per track.
+
+**Rationale:** These corrections keep the driver a constrained transport
+witness instead of a broadly connected trusted client. They also preserve the
+content-addressed run's acyclic construction, make terminal failure behavior
+unambiguous, and ensure accepted public evidence can be verified without
+private controller state.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-08-31-v3b1-in-network-request-driver-design.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The corrected design still requires user review.
+Implementation details belong in the subsequent plan and must be realized
+test-first without changing KIL enforcement semantics.
+
+**Next gate:** Commit and publish the corrected design checkpoint, then obtain
+explicit written-spec approval before creating or executing the implementation
+plan.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-103 — 2026-08-31 — Re-review removes endpoint circularity and clarifies transient credentials
+
+**Input:** Re-review the corrected request-driver specification after closing
+the first five Important design findings.
+
+**Interpretation:** Content identity must not depend indirectly on the
+content-derived Envoy container name, and the driver must be described honestly
+as transiently credential-bearing after request intent even though it has no
+standing credential.
+
+**Decision status:** Confirmed two remaining Important issues and no Critical
+issue. The driver definition now uses fixed endpoint `envoy:8080`; every
+isolated frontend segment assigns and separately attests the fixed per-network
+alias `envoy`, independent of run-derived names and labels. Static validation
+must prove that changes limited to those later runtime attestations cannot alter
+the content-identity preimage.
+
+The design now states that the authorization value and compact Q-state are
+transient credentials present only in bounded driver memory after durable
+request intent. They may enter only through stdin and may never appear in
+arguments, environment variables, mounts, stdout, stderr, container logs,
+journals, or evidence files.
+
+**Rationale:** A fixed network-local alias closes the last content-addressing
+cycle while retaining exact runtime identity attestation. Explicitly naming the
+driver's transient credential boundary avoids understating its trusted handling
+responsibilities and makes secret-exclusion tests enforceable.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-08-31-v3b1-in-network-request-driver-design.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No Critical or Important design finding is known.
+The written specification still awaits the required user review checkpoint;
+implementation has not begun.
+
+**Next gate:** Run final placeholder, consistency, and diff checks; commit and
+publish the design branch; then obtain explicit user approval of the written
+specification before writing the implementation plan.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-104 — 2026-08-31 — Opening scope aligned with the split-network driver topology
+
+**Input:** Perform a final independent consistency pass over the request-driver
+specification after closing endpoint and credential-boundary findings.
+
+**Interpretation:** The opening scope must name the same dedicated frontend and
+backend segmentation required by the normative topology section; otherwise a
+reader could implement the rejected flat-network form.
+
+**Decision status:** Confirmed and corrected one remaining Important wording
+conflict. The opening decision now requires a dedicated internal driver/Envoy
+frontend segment for each track and makes the existing internal segment
+backend-only, with Envoy as the sole dual-homed container. It no longer directs
+the driver onto the authorization/target backend.
+
+**Rationale:** Aligning the summary with the normative topology prevents the
+primary bypass correction from being lost during implementation handoff.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-08-31-v3b1-in-network-request-driver-design.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No Critical or Important written-design issue remains
+known. The user review and subsequent implementation-plan gates remain.
+
+**Next gate:** Commit and publish the design checkpoint for explicit user
+review. Only after approval of the written specification may the implementation
+plan be created.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
