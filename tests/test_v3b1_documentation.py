@@ -14,6 +14,7 @@ README = ROOT / "README.md"
 TOOLS_README = ROOT / "tools/README.md"
 ENVOY_README = ROOT / "adapters/envoy/README.md"
 V3_PROGRESS = ROOT / "docs/lab/V3-PROGRESS.md"
+TASK10_GATE = ROOT / "docs/lab/V3B1-TASK10-REQUEST-FREE-GATE.md"
 PAPER = ROOT / "docs/paper/kinetic-infrastructure.md"
 SVG = ROOT / "docs/architecture/v3-envoy-live-validation.svg"
 HYBRID_INLINE = ROOT / "docs/design-drafts/hybrid-two-timescale-architecture.html"
@@ -29,6 +30,7 @@ LIVE_BOARD = ROOT / "artifacts/generated/v3b1-task6-live-status.md"
 
 REQUEST_DRIVER_DESIGN = "2026-08-31-v3b1-in-network-request-driver-design.md"
 REQUEST_DRIVER_PLAN = "2026-08-31-v3b1-in-network-request-driver.md"
+CURRENT_DRIVER_PLAN = ROOT / "docs/superpowers/plans" / REQUEST_DRIVER_PLAN
 
 LEGACY_PREFIXES = {
     LEGACY_SPEC: (
@@ -46,6 +48,7 @@ TRACKED_TASK9_PUBLICATIONS = (
     TOOLS_README,
     ENVOY_README,
     V3_PROGRESS,
+    TASK10_GATE,
     PAPER,
     SVG,
     HYBRID_INLINE,
@@ -99,6 +102,103 @@ class _PassiveHTMLParser(HTMLParser):
 
 
 class V3B1DocumentationTest(unittest.TestCase):
+    def test_task10_request_free_gate_is_public_bound_and_claim_limited(self):
+        run_id = (
+            "v3b1-d2b26f6c8136dcd26a6e6727b9bb1381076a1e03b71a5a44df9b2b2ef9db6cf9"
+        )
+        source_commit = "a46e8dc98a1af64ceadb5700e91c2f87840564fe"
+        self.assertTrue(TASK10_GATE.is_file(), "Task 10 gate record is missing")
+        for path in (README, V3_PROGRESS, TASK10_GATE):
+            with self.subTest(path=path.relative_to(ROOT)):
+                text = path.read_text(encoding="utf-8")
+                value = normalized(text).lower()
+                self.assertIn(run_id, text)
+                self.assertIn(source_commit, text)
+                self.assertIn("request-free", value)
+                self.assertRegex(value, r"three[^.]{0,120}readiness")
+                self.assertRegex(value, r"three[^.]{0,120}(?:clean )?cancellations")
+                self.assertRegex(value, r"15[^.]{0,80}containers")
+                self.assertRegex(value, r"six[^.]{0,80}networks")
+                self.assertRegex(value, r"zero[^.]{0,120}(?:http|requests?)")
+                self.assertRegex(
+                    value,
+                    r"central `?run`?[^.]{0,120}(?:not executed|prohibited)",
+                )
+
+        gate_text = TASK10_GATE.read_text(encoding="utf-8")
+        gate_value = normalized(gate_text).lower()
+        for exact in (
+            "18bfe97801cfb5f43774c68581da58576147e698f05d56dfac53cc7fa1097da7",
+            "e7dfc3e371a3057152850b196005753b40bafd384fd470b3d501bffa34d0acae",
+            "intermediate_provisional_failure_local_boundary",
+            "local_envoy_boundary",
+            "not_promoted",
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ):
+            self.assertIn(exact, gate_text)
+        self.assertIn("not durably", gate_value)
+        self.assertIn(CITATION_URL, gate_text)
+
+        lineage_text = LINEAGE.read_text(encoding="utf-8").split(
+            "### T-124 —", 1
+        )[1]
+        for exact in (
+            run_id,
+            source_commit,
+            "18bfe97801cfb5f43774c68581da58576147e698f05d56dfac53cc7fa1097da7",
+            "e7dfc3e371a3057152850b196005753b40bafd384fd470b3d501bffa34d0acae",
+        ):
+            self.assertIn(exact, lineage_text)
+        self.assertRegex(
+            normalized(lineage_text).lower(),
+            r"central `?run`?[^.]{0,120}(?:not executed|prohibited)",
+        )
+        self.assertIn("not durably", normalized(lineage_text).lower())
+
+        self.assertNotIn(
+            "latest merged complete static gate passes 480",
+            normalized(README.read_text(encoding="utf-8")).lower(),
+        )
+        self.assertNotIn(
+            "either pending driver-era live gate",
+            normalized(V3_PROGRESS.read_text(encoding="utf-8")).lower(),
+        )
+
+        task10_plan = CURRENT_DRIVER_PLAN.read_text(encoding="utf-8").split(
+            "## Task 10", 1
+        )[1].split("## Task 11", 1)[0]
+        self.assertIn("- [x] **Step 3:", task10_plan)
+        self.assertIn("- [x] **Step 4:", task10_plan)
+        self.assertIn("- [ ] **Step 5:", task10_plan)
+        task10_value = normalized(task10_plan).lower()
+        self.assertNotIn("exact foreign-state restoration", task10_value)
+        self.assertRegex(
+            task10_value,
+            r"context name[^.]{0,160}post-run[^.]{0,160}(?:tuple|resource)",
+        )
+        self.assertNotIn(
+            "until the pending live gates pass",
+            normalized(README.read_text(encoding="utf-8")).lower(),
+        )
+
+        task11_plan = CURRENT_DRIVER_PLAN.read_text(encoding="utf-8").split(
+            "## Task 11", 1
+        )[1]
+        task11_value = normalized(task11_plan).lower()
+        self.assertRegex(
+            task11_value,
+            r"before- and after-resource snapshots[^.]{0,160}"
+            r"(?:implemented|tested|merged)",
+        )
+        self.assertRegex(
+            task11_value,
+            r"verif(?:y|ier)[^.]{0,160}(?:exact equality|exactly equal)",
+        )
+        self.assertRegex(
+            task11_value,
+            r"central `?run`?[^.]{0,160}prohibited",
+        )
+
     def test_founder_byline_and_approved_opening_are_preserved(self):
         text = PAPER.read_text(encoding="utf-8")
         self.assertIn(

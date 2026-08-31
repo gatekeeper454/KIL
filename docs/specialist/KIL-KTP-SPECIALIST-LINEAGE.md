@@ -6685,3 +6685,121 @@ lifecycle begin. The central `run` command remains prohibited until that gate
 record is public, reviewed, merged, and synchronized.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-124 — 2026-08-31 — Driver-era request-free Task 10 gate passes from merged stopped-endpoint source
+
+**Input:** PR #16 was merged after both required public CI jobs passed. Confirm
+GitHub, `origin/main`, and local `main` at the exact merge commit; rerun the
+complete merged static gate; perform the single bounded recovery `down`; then,
+only if recovery proves exact absence and foreign-state restoration, execute one
+fresh request-free `preflight -> up -> readiness -> down` lifecycle. Do not
+invoke the central `run` command.
+
+**Interpretation:** Task 10 is a lifecycle, topology, readiness, evidence-
+freeze, teardown, and restoration gate. Its intentional absence of a
+consequential request means a passing result must remain incomplete,
+provisional, and nonpromotable. It cannot establish an enforcement result,
+historical prevention, Kind/Calico or NetworkPolicy behavior, repetition, or
+performance.
+
+**Decision status:** Confirmed Task 10 request-free live gate passed at the
+local Envoy boundary; public-safe gate record implemented and locally verified,
+independently reviewed with no remaining Critical, Important, or Minor finding,
+but not yet published. PR #16 merged as
+`a46e8dc98a1af64ceadb5700e91c2f87840564fe`; both GitHub `bootstrap` jobs
+reported `SUCCESS`, and GitHub's merge commit, `origin/main`, and local `main`
+were exact. The merged source passed all 484 then-current repository tests.
+The central `run` was not executed and remains prohibited until the Task 10
+record is reviewed, merged through public CI, and synchronized.
+
+The one bounded recovery of rejected lifecycle
+`v3b1-05211715589b45f79dac4ebe5700004831c07b28af7ca42bce5111db47007801`
+completed without a retry. Its archived journal records 15 exact container
+removals, six exact network removals, dedicated profile deletion verified, and
+no request-side event. Its public bundle is correctly classified
+`intermediate_provisional_failure_local_boundary`, `run_complete=false`, and
+`not_promoted`; every request, decision, Envoy, target, join, raw-decision, and
+raw-driver file is zero bytes and every checksum verifies. Active state, active
+journal, and readiness poison were absent. The public manifest binds the
+foreign context name as `default` before and after; a post-recovery readback
+observed `Stopped/containerd/aarch64/4 CPU/4 GiB/20 GiB`, but the exact resource
+tuple was not durably bound at both boundaries.
+
+Fresh preflight passed with the three fixed ports free, exact pinned tool
+identities, clean merged source, and only that foreign stopped profile. Fresh
+up and request-free readiness then produced run
+`v3b1-d2b26f6c8136dcd26a6e6727b9bb1381076a1e03b71a5a44df9b2b2ef9db6cf9`
+from the exact merge commit. All three tracks produced exact readiness records
+and three clean cancellations. The archived 185-event journal contains three
+driver starts, three readiness completions, three cancellation completions,
+zero instruction/request events, nine terminal source collections, nine
+persisted evidence-freeze legs, 15 container removals, six network removals,
+and an explicit zero-survivor topology attestation.
+
+The resulting public-safe bundle is bound by public commitment
+`18bfe97801cfb5f43774c68581da58576147e698f05d56dfac53cc7fa1097da7`
+and manifest SHA-256
+`e7dfc3e371a3057152850b196005753b40bafd384fd470b3d501bffa34d0acae`.
+All eleven request-side and raw-source files are zero bytes and bind to the
+empty SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+Every `SHA256SUMS` entry verifies. Teardown was complete and verified before
+publication; active state, active journal, and readiness poison were absent;
+and the dedicated profile was absent. The public manifest binds the foreign
+context name as `default` before and after. A post-run readback observed its
+stopped resource tuple, but the exact resource tuple was not durably bound at
+both boundaries and therefore is not cryptographic restoration proof.
+
+**Rationale:** Passing request-free readiness before a central proof separates
+transport/lifecycle safety from enforcement behavior. It proves that all three
+in-network witnesses can become ready together and be cancelled without
+instruction, that zero-request evidence is preserved rather than synthesized,
+and that teardown preserves the bound foreign context name while recording a
+post-run profile observation. Exact foreign-resource restoration remains
+unproven because the before-resource tuple was not durably bound. Keeping the
+bundle incomplete and nonpromotable prevents this safety gate from being
+mislabeled as an authorization result.
+
+**Affected artifacts:**
+
+- `docs/lab/V3B1-TASK10-REQUEST-FREE-GATE.md`
+- `docs/lab/V3-PROGRESS.md`
+- `README.md`
+- `tests/test_v3b1_documentation.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- ignored `artifacts/generated/v3b1-task6-live-status.md`
+- ignored bundle `artifacts/generated/v3b1-local-envoy/v3b1-d2b26f6c8136dcd26a6e6727b9bb1381076a1e03b71a5a44df9b2b2ef9db6cf9/`
+- private archived journal `.tools/v3b1-private/completed/v3b1-d2b26f6c8136dcd26a6e6727b9bb1381076a1e03b71a5a44df9b2b2ef9db6cf9.journal.json`
+
+**Verification:** The public-safe record was developed test-first: its binding
+and claim-boundary test failed while the record and current status were absent,
+then passed after the exact source/run/commitment/manifest identifiers,
+readiness/cancellation counts, 15-by-6 absence proof, zero-request facts, and
+central-run prohibition were recorded. Independent review then corrected the
+draft's restoration language: only the context name is bound before and after;
+the exact resource tuple was operator-observed after the run but not durably
+bound at both boundaries. All 485 repository tests pass through `make validate`,
+including citation enforcement and diff hygiene. Read-only post-run checks
+independently verified every public checksum, zero-byte source size, active-
+state absence, exact local/remote merge equality, and the sole foreign Colima
+profile's post-run stopped resource tuple.
+
+**Unresolved questions:** The Task 10 public-safe record still requires public
+CI, merge, and exact local/remote synchronization. The central proof has not
+been executed.
+Before it can execute, a controller and public-evidence extension must durably
+bind exact before/after foreign-resource snapshots and the offline verifier
+must require their exact equality; that prerequisite remains unimplemented.
+Its no-retry request boundary, exact three-result join, target-marker outcomes,
+teardown, and presenter acceptance remain unobserved.
+
+**Next gate:** Review and publish the Task 10 record. Only after both public CI
+jobs pass and the record is merged and synchronized may the project implement,
+test, review, merge, and synchronize exact before/after foreign-resource
+snapshot binding and verifier equality. Only after that prerequisite may one
+fresh central `preflight -> up -> run -> down` proof execute. No retry is
+permitted after request intent. The prospective outcome remains `permit / permit / deny`, HTTP
+`200 / 200 / 403`, and target markers `1 / 1 / 0` with exact joins, checksums,
+teardown, foreign-state restoration, and offline presenter acceptance.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
