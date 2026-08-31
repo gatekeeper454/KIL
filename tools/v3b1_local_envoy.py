@@ -1698,6 +1698,7 @@ def validate_container_attestation(
         "published_ports", "platform", "entrypoint", "command", "environment",
         "state", "stdin_open", "tty", "healthcheck", "privileged",
         "network_mode", "pid_mode", "ipc_mode", "uts_mode", "userns_mode",
+        "cgroupns_mode",
     }
     expected_fields = {
         "name", "role", "track", "image_id", "networks", "config_path",
@@ -1739,6 +1740,8 @@ def validate_container_attestation(
         for field in ("pid_mode", "ipc_mode", "uts_mode", "userns_mode")
     ):
         raise ControllerError("container host namespace mode is forbidden")
+    if actual["cgroupns_mode"] != "private":
+        raise ControllerError("container cgroup namespace mode is not private")
     if actual["log_driver"] != "json-file" or actual["log_options"] != {"max-file": "1", "max-size": "1m"}:
         raise ControllerError("container bounded log attestation failed")
     role = expected["role"]
@@ -1783,6 +1786,7 @@ def validate_container_attestation(
         raise ControllerError("container network aliases are not closed")
     for network, values in aliases.items():
         required = required_aliases[network]
+        allowed = set(required) | {str(expected["name"]), str(actual["id"])[:12]}
         if (
             type(values) is not list
             or any(type(value) is not str or not value for value in values)
@@ -1790,6 +1794,7 @@ def validate_container_attestation(
             or type(required) is not list
             or any(type(value) is not str or not value for value in required)
             or not set(required).issubset(values)
+            or not set(values).issubset(allowed)
         ):
             raise ControllerError("container network aliases are invalid")
     if actual["platform"] != PLATFORM:
@@ -1803,14 +1808,14 @@ def validate_container_attestation(
     ):
         raise ControllerError("container environment attestation is invalid")
     if role == "authz":
-        expected_entrypoint = []
+        expected_entrypoint = ["python"]
         expected_command = [
-            "python", "-c", _AUTHZ_BOOTSTRAP, "--config", "/config/authz.json",
+            "-c", _AUTHZ_BOOTSTRAP, "--config", "/config/authz.json",
         ]
     elif role == "target":
-        expected_entrypoint = []
+        expected_entrypoint = ["python"]
         expected_command = [
-            "python", "-c", _TARGET_BOOTSTRAP, "--config", "/config/target.json",
+            "-c", _TARGET_BOOTSTRAP, "--config", "/config/target.json",
         ]
     elif role == "envoy":
         expected_entrypoint = ["/usr/local/bin/envoy"]
@@ -1819,9 +1824,9 @@ def validate_container_attestation(
             "--concurrency", "1",
         ]
     else:
-        expected_entrypoint = []
+        expected_entrypoint = ["python"]
         expected_command = [
-            "python", "-m", "kil.v3b1_request_driver", "--track",
+            "-m", "kil.v3b1_request_driver", "--track",
             str(expected["track"]), "--endpoint", "envoy:8080",
         ]
     if actual["entrypoint"] != expected_entrypoint or actual["command"] != expected_command:
@@ -2911,6 +2916,44 @@ def _network_segment(item: Mapping[str, object]) -> str:
     return str(segment)
 
 
+def _network_member_identities(
+    objects: Sequence[Mapping[str, object]],
+    track: str,
+    segment: str,
+) -> dict[str, dict[str, str]]:
+    """Project exact full-ID/name/role ownership for one network segment."""
+    roles = (
+        {"envoy", "authz", "target"}
+        if segment == "backend"
+        else {"envoy", "driver"}
+        if segment == "frontend"
+        else None
+    )
+    if roles is None:
+        raise ControllerError("network member segment is invalid")
+    result: dict[str, dict[str, str]] = {}
+    names: set[str] = set()
+    for item in objects:
+        if item.get("track") != track or item.get("role") not in roles:
+            continue
+        object_id = item.get("id")
+        name = item.get("name")
+        role = item.get("role")
+        if (
+            type(object_id) is not str
+            or _HEX.fullmatch(object_id) is None
+            or type(name) is not str
+            or not name
+            or type(role) is not str
+            or object_id in result
+            or name in names
+        ):
+            raise ControllerError("network member ownership is invalid")
+        result[object_id] = {"name": name, "role": role}
+        names.add(name)
+    return result
+
+
 def materialize_run_inputs(root: Path, manifest: dict[str, object]) -> MaterializedInputs:
     """Write deterministic, read-only service configs and central fixtures."""
     _validate_manifest(manifest)
@@ -3020,6 +3063,7 @@ def _hardened_kil_options() -> list[str]:
         "--platform",
         PLATFORM,
         "--pull=never",
+        "--cgroupns=private",
         "--read-only",
         "--user",
         "65532:65532",
@@ -3077,6 +3121,7 @@ def build_runtime_commands(
                 "--platform",
                 PLATFORM,
                 "--pull=never",
+                "--cgroupns=private",
                 "--network",
                 "none",
                 "--read-only",
@@ -3144,8 +3189,9 @@ def build_runtime_commands(
                 *_hardened_kil_options(),
                 "--mount",
                 f"type=bind,src={track_root / 'authz.json'},dst=/config/authz.json,readonly",
-                str(manifest["kil_image_id"]),
+                "--entrypoint",
                 "python",
+                str(manifest["kil_image_id"]),
                 "-c",
                 _AUTHZ_BOOTSTRAP,
                 "--config",
@@ -3166,8 +3212,9 @@ def build_runtime_commands(
                 *_hardened_kil_options(),
                 "--mount",
                 f"type=bind,src={track_root / 'target.json'},dst=/config/target.json,readonly",
-                str(manifest["kil_image_id"]),
+                "--entrypoint",
                 "python",
+                str(manifest["kil_image_id"]),
                 "-c",
                 _TARGET_BOOTSTRAP,
                 "--config",
@@ -3188,6 +3235,7 @@ def build_runtime_commands(
                 "--platform",
                 PLATFORM,
                 "--pull=never",
+                "--cgroupns=private",
                 "--read-only",
                 "--user",
                 "65532:65532",
@@ -3243,6 +3291,7 @@ def build_runtime_commands(
                 "--platform",
                 PLATFORM,
                 "--pull=never",
+                "--cgroupns=private",
                 "--read-only",
                 "--user",
                 "65532:65532",
@@ -3269,8 +3318,9 @@ def build_runtime_commands(
                 "max-file=1",
                 "--tmpfs",
                 "/tmp:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700",
-                str(manifest["kil_image_id"]),
+                "--entrypoint",
                 "python",
+                str(manifest["kil_image_id"]),
                 "-m",
                 "kil.v3b1_request_driver",
                 "--track",
@@ -3423,7 +3473,7 @@ def _synthetic_state_object(
         "port_bindings": {},
         "published_ports": None,
         "platform": PLATFORM,
-        "entrypoint": ["/usr/local/bin/envoy"] if role == "envoy" else [],
+        "entrypoint": ["/usr/local/bin/envoy"] if role == "envoy" else ["python"],
         "command": (
             [
                 "--config-path", "/etc/envoy/envoy.json", "--disable-hot-restart",
@@ -3431,12 +3481,12 @@ def _synthetic_state_object(
             ]
             if role == "envoy"
             else [
-                "python", "-m", "kil.v3b1_request_driver", "--track", track,
+                "-m", "kil.v3b1_request_driver", "--track", track,
                 "--endpoint", "envoy:8080",
             ]
             if role == "driver"
             else [
-                "python", "-c",
+                "-c",
                 _AUTHZ_BOOTSTRAP if role == "authz" else _TARGET_BOOTSTRAP,
                 "--config", f"/config/{role}.json",
             ]
@@ -3456,6 +3506,7 @@ def _synthetic_state_object(
         "ipc_mode": "",
         "uts_mode": "",
         "userns_mode": "",
+        "cgroupns_mode": "private",
     }
     return {
         "name": name,
@@ -3709,8 +3760,109 @@ def load_bound_active_state(state_path: Path) -> dict[str, object]:
     return state
 
 
+def _closed_teardown_validators(
+    validator_objects: Sequence[Mapping[str, object]],
+    manifest: Mapping[str, object],
+) -> list[Mapping[str, object]]:
+    """Validate exact retained validator identities without name discovery."""
+    if type(validator_objects) not in {list, tuple} or len(validator_objects) != 3:
+        raise ControllerError("exact validator teardown identities are unavailable")
+    expected_outer = {
+        "id", "name", "role", "track", "labels", "image_id",
+        "image_reference", "runtime_attestation",
+    }
+    expected_runtime = {
+        "privileged", "network_mode", "pid_mode", "ipc_mode", "uts_mode",
+        "userns_mode", "cgroupns_mode", "state", "entrypoint", "command",
+        "mounts", "networks", "port_bindings", "published_ports",
+    }
+    by_track: dict[str, Mapping[str, object]] = {}
+    ids: set[str] = set()
+    names: set[str] = set()
+    for record in validator_objects:
+        if type(record) is not dict or set(record) != expected_outer:
+            raise ControllerError("validator teardown identity is not closed")
+        track_value = record["track"]
+        if type(track_value) is not str:
+            raise ControllerError("validator teardown track is invalid")
+        try:
+            track = LiveTrack(track_value)
+        except ValueError as error:
+            raise ControllerError("validator teardown track is invalid") from error
+        expected_name = (
+            f"kil-v3b1-validate-{_track_slug(track)}-"
+            f"{str(manifest['content_identity_sha256'])[:12]}"
+        )
+        object_id = record["id"]
+        name = record["name"]
+        runtime = record["runtime_attestation"]
+        expected_labels = _object_labels(
+            str(manifest["run_id"]), "validator", track.value
+        )
+        if (
+            type(object_id) is not str
+            or _HEX.fullmatch(object_id) is None
+            or object_id in ids
+            or name != expected_name
+            or name in names
+            or record["role"] != "validator"
+            or record["labels"] != expected_labels
+            or record["image_id"] != manifest["envoy_image_id"]
+            or record["image_reference"] != manifest["envoy_image_digest"]
+            or type(runtime) is not dict
+            or set(runtime) != expected_runtime
+        ):
+            raise ControllerError("validator teardown identity is invalid")
+        mounts = runtime["mounts"]
+        published_ports = runtime["published_ports"]
+        published_ports_empty = published_ports is None or (
+            type(published_ports) is dict
+            and all(
+                type(port) is str and port and bindings in (None, [])
+                for port, bindings in published_ports.items()
+            )
+        )
+        if (
+            runtime["privileged"] is not False
+            or runtime["network_mode"] != "none"
+            or any(
+                type(runtime[field]) is not str or runtime[field] != ""
+                for field in ("pid_mode", "ipc_mode", "uts_mode", "userns_mode")
+            )
+            or runtime["cgroupns_mode"] != "private"
+            or runtime["state"] != "exited"
+            or runtime["entrypoint"] != ["/usr/local/bin/envoy"]
+            or runtime["command"] != [
+                "--mode", "validate", "--config-path", "/etc/envoy/envoy.json",
+                "--disable-hot-restart", "--concurrency", "1",
+            ]
+            or type(mounts) is not list
+            or len(mounts) != 1
+            or type(mounts[0]) is not dict
+            or set(mounts[0]) != {"source", "destination", "rw"}
+            or type(mounts[0]["source"]) is not str
+            or not Path(str(mounts[0]["source"])).is_absolute()
+            or mounts[0]["destination"] != "/etc/envoy/envoy.json"
+            or mounts[0]["rw"] is not False
+            or runtime["networks"] != {}
+            or runtime["port_bindings"] != {}
+            or not published_ports_empty
+        ):
+            raise ControllerError("validator teardown runtime identity is invalid")
+        ids.add(object_id)
+        names.add(str(name))
+        if track.value in by_track:
+            raise ControllerError("validator teardown track is duplicated")
+        by_track[track.value] = record
+    if set(by_track) != {track.value for track in _TRACKS}:
+        raise ControllerError("validator teardown track inventory is incomplete")
+    return [by_track[track.value] for track in _TRACKS]
+
+
 def teardown_commands(
-    state: Mapping[str, object], *, docker_binary: Path
+    state: Mapping[str, object], *,
+    validator_objects: Sequence[Mapping[str, object]],
+    docker_binary: Path,
 ) -> list[list[str]]:
     """Construct exact ID-addressed cleanup; never discover deletion targets."""
     if state.get("profile_created") is not True:
@@ -3718,8 +3870,10 @@ def teardown_commands(
     if state.get("colima_profile") != LAB_IDENTITY:
         raise ControllerError("profile ownership identity is invalid")
     manifest = state.get("manifest")
-    if isinstance(manifest, dict):
-        _validate_state_objects(state, manifest)
+    if type(manifest) is not dict:
+        raise ControllerError("validator teardown manifest is unavailable")
+    _validate_state_objects(state, manifest)
+    validators = _closed_teardown_validators(validator_objects, manifest)
     prefix = [
         str(docker_binary),
         "--config",
@@ -3735,7 +3889,7 @@ def teardown_commands(
         for item in objects
         if isinstance(item, dict) and item.get("role") == role
     ]
-    ordered = [
+    ordered = list(validators) + [
         item for role in ("envoy", "authz", "target", "driver")
         for item in objects
         if isinstance(item, dict) and item.get("role") == role
@@ -7381,21 +7535,62 @@ class LocalEnvoyController:
             state_value = raw["State"]
             network_settings = raw["NetworkSettings"]
             mounts_value = raw["Mounts"]
-            assert isinstance(config_value, dict)
-            assert isinstance(host, dict)
-            assert isinstance(state_value, dict)
-            assert isinstance(network_settings, dict)
-            assert isinstance(mounts_value, list)
+            assert type(config_value) is dict
+            assert type(host) is dict
+            assert type(state_value) is dict
+            assert type(network_settings) is dict
+            assert type(mounts_value) is list
+            assert all(type(item) is dict for item in mounts_value)
             image_reference = config_value["Image"]
             labels = config_value["Labels"]
+            entrypoint = config_value["Entrypoint"]
+            command = config_value["Cmd"]
+            running_value = state_value["Running"]
+            state_status = state_value["Status"]
+            raw_networks = network_settings["Networks"]
+            published_ports = network_settings["Ports"]
             privileged = host["Privileged"]
             network_mode = host["NetworkMode"]
             pid_mode = host["PidMode"]
             ipc_mode = host["IpcMode"]
             uts_mode = host["UTSMode"]
             userns_mode = host["UsernsMode"]
+            cgroupns_mode = host["CgroupnsMode"]
+            port_bindings = host["PortBindings"]
         except (KeyError, TypeError, AssertionError) as error:
             raise ControllerError("container inspection required fields are missing") from error
+        if (
+            type(running_value) is not bool
+            or type(state_status) is not str
+            or not state_status
+            or type(entrypoint) is not list
+            or not entrypoint
+            or any(type(item) is not str or not item for item in entrypoint)
+            or type(command) is not list
+            or not command
+            or any(type(item) is not str or not item for item in command)
+            or type(raw_networks) is not dict
+            or type(port_bindings) is not dict
+            or not (
+                published_ports is None
+                or (
+                    type(published_ports) is dict
+                    and all(
+                        type(port) is str
+                        and port
+                        and (
+                            bindings is None
+                            or (
+                                type(bindings) is list
+                                and all(type(binding) is dict for binding in bindings)
+                            )
+                        )
+                        for port, bindings in published_ports.items()
+                    )
+                )
+            )
+        ):
+            raise ControllerError("container inspection process/state/port fields are invalid")
         expected_labels = _object_labels(str(manifest["run_id"]), role, track)
         track_manifest = _track_manifest(manifest, LiveTrack(track))
         expected_name = str(track_manifest[f"{role}_container"])
@@ -7403,10 +7598,7 @@ class LocalEnvoyController:
         health = (
             health_value.get("Status") if isinstance(health_value, dict) else "none"
         )
-        running = state_value.get("Running") is True
-        state_status = state_value.get("Status")
-        if type(state_status) is not str:
-            state_status = "running" if running else "exited"
+        running = running_value is True
         if (
             type(object_id) is not str
             or _HEX.fullmatch(object_id) is None
@@ -7462,16 +7654,13 @@ class LocalEnvoyController:
         security = host.get("SecurityOpt") or []
         if security == ["no-new-privileges:true"]:
             security = ["no-new-privileges"]
-        raw_networks = network_settings.get("Networks")
-        if type(raw_networks) is not dict:
-            raise ControllerError("container network inspection is invalid")
         network_aliases: dict[str, list[str]] = {}
         for network_name, endpoint in raw_networks.items():
             if type(network_name) is not str or type(endpoint) is not dict:
                 raise ControllerError("container network inspection is invalid")
-            aliases = endpoint.get("Aliases")
-            if aliases is None:
-                aliases = []
+            if "Aliases" not in endpoint:
+                raise ControllerError("container network aliases are missing")
+            aliases = endpoint["Aliases"]
             if (
                 type(aliases) is not list
                 or any(type(alias) is not str or not alias for alias in aliases)
@@ -7507,17 +7696,16 @@ class LocalEnvoyController:
                     "rw": item.get("RW"),
                 }
                 for item in mounts_value
-                if isinstance(item, dict)
             ],
             "networks": sorted(raw_networks),
             "network_aliases": {
                 name: network_aliases[name] for name in sorted(network_aliases)
             },
-            "port_bindings": host.get("PortBindings"),
-            "published_ports": network_settings.get("Ports"),
+            "port_bindings": port_bindings,
+            "published_ports": published_ports,
             "platform": PLATFORM,
-            "entrypoint": config_value.get("Entrypoint") or [],
-            "command": config_value.get("Cmd") or [],
+            "entrypoint": entrypoint,
+            "command": command,
             "environment": config_value.get("Env") or [],
             "state": state_status,
             "stdin_open": config_value.get("OpenStdin", False),
@@ -7535,6 +7723,7 @@ class LocalEnvoyController:
             "ipc_mode": "" if ipc_mode == "private" else ipc_mode,
             "uts_mode": uts_mode,
             "userns_mode": userns_mode,
+            "cgroupns_mode": cgroupns_mode,
         }
         if role == "envoy":
             expected_networks = [
@@ -7615,6 +7804,7 @@ class LocalEnvoyController:
         track: str,
         *,
         segment: str = "backend",
+        expected_members: Mapping[str, Mapping[str, str]],
         require_complete_membership: bool = True,
         require_empty_membership: bool = False,
     ) -> dict[str, object]:
@@ -7696,15 +7886,45 @@ class LocalEnvoyController:
             if segment == "backend"
             else {"envoy", "driver"}
         )
-        expected_members = {
-            str(item["name"])
-            for item in manifest["containers"]  # type: ignore[union-attr]
-            if item["track"] == track and item["role"] in expected_roles
+        if type(expected_members) is not dict:
+            raise ControllerError("expected network membership is invalid")
+        expected_pairs: dict[str, str] = {}
+        expected_names: set[str] = set()
+        expected_member_roles: set[str] = set()
+        for container_id, identity in expected_members.items():
+            if (
+                type(container_id) is not str
+                or _HEX.fullmatch(container_id) is None
+                or type(identity) is not dict
+                or set(identity) != {"name", "role"}
+                or type(identity["name"]) is not str
+                or type(identity["role"]) is not str
+                or identity["role"] not in expected_roles
+                or identity["name"]
+                != str(track_value[f"{identity['role']}_container"])
+                or identity["name"] in expected_names
+            ):
+                raise ControllerError("expected network member identity is invalid")
+            expected_pairs[container_id] = identity["name"]
+            expected_names.add(identity["name"])
+            expected_member_roles.add(identity["role"])
+        actual_pairs = {
+            container_id: endpoint["Name"]
+            for container_id, endpoint in containers.items()
         }
         if (
-            not set(members).issubset(expected_members)
-            or len(members) != len(set(members))
-            or (require_complete_membership and set(members) != expected_members)
+            len(members) != len(set(members))
+            or any(
+                expected_pairs.get(container_id) != member_name
+                for container_id, member_name in actual_pairs.items()
+            )
+            or (
+                require_complete_membership
+                and (
+                    actual_pairs != expected_pairs
+                    or expected_member_roles != expected_roles
+                )
+            )
             or (require_empty_membership and members)
         ):
             raise ControllerError(
@@ -7730,35 +7950,107 @@ class LocalEnvoyController:
             raw = json.loads(raw_output, object_pairs_hook=_closed_object)
         except (json.JSONDecodeError, ControllerError) as error:
             raise ControllerError("Envoy validator inspection is not closed JSON") from error
-        if type(raw) is not dict or type(raw.get("Config")) is not dict or type(raw.get("HostConfig")) is not dict:
+        if type(raw) is not dict:
             raise ControllerError("Envoy validator inspection fields are invalid")
-        config = raw["Config"]
-        host = raw["HostConfig"]
-        assert isinstance(config, dict) and isinstance(host, dict)
+        try:
+            object_id = raw["Id"]
+            object_name = raw["Name"]
+            image_id = raw["Image"]
+            config = raw["Config"]
+            host = raw["HostConfig"]
+            state = raw["State"]
+            network_settings = raw["NetworkSettings"]
+            mounts = raw["Mounts"]
+            assert type(config) is dict
+            assert type(host) is dict
+            assert type(state) is dict
+            assert type(network_settings) is dict
+            assert type(mounts) is list
+            assert all(type(item) is dict for item in mounts)
+            image_reference = config["Image"]
+            actual_labels = config["Labels"]
+            user = config["User"]
+            entrypoint = config["Entrypoint"]
+            command = config["Cmd"]
+            privileged = host["Privileged"]
+            readonly_rootfs = host["ReadonlyRootfs"]
+            auto_remove = host["AutoRemove"]
+            cap_drop = host["CapDrop"]
+            security_value = host["SecurityOpt"]
+            network_mode = host["NetworkMode"]
+            pid_mode = host["PidMode"]
+            ipc_mode = host["IpcMode"]
+            uts_mode = host["UTSMode"]
+            userns_mode = host["UsernsMode"]
+            cgroupns_mode = host["CgroupnsMode"]
+            port_bindings = host["PortBindings"]
+            running = state["Running"]
+            state_status = state["Status"]
+            networks = network_settings["Networks"]
+            published_ports = network_settings["Ports"]
+        except (KeyError, TypeError, AssertionError) as error:
+            raise ControllerError(
+                "Envoy validator inspection required fields are invalid"
+            ) from error
         name = f"kil-v3b1-validate-{_track_slug(track)}-{str(manifest['content_identity_sha256'])[:12]}"
         labels = _object_labels(str(manifest["run_id"]), "validator", track.value)
-        security = host.get("SecurityOpt") or []
+        security = security_value
         if security == ["no-new-privileges:true"]:
             security = ["no-new-privileges"]
+        normalized_mounts = [
+            {
+                "source": item.get("Source"),
+                "destination": item.get("Destination"),
+                "rw": item.get("RW"),
+            }
+            for item in mounts
+        ]
+        live_ports_empty = published_ports is None or (
+            type(published_ports) is dict
+            and all(
+                type(port) is str and port and bindings in (None, [])
+                for port, bindings in published_ports.items()
+            )
+        )
         if (
-            type(raw.get("Id")) is not str
-            or _HEX.fullmatch(str(raw["Id"])) is None
-            or raw["Id"] != identifier
-            or raw.get("Name") != f"/{name}"
-            or raw.get("Image") != manifest["envoy_image_id"]
-            or config.get("Image") != manifest["envoy_image_digest"]
-            or config.get("User") != "65532:65532"
-            or config.get("Entrypoint") != ["/usr/local/bin/envoy"]
-            or config.get("Cmd") != [
+            type(object_id) is not str
+            or _HEX.fullmatch(object_id) is None
+            or object_id != identifier
+            or object_name != f"/{name}"
+            or image_id != manifest["envoy_image_id"]
+            or image_reference != manifest["envoy_image_digest"]
+            or user != "65532:65532"
+            or entrypoint != ["/usr/local/bin/envoy"]
+            or command != [
                 "--mode", "validate", "--config-path", "/etc/envoy/envoy.json",
                 "--disable-hot-restart", "--concurrency", "1",
             ]
-            or host.get("ReadonlyRootfs") is not True
-            or host.get("AutoRemove") is not False
-            or host.get("CapDrop") != ["ALL"]
+            or privileged is not False
+            or readonly_rootfs is not True
+            or auto_remove is not False
+            or cap_drop != ["ALL"]
             or security != ["no-new-privileges"]
-            or host.get("NetworkMode") != "none"
-            or (host.get("PortBindings") or {}) != {}
+            or network_mode != "none"
+            or type(pid_mode) is not str
+            or pid_mode != ""
+            or type(ipc_mode) is not str
+            or ipc_mode not in {"", "private"}
+            or type(uts_mode) is not str
+            or uts_mode != ""
+            or type(userns_mode) is not str
+            or userns_mode != ""
+            or cgroupns_mode != "private"
+            or port_bindings != {}
+            or running is not False
+            or state_status != "exited"
+            or type(networks) is not dict
+            or networks != {}
+            or not live_ports_empty
+            or len(normalized_mounts) != 1
+            or type(normalized_mounts[0]["source"]) is not str
+            or not Path(str(normalized_mounts[0]["source"])).is_absolute()
+            or normalized_mounts[0]["destination"] != "/etc/envoy/envoy.json"
+            or normalized_mounts[0]["rw"] is not False
         ):
             raise ControllerError("Envoy validator immutable/sandbox attestation failed")
         image_inspection = self._execute(
@@ -7789,16 +8081,33 @@ class LocalEnvoyController:
                 "Envoy validator immutable image attestation failed"
             ) from error
         _validate_container_labels(
-            config.get("Labels"), image_config.get("Labels"), labels
+            actual_labels, image_config.get("Labels"), labels
         )
+        runtime_attestation = {
+            "privileged": privileged,
+            "network_mode": network_mode,
+            "pid_mode": pid_mode,
+            "ipc_mode": "" if ipc_mode == "private" else ipc_mode,
+            "uts_mode": uts_mode,
+            "userns_mode": userns_mode,
+            "cgroupns_mode": cgroupns_mode,
+            "state": state_status,
+            "entrypoint": entrypoint,
+            "command": command,
+            "mounts": normalized_mounts,
+            "networks": networks,
+            "port_bindings": port_bindings,
+            "published_ports": published_ports,
+        }
         return {
-            "id": raw["Id"],
+            "id": object_id,
             "name": name,
             "role": "validator",
             "track": track.value,
             "labels": labels,
             "image_id": manifest["envoy_image_id"],
             "image_reference": manifest["envoy_image_digest"],
+            "runtime_attestation": runtime_attestation,
         }
 
     def _attest_runtime(
@@ -7829,6 +8138,11 @@ class LocalEnvoyController:
                 manifest,
                 str(item["track"]),
                 segment=_network_segment(item),
+                expected_members=_network_member_identities(
+                    objects,
+                    str(item["track"]),
+                    _network_segment(item),
+                ),
             )
             for item in _runtime_networks(manifest)
         ]
@@ -8142,6 +8456,11 @@ class LocalEnvoyController:
                     manifest,
                     str(item["track"]),
                     segment=str(item.get("segment", "backend")),
+                    expected_members=_network_member_identities(
+                        objects,
+                        str(item["track"]),
+                        str(item.get("segment", "backend")),
+                    ),
                     require_complete_membership=False,
                 )
                 if "id" in item and current != item:
@@ -8495,6 +8814,11 @@ class LocalEnvoyController:
                 manifest,
                 str(record["track"]),
                 segment=str(record.get("segment", "backend")),
+                expected_members=_network_member_identities(
+                    state["objects"],  # type: ignore[arg-type]
+                    str(record["track"]),
+                    str(record.get("segment", "backend")),
+                ),
             )
             if current != record:
                 raise ControllerError("recorded network attestation changed")
@@ -10739,6 +11063,7 @@ class LocalEnvoyController:
                 manifest,
                 str(item["track"]),
                 segment=str(item.get("segment", "backend")),
+                expected_members={},
                 require_complete_membership=False,
                 require_empty_membership=True,
             )

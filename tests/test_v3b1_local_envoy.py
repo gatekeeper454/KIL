@@ -2542,6 +2542,20 @@ class ControllerContractTest(unittest.TestCase):
             self.assertTrue(
                 all("kil.v3b1.managed=true" in command for command in validators)
             )
+            managed_container_commands = [
+                command
+                for command in commands
+                if any(
+                    part.startswith("kil.v3b1.role=") for part in command
+                )
+            ]
+            self.assertEqual(len(managed_container_commands), 15)
+            self.assertTrue(
+                all(
+                    "--cgroupns=private" in command
+                    for command in managed_container_commands
+                )
+            )
             for command in detached:
                 name = command[command.index("--name") + 1]
                 self.assertTrue(name.startswith("kil-v3b1-"))
@@ -2575,6 +2589,9 @@ class ControllerContractTest(unittest.TestCase):
                     any(value.startswith("/evidence:rw,") for value in command)
                 )
                 self.assertFalse(any("dst=/ledger" in value for value in command))
+                self.assertEqual(
+                    command[command.index("--entrypoint") + 1], "python"
+                )
             targets = [
                 command
                 for command in kil_services
@@ -2641,10 +2658,12 @@ class ControllerContractTest(unittest.TestCase):
                 )
                 self.assertNotIn(track["backend_network"], command)
                 self.assertEqual(
-                    command[-8:],
+                    command[command.index("--entrypoint") + 1], "python"
+                )
+                self.assertEqual(
+                    command[-7:],
                     [
                         KIL_IMAGE_ID,
-                        "python",
                         "-m",
                         "kil.v3b1_request_driver",
                         "--track",
@@ -2709,13 +2728,67 @@ class ControllerContractTest(unittest.TestCase):
             persist_active_state(state_path, manifest_path, value)
             state = load_bound_active_state(state_path)
             self.assertTrue(state["profile_created"])
+            validator_objects = [
+                {
+                    "id": character * 64,
+                    "name": (
+                        f"kil-v3b1-validate-{track.value.replace('_', '-')}-"
+                        f"{str(value['content_identity_sha256'])[:12]}"
+                    ),
+                    "role": "validator",
+                    "track": track.value,
+                    "labels": {
+                        "kil.v3b1.managed": "true",
+                        "kil.v3b1.run-id": value["run_id"],
+                        "kil.v3b1.role": "validator",
+                        "kil.v3b1.track": track.value,
+                    },
+                    "image_id": value["envoy_image_id"],
+                    "image_reference": value["envoy_image_digest"],
+                    "runtime_attestation": {
+                        "privileged": False,
+                        "network_mode": "none",
+                        "pid_mode": "",
+                        "ipc_mode": "",
+                        "uts_mode": "",
+                        "userns_mode": "",
+                        "cgroupns_mode": "private",
+                        "state": "exited",
+                        "entrypoint": ["/usr/local/bin/envoy"],
+                        "command": [
+                            "--mode",
+                            "validate",
+                            "--config-path",
+                            "/etc/envoy/envoy.json",
+                            "--disable-hot-restart",
+                            "--concurrency",
+                            "1",
+                        ],
+                        "mounts": [
+                            {
+                                "source": f"/private/{track.value}/envoy.json",
+                                "destination": "/etc/envoy/envoy.json",
+                                "rw": False,
+                            }
+                        ],
+                        "networks": {},
+                        "port_bindings": {},
+                        "published_ports": None,
+                    },
+                }
+                for track, character in zip(
+                    LiveTrack, ("d", "e", "f"), strict=True
+                )
+            ]
 
             commands = teardown_commands(
-                state, docker_binary=Path("/locked/docker")
+                state,
+                validator_objects=validator_objects,
+                docker_binary=Path("/locked/docker"),
             )
 
             removed = [command[-1] for command in commands if "rm" in command and "network" not in command]
-            expected_order = [
+            expected_order = [item["id"] for item in validator_objects] + [
                 item["id"]
                 for role in ("envoy", "authz", "target", "driver")
                 for item in state["objects"]
@@ -2764,7 +2837,22 @@ class ControllerContractTest(unittest.TestCase):
             unowned["profile_created"] = False
             unowned.pop("binding_sha256")
             with self.assertRaisesRegex(ControllerError, "profile ownership"):
-                teardown_commands(unowned, docker_binary=Path("/locked/docker"))
+                teardown_commands(
+                    unowned,
+                    validator_objects=validator_objects,
+                    docker_binary=Path("/locked/docker"),
+                )
+
+            forged_validators = json.loads(json.dumps(validator_objects))
+            forged_validators[0]["name"] = validator_objects[1]["name"]
+            with self.assertRaisesRegex(
+                ControllerError, "validator|identity|teardown"
+            ):
+                teardown_commands(
+                    state,
+                    validator_objects=forged_validators,
+                    docker_binary=Path("/locked/docker"),
+                )
 
     def test_default_active_state_is_an_exact_ignored_repository_path(self):
         self.assertEqual(
@@ -7394,6 +7482,7 @@ class TeardownContinuationTest(unittest.TestCase):
                         track,
                         *,
                         segment="backend",
+                        expected_members=None,
                         require_complete_membership=True,
                         require_empty_membership=False,
                     ):
@@ -7787,9 +7876,8 @@ class RuntimeAttestationTest(unittest.TestCase):
             "port_bindings": {},
             "published_ports": None,
             "platform": "linux/arm64",
-            "entrypoint": [],
+            "entrypoint": ["python"],
             "command": [
-                "python",
                 "-c",
                 (
                     "import os,runpy;"
@@ -7812,6 +7900,7 @@ class RuntimeAttestationTest(unittest.TestCase):
             "ipc_mode": "",
             "uts_mode": "",
             "userns_mode": "",
+            "cgroupns_mode": "private",
         }
         validated = validate_container_attestation(actual, expected)
         self.assertEqual(validated["id"], "9" * 64)
@@ -7831,6 +7920,7 @@ class RuntimeAttestationTest(unittest.TestCase):
             ("ipc_mode", "host"),
             ("uts_mode", "host"),
             ("userns_mode", "host"),
+            ("cgroupns_mode", "host"),
         ):
             with self.subTest(field=field, value=value):
                 broken = dict(actual)
@@ -7846,6 +7936,7 @@ class RuntimeAttestationTest(unittest.TestCase):
             "ipc_mode",
             "uts_mode",
             "userns_mode",
+            "cgroupns_mode",
         ):
             with self.subTest(missing=field):
                 broken = dict(actual)
@@ -7863,6 +7954,16 @@ class RuntimeAttestationTest(unittest.TestCase):
         unknown["namespace_escape"] = False
         with self.assertRaisesRegex(ControllerError, "closed|fields"):
             validate_container_attestation(unknown, expected)
+        for aliases in (
+            [expected["name"], "9" * 12, "envoy"],
+            [expected["name"], "9" * 12, "cross-role"],
+            [expected["name"], expected["name"]],
+        ):
+            with self.subTest(aliases=aliases):
+                broken = json.loads(json.dumps(actual))
+                broken["network_aliases"][expected["primary_network"]] = aliases
+                with self.assertRaisesRegex(ControllerError, "alias"):
+                    validate_container_attestation(broken, expected)
 
     def test_running_envoy_is_dual_homed_with_fixed_frontend_alias_and_no_publication(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -7931,6 +8032,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                         "IpcMode": "private",
                         "UTSMode": "",
                         "UsernsMode": "",
+                        "CgroupnsMode": "private",
                         "ReadonlyRootfs": True,
                         "CapDrop": ["ALL"],
                         "SecurityOpt": ["no-new-privileges"],
@@ -8116,6 +8218,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                 ("IpcMode", "host"),
                 ("UTSMode", "host"),
                 ("UsernsMode", "host"),
+                ("CgroupnsMode", "host"),
             ):
                 with self.subTest(field=field, value=mutated_value):
                     broken = json.loads(inspections()[0].stdout)
@@ -8130,6 +8233,115 @@ class RuntimeAttestationTest(unittest.TestCase):
                     )
                     with self.assertRaisesRegex(
                         ControllerError, "privileged|network|namespace|mode"
+                    ):
+                        controller._inspect_container(
+                            "9" * 64, value, "envoy", track.value
+                        )
+            for field in (
+                "Privileged",
+                "NetworkMode",
+                "PidMode",
+                "IpcMode",
+                "UTSMode",
+                "UsernsMode",
+                "CgroupnsMode",
+            ):
+                with self.subTest(missing=field):
+                    broken = json.loads(inspections()[0].stdout)
+                    del broken["HostConfig"][field]
+                    controller.runner = FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(broken) + "\n", ""
+                            ),
+                            inspections()[1],
+                        ]
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError, "required fields|missing"
+                    ):
+                        controller._inspect_container(
+                            "9" * 64, value, "envoy", track.value
+                        )
+                with self.subTest(wrong_type=field):
+                    broken = json.loads(inspections()[0].stdout)
+                    broken["HostConfig"][field] = None
+                    controller.runner = FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(broken) + "\n", ""
+                            ),
+                            inspections()[1],
+                        ]
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError, "privileged|network|namespace|mode"
+                    ):
+                        controller._inspect_container(
+                            "9" * 64, value, "envoy", track.value
+                        )
+            reserved_backend_alias = json.loads(inspections()[0].stdout)
+            reserved_backend_alias["NetworkSettings"]["Networks"][
+                track_value["backend_network"]
+            ]["Aliases"].append("envoy")
+            controller.runner = FakeRunner(
+                [
+                    CommandResult(
+                        0, canonical_json(reserved_backend_alias) + "\n", ""
+                    ),
+                    inspections()[1],
+                ]
+            )
+            with self.assertRaisesRegex(ControllerError, "alias"):
+                controller._inspect_container(
+                    "9" * 64, value, "envoy", track.value
+                )
+
+            for label, mutate in (
+                ("mounts", lambda item: item.__setitem__("Mounts", [None])),
+                ("status", lambda item: item["State"].pop("Status")),
+                (
+                    "entrypoint_falsey",
+                    lambda item: item["Config"].__setitem__("Entrypoint", []),
+                ),
+                (
+                    "entrypoint_wrong_type",
+                    lambda item: item["Config"].__setitem__("Entrypoint", None),
+                ),
+                ("cmd_falsey", lambda item: item["Config"].__setitem__("Cmd", [])),
+                ("cmd_wrong_type", lambda item: item["Config"].__setitem__("Cmd", None)),
+                (
+                    "aliases",
+                    lambda item: item["NetworkSettings"]["Networks"][
+                        track_value["backend_network"]
+                    ].__setitem__("Aliases", {}),
+                ),
+                (
+                    "networks",
+                    lambda item: item["NetworkSettings"].__setitem__(
+                        "Networks", []
+                    ),
+                ),
+                (
+                    "ports",
+                    lambda item: item["NetworkSettings"].pop("Ports"),
+                ),
+                ("host", lambda item: item.__setitem__("HostConfig", [])),
+            ):
+                with self.subTest(malformed=label):
+                    broken = json.loads(inspections()[0].stdout)
+                    mutate(broken)
+                    controller.runner = FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(broken) + "\n", ""
+                            ),
+                            inspections()[1],
+                        ]
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError,
+                        "inspection|required|mount|state|process|network|port|alias",
                     ):
                         controller._inspect_container(
                             "9" * 64, value, "envoy", track.value
@@ -8165,9 +8377,8 @@ class RuntimeAttestationTest(unittest.TestCase):
                     "Labels": {**immutable_labels, **runtime_labels},
                     "User": "65532:65532",
                     "StopTimeout": 10,
-                    "Entrypoint": [],
+                    "Entrypoint": ["python"],
                     "Cmd": [
-                        "python",
                         "-m",
                         "kil.v3b1_request_driver",
                         "--track",
@@ -8187,6 +8398,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                     "IpcMode": "private",
                     "UTSMode": "",
                     "UsernsMode": "",
+                    "CgroupnsMode": "private",
                     "ReadonlyRootfs": True,
                     "CapDrop": ["ALL"],
                     "SecurityOpt": ["no-new-privileges"],
@@ -8299,6 +8511,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                 ("IpcMode", "host"),
                 ("UTSMode", "host"),
                 ("UsernsMode", "host"),
+                ("CgroupnsMode", "host"),
             ):
                 with self.subTest(field=field, value=mutated_value):
                     broken = json.loads(json.dumps(raw))
@@ -8330,6 +8543,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                 "IpcMode",
                 "UTSMode",
                 "UsernsMode",
+                "CgroupnsMode",
             ):
                 with self.subTest(missing=field):
                     broken = json.loads(json.dumps(raw))
@@ -8377,7 +8591,82 @@ class RuntimeAttestationTest(unittest.TestCase):
                             track.value,
                             require_running=False,
                         )
+            reserved_driver_alias = json.loads(json.dumps(raw))
+            reserved_driver_alias["NetworkSettings"]["Networks"][
+                track_value["frontend_network"]
+            ]["Aliases"].append("envoy")
+            controller.runner = FakeRunner(
+                [
+                    CommandResult(
+                        0, canonical_json(reserved_driver_alias) + "\n", ""
+                    ),
+                    CommandResult(0, canonical_json(image) + "\n", ""),
+                ]
+            )
+            with self.assertRaisesRegex(ControllerError, "alias"):
+                controller._inspect_container(
+                    "7" * 64,
+                    value,
+                    "driver",
+                    track.value,
+                    require_running=False,
+                )
 
+            for label, mutate in (
+                ("mounts", lambda item: item.__setitem__("Mounts", [None])),
+                ("status", lambda item: item["State"].pop("Status")),
+                (
+                    "entrypoint_falsey",
+                    lambda item: item["Config"].__setitem__("Entrypoint", []),
+                ),
+                (
+                    "entrypoint_wrong_type",
+                    lambda item: item["Config"].__setitem__("Entrypoint", None),
+                ),
+                ("cmd_falsey", lambda item: item["Config"].__setitem__("Cmd", [])),
+                ("cmd_wrong_type", lambda item: item["Config"].__setitem__("Cmd", None)),
+                (
+                    "aliases",
+                    lambda item: item["NetworkSettings"]["Networks"][
+                        track_value["frontend_network"]
+                    ].__setitem__("Aliases", {}),
+                ),
+                (
+                    "networks",
+                    lambda item: item["NetworkSettings"].__setitem__(
+                        "Networks", []
+                    ),
+                ),
+                (
+                    "ports",
+                    lambda item: item["NetworkSettings"].pop("Ports"),
+                ),
+                ("host", lambda item: item.__setitem__("HostConfig", [])),
+            ):
+                with self.subTest(malformed=label):
+                    broken = json.loads(json.dumps(raw))
+                    mutate(broken)
+                    controller.runner = FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(broken) + "\n", ""
+                            ),
+                            CommandResult(
+                                0, canonical_json(image) + "\n", ""
+                            ),
+                        ]
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError,
+                        "inspection|required|mount|state|process|network|port|alias",
+                    ):
+                        controller._inspect_container(
+                            "7" * 64,
+                            value,
+                            "driver",
+                            track.value,
+                            require_running=False,
+                        )
     def test_stopped_transient_validator_uses_exact_immutable_label_merge(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "repo"
@@ -8419,14 +8708,28 @@ class RuntimeAttestationTest(unittest.TestCase):
                     ],
                 },
                 "HostConfig": {
+                    "Privileged": False,
                     "ReadonlyRootfs": True,
                     "AutoRemove": False,
                     "CapDrop": ["ALL"],
                     "SecurityOpt": ["no-new-privileges"],
                     "NetworkMode": "none",
+                    "PidMode": "",
+                    "IpcMode": "private",
+                    "UTSMode": "",
+                    "UsernsMode": "",
+                    "CgroupnsMode": "private",
                     "PortBindings": {},
                 },
-                "State": {"Running": False},
+                "State": {"Running": False, "Status": "exited"},
+                "NetworkSettings": {"Networks": {}, "Ports": None},
+                "Mounts": [
+                    {
+                        "Source": "/private/envoy.json",
+                        "Destination": "/etc/envoy/envoy.json",
+                        "RW": False,
+                    }
+                ],
             }
             image = {
                 "Os": "linux",
@@ -8453,6 +8756,153 @@ class RuntimeAttestationTest(unittest.TestCase):
 
             self.assertEqual(inspected["labels"], runtime_labels)
             self.assertFalse(raw["State"]["Running"])
+            self.assertEqual(
+                inspected["runtime_attestation"],
+                {
+                    "privileged": False,
+                    "network_mode": "none",
+                    "pid_mode": "",
+                    "ipc_mode": "",
+                    "uts_mode": "",
+                    "userns_mode": "",
+                    "cgroupns_mode": "private",
+                    "state": "exited",
+                    "entrypoint": ["/usr/local/bin/envoy"],
+                    "command": raw["Config"]["Cmd"],
+                    "mounts": [
+                        {
+                            "source": "/private/envoy.json",
+                            "destination": "/etc/envoy/envoy.json",
+                            "rw": False,
+                        }
+                    ],
+                    "networks": {},
+                    "port_bindings": {},
+                    "published_ports": None,
+                },
+            )
+
+            for field, mutated_value in (
+                ("Privileged", True),
+                ("NetworkMode", "host"),
+                ("PidMode", "host"),
+                ("IpcMode", "host"),
+                ("UTSMode", "host"),
+                ("UsernsMode", "host"),
+                ("CgroupnsMode", "host"),
+            ):
+                with self.subTest(field=field, value=mutated_value):
+                    broken = json.loads(json.dumps(raw))
+                    broken["HostConfig"][field] = mutated_value
+                    controller.runner = FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(broken) + "\n", ""
+                            ),
+                            CommandResult(
+                                0, canonical_json(image) + "\n", ""
+                            ),
+                        ]
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError, "validator|sandbox|namespace|mode"
+                    ):
+                        controller._inspect_validation_container(
+                            "8" * 64, value, track
+                        )
+
+            for field in (
+                "Privileged",
+                "NetworkMode",
+                "PidMode",
+                "IpcMode",
+                "UTSMode",
+                "UsernsMode",
+                "CgroupnsMode",
+            ):
+                with self.subTest(missing=field):
+                    broken = json.loads(json.dumps(raw))
+                    del broken["HostConfig"][field]
+                    controller.runner = FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(broken) + "\n", ""
+                            ),
+                            CommandResult(
+                                0, canonical_json(image) + "\n", ""
+                            ),
+                        ]
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError, "validator|fields|sandbox"
+                    ):
+                        controller._inspect_validation_container(
+                            "8" * 64, value, track
+                        )
+                with self.subTest(wrong_type=field):
+                    broken = json.loads(json.dumps(raw))
+                    broken["HostConfig"][field] = None
+                    controller.runner = FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(broken) + "\n", ""
+                            ),
+                            CommandResult(
+                                0, canonical_json(image) + "\n", ""
+                            ),
+                        ]
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError, "validator|sandbox|namespace|mode"
+                    ):
+                        controller._inspect_validation_container(
+                            "8" * 64, value, track
+                        )
+
+            for label, mutate in (
+                ("mounts", lambda item: item.__setitem__("Mounts", [None])),
+                ("status", lambda item: item["State"].pop("Status")),
+                (
+                    "entrypoint_falsey",
+                    lambda item: item["Config"].__setitem__("Entrypoint", []),
+                ),
+                (
+                    "entrypoint_wrong_type",
+                    lambda item: item["Config"].__setitem__("Entrypoint", None),
+                ),
+                ("cmd_falsey", lambda item: item["Config"].__setitem__("Cmd", [])),
+                ("cmd_wrong_type", lambda item: item["Config"].__setitem__("Cmd", None)),
+                (
+                    "networks",
+                    lambda item: item["NetworkSettings"].__setitem__(
+                        "Networks", []
+                    ),
+                ),
+                (
+                    "ports",
+                    lambda item: item["NetworkSettings"].pop("Ports"),
+                ),
+                ("host", lambda item: item.__setitem__("HostConfig", [])),
+            ):
+                with self.subTest(malformed=label):
+                    broken = json.loads(json.dumps(raw))
+                    mutate(broken)
+                    controller.runner = FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(broken) + "\n", ""
+                            ),
+                            CommandResult(
+                                0, canonical_json(image) + "\n", ""
+                            ),
+                        ]
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError, "validator|inspection|fields|shape"
+                    ):
+                        controller._inspect_validation_container(
+                            "8" * 64, value, track
+                        )
 
     def test_network_inspection_closes_backend_and_frontend_membership(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -8477,6 +8927,13 @@ class RuntimeAttestationTest(unittest.TestCase):
                 track_value["target_container"],
                 track_value["envoy_container"],
             ]
+            backend_expected = {
+                f"{index}" * 64: {"name": name, "role": role}
+                for index, (name, role) in enumerate(
+                    zip(member_names, ("authz", "target", "envoy"), strict=True),
+                    start=1,
+                )
+            }
 
             def member(name):
                 return {
@@ -8530,13 +8987,39 @@ class RuntimeAttestationTest(unittest.TestCase):
             controller._prepare_private_roots()
 
             inspected = controller._inspect_network(
-                "a" * 64, value, track.value, segment="backend"
+                "a" * 64,
+                value,
+                track.value,
+                segment="backend",
+                expected_members=backend_expected,
             )
 
             self.assertEqual(inspected["name"], track_value["backend_network"])
             self.assertEqual(inspected["segment"], "backend")
             self.assertEqual(len(runner.calls), 1)
             self.assertIn("{{json .}}", runner.calls[0][0])
+
+            duplicate_id_payload = canonical_json(network).replace(
+                '"Containers":{',
+                (
+                    '"Containers":{'
+                    f'"{"1" * 64}":{canonical_json(member(member_names[0]))},'
+                ),
+                1,
+            )
+            controller.runner = FakeRunner(
+                [CommandResult(0, duplicate_id_payload + "\n", "")]
+            )
+            with self.assertRaisesRegex(
+                ControllerError, "closed JSON|duplicate"
+            ):
+                controller._inspect_network(
+                    "a" * 64,
+                    value,
+                    track.value,
+                    segment="backend",
+                    expected_members=backend_expected,
+                )
 
             partial = {**network, "Containers": {
                 "1" * 64: member(member_names[0])
@@ -8547,6 +9030,9 @@ class RuntimeAttestationTest(unittest.TestCase):
                 value,
                 track.value,
                 segment="backend",
+                expected_members={
+                    "1" * 64: backend_expected["1" * 64]
+                },
                 require_complete_membership=False,
             )
             controller.runner = NetworkRunner(partial)
@@ -8556,6 +9042,9 @@ class RuntimeAttestationTest(unittest.TestCase):
                     value,
                     track.value,
                     segment="backend",
+                    expected_members={
+                        "1" * 64: backend_expected["1" * 64]
+                    },
                     require_complete_membership=False,
                     require_empty_membership=True,
                 )
@@ -8565,6 +9054,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                 value,
                 track.value,
                 segment="backend",
+                expected_members={},
                 require_complete_membership=False,
                 require_empty_membership=True,
             )
@@ -8582,9 +9072,19 @@ class RuntimeAttestationTest(unittest.TestCase):
                     for index, name in enumerate(frontend_members)
                 },
             }
+            frontend_expected = {
+                f"{index + 4}" * 64: {"name": name, "role": role}
+                for index, (name, role) in enumerate(
+                    zip(frontend_members, ("driver", "envoy"), strict=True)
+                )
+            }
             controller.runner = NetworkRunner(frontend)
             inspected_frontend = controller._inspect_network(
-                "b" * 64, value, track.value, segment="frontend"
+                "b" * 64,
+                value,
+                track.value,
+                segment="frontend",
+                expected_members=frontend_expected,
             )
             self.assertEqual(inspected_frontend["segment"], "frontend")
 
@@ -8598,8 +9098,71 @@ class RuntimeAttestationTest(unittest.TestCase):
             controller.runner = NetworkRunner(bypass)
             with self.assertRaisesRegex(ControllerError, "membership|frontend"):
                 controller._inspect_network(
-                    "b" * 64, value, track.value, segment="frontend"
+                    "b" * 64,
+                    value,
+                    track.value,
+                    segment="frontend",
+                    expected_members=frontend_expected,
                 )
+
+            for label, containers in (
+                (
+                    "wrong_id_right_name",
+                    {
+                        **network["Containers"],
+                        "1" * 64: None,
+                        "f" * 64: member(member_names[0]),
+                    },
+                ),
+                (
+                    "cross_track_forged_name",
+                    {
+                        "1" * 64: member(member_names[1]),
+                        "2" * 64: member(member_names[0]),
+                        "3" * 64: member(member_names[2]),
+                    },
+                ),
+                (
+                    "duplicate_name",
+                    {
+                        **network["Containers"],
+                        "f" * 64: member(member_names[0]),
+                    },
+                ),
+                (
+                    "missing_member",
+                    {
+                        "1" * 64: network["Containers"]["1" * 64],
+                        "2" * 64: network["Containers"]["2" * 64],
+                    },
+                ),
+                (
+                    "extra_member",
+                    {
+                        **network["Containers"],
+                        "f" * 64: member("kil-v3b1-attacker"),
+                    },
+                ),
+            ):
+                with self.subTest(member_identity=label):
+                    candidate = {
+                        key: item
+                        for key, item in containers.items()
+                        if item is not None
+                    }
+                    controller.runner = NetworkRunner(
+                        {**network, "Containers": candidate}
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError, "identity|membership|duplicate"
+                    ):
+                        controller._inspect_network(
+                            "a" * 64,
+                            value,
+                            track.value,
+                            segment="backend",
+                            expected_members=backend_expected,
+                        )
 
             malformed = {**network, "Internal": "true"}
             duplicate = {
@@ -8633,6 +9196,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                             value,
                             track.value,
                             segment="backend",
+                            expected_members=backend_expected,
                             require_complete_membership=False,
                         )
 
