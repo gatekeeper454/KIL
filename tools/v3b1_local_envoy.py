@@ -2657,11 +2657,6 @@ def _classify_inspected_healthcheck(
     if type(actual) is not dict:
         return "configured"
 
-    # Docker's legacy inspect representation for ``--no-healthcheck`` is a
-    # complete one-field object. Keep that exact, closed compatibility shape.
-    if set(actual) == {"Test"} and actual["Test"] == ["NONE"]:
-        return "disabled"
-
     # Docker 29.7.2 retains the immutable image timing/retry fields when
     # replacing only Test with NONE. Bind every retained scalar, including its
     # exact JSON type, to the already-inspected immutable image definition.

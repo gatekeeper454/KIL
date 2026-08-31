@@ -11241,12 +11241,6 @@ class RuntimeAttestationTest(unittest.TestCase):
             ),
             "disabled",
         )
-        self.assertEqual(
-            local_envoy_module._classify_inspected_healthcheck(
-                {"Test": ["NONE"]}, None
-            ),
-            "disabled",
-        )
         self.assertIsNone(
             local_envoy_module._classify_inspected_healthcheck(
                 None, image_healthcheck
@@ -11304,6 +11298,15 @@ class RuntimeAttestationTest(unittest.TestCase):
             {**image_healthcheck, "Test": ["NONE"]},
             {**image_healthcheck, "Unexpected": 1},
         ]
+
+        for immutable in (image_healthcheck, None):
+            with self.subTest(singleton_immutable=immutable):
+                self.assertEqual(
+                    local_envoy_module._classify_inspected_healthcheck(
+                        {"Test": ["NONE"]}, immutable
+                    ),
+                    "configured",
+                )
 
         for actual in rejected:
             with self.subTest(actual=actual):
@@ -12054,6 +12057,32 @@ class RuntimeAttestationTest(unittest.TestCase):
                 },
                 {""},
             )
+
+            for immutable_healthcheck in (image["Config"]["Healthcheck"], None):
+                broken = json.loads(json.dumps(raw))
+                broken["Config"]["Healthcheck"] = {"Test": ["NONE"]}
+                broken_image = json.loads(json.dumps(image))
+                if immutable_healthcheck is None:
+                    broken_image["Config"].pop("Healthcheck")
+                controller.runner = FakeRunner(
+                    [
+                        CommandResult(0, canonical_json(broken) + "\n", ""),
+                        CommandResult(
+                            0, canonical_json(broken_image) + "\n", ""
+                        ),
+                    ]
+                )
+                with self.subTest(singleton_immutable=immutable_healthcheck):
+                    with self.assertRaisesRegex(
+                        ControllerError, "health|driver"
+                    ):
+                        controller._inspect_container(
+                            "7" * 64,
+                            value,
+                            "driver",
+                            track.value,
+                            require_running=False,
+                        )
 
             for mutation, message in (
                 (("OpenStdin", False), "stdin|driver"),
