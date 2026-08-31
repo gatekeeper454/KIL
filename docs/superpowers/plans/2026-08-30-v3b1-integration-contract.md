@@ -243,6 +243,12 @@ controller tests and 396 repository tests, with an independent no-finding
 review. Task 6 remains open until the correction is merged and all nine source
 legs pass the repeated live zero-request freeze.
 
+Two corrected-source launch attempts on 2026-08-30 stopped before profile
+creation: first at host Docker discovery, then at Colima's rejection of the
+explicit nested-virtualization false flag. Both journals were safely archived,
+the foreign runtime was restored, and no request occurred. The minimal Colima
+compatibility correction must merge before Task 6 is attempted again.
+
 ### Task 7: Execute one accepted local Envoy proof and presenter bundle
 
 **Files:**

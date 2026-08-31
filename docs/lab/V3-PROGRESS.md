@@ -92,6 +92,19 @@ tests and 396 repository tests, plus Python compilation and diff hygiene. The
 remaining risk is the real Docker path, which is the purpose of the repeated
 zero-request gate.
 
+The first two post-merge launch attempts remained pre-profile and
+non-enforcement events. The first could not expose the repo-pinned Docker CLI to
+Colima's dependency check; the second used the corrected explicit PATH but
+Colima v0.10.3 rejected `--nested-virtualization=false` during actual launch,
+despite advertising the boolean option in help mode. Neither attempt created
+`kil-v3-lab`, a Docker object, or a request; each journal records all request
+states as `not_attempted` and was archived through `down`. The foreign `default`
+profile was restored to its exact Running/containerd/arm64/4 CPU/4 GiB/20 GiB
+state. The minimal compatibility correction removes only that redundant false
+CLI flag. The saved-config attestation still requires
+`nestedVirtualization: false` before any service container may deploy. Static
+verification remains 180 controller tests and 396 repository tests.
+
 V3B-1 is limited to the local Envoy boundary. Full local-cluster transport
 validation remains V3B-2: the isolated Kind/Calico topology, approved failure
 matrix, target-side markers, and cluster-level measurements are still

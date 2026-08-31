@@ -6031,7 +6031,6 @@ class LocalEnvoyController:
             "--network-preferred-route=false",
             "--port-forwarder=ssh",
             "--ssh-agent=false",
-            "--nested-virtualization=false",
             "--mount",
             str(execution_staging),
             "--mount-type=virtiofs",
