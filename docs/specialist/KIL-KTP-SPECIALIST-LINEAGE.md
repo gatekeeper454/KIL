@@ -4477,3 +4477,58 @@ zero-request smoke and single accepted proof run before publication and the
 verified offline backup.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-090 — 2026-08-30 — Harden presenter publication and verification races
+
+**Input:** Close four final Task 5b quality gaps around atomic publication,
+untrusted-manifest totality, embedded host paths, and descriptor lifetime
+through offline semantic verification.
+
+**Interpretation:** A path-based rename can publish into a replaced parent,
+and validating snapshotted bytes after closing directory descriptors leaves a
+post-snapshot replacement window. A failed post-rename validation must remove
+the invalid final-name entry without deleting evidence, and malformed public
+JSON must never escape as a Python exception.
+
+**Decision status:** Confirmed harness-only implementation complete, pending
+independent re-review and the final verification gate. Final publication opens
+the private staging parent, public parent, and staged run with
+`O_DIRECTORY|O_NOFOLLOW`, records device/inode identities, renames the single
+leaf with `src_dir_fd`/`dst_dir_fd`, fsyncs both parents, and reattests parent,
+tree, checksum, presenter, and semantic identity before returning. A failed
+post-rename validation atomically moves the exact no-follow destination into a
+collision-safe, device/inode-bound `.failed-publication-*` name under the
+contained private staging parent, leaving the public run name free for retry.
+
+Offline `view` now retains the root, `raw`, and `raw/decisions` descriptors and
+all file identities while parsing and rederiving the presentation, then repeats
+the exact directory inventory and file/tree identity checks immediately before
+return. Its semantic boundary normalizes residual attribute, type, value,
+Unicode, and recursion failures to `ControllerError`, with identity pin types
+validated before canonicalization. The shared privacy scan additionally rejects
+embedded `/private/var/folders`, `/tmp`, `/var/tmp`, and Windows user paths in
+public provenance while retaining fixed safe logical URIs. Global Docker
+context values are single-line as well as nonblank, bounded, and UTF-8 safe.
+
+**Rationale:** Descriptor-relative mutation and identity-bound quarantine make
+publication fail closed across parent replacement and after-rename corruption
+without clobbering a later retry. Holding the snapshot through semantic use
+ensures the bytes accepted by `view` still name the exact final files returned
+to the operator.
+
+**Affected artifacts:**
+
+- `tools/v3b1_harness_contract.py`
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker, Colima, browser, KIL, Envoy, authz,
+or target operation was performed. Publisher authenticity remains external to
+the internally consistent public bundle.
+
+**Next gate:** Independent Task 5b quality re-review, then the committed
+zero-request smoke and single accepted proof run before publication and the
+verified offline backup.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

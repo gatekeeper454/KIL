@@ -7398,7 +7398,13 @@ def presenter_source_attestations(provisional, envoy, targets):
     ]
 
 
-def published_presenter_bundle(root, *, completed=True, global_context="personal"):
+def published_presenter_bundle(
+    root,
+    *,
+    completed=True,
+    global_context="personal",
+    publication_fault=None,
+):
     value, requests, decisions, envoy, targets = JoinContractTest().all_records()
     if completed:
         joins = join_evidence(value, requests, decisions, envoy, targets)
@@ -7431,6 +7437,7 @@ def published_presenter_bundle(root, *, completed=True, global_context="personal
         global_context_after=global_context,
         completed=completed,
         authoritative_attestation=authority,
+        publication_fault=publication_fault,
     )
     return published
 
@@ -7455,7 +7462,213 @@ def rewrite_public_bundle_hashes(bundle, *, repair_commitment=True):
 
 
 class EvidenceBundleTest(unittest.TestCase):
+    def test_publication_quarantines_postrename_mutation_and_allows_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mutated = b"mutated-after-rename\n"
+
+            def mutate_after_rename(stage, path):
+                if stage == "after_atomic_rename":
+                    live = path / "live.html"
+                    live.chmod(0o600)
+                    live.write_bytes(mutated)
+                    live.chmod(0o444)
+
+            with self.assertRaises(ControllerError):
+                published_presenter_bundle(
+                    root, publication_fault=mutate_after_rename
+                )
+            value, _, _, envoy, targets = JoinContractTest().all_records()
+            destination = root / "public" / value["run_id"]
+            self.assertFalse(destination.exists())
+            quarantines = list(
+                (root / "private/.publication-staging").glob(
+                    ".failed-publication-*"
+                )
+            )
+            self.assertEqual(len(quarantines), 1)
+            self.assertEqual((quarantines[0] / "live.html").read_bytes(), mutated)
+
+            provisional = root / "private" / value["run_id"]
+            retried = finalize_publication(
+                provisional,
+                root / "public",
+                value,
+                source_attestations=presenter_source_attestations(
+                    provisional, envoy, targets
+                ),
+                tool_identities=TOOL_IDENTITIES,
+                engine_provenance=ENGINE_PROVENANCE,
+                global_context_before="personal",
+                global_context_after="personal",
+                completed=True,
+                authoritative_attestation=authoritative_bundle_attestation(
+                    provisional
+                ),
+            )
+            self.assertEqual(
+                local_envoy_module.verify_presenter_bundle(retried),
+                (retried / "live.html").resolve(),
+            )
+
+    def test_publication_rejects_parent_symlink_swap_before_dirfd_rename(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            public_parent = root / "public"
+            displaced = root / "public-displaced"
+            outside = root / "outside"
+            outside.mkdir()
+
+            def swap_parent(stage, _path):
+                if stage == "before_atomic_rename":
+                    public_parent.mkdir(exist_ok=True)
+                    public_parent.rename(displaced)
+                    public_parent.symlink_to(outside, target_is_directory=True)
+
+            with self.assertRaises(ControllerError):
+                published_presenter_bundle(
+                    root, publication_fault=swap_parent
+                )
+            self.assertEqual(list(outside.iterdir()), [])
+
+    def test_view_rechecks_descriptor_tree_after_semantic_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            live = published / "live.html"
+            original = local_envoy_module._validate_presenter_records
+
+            def mutate_after_semantics(payloads, manifest):
+                result = original(payloads, manifest)
+                live.chmod(0o600)
+                live.write_bytes(live.read_bytes())
+                live.chmod(0o444)
+                return result
+
+            with mock.patch.object(
+                local_envoy_module,
+                "_validate_presenter_records",
+                side_effect=mutate_after_semantics,
+            ):
+                with self.assertRaisesRegex(
+                    ControllerError, "changed|identity|snapshot"
+                ):
+                    local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_totalizes_residual_manifest_type_and_depth_failures(self):
+        candidates = ("float_identity", "list_checksum", "deep", "surrogate")
+        for candidate in candidates:
+            with self.subTest(candidate=candidate), tempfile.TemporaryDirectory() as directory:
+                published = published_presenter_bundle(Path(directory))
+                manifest_path = published / "manifest.json"
+                public_manifest = json.loads(
+                    manifest_path.read_text(encoding="utf-8")
+                )
+                if candidate == "float_identity":
+                    public_manifest["content_identity"]["profile_sha256"] = 1.5
+                elif candidate == "list_checksum":
+                    public_manifest["artifact_sha256"] = [["not", "a", "map"]]
+                elif candidate == "deep":
+                    value = []
+                    for _ in range(10_000):
+                        value = [value]
+                    with self.assertRaises(ControllerError):
+                        local_envoy_module._validate_public_manifest(
+                            value, {}
+                        )
+                    continue
+                else:
+                    public_manifest["source_commit"] = "\ud800"
+                manifest_path.chmod(0o600)
+                manifest_path.write_text(
+                    json.dumps(
+                        public_manifest,
+                        ensure_ascii=True,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                manifest_path.chmod(0o444)
+                local_envoy_module._write_sums(published)
+                with self.assertRaises(SystemExit) as caught:
+                    local_envoy_module.main(
+                        ["view", "--bundle", str(published)]
+                    )
+                self.assertTrue(
+                    str(caught.exception).startswith("v3b1-local-envoy:")
+                )
+
+    def test_embedded_private_build_paths_are_rejected_in_public_provenance(self):
+        embedded_paths = (
+            "Docker version 29.7.2 build=/private/var/folders/aa/tool",
+            "Docker version 29.7.2 cache=/tmp/v3b1-build/context",
+            "Docker version 29.7.2 log=C:\\Users\\lab\\build.log",
+        )
+        for value in embedded_paths:
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                poisoned_tools = json.loads(canonical_json(TOOL_IDENTITIES))
+                poisoned_tools["docker"]["version_output"] = value
+                run, requests, decisions, envoy, targets = (
+                    JoinContractTest().all_records()
+                )
+                joins = join_evidence(run, requests, decisions, envoy, targets)
+                provisional = write_evidence_bundle(
+                    root / "private",
+                    run,
+                    requests=requests,
+                    decisions=decisions,
+                    envoy=envoy,
+                    targets=targets,
+                    joins=joins,
+                )
+                sources = presenter_source_attestations(
+                    provisional, envoy, targets
+                )
+                with self.assertRaises(ControllerError):
+                    finalize_publication(
+                        provisional,
+                        root / "public",
+                        run,
+                        source_attestations=sources,
+                        tool_identities=poisoned_tools,
+                        engine_provenance=ENGINE_PROVENANCE,
+                        global_context_before="personal",
+                        global_context_after="personal",
+                        completed=True,
+                        authoritative_attestation=authoritative_bundle_attestation(
+                            provisional
+                        ),
+                    )
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            manifest_path = published / "manifest.json"
+            public_manifest = json.loads(
+                manifest_path.read_text(encoding="utf-8")
+            )
+            public_manifest["verified_tool_identities"]["docker"][
+                "version_output"
+            ] = "Docker version 29.7.2 cache=/tmp/v3b1-build/context"
+            manifest_path.chmod(0o600)
+            manifest_path.write_text(
+                canonical_json(public_manifest) + "\n", encoding="utf-8"
+            )
+            manifest_path.chmod(0o444)
+            rewrite_public_bundle_hashes(published)
+            with self.assertRaises(ControllerError):
+                local_envoy_module.verify_presenter_bundle(published)
+
     def test_public_boundary_recursively_rejects_sensitive_strings_and_contexts(self):
+        local_envoy_module._reject_public_secrets(
+            {
+                "safe_logical_uris": [
+                    "spiffe://kil.local/workload/demo",
+                    "docker.io/library/python@sha256:" + HEX_A,
+                    "colima_profile_socket",
+                ]
+            }
+        )
         sensitive = (
             "/Users/example/private",
             "/home/example/private",
@@ -7479,7 +7692,7 @@ class EvidenceBundleTest(unittest.TestCase):
                         published_presenter_bundle(
                             Path(directory), global_context=token
                         )
-        for context in ("", "x" * 4097, "\ud800"):
+        for context in ("", "x" * 4097, "personal\n", "personal\r", "\ud800"):
             with self.subTest(context=repr(context)), tempfile.TemporaryDirectory() as directory:
                 with self.assertRaises(ControllerError):
                     published_presenter_bundle(

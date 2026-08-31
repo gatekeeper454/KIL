@@ -3829,7 +3829,9 @@ def _read_stable_public_file_at(
 
 def _public_bundle_snapshot(
     output: Path,
-) -> dict[str, bytes]:
+    *,
+    validator: Callable[[dict[str, bytes]], object] | None = None,
+) -> object:
     if output.is_symlink() or not output.is_dir():
         raise ControllerError("public evidence directory is missing or unsafe")
     expected = _authoritative_file_names()
@@ -3950,7 +3952,45 @@ def _public_bundle_snapshot(
                 ) from error
             if identity != _snapshot_identity(current):
                 raise ControllerError("public evidence changed after snapshot")
-        return payloads
+        result = payloads if validator is None else validator(payloads)
+        if (
+            root_identity != _snapshot_identity(os.fstat(root_fd))
+            or raw_identity != _snapshot_identity(os.fstat(raw_fd))
+            or decisions_identity != _snapshot_identity(os.fstat(decisions_fd))
+            or set(os.listdir(root_fd)) != root_names
+            or set(os.listdir(raw_fd)) != {"decisions"}
+            or set(os.listdir(decisions_fd)) != raw_decision_names
+        ):
+            raise ControllerError(
+                "public evidence inventory changed after validation"
+            )
+        try:
+            if root_identity != _snapshot_identity(
+                os.stat(output, follow_symlinks=False)
+            ):
+                raise ControllerError(
+                    "public evidence directory changed after validation"
+                )
+            if raw_identity != _snapshot_identity(
+                os.stat("raw", dir_fd=root_fd, follow_symlinks=False)
+            ) or decisions_identity != _snapshot_identity(
+                os.stat("decisions", dir_fd=raw_fd, follow_symlinks=False)
+            ):
+                raise ControllerError(
+                    "public evidence directory identity changed after validation"
+                )
+            for directory_fd, name, identity in identities.values():
+                if identity != _snapshot_identity(
+                    os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                ):
+                    raise ControllerError(
+                        "public evidence file identity changed after validation"
+                    )
+        except OSError as error:
+            raise ControllerError(
+                "public evidence changed after validation"
+            ) from error
+        return result
     except OSError as error:
         raise ControllerError(
             "public evidence changed during snapshot"
@@ -4012,6 +4052,18 @@ def _validate_public_manifest(
         "dockerignore_sha256", "build_context_sha256",
     ):
         _require_sha256(f"public content identity {name}", identity[name])
+    _require_digest_ref(
+        "public content identity Python image", identity["python_image_digest"]
+    )
+    _require_digest_ref(
+        "public content identity Envoy image", identity["envoy_image_digest"]
+    )
+    for name in ("envoy_image_id", "kil_image_id"):
+        if type(identity[name]) is not str or _IMAGE_ID.fullmatch(identity[name]) is None:
+            raise ControllerError("public content identity image ID is invalid")
+    _require_sha256(
+        "public content identity KIL archive", identity["kil_archive_sha256"]
+    )
     if identity["docker_endpoint"] != {
         "transport": "unix",
         "logical_locator": "colima_profile_socket",
@@ -4333,16 +4385,44 @@ def verify_presenter_bundle(output: Path) -> Path:
         raise ControllerError(
             "public evidence directory is missing or unsafe"
         ) from error
-    payloads = _public_bundle_snapshot(bundle)
-    manifest = _load_json_bytes(payloads["manifest.json"], "public manifest")
-    _validate_public_manifest(manifest, payloads)
-    if payloads["summary.md"] != _public_summary(manifest).encode("utf-8"):
-        raise ControllerError("public summary does not match accepted evidence")
-    decisions, joins = _validate_presenter_records(payloads, manifest)
-    expected = _render_live_html(_presenter_model(manifest, decisions, joins))
-    if payloads["live.html"] != expected:
-        raise ControllerError("public presenter does not match accepted evidence")
-    return bundle / "live.html"
+    def validate_snapshot(payloads: dict[str, bytes]) -> Path:
+        try:
+            manifest = _load_json_bytes(
+                payloads["manifest.json"], "public manifest"
+            )
+            _validate_public_manifest(manifest, payloads)
+            if payloads["summary.md"] != _public_summary(manifest).encode(
+                "utf-8"
+            ):
+                raise ControllerError(
+                    "public summary does not match accepted evidence"
+                )
+            decisions, joins = _validate_presenter_records(payloads, manifest)
+            expected = _render_live_html(
+                _presenter_model(manifest, decisions, joins)
+            )
+            if payloads["live.html"] != expected:
+                raise ControllerError(
+                    "public presenter does not match accepted evidence"
+                )
+            return bundle / "live.html"
+        except ControllerError:
+            raise
+        except (
+            AttributeError,
+            TypeError,
+            ValueError,
+            UnicodeError,
+            RecursionError,
+        ) as error:
+            raise ControllerError(
+                "public evidence semantic validation failed"
+            ) from error
+
+    result = _public_bundle_snapshot(bundle, validator=validate_snapshot)
+    if not isinstance(result, Path):
+        raise ControllerError("public evidence validation result is invalid")
+    return result
 
 
 _AUTHORITATIVE_BUNDLE_SCHEMA = "kil.v3b1-authoritative-bundle.v1"
@@ -4551,6 +4631,8 @@ def _reject_public_secrets(value: object) -> None:
 def _validate_global_context(label: str, value: object) -> str:
     if type(value) is not str or not value.strip():
         raise ControllerError(f"{label} must be a nonempty string")
+    if "\r" in value or "\n" in value:
+        raise ControllerError(f"{label} must be one closed line")
     try:
         if len(value.encode("utf-8")) > 4096:
             raise ControllerError(f"{label} is too large")
@@ -4729,6 +4811,98 @@ def _artifact_hash_map(output: Path) -> dict[str, str]:
         if path.is_file():
             hashes[relative] = _digest_file(path)
     return hashes
+
+
+def _directory_object_identity(value: os.stat_result) -> tuple[int, int]:
+    return value.st_dev, value.st_ino
+
+
+def _open_verified_directory(path: Path, label: str) -> tuple[int, tuple[int, int]]:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor = -1
+    try:
+        descriptor = os.open(path, flags)
+        opened = os.fstat(descriptor)
+        current = os.stat(path, follow_symlinks=False)
+    except OSError as error:
+        if descriptor >= 0:
+            os.close(descriptor)
+        raise ControllerError(f"{label} is missing or unsafe") from error
+    identity = _directory_object_identity(opened)
+    if not stat.S_ISDIR(opened.st_mode) or identity != _directory_object_identity(
+        current
+    ):
+        os.close(descriptor)
+        raise ControllerError(f"{label} identity is unstable")
+    return descriptor, identity
+
+
+def _require_directory_identity(
+    descriptor: int,
+    path: Path,
+    identity: tuple[int, int],
+    label: str,
+) -> None:
+    try:
+        opened = os.fstat(descriptor)
+        current = os.stat(path, follow_symlinks=False)
+    except OSError as error:
+        raise ControllerError(f"{label} changed during publication") from error
+    if (
+        not stat.S_ISDIR(opened.st_mode)
+        or identity != _directory_object_identity(opened)
+        or identity != _directory_object_identity(current)
+    ):
+        raise ControllerError(f"{label} changed during publication")
+
+
+def _quarantine_publication_leaf(
+    public_parent_fd: int,
+    destination_name: str,
+    private_parent_fd: int,
+    run_id: str,
+) -> None:
+    try:
+        current = os.stat(
+            destination_name,
+            dir_fd=public_parent_fd,
+            follow_symlinks=False,
+        )
+    except OSError as error:
+        raise ControllerError(
+            "failed publication destination cannot be quarantined"
+        ) from error
+    identity = _directory_object_identity(current)
+    for counter in range(10_000):
+        quarantine_name = (
+            f".failed-publication-{run_id}-{identity[0]:x}-{identity[1]:x}-"
+            f"{counter}"
+        )
+        try:
+            os.stat(
+                quarantine_name,
+                dir_fd=private_parent_fd,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            os.rename(
+                destination_name,
+                quarantine_name,
+                src_dir_fd=public_parent_fd,
+                dst_dir_fd=private_parent_fd,
+            )
+            os.fsync(public_parent_fd)
+            os.fsync(private_parent_fd)
+            return
+        except OSError as error:
+            raise ControllerError(
+                "failed publication quarantine inventory is unsafe"
+            ) from error
+    raise ControllerError("failed publication quarantine names are exhausted")
 
 
 def finalize_publication(
@@ -4934,11 +5108,132 @@ def finalize_publication(
     public_parent.mkdir(parents=True, exist_ok=True)
     _require_contained(public_parent, safety_root, "public evidence root")
     _require_contained(destination, public_parent, "public evidence destination")
-    if destination.exists():
-        raise ControllerError("public evidence clobber is forbidden")
-    os.rename(staging, destination)
-    verify_public_checksums(destination)
-    return destination
+    publication_fd = public_fd = staging_fd = -1
+    renamed = False
+    try:
+        publication_fd, publication_identity = _open_verified_directory(
+            publication_root, "private publication staging"
+        )
+        public_fd, public_identity = _open_verified_directory(
+            public_parent, "public evidence root"
+        )
+        directory_flags = (
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+        )
+        try:
+            staging_fd = os.open(
+                staging.name,
+                directory_flags,
+                dir_fd=publication_fd,
+            )
+        except OSError as error:
+            raise ControllerError(
+                "private publication staging run changed before rename"
+            ) from error
+        staging_identity = _directory_object_identity(os.fstat(staging_fd))
+        _require_directory_identity(
+            publication_fd,
+            publication_root,
+            publication_identity,
+            "private publication staging",
+        )
+        _require_directory_identity(
+            public_fd,
+            public_parent,
+            public_identity,
+            "public evidence root",
+        )
+        try:
+            os.stat(
+                destination.name,
+                dir_fd=public_fd,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            raise ControllerError(
+                "public evidence destination inventory is unsafe"
+            ) from error
+        else:
+            raise ControllerError("public evidence clobber is forbidden")
+        os.rename(
+            staging.name,
+            destination.name,
+            src_dir_fd=publication_fd,
+            dst_dir_fd=public_fd,
+        )
+        renamed = True
+        os.fsync(publication_fd)
+        os.fsync(public_fd)
+        if publication_fault is not None:
+            publication_fault("after_atomic_rename", destination)
+        _require_directory_identity(
+            publication_fd,
+            publication_root,
+            publication_identity,
+            "private publication staging",
+        )
+        _require_directory_identity(
+            public_fd,
+            public_parent,
+            public_identity,
+            "public evidence root",
+        )
+        destination_identity = _directory_object_identity(
+            os.stat(
+                destination.name,
+                dir_fd=public_fd,
+                follow_symlinks=False,
+            )
+        )
+        if destination_identity != staging_identity:
+            raise ControllerError(
+                "public evidence destination identity changed after rename"
+            )
+        if completed:
+            verify_presenter_bundle(destination)
+        else:
+            verify_public_checksums(destination)
+        _require_directory_identity(
+            publication_fd,
+            publication_root,
+            publication_identity,
+            "private publication staging",
+        )
+        _require_directory_identity(
+            public_fd,
+            public_parent,
+            public_identity,
+            "public evidence root",
+        )
+        if staging_identity != _directory_object_identity(os.fstat(staging_fd)):
+            raise ControllerError(
+                "public evidence tree identity changed after validation"
+            )
+        return destination
+    except (ControllerError, OSError) as error:
+        if renamed:
+            try:
+                _quarantine_publication_leaf(
+                    public_fd,
+                    destination.name,
+                    publication_fd,
+                    str(private_manifest["run_id"]),
+                )
+            except ControllerError as quarantine_error:
+                raise ControllerError(
+                    "invalid public evidence could not be quarantined"
+                ) from quarantine_error
+        if isinstance(error, ControllerError):
+            raise
+        raise ControllerError("public evidence rename transaction failed") from error
+    finally:
+        for descriptor in (staging_fd, public_fd, publication_fd):
+            if descriptor >= 0:
+                os.close(descriptor)
 
 
 def write_evidence_bundle(

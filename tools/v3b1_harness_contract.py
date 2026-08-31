@@ -222,6 +222,9 @@ def _reject_sensitive_material(value: object) -> None:
         or _WINDOWS_ABSOLUTE.match(value) is not None
         or "/Users/" in value
         or "/home/" in value
+        or "/private/var/folders/" in value
+        or "/tmp/" in value
+        or "/var/tmp/" in value
         or re.search(r"(?i)[A-Z]:[\\/]Users[\\/]", value) is not None
     ):
         raise ContractError("transcript contains an absolute private path")
