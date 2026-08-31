@@ -362,7 +362,7 @@ git commit -m "Add the one-shot V3B-1 request driver"
 - Modify: `tools/v3b1_local_envoy.py`
 - Modify: `tests/test_v3b1_local_envoy.py`
 
-- [ ] **Step 1: Write RED profile and identity tests**
+- [x] **Step 1: Write RED profile and identity tests**
 
 Require `kil.v3b-profile.v2` to contain no `gateway_ports`. Require:
 
@@ -380,7 +380,7 @@ Change only runtime names, labels, and full IDs in test data and assert the
 content-identity digest is unchanged. Add hybrid-schema rejection tests: v1 may
 not contain driver fields and v2/v3 may not omit them.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run:
 
@@ -392,7 +392,7 @@ PYTHONPATH=src .venv/bin/python -m unittest \
 
 Expected: FAIL on the old profile, gateway-port tracks, and old schema IDs.
 
-- [ ] **Step 3: Implement acyclic definitions and schema dispatch**
+- [x] **Step 3: Implement acyclic definitions and schema dispatch**
 
 Use name-independent definitions:
 
@@ -416,7 +416,7 @@ public manifest, public commitment, and authoritative bundle schemas only where
 new fields are required. Preserve v1 verifier functions unchanged behind
 dispatch.
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [x] **Step 4: Verify GREEN and commit**
 
 Run the two focused suites, compilation, and `git diff --check`.
 

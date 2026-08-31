@@ -5643,3 +5643,69 @@ non-circular driver definitions without admitting run-derived names or IDs into
 the content-identity preimage.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-111 — 2026-08-31 — Driver-era content identity and runtime projection approved
+
+**Input:** Continue the V3B-1 implementation from the approved one-shot driver
+into the profile, content-identity, private-manifest, and active-state schema
+boundary.
+
+**Interpretation:** Content identity must bind the immutable topology and driver
+definitions without becoming circular or depending on generated runtime
+object names. The private manifest must nevertheless derive and cross-bind the
+exact future 12-container/6-network runtime projection so creation,
+attestation, recovery, and teardown cannot disagree about owned objects.
+
+**Decision status:** Confirmed Task 3 complete after specification and quality
+approval. Commits `ff2a99e5a6414f1c5193cfd2639e6187406cf1f7` and
+`a86e848216283146f9cc483b725dbfa8b63816aa` introduce the closed v2 profile
+without host gateway ports; v2 private manifest; v3 content identity; six
+canonical name-independent frontend/backend segment definitions; three
+non-circular driver definitions and hashes; and explicit legacy/new private and
+public schema dispatch. The legacy v1 presenter remains independently
+verifiable and cannot accept driver-era fields.
+
+Quality review reproduced acceptance of a detached runtime name that could
+make creation and teardown address different objects. The corrected manifest
+now deterministically derives and requires exact equality for all 12
+`(track, role)` container records and six `(track, segment)` network records,
+including track pointers, immutable images, approved source paths, driver
+references, and run-derived name suffixes. Duplicate, missing, extra, detached,
+or mismatched records fail validation. The coherent runtime projection remains
+outside the content preimage, so generated-name changes cannot redefine the
+immutable topology.
+
+**Rationale:** Excluding generated runtime identities from the content hash
+prevents circular identity; cross-binding them in the private manifest prevents
+ownership ambiguity. Both properties are required simultaneously for safe
+recovery and teardown.
+
+**Affected artifacts:**
+
+- `deploy/kind/v3b-profile.json`
+- `src/kil/v3b_preflight.py`
+- `tests/test_v3b_preflight.py`
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** The final correction sweep passed 432 repository tests,
+compilation, and diff hygiene. Independent quality re-review passed 79 focused
+lifecycle, attestation, and recovery tests plus the full suite, with no
+remaining Critical or Important finding. No Docker, Colima, network, or live
+laboratory runtime was invoked.
+
+**Unresolved questions:** The manifest carries the future 12/6 projection, but
+runtime commands intentionally still instantiate only the transitional nine
+service containers and three backend networks. A minor diagnostics issue
+remains: some unhashable malformed private-manifest key values can surface as
+`TypeError` rather than normalized `ControllerError`; they remain non-accepted
+and cannot redirect ownership.
+
+**Next gate:** Execute Task 4 test-first: create and attest six internal
+frontend/backend networks, nine running service containers, and three stopped
+drivers; make Envoy the sole dual-homed service with fixed frontend alias
+`envoy`; remove all host publication; and maintain exact inventory ownership.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
