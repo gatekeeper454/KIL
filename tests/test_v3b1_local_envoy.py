@@ -1082,8 +1082,30 @@ def request_record(run_manifest, track, **changes):
         },
         "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
     }
+    result = {
+        "attempt_count": 1,
+        "connect_monotonic_ns": 5,
+        "decision_digest": client_digest,
+        "receive_monotonic_ns": 20,
+        "response_status": 403 if denied else 200,
+        "retry_performed": False,
+        "schema_version": "kil.v3b1-driver-result.v1",
+        "send_monotonic_ns": 10,
+        "status": "complete",
+        "track": track.value,
+    }
+    definition_sha256 = next(
+        item["sha256"]
+        for item in run_manifest["content_identity"]["driver_definition_sha256"]
+        if item["track"] == track.value
+    )
+    driver_full_id = {
+        LiveTrack.CREDENTIAL_POLICY_BASELINE: "d" * 64,
+        LiveTrack.SIGNED_STATE_ONLY: "e" * 64,
+        LiveTrack.SIGNED_PLUS_LOCAL_REDUCE: "f" * 64,
+    }[track]
     value = {
-        "schema_version": "kil.v3b1-request.v1",
+        "schema_version": "kil.v3b1-request.v2",
         "run_id": run_manifest["run_id"],
         "request_id": run_manifest["request_id"],
         "track": track.value,
@@ -1105,9 +1127,38 @@ def request_record(run_manifest, track, **changes):
         "receive_monotonic_ns": 20,
         "client_response_status": 403 if denied else 200,
         "client_decision_digest": client_digest,
+        "request_transport": "in_network_request_driver",
+        "driver_role": "request_driver",
+        "driver_full_id": driver_full_id,
+        "driver_image_id": run_manifest["kil_image_id"],
+        "driver_definition_sha256": definition_sha256,
+        "driver_result_sha256": sha256(
+            (canonical_json(result) + "\n").encode("utf-8")
+        ).hexdigest(),
     }
     value.update(changes)
     return value
+
+
+def driver_results_for_requests(requests):
+    """Reconstruct deterministic test-only raw driver sources from v2 requests."""
+    results = {}
+    for request in requests:
+        track = LiveTrack(request["track"])
+        result = {
+            "attempt_count": 1,
+            "connect_monotonic_ns": 5,
+            "decision_digest": request["client_decision_digest"],
+            "receive_monotonic_ns": request["receive_monotonic_ns"],
+            "response_status": request["client_response_status"],
+            "retry_performed": False,
+            "schema_version": "kil.v3b1-driver-result.v1",
+            "send_monotonic_ns": request["send_monotonic_ns"],
+            "status": "complete",
+            "track": track.value,
+        }
+        results[track] = (canonical_json(result) + "\n").encode("utf-8")
+    return results
 
 
 def decision_record(run_manifest, track, *, status, outcome, digest):
@@ -7386,6 +7437,14 @@ class TeardownContinuationTest(unittest.TestCase):
                     for record in requests
                 )
             )
+            driver_root = (
+                controller.private_root / "driver-results" / value["run_id"]
+            )
+            driver_root.mkdir(parents=True, exist_ok=True)
+            for track, payload in driver_results_for_requests(requests).items():
+                path = driver_root / f"{track.value}.json"
+                path.write_bytes(payload)
+                path.chmod(0o600)
         persist_active_state(controller.state_path, private_manifest, value)
         controller.bound_state = load_bound_active_state(controller.state_path)
         controller.running = {
@@ -7818,6 +7877,7 @@ class TeardownContinuationTest(unittest.TestCase):
                     targets=targets,
                     joins=join_evidence(value, requests, decisions, envoy, targets),
                     raw_decisions=raw_decisions,
+                    raw_driver_results=driver_results_for_requests(requests),
                 )
                 self.assertNotEqual((seeded / "joins.jsonl").read_bytes(), b"")
 
@@ -9049,6 +9109,7 @@ class TeardownContinuationTest(unittest.TestCase):
                 envoy=envoy,
                 targets=targets,
                 joins=join_evidence(value, requests, decisions, envoy, targets),
+                raw_driver_results=driver_results_for_requests(requests),
             )
             stale_authority = authoritative_bundle_attestation(stale)
             journal_event(
@@ -9085,7 +9146,10 @@ class TeardownContinuationTest(unittest.TestCase):
 
             # Crash point: replacement is complete, but its authority was not journaled.
             _prepare_failure_provisional(
-                controller.provisional_root, value, reset=True
+                controller.provisional_root,
+                value,
+                raw_driver_results={track: b"" for track in LiveTrack},
+                reset=True,
             )
 
             published = controller.down()
@@ -10639,6 +10703,7 @@ def published_presenter_bundle(
     publication_complete=None,
 ):
     value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+    raw_driver_results = driver_results_for_requests(requests)
     if completed:
         joins = join_evidence(value, requests, decisions, envoy, targets)
         provisional = write_evidence_bundle(
@@ -10649,13 +10714,17 @@ def published_presenter_bundle(
             envoy=envoy,
             targets=targets,
             joins=joins,
+            raw_driver_results=raw_driver_results,
         )
         source_attestations = presenter_source_attestations(
             provisional, envoy, targets
         )
     else:
         provisional = _prepare_failure_provisional(
-            root / "private", value, reset=True
+            root / "private",
+            value,
+            raw_driver_results={track: b"" for track in LiveTrack},
+            reset=True,
         )
         source_attestations = []
     authority = authoritative_bundle_attestation(provisional)
@@ -10762,13 +10831,17 @@ def interrupted_published_recovery(root, *, completed):
             envoy=envoy,
             targets=targets,
             joins=join_evidence(value, requests, decisions, envoy, targets),
+            raw_driver_results=driver_results_for_requests(requests),
         )
         source_attestations = presenter_source_attestations(
             provisional, envoy, targets
         )
     else:
         provisional = _prepare_failure_provisional(
-            controller.provisional_root, value, reset=True
+            controller.provisional_root,
+            value,
+            raw_driver_results={track: b"" for track in LiveTrack},
+            reset=True,
         )
         source_attestations = []
     authority = authoritative_bundle_attestation(provisional)
@@ -10846,6 +10919,181 @@ class EvidenceBundleTest(unittest.TestCase):
         "https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff"
     )
 
+    def test_v2_bundle_binds_exact_canonical_driver_results_everywhere(self):
+        value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+        raw_driver_results = driver_results_for_requests(requests)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provisional = write_evidence_bundle(
+                root / "private",
+                value,
+                requests=requests,
+                decisions=decisions,
+                envoy=envoy,
+                targets=targets,
+                joins=join_evidence(value, requests, decisions, envoy, targets),
+                raw_driver_results=raw_driver_results,
+            )
+            authority = authoritative_bundle_attestation(provisional)
+            published = finalize_publication(
+                provisional,
+                root / "public",
+                value,
+                source_attestations=presenter_source_attestations(
+                    provisional, envoy, targets
+                ),
+                tool_identities=TOOL_IDENTITIES,
+                engine_provenance=ENGINE_PROVENANCE,
+                global_context_before="personal",
+                global_context_after="personal",
+                completed=True,
+                authoritative_attestation=authority,
+            )
+            public_manifest = json.loads(
+                (published / "manifest.json").read_text(encoding="utf-8")
+            )
+            sums = {
+                relative: digest
+                for digest, relative in (
+                    line.split("  ", 1)
+                    for line in (published / "SHA256SUMS")
+                    .read_text(encoding="ascii")
+                    .splitlines()
+                )
+            }
+            by_track = {item["track"]: item for item in requests}
+            for track in LiveTrack:
+                relative = f"raw/drivers/{track.value}.json"
+                payload = (published / relative).read_bytes()
+                self.assertEqual(payload, raw_driver_results[track])
+                self.assertTrue(payload.endswith(b"\n"))
+                self.assertEqual(
+                    payload,
+                    (canonical_json(json.loads(payload)) + "\n").encode("utf-8"),
+                )
+                digest = sha256(payload).hexdigest()
+                self.assertEqual(
+                    by_track[track.value]["driver_result_sha256"], digest
+                )
+                self.assertEqual(sums[relative], digest)
+                self.assertEqual(public_manifest["artifact_sha256"][relative], digest)
+                self.assertEqual(authority["file_sha256"][relative], digest)
+            self.assertEqual(
+                local_envoy_module.verify_presenter_bundle(published),
+                (published / "live.html").resolve(),
+            )
+
+    def test_v1_rejects_driver_files_and_v2_requires_all_three(self):
+        fixture_root = ROOT / "tests/fixtures/v3b1-public-bundle-v1"
+        legacy = next(path for path in fixture_root.iterdir() if path.is_dir())
+        with tempfile.TemporaryDirectory() as directory:
+            copied = Path(directory) / "legacy"
+            shutil.copytree(legacy, copied)
+            drivers = copied / "raw/drivers"
+            drivers.mkdir()
+            (drivers / "credential_policy_baseline.json").write_text("{}\n")
+            with self.assertRaisesRegex(ControllerError, "artifact set|closed"):
+                local_envoy_module.verify_presenter_bundle(copied)
+
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            missing = published / "raw/drivers/signed_state_only.json"
+            missing.chmod(0o600)
+            missing.unlink()
+            with self.assertRaisesRegex(ControllerError, "missing|closed|artifact"):
+                local_envoy_module.verify_presenter_bundle(published)
+
+    def test_v2_verifier_reconstructs_driver_bytes_and_rejects_repaired_join_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            driver_path = (
+                published / "raw/drivers/credential_policy_baseline.json"
+            )
+            result = json.loads(driver_path.read_text(encoding="utf-8"))
+            result["decision_digest"] = "9" * 64
+            payload = (canonical_json(result) + "\n").encode("utf-8")
+            driver_path.chmod(0o600)
+            driver_path.write_bytes(payload)
+            driver_path.chmod(0o444)
+            requests_path = published / "requests.jsonl"
+            requests = [
+                json.loads(line)
+                for line in requests_path.read_text(encoding="utf-8").splitlines()
+            ]
+            requests[0]["driver_result_sha256"] = sha256(payload).hexdigest()
+            requests_path.chmod(0o600)
+            requests_path.write_bytes(
+                b"".join(
+                    (canonical_json(item) + "\n").encode("utf-8")
+                    for item in requests
+                )
+            )
+            requests_path.chmod(0o444)
+            rewrite_public_bundle_hashes(published)
+
+            with self.assertRaisesRegex(
+                ControllerError, "driver|decision|projection|join"
+            ):
+                local_envoy_module.verify_presenter_bundle(published)
+
+    def test_v2_verifier_rejects_noncanonical_duplicate_and_sensitive_driver_bytes(self):
+        for mutation in ("noncanonical", "duplicate", "sensitive"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                published = published_presenter_bundle(Path(directory))
+                driver_path = (
+                    published / "raw/drivers/credential_policy_baseline.json"
+                )
+                original = driver_path.read_bytes()
+                if mutation == "noncanonical":
+                    payload = b" " + original
+                elif mutation == "duplicate":
+                    payload = original.replace(
+                        b'{"attempt_count":1,',
+                        b'{"attempt_count":1,"attempt_count":1,',
+                        1,
+                    )
+                else:
+                    payload = original[:-2] + (
+                        b',"exception_message":"Bearer do-not-publish"}\n'
+                    )
+                driver_path.chmod(0o600)
+                driver_path.write_bytes(payload)
+                driver_path.chmod(0o444)
+                requests_path = published / "requests.jsonl"
+                requests = [
+                    json.loads(line)
+                    for line in requests_path.read_text(encoding="utf-8").splitlines()
+                ]
+                requests[0]["driver_result_sha256"] = sha256(payload).hexdigest()
+                requests_path.chmod(0o600)
+                requests_path.write_bytes(
+                    b"".join(
+                        (canonical_json(item) + "\n").encode("utf-8")
+                        for item in requests
+                    )
+                )
+                requests_path.chmod(0o444)
+                rewrite_public_bundle_hashes(published)
+
+                with self.assertRaisesRegex(
+                    ControllerError, "driver result|canonical|public evidence"
+                ):
+                    local_envoy_module.verify_presenter_bundle(published)
+
+    def test_v2_presenter_explains_driver_boundary_without_active_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            text = (published / "live.html").read_text(encoding="utf-8")
+            for statement in (
+                "request driver -&gt; Envoy -&gt; authorization -&gt; target or withhold",
+                "No host publication",
+                "The driver is a laboratory transport witness, not KIL enforcement",
+                "Evidence scope: local_envoy_boundary",
+            ):
+                self.assertIn(statement, text)
+            for forbidden in ("<script", " src=", " href=", "url(", "http://", "https://"):
+                self.assertNotIn(forbidden, text)
+
     def test_synthetic_legacy_v1_compatibility_fixture_remains_accepted(self):
         fixture_root = ROOT / "tests/fixtures/v3b1-public-bundle-v1"
         fixture_bundles = tuple(
@@ -10903,6 +11151,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 envoy=envoy,
                 targets=targets,
                 joins=joins,
+                raw_driver_results=driver_results_for_requests(requests),
             )
             self.assert_summary_citation_is_bound(provisional, public=False)
             authoritative = authoritative_bundle_attestation(provisional)
@@ -10927,7 +11176,10 @@ class EvidenceBundleTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             provisional = _prepare_failure_provisional(
-                root / "private", value, reset=True
+                root / "private",
+                value,
+                raw_driver_results={track: b"" for track in LiveTrack},
+                reset=True,
             )
             self.assert_summary_citation_is_bound(provisional, public=False)
             authoritative = authoritative_bundle_attestation(provisional)
@@ -11296,6 +11548,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     envoy=envoy,
                     targets=targets,
                     joins=joins,
+                    raw_driver_results=driver_results_for_requests(requests),
                 )
                 sources = presenter_source_attestations(
                     provisional, envoy, targets
@@ -11422,6 +11675,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 envoy=envoy,
                 targets=targets,
                 joins=joins,
+                raw_driver_results=driver_results_for_requests(requests),
             )
             source_attestations = presenter_source_attestations(
                 provisional, envoy, targets
@@ -11980,6 +12234,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 envoy=envoy,
                 targets=targets,
                 joins=joins,
+                raw_driver_results=driver_results_for_requests(requests),
             )
 
         self.assertEqual(len(observed), 1)
@@ -11998,6 +12253,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 envoy=envoy,
                 targets=targets,
                 joins=joins,
+                raw_driver_results=driver_results_for_requests(requests),
             )
             authority = authoritative_bundle_attestation(output)
             live = output / "live.html"
@@ -12321,6 +12577,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 envoy=envoy,
                 targets=targets,
                 joins=joins,
+                raw_driver_results=driver_results_for_requests(requests),
             )
             live = output / "live.html"
             live.chmod(0o600)
@@ -12343,6 +12600,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 envoy=envoy,
                 targets=targets,
                 joins=joins,
+                raw_driver_results=driver_results_for_requests(requests),
             )
             live = provisional / "live.html"
             live.chmod(0o600)
@@ -12379,7 +12637,10 @@ class EvidenceBundleTest(unittest.TestCase):
         value = manifest()
         with tempfile.TemporaryDirectory() as directory:
             output = _prepare_failure_provisional(
-                Path(directory), value, reset=True
+                Path(directory),
+                value,
+                raw_driver_results={track: b"" for track in LiveTrack},
+                reset=True,
             )
 
             text = (output / "live.html").read_text(encoding="utf-8")
@@ -12405,6 +12666,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 envoy=envoy,
                 targets=targets,
                 joins=joins,
+                raw_driver_results=driver_results_for_requests(requests),
             )
             second = write_evidence_bundle(
                 Path(second_directory),
@@ -12414,6 +12676,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 envoy=list(reversed(envoy)),
                 targets=list(reversed(targets)),
                 joins=list(reversed(joins)),
+                raw_driver_results=driver_results_for_requests(requests),
             )
 
             live = (first / "live.html").read_bytes()
@@ -12464,6 +12727,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 envoy=envoy,
                 targets=targets,
                 joins=joins,
+                raw_driver_results=driver_results_for_requests(requests),
             )
 
             self.assertEqual(output.name, value["run_id"])
@@ -12515,6 +12779,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     envoy=envoy,
                     targets=targets,
                     joins=joins,
+                    raw_driver_results=driver_results_for_requests(requests),
                 )
             manifest_line = (output / "manifest.json").read_text().strip()
             self.assertEqual(manifest_line, canonical_json(json.loads(manifest_line)))
@@ -12529,7 +12794,7 @@ class EvidenceBundleTest(unittest.TestCase):
             ):
                 self.assertNotIn(forbidden, summary)
             sums = (output / "SHA256SUMS").read_text().splitlines()
-            self.assertEqual(len(sums), 11)
+            self.assertEqual(len(sums), 14)
             for line in sums:
                 digest, name = line.split("  ", 1)
                 self.assertEqual(
@@ -12563,6 +12828,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 envoy=envoy,
                 targets=targets,
                 joins=joins,
+                raw_driver_results=driver_results_for_requests(requests),
             )
             authoritative = authoritative_bundle_attestation(provisional)
             public_parent = root / "public"
@@ -12972,6 +13238,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 root / "private",
                 value,
                 requests=requests,
+                raw_driver_results=driver_results_for_requests(requests),
                 reset=True,
             )
             self.assertEqual((provisional / "joins.jsonl").read_bytes(), b"")
@@ -13011,6 +13278,12 @@ class EvidenceBundleTest(unittest.TestCase):
                 value,
                 requests=requests[:1],
                 raw_decisions=partial_raw,
+                raw_driver_results=driver_results_for_requests(requests[:1])
+                | {
+                    track: b""
+                    for track in LiveTrack
+                    if track is not LiveTrack.CREDENTIAL_POLICY_BASELINE
+                },
                 envoy=envoy[:1],
                 targets=targets[:1],
             )

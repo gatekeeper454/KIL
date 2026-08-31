@@ -348,6 +348,7 @@ class PresenterModel:
     source_commit: str
     tracks: tuple[PresenterTrack, ...]
     complete: bool
+    driver_boundary: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -4894,6 +4895,108 @@ def _request_closed(record: Mapping[str, object]) -> None:
         _require_sha256("request driver result", record["driver_result_sha256"])
 
 
+def _validate_driver_result_bindings(
+    payloads: Mapping[str, bytes],
+    manifest: Mapping[str, object],
+    requests: Sequence[Mapping[str, object]],
+    *,
+    completed: bool,
+) -> dict[str, dict[str, object]]:
+    """Reconstruct exact v2 driver sources and bind their normalized requests."""
+    generation = _bundle_generation(manifest.get("schema_version"))
+    if generation == 1:
+        if any(
+            request.get("schema_version") != "kil.v3b1-request.v1"
+            for request in requests
+        ):
+            raise ControllerError("legacy presenter request schema is invalid")
+        return {}
+    request_by_track = {str(request.get("track")): request for request in requests}
+    if len(request_by_track) != len(requests):
+        raise ControllerError("driver request track identity is duplicated")
+    if any(
+        request.get("schema_version") != "kil.v3b1-request.v2"
+        for request in requests
+    ):
+        raise ControllerError("driver presenter requires v2 request records")
+    identity = manifest.get("content_identity")
+    immutable = manifest.get("immutable_images")
+    if type(identity) is not dict:
+        raise ControllerError("driver presenter manifest identity is invalid")
+    kil_image_id = (
+        immutable.get("kil_image_id")
+        if type(immutable) is dict
+        else manifest.get("kil_image_id")
+    )
+    definition_values = identity.get("driver_definition_sha256")
+    if type(definition_values) is not list:
+        raise ControllerError("driver presenter definitions are invalid")
+    definition_by_track = {
+        str(item.get("track")): item.get("sha256")
+        for item in definition_values
+        if type(item) is dict
+    }
+    results: dict[str, dict[str, object]] = {}
+    driver_ids: set[str] = set()
+    for track in _TRACKS:
+        relative = f"raw/drivers/{track.value}.json"
+        if relative not in payloads:
+            raise ControllerError("driver result artifact set is incomplete")
+        payload = payloads[relative]
+        request = request_by_track.get(track.value)
+        if payload == b"":
+            if completed or request is not None:
+                raise ControllerError("commanded driver result must not be empty")
+            continue
+        try:
+            result = parse_driver_result(payload, expected_track=track.value)
+        except (DriverProtocolError, TypeError, ValueError, UnicodeError) as error:
+            raise ControllerError(
+                "driver result is not exact canonical public evidence"
+            ) from error
+        _reject_public_secrets(result)
+        if canonical_record(result) != payload:
+            raise ControllerError("driver result bytes are not canonical")
+        results[track.value] = result
+        if request is None:
+            if result.get("status") == "complete":
+                raise ControllerError("complete driver result lacks normalized request")
+            continue
+        _request_closed(request)
+        full_id = request["driver_full_id"]
+        if full_id in driver_ids:
+            raise ControllerError("driver full ID is reused across tracks")
+        driver_ids.add(str(full_id))
+        result_digest = _digest_bytes(payload)
+        expected_projection = {
+            "attempt_count": request["attempt_count"],
+            "decision_digest": request["client_decision_digest"],
+            "receive_monotonic_ns": request["receive_monotonic_ns"],
+            "response_status": request["client_response_status"],
+            "retry_performed": request["retry_observed"],
+            "send_monotonic_ns": request["send_monotonic_ns"],
+            "status": "complete",
+            "track": request["track"],
+        }
+        if any(
+            result.get(name) != value
+            for name, value in expected_projection.items()
+        ):
+            raise ControllerError("driver result normalized request projection is invalid")
+        if (
+            request["run_id"] != manifest.get("run_id")
+            or request["request_id"] != manifest.get("request_id")
+            or request["driver_image_id"] != kil_image_id
+            or request["driver_definition_sha256"]
+            != definition_by_track.get(track.value)
+            or request["driver_result_sha256"] != result_digest
+        ):
+            raise ControllerError("driver request identity or result binding is invalid")
+    if completed and set(results) != {track.value for track in _TRACKS}:
+        raise ControllerError("accepted bundle requires three driver results")
+    return results
+
+
 def _decision_closed(record: Mapping[str, object]) -> None:
     expected = {
         "schema_version",
@@ -5300,6 +5403,47 @@ _PUBLIC_COMMITMENT_RULE = (
     "sha256_of_canonical_manifest_without_public_commitment_sha256_and_"
     "all_public_file_sha256_except_manifest_and_SHA256SUMS"
 )
+_LEGACY_PUBLIC_MANIFEST_SCHEMA = "kil.v3b1-public-manifest.v1"
+_DRIVER_PUBLIC_MANIFEST_SCHEMA = "kil.v3b1-public-manifest.v2"
+_LEGACY_AUTHORITATIVE_BUNDLE_SCHEMA = "kil.v3b1-authoritative-bundle.v1"
+_DRIVER_AUTHORITATIVE_BUNDLE_SCHEMA = "kil.v3b1-authoritative-bundle.v2"
+
+
+def _bundle_generation(schema_version: object) -> int:
+    if schema_version in {
+        LEGACY_MANIFEST_SCHEMA,
+        _LEGACY_PUBLIC_MANIFEST_SCHEMA,
+    }:
+        return 1
+    if schema_version in {MANIFEST_SCHEMA, _DRIVER_PUBLIC_MANIFEST_SCHEMA}:
+        return 2
+    raise ControllerError("evidence manifest schema is invalid")
+
+
+def _driver_result_file_names() -> set[str]:
+    return {f"raw/drivers/{track.value}.json" for track in _TRACKS}
+
+
+def _authoritative_file_names(schema_version: object = MANIFEST_SCHEMA) -> set[str]:
+    names = {
+        *_EVIDENCE_FILES,
+        "SHA256SUMS",
+        *{f"raw/decisions/{track.value}.jsonl" for track in _TRACKS},
+    }
+    if _bundle_generation(schema_version) == 2:
+        names.update(_driver_result_file_names())
+    return names
+
+
+def _manifest_schema_from_output(output: Path) -> str:
+    path = output / "manifest.json"
+    if path.is_symlink() or not path.is_file():
+        raise ControllerError("evidence manifest is missing or unsafe")
+    value = _load_json_bytes(path.read_bytes(), "evidence manifest")
+    schema = value.get("schema_version")
+    _bundle_generation(schema)
+    assert isinstance(schema, str)
+    return schema
 
 
 def _presenter_safe_text(label: str, value: object) -> str:
@@ -5331,7 +5475,13 @@ def _presenter_model(
         raise ControllerError("presenter source commit is invalid")
     if not joins:
         return PresenterModel(
-            run_id, request_id, evidence_scope, source_commit, (), False
+            run_id,
+            request_id,
+            evidence_scope,
+            source_commit,
+            (),
+            False,
+            _bundle_generation(manifest.get("schema_version")) == 2,
         )
     decisions_by_track = {
         str(item.get("track")): item for item in decisions
@@ -5431,7 +5581,13 @@ def _presenter_model(
     ):
         raise ControllerError("presenter causal reasons are not the fixed proof")
     return PresenterModel(
-        run_id, request_id, evidence_scope, source_commit, tuple(tracks), True
+        run_id,
+        request_id,
+        evidence_scope,
+        source_commit,
+        tuple(tracks),
+        True,
+        _bundle_generation(manifest.get("schema_version")) == 2,
     )
 
 
@@ -5467,6 +5623,17 @@ def _render_live_html(model: PresenterModel) -> bytes:
             "<section class=\"incomplete\"><h2>INCOMPLETE · NOT PRESENTABLE</h2>"
             "<p>No partial outcome is represented by this derived page.</p></section>"
         )
+    driver_boundary = ""
+    if model.driver_boundary:
+        driver_boundary = """
+<section class="boundary driver-boundary">
+<h2>In-network request path</h2>
+<p><strong>request driver -&gt; Envoy -&gt; authorization -&gt; target or withhold</strong></p>
+<p>No host publication</p>
+<p>The driver is a laboratory transport witness, not KIL enforcement</p>
+<p>Evidence scope: local_envoy_boundary</p>
+</section>
+"""
     html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -5502,7 +5669,7 @@ code {{ overflow-wrap: anywhere; }}
 </div>
 <p>Run <code>{run_id}</code> · source <code>{source_commit}</code></p>
 {result}
-<section class="boundary">
+{driver_boundary}<section class="boundary">
 <strong>DERIVED PRESENTER · JSONL + manifest.json + SHA256SUMS CONTROL</strong>
 <p>VERIFY THE BUNDLE BEFORE PRESENTATION; THIS PAGE DOES NOT ATTEST TEARDOWN BY ITSELF.</p>
 <p>DOES NOT ESTABLISH KIND ORCHESTRATION, KUBERNETES NETWORKPOLICY, HISTORICAL INCIDENT PREVENTION, OR PRODUCTION PERFORMANCE.</p>
@@ -5519,10 +5686,13 @@ code {{ overflow-wrap: anywhere; }}
 
 
 def _write_sums(output: Path) -> None:
-    paths = [output / name for name in _EVIDENCE_FILES]
-    raw_root = output / "raw/decisions"
-    if raw_root.is_dir():
-        paths.extend(sorted(raw_root.glob("*.jsonl")))
+    schema = _manifest_schema_from_output(output)
+    paths = [
+        output / relative
+        for relative in sorted(
+            _authoritative_file_names(schema) - {"SHA256SUMS"}
+        )
+    ]
     lines = []
     for path in sorted(paths, key=lambda item: item.relative_to(output).as_posix()):
         if not path.is_file() or path.is_symlink():
@@ -5661,54 +5831,89 @@ def _public_bundle_snapshot(
 ) -> object:
     if output.is_symlink() or not output.is_dir():
         raise ControllerError("public evidence directory is missing or unsafe")
-    expected = _authoritative_file_names()
-    root_names = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
     raw_decision_names = {f"{track.value}.jsonl" for track in _TRACKS}
+    raw_driver_names = {f"{track.value}.json" for track in _TRACKS}
     directory_flags = (
         os.O_RDONLY
         | getattr(os, "O_DIRECTORY", 0)
         | getattr(os, "O_NOFOLLOW", 0)
     )
-    root_fd = raw_fd = decisions_fd = -1
+    root_fd = raw_fd = decisions_fd = drivers_fd = -1
     try:
         try:
             root_fd = os.open(output, directory_flags)
             root_opened = os.fstat(root_fd)
+            manifest_payload, manifest_identity = _read_stable_public_file_at(
+                root_fd, "manifest.json", maximum_bytes=1024 * 1024
+            )
+            manifest_value = _load_json_bytes(
+                manifest_payload, "public manifest"
+            )
+            schema = manifest_value.get("schema_version")
+            generation = _bundle_generation(schema)
+            expected = _authoritative_file_names(schema)
+            root_names = set(_EVIDENCE_FILES) | {"SHA256SUMS", "raw"}
             raw_fd = os.open("raw", directory_flags, dir_fd=root_fd)
             raw_opened = os.fstat(raw_fd)
             decisions_fd = os.open(
                 "decisions", directory_flags, dir_fd=raw_fd
             )
             decisions_opened = os.fstat(decisions_fd)
+            if generation == 2:
+                drivers_fd = os.open(
+                    "drivers", directory_flags, dir_fd=raw_fd
+                )
+                drivers_opened = os.fstat(drivers_fd)
+            else:
+                drivers_opened = None
         except OSError as error:
             raise ControllerError(
                 "public evidence directory component is missing or unsafe"
             ) from error
-        if not all(
-            stat.S_ISDIR(item.st_mode)
-            for item in (root_opened, raw_opened, decisions_opened)
-        ):
+        directory_stats = [root_opened, raw_opened, decisions_opened]
+        if drivers_opened is not None:
+            directory_stats.append(drivers_opened)
+        if not all(stat.S_ISDIR(item.st_mode) for item in directory_stats):
             raise ControllerError("public evidence component is not a directory")
         root_identity = _snapshot_identity(root_opened)
         raw_identity = _snapshot_identity(raw_opened)
         decisions_identity = _snapshot_identity(decisions_opened)
+        drivers_identity = (
+            None
+            if drivers_opened is None
+            else _snapshot_identity(drivers_opened)
+        )
+        expected_raw_names = {"decisions"} | (
+            {"drivers"} if generation == 2 else set()
+        )
         if (
             set(os.listdir(root_fd)) != root_names
-            or set(os.listdir(raw_fd)) != {"decisions"}
+            or set(os.listdir(raw_fd)) != expected_raw_names
             or set(os.listdir(decisions_fd)) != raw_decision_names
+            or generation == 2
+            and set(os.listdir(drivers_fd)) != raw_driver_names
         ):
             raise ControllerError("public evidence artifact set is not closed")
         if raw_identity != _snapshot_identity(
             os.stat("raw", dir_fd=root_fd, follow_symlinks=False)
         ) or decisions_identity != _snapshot_identity(
             os.stat("decisions", dir_fd=raw_fd, follow_symlinks=False)
+        ) or generation == 2 and drivers_identity != _snapshot_identity(
+            os.stat("drivers", dir_fd=raw_fd, follow_symlinks=False)
         ):
             raise ControllerError("public evidence directory identity is unstable")
-        payloads: dict[str, bytes] = {}
-        identities: dict[str, tuple[int, str, tuple[int, int, int, int, int]]] = {}
+        payloads: dict[str, bytes] = {"manifest.json": manifest_payload}
+        identities: dict[
+            str, tuple[int, str, tuple[int, int, int, int, int]]
+        ] = {"manifest.json": (root_fd, "manifest.json", manifest_identity)}
         for relative in sorted(expected):
+            if relative == "manifest.json":
+                continue
             if relative.startswith("raw/decisions/"):
                 directory_fd = decisions_fd
+                name = relative.rsplit("/", 1)[1]
+            elif relative.startswith("raw/drivers/"):
+                directory_fd = drivers_fd
                 name = relative.rsplit("/", 1)[1]
             else:
                 directory_fd = root_fd
@@ -5747,9 +5952,13 @@ def _public_bundle_snapshot(
             root_identity != _snapshot_identity(os.fstat(root_fd))
             or raw_identity != _snapshot_identity(os.fstat(raw_fd))
             or decisions_identity != _snapshot_identity(os.fstat(decisions_fd))
+            or generation == 2
+            and drivers_identity != _snapshot_identity(os.fstat(drivers_fd))
             or set(os.listdir(root_fd)) != root_names
-            or set(os.listdir(raw_fd)) != {"decisions"}
+            or set(os.listdir(raw_fd)) != expected_raw_names
             or set(os.listdir(decisions_fd)) != raw_decision_names
+            or generation == 2
+            and set(os.listdir(drivers_fd)) != raw_driver_names
         ):
             raise ControllerError("public evidence inventory changed during snapshot")
         try:
@@ -5757,6 +5966,11 @@ def _public_bundle_snapshot(
             raw_path = os.stat("raw", dir_fd=root_fd, follow_symlinks=False)
             decisions_path = os.stat(
                 "decisions", dir_fd=raw_fd, follow_symlinks=False
+            )
+            drivers_path = (
+                None
+                if generation == 1
+                else os.stat("drivers", dir_fd=raw_fd, follow_symlinks=False)
             )
         except OSError as error:
             raise ControllerError(
@@ -5766,6 +5980,8 @@ def _public_bundle_snapshot(
             root_identity != _snapshot_identity(root_path)
             or raw_identity != _snapshot_identity(raw_path)
             or decisions_identity != _snapshot_identity(decisions_path)
+            or generation == 2
+            and drivers_identity != _snapshot_identity(drivers_path)
         ):
             raise ControllerError("public evidence directory changed during snapshot")
         for directory_fd, name, identity in identities.values():
@@ -5785,9 +6001,13 @@ def _public_bundle_snapshot(
                 or raw_identity != _snapshot_identity(os.fstat(raw_fd))
                 or decisions_identity
                 != _snapshot_identity(os.fstat(decisions_fd))
+                or generation == 2
+                and drivers_identity != _snapshot_identity(os.fstat(drivers_fd))
                 or set(os.listdir(root_fd)) != root_names
-                or set(os.listdir(raw_fd)) != {"decisions"}
+                or set(os.listdir(raw_fd)) != expected_raw_names
                 or set(os.listdir(decisions_fd)) != raw_decision_names
+                or generation == 2
+                and set(os.listdir(drivers_fd)) != raw_driver_names
             ):
                 raise ControllerError(
                     f"public evidence inventory changed {stage}"
@@ -5803,6 +6023,8 @@ def _public_bundle_snapshot(
                     os.stat("raw", dir_fd=root_fd, follow_symlinks=False)
                 ) or decisions_identity != _snapshot_identity(
                     os.stat("decisions", dir_fd=raw_fd, follow_symlinks=False)
+                ) or generation == 2 and drivers_identity != _snapshot_identity(
+                    os.stat("drivers", dir_fd=raw_fd, follow_symlinks=False)
                 ):
                     raise ControllerError(
                         f"public evidence directory identity changed {stage}"
@@ -5835,7 +6057,7 @@ def _public_bundle_snapshot(
             "public evidence changed during snapshot"
         ) from error
     finally:
-        for descriptor in (decisions_fd, raw_fd, root_fd):
+        for descriptor in (drivers_fd, decisions_fd, raw_fd, root_fd):
             if descriptor >= 0:
                 os.close(descriptor)
 
@@ -5845,6 +6067,7 @@ def _validate_public_manifest_v1(
     payloads: Mapping[str, bytes],
     *,
     completed: bool = True,
+    file_schema_version: str = _LEGACY_PUBLIC_MANIFEST_SCHEMA,
 ) -> None:
     _reject_public_secrets(value)
     expected = {
@@ -5990,7 +6213,7 @@ def _validate_public_manifest_v1(
     if value["artifact_hash_rule"] != "sha256_excludes_manifest_summary_and_SHA256SUMS":
         raise ControllerError("public artifact hash rule is invalid")
     hashes = value["artifact_sha256"]
-    hash_names = _authoritative_file_names() - {
+    hash_names = _authoritative_file_names(file_schema_version) - {
         "manifest.json", "summary.md", "SHA256SUMS"
     }
     if type(hashes) is not dict or set(hashes) != hash_names:
@@ -6112,7 +6335,12 @@ def _validate_public_manifest_v2(
     projected["public_commitment_sha256"] = _public_commitment_sha256(
         projected, payloads
     )
-    _validate_public_manifest_v1(projected, payloads, completed=completed)
+    _validate_public_manifest_v1(
+        projected,
+        payloads,
+        completed=completed,
+        file_schema_version=_DRIVER_PUBLIC_MANIFEST_SCHEMA,
+    )
     if value.get("public_commitment_sha256") != _public_commitment_sha256(
         value, payloads
     ):
@@ -6252,6 +6480,9 @@ def _validate_presenter_records(
         _request_closed,
         allow_empty=False,
     )
+    _validate_driver_result_bindings(
+        payloads, manifest, requests, completed=True
+    )
     decisions = _parse_jsonl_bytes(
         payloads["decisions.jsonl"],
         "presenter decisions",
@@ -6355,6 +6586,9 @@ def _validate_failure_presenter_records(
         "failure presenter requests",
         _request_closed,
         allow_empty=True,
+    )
+    _validate_driver_result_bindings(
+        payloads, manifest, requests, completed=False
     )
     decisions = _parse_jsonl_bytes(
         payloads["decisions.jsonl"],
@@ -6534,23 +6768,14 @@ def _verify_failure_presenter_bundle(
     return result
 
 
-_AUTHORITATIVE_BUNDLE_SCHEMA = "kil.v3b1-authoritative-bundle.v1"
 _FAILURE_BUNDLE_REPLACEMENT = "deterministic_empty_failure_v1"
-
-
-def _authoritative_file_names() -> set[str]:
-    return {
-        *_EVIDENCE_FILES,
-        "SHA256SUMS",
-        *{f"raw/decisions/{track.value}.jsonl" for track in _TRACKS},
-    }
 
 
 def _public_commitment_sha256(
     manifest: Mapping[str, object], payloads: Mapping[str, bytes]
 ) -> str:
     """Recompute the non-circular commitment for one public snapshot."""
-    file_names = _authoritative_file_names() - {
+    file_names = _authoritative_file_names(manifest.get("schema_version")) - {
         "manifest.json",
         "SHA256SUMS",
     }
@@ -6581,7 +6806,7 @@ def _public_commitment_from_output(
 ) -> str:
     payloads = {
         relative: (output / relative).read_bytes()
-        for relative in _authoritative_file_names()
+        for relative in _authoritative_file_names(manifest.get("schema_version"))
         if relative not in {"manifest.json", "SHA256SUMS"}
     }
     return _public_commitment_sha256(manifest, payloads)
@@ -6594,10 +6819,17 @@ def _validate_authoritative_attestation(
         "schema_version", "file_sha256", "binding_sha256",
     }:
         raise ControllerError("authoritative bundle attestation fields are not closed")
-    if value["schema_version"] != _AUTHORITATIVE_BUNDLE_SCHEMA:
+    schema = value["schema_version"]
+    if schema == _LEGACY_AUTHORITATIVE_BUNDLE_SCHEMA:
+        manifest_schema = LEGACY_MANIFEST_SCHEMA
+    elif schema == _DRIVER_AUTHORITATIVE_BUNDLE_SCHEMA:
+        manifest_schema = MANIFEST_SCHEMA
+    else:
         raise ControllerError("authoritative bundle attestation schema is invalid")
     hashes = value["file_sha256"]
-    if type(hashes) is not dict or set(hashes) != _authoritative_file_names():
+    if type(hashes) is not dict or set(hashes) != _authoritative_file_names(
+        manifest_schema
+    ):
         raise ControllerError("authoritative bundle attestation file set is not closed")
     for relative, digest in hashes.items():
         if type(relative) is not str:
@@ -6605,7 +6837,7 @@ def _validate_authoritative_attestation(
         _require_sha256("authoritative artifact sha256", digest)
     _require_sha256("authoritative binding_sha256", value["binding_sha256"])
     bound = {
-        "schema_version": _AUTHORITATIVE_BUNDLE_SCHEMA,
+        "schema_version": schema,
         "file_sha256": dict(hashes),
     }
     expected_binding = _digest_bytes(canonical_json(bound).encode("utf-8"))
@@ -6616,13 +6848,19 @@ def _validate_authoritative_attestation(
 
 def authoritative_bundle_attestation(output: Path) -> dict[str, object]:
     """Bind every byte in one closed, checksummed provisional bundle."""
+    manifest_schema = _manifest_schema_from_output(output)
+    authority_schema = (
+        _LEGACY_AUTHORITATIVE_BUNDLE_SCHEMA
+        if _bundle_generation(manifest_schema) == 1
+        else _DRIVER_AUTHORITATIVE_BUNDLE_SCHEMA
+    )
     verify_public_checksums(output)
     hashes = {
         relative: _digest_file(output / relative)
-        for relative in sorted(_authoritative_file_names())
+        for relative in sorted(_authoritative_file_names(manifest_schema))
     }
     bound: dict[str, object] = {
-        "schema_version": _AUTHORITATIVE_BUNDLE_SCHEMA,
+        "schema_version": authority_schema,
         "file_sha256": hashes,
     }
     bound["binding_sha256"] = _digest_bytes(
@@ -6953,7 +7191,11 @@ def _validate_global_context(label: str, value: object) -> str:
 
 
 def _validate_provisional_tree(output: Path, *, completed: bool) -> None:
-    expected = _authoritative_file_names()
+    manifest = _load_json_bytes(
+        (output / "manifest.json").read_bytes(), "provisional manifest"
+    )
+    schema = manifest.get("schema_version")
+    expected = _authoritative_file_names(schema)
     actual = set()
     for path in output.rglob("*"):
         if path.is_symlink():
@@ -6977,6 +7219,31 @@ def _validate_provisional_tree(output: Path, *, completed: bool) -> None:
             raise ControllerError("provisional raw decision track is invalid")
     if not completed and (output / "joins.jsonl").read_bytes() != b"":
         raise ControllerError("incomplete provisional joins must be empty")
+
+
+def _validate_provisional_driver_bindings(
+    output: Path, *, completed: bool
+) -> None:
+    manifest = _load_json_bytes(
+        (output / "manifest.json").read_bytes(), "provisional manifest"
+    )
+    if _bundle_generation(manifest.get("schema_version")) == 1:
+        return
+    requests = _parse_jsonl_bytes(
+        (output / "requests.jsonl").read_bytes(),
+        "provisional requests",
+        _request_closed,
+        allow_empty=not completed,
+    )
+    _validate_driver_result_bindings(
+        {
+            relative: (output / relative).read_bytes()
+            for relative in _driver_result_file_names()
+        },
+        manifest,
+        requests,
+        completed=completed,
+    )
 
 
 def _validate_source_attestations(
@@ -7277,6 +7544,7 @@ def finalize_publication(
     authoritative = _reattest_authoritative_bundle(
         provisional, authoritative_attestation
     )
+    _validate_provisional_driver_bindings(provisional, completed=completed)
     _validate_source_attestation_bindings(
         provisional, source_attestations, private_manifest
     )
@@ -7356,6 +7624,7 @@ def finalize_publication(
     shutil.copytree(provisional, staging, symlinks=True)
     _validate_provisional_tree(staging, completed=completed)
     _reattest_authoritative_bundle(staging, authoritative)
+    _validate_provisional_driver_bindings(staging, completed=completed)
     if publication_fault is not None:
         publication_fault("after_copy", staging)
     staging_manifest = staging / "manifest.json"
@@ -7573,6 +7842,7 @@ def write_evidence_bundle(
     targets: Sequence[Mapping[str, object]],
     joins: Sequence[Mapping[str, object]],
     raw_decisions: Mapping[LiveTrack, bytes] | None = None,
+    raw_driver_results: Mapping[LiveTrack, bytes] | None = None,
     resume_attested: bool = False,
 ) -> Path:
     """Rebuild the exact public bundle from verified source records."""
@@ -7607,6 +7877,33 @@ def write_evidence_bundle(
         if any(record["track"] != track.value for record in parsed):
             raise ControllerError("raw decision source track does not match fixed file")
         _write_file(raw_root / f"{track.value}.jsonl", payload, 0o444)
+    generation = _bundle_generation(manifest.get("schema_version"))
+    if generation == 2:
+        if (
+            type(raw_driver_results) is not dict
+            or set(raw_driver_results) != set(_TRACKS)
+        ):
+            raise ControllerError(
+                "v2 driver results must cover the three fixed tracks"
+            )
+        driver_root = output / "raw/drivers"
+        driver_root.mkdir(parents=True, exist_ok=True)
+        driver_payloads: dict[str, bytes] = {}
+        for track in _TRACKS:
+            payload = raw_driver_results[track]
+            if type(payload) is not bytes:
+                raise ControllerError("driver result source must be exact bytes")
+            relative = f"raw/drivers/{track.value}.json"
+            driver_payloads[relative] = payload
+            _write_file(output / relative, payload, 0o444)
+        _validate_driver_result_bindings(
+            driver_payloads,
+            manifest,
+            requests,
+            completed=True,
+        )
+    elif raw_driver_results is not None:
+        raise ControllerError("legacy evidence cannot contain driver results")
     normalized_decisions = _normalized_decision_records(manifest, decisions)
     _write_file(output / "requests.jsonl", _jsonl_payload(requests), 0o444)
     _write_file(
@@ -7655,6 +7952,7 @@ def _prepare_failure_provisional(
     *,
     requests: Sequence[Mapping[str, object]] | None = None,
     raw_decisions: Mapping[LiveTrack, bytes] | None = None,
+    raw_driver_results: Mapping[LiveTrack, bytes] | None = None,
     envoy: Sequence[Mapping[str, object]] | None = None,
     targets: Sequence[Mapping[str, object]] | None = None,
     reset: bool = False,
@@ -7688,6 +7986,33 @@ def _prepare_failure_provisional(
             _write_file(path, payload, 0o444)
         elif reset or not path.exists():
             _write_file(path, b"", 0o444)
+    generation = _bundle_generation(manifest.get("schema_version"))
+    if generation == 2:
+        if (
+            type(raw_driver_results) is not dict
+            or set(raw_driver_results) != set(_TRACKS)
+        ):
+            raise ControllerError(
+                "failure v2 driver results must cover fixed tracks"
+            )
+        driver_root = output / "raw/drivers"
+        driver_root.mkdir(parents=True, exist_ok=True)
+        driver_payloads: dict[str, bytes] = {}
+        for track in _TRACKS:
+            payload = raw_driver_results[track]
+            if type(payload) is not bytes:
+                raise ControllerError("failure driver result must be exact bytes")
+            relative = f"raw/drivers/{track.value}.json"
+            driver_payloads[relative] = payload
+            _write_file(output / relative, payload, 0o444)
+        _validate_driver_result_bindings(
+            driver_payloads,
+            manifest,
+            requests or [],
+            completed=False,
+        )
+    elif raw_driver_results is not None:
+        raise ControllerError("legacy failure evidence cannot contain driver results")
     supplied = {
         "requests.jsonl": requests,
         "decisions.jsonl": (
@@ -9911,6 +10236,26 @@ class LocalEnvoyController:
             records, load_lifecycle_journal(self.journal_path), require_all=True
         )
         return records
+
+    def _private_driver_result_sources(
+        self, manifest: Mapping[str, object]
+    ) -> dict[LiveTrack, bytes]:
+        root = self.private_root / "driver-results" / str(manifest["run_id"])
+        _require_contained(root, self.private_root, "private driver result root")
+        results: dict[LiveTrack, bytes] = {}
+        for track in _TRACKS:
+            path = root / f"{track.value}.json"
+            _require_contained(path, root, "private driver result")
+            if not path.exists():
+                results[track] = b""
+                continue
+            if path.is_symlink() or not path.is_file():
+                raise ControllerError("private driver result is unsafe")
+            payload = path.read_bytes()
+            if len(payload) > 8 * 1024:
+                raise ControllerError("private driver result exceeds its bound")
+            results[track] = payload
+        return results
 
     @staticmethod
     def _freeze_epoch(manifest: Mapping[str, object]) -> tuple[str, str]:
@@ -12166,6 +12511,7 @@ class LocalEnvoyController:
             }
             copied_envoy: list[dict[str, object]] = []
             copied_targets: list[dict[str, object]] = []
+            copied_driver_results = self._private_driver_result_sources(manifest)
             completed = freeze.complete
             if completed:
                 if set(copied_raw) != set(_TRACKS):
@@ -12210,6 +12556,7 @@ class LocalEnvoyController:
                     targets=copied_targets,
                     joins=joins,
                     raw_decisions=copied_raw,
+                    raw_driver_results=copied_driver_results,
                     resume_attested=True,
                 )
                 if {
@@ -12283,6 +12630,7 @@ class LocalEnvoyController:
                     manifest,
                     requests=partial_requests,
                     raw_decisions=failure_raw_decisions,
+                    raw_driver_results=copied_driver_results,
                     envoy=failure_envoy,
                     targets=failure_targets,
                     reset=True,
@@ -12481,7 +12829,12 @@ class LocalEnvoyController:
                     )
                     if prepared is None:
                         provisional = _prepare_failure_provisional(
-                            self._private_provisional_root(), manifest, reset=True
+                            self._private_provisional_root(),
+                            manifest,
+                            raw_driver_results=self._private_driver_result_sources(
+                                manifest
+                            ),
+                            reset=True,
                         )
                         authoritative = authoritative_bundle_attestation(
                             provisional
@@ -13004,7 +13357,10 @@ class LocalEnvoyController:
                 failure_intent_sequence = len(intent_events)
             assert failure_intent_sequence is not None
             output = _prepare_failure_provisional(
-                self._private_provisional_root(), manifest, reset=True
+                self._private_provisional_root(),
+                manifest,
+                raw_driver_results=self._private_driver_result_sources(manifest),
+                reset=True,
             )
             source_attestations = []
             completed = False
