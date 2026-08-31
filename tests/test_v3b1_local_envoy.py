@@ -11,6 +11,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -3716,6 +3717,35 @@ class _DriverOutput(io.BytesIO):
         self.events.append(("stdout_read", self.owner.full_id, size))
         return super().read(size)
 
+    def close(self):
+        if self.owner.stdout_close_error:
+            self.owner.stdout_close_error = False
+            raise OSError("private close failure")
+        super().close()
+
+
+class _BlockingDriverOutput(_DriverOutput):
+    def __init__(self, owner, payload, events, factory, clock, advance_ns):
+        super().__init__(owner, payload, events, factory, clock, advance_ns)
+        self.release = threading.Event()
+
+    def fileno(self):
+        raise io.UnsupportedOperation("no descriptor")
+
+    def readline(self, size=-1):
+        self.events.append(("stdout_readline_blocking", self.owner.full_id, size))
+        if len(self.factory.processes) != 3:
+            raise AssertionError("readiness was consumed before all drivers started")
+        self.clock.advance(self.advance_ns)
+        self.release.wait()
+        if self.closed:
+            return b""
+        return super().readline(size)
+
+    def close(self):
+        self.release.set()
+        super().close()
+
 
 class _DriverProcess:
     def __init__(
@@ -3730,14 +3760,23 @@ class _DriverProcess:
         returncode=0,
         stderr=b"",
         wait_error=None,
+        blocking_stdout=False,
+        terminate_exits=True,
+        stdout_close_error=False,
     ):
         self.full_id = full_id
         self.events = events
         self.returncode = returncode
         self.wait_error = wait_error
+        self.terminate_exits = terminate_exits
+        self.stdout_close_error = stdout_close_error
         self.exited = False
+        self.terminated = False
+        self.killed = False
+        self.reaped = False
         self.stdin = _DriverInput(self, events)
-        self.stdout = _DriverOutput(
+        output_type = _BlockingDriverOutput if blocking_stdout else _DriverOutput
+        self.stdout = output_type(
             self, payload, events, factory, clock, advance_ns
         )
         self.stderr = io.BytesIO(stderr)
@@ -3747,10 +3786,29 @@ class _DriverProcess:
 
     def wait(self, timeout):
         self.events.append(("wait", self.full_id, timeout))
+        if self.exited:
+            self.reaped = True
+            return self.returncode
         if self.wait_error is not None:
             raise self.wait_error
         self.exited = True
+        self.reaped = True
         return self.returncode
+
+    def terminate(self):
+        self.events.append(("terminate", self.full_id))
+        self.terminated = True
+        if self.terminate_exits:
+            self.exited = True
+            if isinstance(self.stdout, _BlockingDriverOutput):
+                self.stdout.release.set()
+
+    def kill(self):
+        self.events.append(("kill", self.full_id))
+        self.killed = True
+        self.exited = True
+        if isinstance(self.stdout, _BlockingDriverOutput):
+            self.stdout.release.set()
 
 
 class _DriverProcessFactory:
@@ -3765,6 +3823,9 @@ class _DriverProcessFactory:
         full_id = argv[-1]
         self.events.append(("start", argv))
         behavior = dict(self.behaviors[full_id])
+        start_error = behavior.pop("start_error", None)
+        if start_error is not None:
+            raise start_error
         process = _DriverProcess(
             full_id=full_id,
             events=self.events,
@@ -4033,6 +4094,17 @@ class DriverReadinessTest(unittest.TestCase):
                 self.assertNotIn("not-json", raw)
                 self.assertFalse(any(event[0] == "request" for event in events))
                 self.assertEqual(len(factory.processes), 3)
+                self.assertTrue(all(process.exited for process in factory.processes))
+                self.assertTrue(all(process.reaped for process in factory.processes))
+                self.assertTrue(all(process.stdin.closed for process in factory.processes))
+                self.assertTrue(all(process.stdout.closed for process in factory.processes))
+                self.assertTrue(all(process.stderr.closed for process in factory.processes))
+                cancel_completes = [
+                    item["details"]["driver_id"]
+                    for item in journal["events"]
+                    if item["event"] == "readiness_cancel_complete"
+                ]
+                self.assertEqual(len(cancel_completes), len(set(cancel_completes)))
                 if name in {"extra", "nonzero", "stderr", "ambiguous"}:
                     failed_id = next(
                         item["details"]["driver_id"]
@@ -4045,6 +4117,227 @@ class DriverReadinessTest(unittest.TestCase):
                             and item["details"]["driver_id"] == failed_id
                             for item in journal["events"]
                         )
+                    )
+
+    def test_non_fileno_blocking_read_uses_common_deadline_and_cleans_up(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, _, _ = self.make_controller(
+                directory,
+                {
+                    "credential_policy_baseline": {
+                        "blocking_stdout": True,
+                        "advance_ns": 31_000_000_000,
+                    }
+                },
+            )
+            result = []
+
+            def invoke_readiness():
+                try:
+                    controller.readiness()
+                except BaseException as error:
+                    result.append(error)
+
+            worker = threading.Thread(target=invoke_readiness, daemon=True)
+            worker.start()
+            worker.join(0.5)
+            completed_under_deadline = not worker.is_alive()
+            if worker.is_alive():
+                for process in factory.processes:
+                    process.kill()
+                    process.stdout.close()
+                worker.join(0.5)
+
+            self.assertTrue(completed_under_deadline)
+            self.assertEqual(len(result), 1)
+            self.assertIsInstance(result[0], ControllerError)
+            self.assertTrue(all(process.exited for process in factory.processes))
+            self.assertTrue(all(process.reaped for process in factory.processes))
+            self.assertFalse(
+                any(
+                    thread.is_alive()
+                    and thread.name.startswith("kil-v3b1-driver-read-")
+                    for thread in threading.enumerate()
+                )
+            )
+
+    def test_failed_cancel_uses_exact_id_stop_then_terminate_kill_and_reap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, drivers, _ = self.make_controller(
+                directory,
+                {
+                    "credential_policy_baseline": {
+                        "wait_error": subprocess.TimeoutExpired("docker", 1),
+                        "terminate_exits": False,
+                    }
+                },
+            )
+
+            with self.assertRaisesRegex(ControllerError, "failed closed"):
+                controller.readiness()
+
+            failed = factory.processes[0]
+            self.assertTrue(failed.terminated)
+            self.assertTrue(failed.killed)
+            self.assertTrue(failed.exited)
+            self.assertTrue(failed.reaped)
+            failed_id = drivers[LiveTrack.CREDENTIAL_POLICY_BASELINE.value]["id"]
+            stop_commands = [
+                call[0]
+                for call in controller.runner.calls
+                if "stop" in call[0]
+            ]
+            self.assertEqual(
+                stop_commands,
+                [controller.docker_command("stop", "--timeout", "1", failed_id)],
+            )
+            journal = load_lifecycle_journal(controller.journal_path)
+            cleanup = next(
+                item for item in journal["events"]
+                if item["event"] == "driver_cleanup_complete"
+            )
+            self.assertEqual(
+                cleanup["details"],
+                {
+                    "readiness_nonce": cleanup["details"]["readiness_nonce"],
+                    "track": LiveTrack.CREDENTIAL_POLICY_BASELINE.value,
+                    "driver_id": failed_id,
+                    "outcome": "killed",
+                    "exit_code": 0,
+                },
+            )
+            self.assertFalse(
+                any(
+                    item["event"] == "readiness_cancel_complete"
+                    and item["details"]["driver_id"] == failed_id
+                    for item in journal["events"]
+                )
+            )
+            with self.assertRaisesRegex(ControllerError, "poison|down"):
+                controller.readiness()
+
+    def test_cleanup_failure_is_closed_explicit_and_process_is_still_reaped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, drivers, _ = self.make_controller(
+                directory,
+                {
+                    "credential_policy_baseline": {
+                        "payload": b"not-json\n",
+                        "stdout_close_error": True,
+                    }
+                },
+            )
+
+            with self.assertRaisesRegex(ControllerError, "failed closed"):
+                controller.readiness()
+
+            journal = load_lifecycle_journal(controller.journal_path)
+            failed_id = drivers[LiveTrack.CREDENTIAL_POLICY_BASELINE.value]["id"]
+            cleanup_failure = next(
+                item for item in journal["events"]
+                if item["event"] == "driver_cleanup_failed"
+                and item["details"]["driver_id"] == failed_id
+            )
+            self.assertEqual(
+                cleanup_failure["details"]["category"], "cleanup_pipe_close"
+            )
+            self.assertEqual(
+                set(cleanup_failure["details"]),
+                {"readiness_nonce", "track", "driver_id", "category"},
+            )
+            self.assertTrue(all(process.exited for process in factory.processes))
+            self.assertTrue(all(process.reaped for process in factory.processes))
+            raw = controller.journal_path.read_text()
+            self.assertNotIn("private close failure", raw)
+
+    def test_later_driver_start_failures_retain_exact_primary_attribution(self):
+        for failed_track in (
+            LiveTrack.SIGNED_STATE_ONLY,
+            LiveTrack.SIGNED_PLUS_LOCAL_REDUCE,
+        ):
+            with self.subTest(track=failed_track.value), tempfile.TemporaryDirectory() as directory:
+                controller, factory, _, drivers, _ = self.make_controller(
+                    directory,
+                    {
+                        failed_track.value: {
+                            "start_error": DriverTransportError("process_start")
+                        }
+                    },
+                )
+
+                with self.assertRaisesRegex(ControllerError, "failed closed"):
+                    controller.readiness()
+
+                journal = load_lifecycle_journal(controller.journal_path)
+                failure = next(
+                    item for item in journal["events"]
+                    if item["event"] == "driver_readiness_failed"
+                )
+                self.assertEqual(
+                    failure["details"],
+                    {
+                        "readiness_nonce": failure["details"]["readiness_nonce"],
+                        "track": failed_track.value,
+                        "driver_id": drivers[failed_track.value]["id"],
+                        "category": "process_start",
+                        "stage": "process_start",
+                    },
+                )
+                self.assertTrue(all(process.exited for process in factory.processes))
+                self.assertTrue(all(process.reaped for process in factory.processes))
+
+    def test_later_start_record_failures_retain_exact_primary_attribution(self):
+        for failed_track in (
+            LiveTrack.SIGNED_STATE_ONLY,
+            LiveTrack.SIGNED_PLUS_LOCAL_REDUCE,
+        ):
+            for failed_event in ("driver_start_intent", "driver_start_complete"):
+                with self.subTest(
+                    track=failed_track.value, event=failed_event
+                ), tempfile.TemporaryDirectory() as directory:
+                    controller, factory, _, drivers, _ = self.make_controller(directory)
+                    real_journal_event = local_envoy_module.journal_event
+                    failed_once = False
+
+                    def fail_target_record(path, event, details):
+                        nonlocal failed_once
+                        if (
+                            not failed_once
+                            and event == failed_event
+                            and details["track"] == failed_track.value
+                        ):
+                            failed_once = True
+                            raise ControllerError("injected durable start record failure")
+                        return real_journal_event(path, event, details)
+
+                    with mock.patch(
+                        "tools.v3b1_local_envoy.journal_event",
+                        side_effect=fail_target_record,
+                    ):
+                        with self.assertRaisesRegex(ControllerError, "failed closed"):
+                            controller.readiness()
+
+                    journal = load_lifecycle_journal(controller.journal_path)
+                    failure = next(
+                        item for item in journal["events"]
+                        if item["event"] == "driver_readiness_failed"
+                    )
+                    self.assertEqual(
+                        failure["details"]["track"], failed_track.value
+                    )
+                    self.assertEqual(
+                        failure["details"]["driver_id"],
+                        drivers[failed_track.value]["id"],
+                    )
+                    self.assertEqual(
+                        failure["details"]["stage"],
+                        failed_event.removeprefix("driver_"),
+                    )
+                    self.assertTrue(
+                        all(process.exited for process in factory.processes)
+                    )
+                    self.assertTrue(
+                        all(process.reaped for process in factory.processes)
                     )
 
     def test_cli_exposes_readiness_subcommand(self):
@@ -4063,6 +4356,18 @@ class DriverReadinessTest(unittest.TestCase):
                         "readiness_nonce": HEX_B,
                         "track": track,
                         "driver_id": drivers[track]["id"],
+                        "stderr": "private output",
+                    },
+                )
+            with self.assertRaisesRegex(ControllerError, "fields.*closed"):
+                journal_event(
+                    controller.journal_path,
+                    "driver_cleanup_failed",
+                    {
+                        "readiness_nonce": HEX_B,
+                        "track": track,
+                        "driver_id": drivers[track]["id"],
+                        "category": "cleanup_wait",
                         "stderr": "private output",
                     },
                 )
