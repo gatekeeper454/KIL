@@ -7163,3 +7163,45 @@ remains at its separate founder-review gate.
 and commit the design specification before implementation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-134 — 2026-08-31 — Incident Presenter/Audience written design completed
+
+**Input:** The founder approved the consolidated incident-centered design,
+including synchronized Presenter/Audience modes, the branching
+actual-versus-counterfactual visual language, and the first privileged egress
+as the principal KIL cutoff.
+
+**Interpretation:** Convert the approved concept into an implementation-ready
+written specification while preserving the historical incident, modeled KIL
+counterfactual, local lab mapping, and current evidence gate as distinct claim
+classes.
+
+**Decision status:** Written design completed, self-reviewed, and pending
+founder review. The specification defines eight scenes, a persistent incident
+topology, a branching timeline, the incident-to-lab mapping, 30–45-second
+scene-linked scripts, a presenter-authoritative same-origin synchronization
+contract, responsive and accessible behavior, canonical tracked source, test
+requirements, and non-goals. No demo implementation or laboratory behavior was
+changed.
+
+**Rationale:** A durable specification prevents the spoken narrative, animated
+graphic, and evidence language from drifting independently. Self-review added a
+presenter-epoch handshake so an audience view can recover from presenter reload
+without treating new state as stale, and it fixed the principal cutoff at the
+canonical Phase 1 Kubernetes control-plane request.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-08-31-kil-incident-presenter-audience-demo-design.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Founder review of the written presentation design is
+required before the test-first implementation plan. The V3B-1 foreign-resource
+snapshot design remains at a separate founder-review gate, and the central
+laboratory request remains prohibited.
+
+**Next gate:** Founder reviews and approves the written incident-demo design;
+then create the test-first implementation plan. Do not implement the page or
+run the central V3B-1 request before the applicable gates pass.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
