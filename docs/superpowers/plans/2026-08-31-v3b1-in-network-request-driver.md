@@ -706,7 +706,7 @@ git commit -m "Bind V3B-1 driver results into public evidence"
 - Modify: `tools/v3b1_harness_contract.py`
 - Modify: `tests/test_v3b1_local_envoy.py`
 
-- [ ] **Step 1: Write RED partial-up and partial-run recovery tests**
+- [x] **Step 1: Write RED partial-up and partial-run recovery tests**
 
 Require partial `up` to remove a created-never-started driver only after exact
 full-ID, image, command, labels, state, and network attestation. Once any
@@ -716,7 +716,7 @@ replace, or command that driver.
 An intent without a trusted terminal result is ambiguous and nonpromotable;
 cleanup must still continue against exact recorded IDs.
 
-- [ ] **Step 2: Write RED ordering and inventory tests**
+- [x] **Step 2: Write RED ordering and inventory tests**
 
 Require every driver to be durably exited or exactly stopped and re-attested
 before any Envoy stop. Preserve the existing nine-source freeze. Remove drivers,
@@ -724,20 +724,20 @@ Envoys, authz, targets, validators, and then six empty networks through durable
 intents and full-ID survivor inventories. Final publication requires 15
 containers and six networks absent.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run `JournalRecoveryTest`, `TeardownContinuationTest`, and teardown contract
 tests. Expect old nine-container/three-network and running-driver assumptions to
 fail.
 
-- [ ] **Step 4: Implement phase-aware revalidation and exact cleanup**
+- [x] **Step 4: Implement phase-aware revalidation and exact cleanup**
 
 Make `_load_and_reverify()` accept created drivers before run and exited/stopped
 drivers after readiness/run. Add driver-first finalization to `down()` and keep
 source collection restricted to Envoy/authz/target. Update both
 `teardown_commands()` and imperative teardown so they cannot diverge.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run recovery, teardown, source-freeze, full controller tests, compilation, and
 diff hygiene.

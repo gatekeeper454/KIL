@@ -5990,3 +5990,79 @@ the nine authoritative service sources, and prove all fifteen containers and
 six networks absent through durable exact-ID teardown.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-116 — 2026-08-31 — Driver-aware recovery and exact teardown approved
+
+**Input:** Make partial-up, post-readiness, post-request, and crash recovery
+aware of the retained one-shot request drivers without ever replaying a start,
+attach, instruction, or request, and make all teardown paths prove the complete
+driver-era topology absent before publishing evidence.
+
+**Interpretation:** The persisted ownership snapshot remains the exact
+created-state baseline. Live driver state is admitted only through closed,
+journal-derived phases. A persisted driver result or clean readiness
+cancellation proves output termination; Docker-client cleanup proves only the
+client was reaped; stop and cleanup completions prove teardown quiescence only.
+Every ambiguous post-start driver remains nonpromotable but must still be
+stopped and removed through its recorded full ID. Pure and imperative teardown
+must share the same driver-first authority and role ordering.
+
+**Decision status:** Confirmed Task 8 complete after final specification and
+quality approval. Commits `75161f0` and `48bd81a` add phase-scoped immutable
+driver attestation, a zero-restart recovery gate, conservative closure of
+stranded request intents, crash-idempotent exact driver stopping, exact
+frontend membership shrink, driver finalization before Envoy shutdown, the
+unchanged nine-service-source freeze, shared teardown ordering, and exact
+driver/Envoy/authz/target/validator/network removal.
+
+The final publication gate recomputes one durable commitment for all twelve
+manifest containers, three validators, and six manifest networks from the
+validated manifest plus exact creation and removal transitions. It requires
+unique full IDs and names, exact cardinalities and digests, empty survivor
+inventories, and one matching `topology_absence_attested` event before any
+complete-run publication action. The reconstruction no longer depends on the
+active-state file, so a crash after state unlink but before journal archival
+can validate, complete exactly once, and recover.
+
+Review corrections established real end-to-end partial-up and full `down()`
+proofs; separated attached-client cleanup from container termination; aligned
+the pure planner with imperative teardown; gated normal, provisional, renamed,
+and post-delete publication paths; and covered stop, absence, state-unlink,
+and journal-archive crash boundaries. The serialized public harness v1/v2
+schemas remain unchanged because the new facts are private recovery-journal
+records.
+
+**Rationale:** Driver-era recovery is safe only when journal phase determines
+which live states may be inspected and cleaned, never which actions may be
+replayed. Evidence is durable only when a complete-run publication is
+cryptographically and procedurally downstream of exact absence for every
+owned runtime object, including across the cleanup crash window.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Verification:** Final implementation and independent re-reviews passed 222
+local-Envoy tests, 38 teardown-continuation tests, seven focused correction
+proofs, and the full 466-test non-runtime repository suite. Compilation and
+diff hygiene passed. The exact partial-up survivor, immutable mutation matrix,
+full 12-plus-3 container/six-network fake runtime, missing and mismatched proof
+suppression, post-delete recovery, and state-unlink-to-journal-archive crash
+tests all passed. The worktree was clean. No Docker, Colima, network, or live
+laboratory runtime was invoked.
+
+**Unresolved questions:** The driver mechanism and teardown are implemented
+and statically approved but not yet exercised in the live dedicated profile.
+Request-free readiness, the one central proof, future Kind/Calico V3B-2,
+historical prevention, and production performance remain pending or unclaimed.
+
+**Next gate:** Execute Task 9: update all current-facing documentation, the
+white paper, the local-Envoy architecture SVG, the hybrid two-timescale HTML,
+progress state, supersession notes, and the ignored live board so every asset
+describes the implemented six-network driver topology and labels both live
+gates as pending. Then pass the complete static documentation and code gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
