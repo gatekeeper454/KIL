@@ -12182,7 +12182,31 @@ class RuntimeAttestationTest(unittest.TestCase):
                     "PortBindings": {},
                 },
                 "State": {"Running": False, "Status": "exited"},
-                "NetworkSettings": {"Networks": {}, "Ports": None},
+                "NetworkSettings": {
+                    "Networks": {
+                        "none": {
+                            "IPAMConfig": None,
+                            "Links": None,
+                            "Aliases": None,
+                            "DriverOpts": None,
+                            "GwPriority": 0,
+                            "NetworkID": (
+                                "f39fddd12311f9f3a107c2a3186c82dc"
+                                "587baf09fbffc1cf39d99b261dbf077a"
+                            ),
+                            "EndpointID": "",
+                            "Gateway": "",
+                            "IPAddress": "",
+                            "MacAddress": "",
+                            "IPPrefixLen": 0,
+                            "IPv6Gateway": "",
+                            "GlobalIPv6Address": "",
+                            "GlobalIPv6PrefixLen": 0,
+                            "DNSNames": None,
+                        }
+                    },
+                    "Ports": None,
+                },
                 "Mounts": [
                     {
                         "Source": "/private/envoy.json",
@@ -12241,6 +12265,103 @@ class RuntimeAttestationTest(unittest.TestCase):
                     "published_ports": None,
                 },
             )
+
+            none_network = raw["NetworkSettings"]["Networks"]["none"]
+            missing_network_id = dict(none_network)
+            del missing_network_id["NetworkID"]
+            for label, invalid_networks in (
+                ("record_wrong_type", {"none": []}),
+                ("wrong_network_name", {"custom": dict(none_network)}),
+                (
+                    "additional_network",
+                    {"none": dict(none_network), "custom": {}},
+                ),
+                (
+                    "unexpected_endpoint_field",
+                    {"none": {**none_network, "Unexpected": None}},
+                ),
+                ("missing_network_id", {"none": missing_network_id}),
+                (
+                    "malformed_network_id",
+                    {"none": {**none_network, "NetworkID": "not-hex"}},
+                ),
+                (
+                    "endpoint_id",
+                    {"none": {**none_network, "EndpointID": "e" * 64}},
+                ),
+                (
+                    "gateway",
+                    {"none": {**none_network, "Gateway": "172.18.0.1"}},
+                ),
+                (
+                    "ip_address",
+                    {"none": {**none_network, "IPAddress": "172.18.0.2"}},
+                ),
+                (
+                    "mac_address",
+                    {"none": {**none_network, "MacAddress": "02:42:ac:12:00:02"}},
+                ),
+                (
+                    "ipv6_address",
+                    {
+                        "none": {
+                            **none_network,
+                            "GlobalIPv6Address": "fd00::2",
+                        }
+                    },
+                ),
+                (
+                    "aliases",
+                    {"none": {**none_network, "Aliases": ["validator"]}},
+                ),
+                (
+                    "links",
+                    {"none": {**none_network, "Links": ["service"]}},
+                ),
+                (
+                    "dns_names",
+                    {"none": {**none_network, "DNSNames": ["validator"]}},
+                ),
+                (
+                    "ipam",
+                    {"none": {**none_network, "IPAMConfig": {}}},
+                ),
+                (
+                    "driver_options",
+                    {"none": {**none_network, "DriverOpts": {}}},
+                ),
+                (
+                    "boolean_priority",
+                    {"none": {**none_network, "GwPriority": False}},
+                ),
+                (
+                    "ipv4_prefix",
+                    {"none": {**none_network, "IPPrefixLen": 24}},
+                ),
+                (
+                    "ipv6_prefix",
+                    {"none": {**none_network, "GlobalIPv6PrefixLen": 64}},
+                ),
+            ):
+                with self.subTest(invalid_none_network=label):
+                    broken = json.loads(json.dumps(raw))
+                    broken["NetworkSettings"]["Networks"] = invalid_networks
+                    controller.runner = FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(broken) + "\n", ""
+                            ),
+                            CommandResult(
+                                0, canonical_json(image) + "\n", ""
+                            ),
+                        ]
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError, "validator|inspection|fields|shape"
+                    ):
+                        controller._inspect_validation_container(
+                            "8" * 64, value, track
+                        )
 
             for field, mutated_value in (
                 ("Privileged", True),

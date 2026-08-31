@@ -10431,6 +10431,58 @@ class LocalEnvoyController:
                 for port, bindings in published_ports.items()
             )
         )
+        none_network_fields = {
+            "IPAMConfig",
+            "Links",
+            "Aliases",
+            "DriverOpts",
+            "GwPriority",
+            "NetworkID",
+            "EndpointID",
+            "Gateway",
+            "IPAddress",
+            "MacAddress",
+            "IPPrefixLen",
+            "IPv6Gateway",
+            "GlobalIPv6Address",
+            "GlobalIPv6PrefixLen",
+            "DNSNames",
+        }
+        canonical_networks: dict[str, object] | None = None
+        if type(networks) is dict and networks == {}:
+            canonical_networks = {}
+        elif type(networks) is dict and set(networks) == {"none"}:
+            none_network = networks["none"]
+            if (
+                type(none_network) is dict
+                and set(none_network) == none_network_fields
+                and none_network["IPAMConfig"] is None
+                and none_network["Links"] is None
+                and none_network["Aliases"] is None
+                and none_network["DriverOpts"] is None
+                and type(none_network["GwPriority"]) is int
+                and none_network["GwPriority"] == 0
+                and type(none_network["NetworkID"]) is str
+                and _HEX.fullmatch(none_network["NetworkID"]) is not None
+                and type(none_network["EndpointID"]) is str
+                and none_network["EndpointID"] == ""
+                and type(none_network["Gateway"]) is str
+                and none_network["Gateway"] == ""
+                and type(none_network["IPAddress"]) is str
+                and none_network["IPAddress"] == ""
+                and type(none_network["MacAddress"]) is str
+                and none_network["MacAddress"] == ""
+                and type(none_network["IPPrefixLen"]) is int
+                and none_network["IPPrefixLen"] == 0
+                and type(none_network["IPv6Gateway"]) is str
+                and none_network["IPv6Gateway"] == ""
+                and type(none_network["GlobalIPv6Address"]) is str
+                and none_network["GlobalIPv6Address"] == ""
+                and type(none_network["GlobalIPv6PrefixLen"]) is int
+                and none_network["GlobalIPv6PrefixLen"] == 0
+                and none_network["DNSNames"] is None
+            ):
+                canonical_networks = {}
         if (
             type(object_id) is not str
             or _HEX.fullmatch(object_id) is None
@@ -10462,8 +10514,7 @@ class LocalEnvoyController:
             or port_bindings != {}
             or running is not False
             or state_status != "exited"
-            or type(networks) is not dict
-            or networks != {}
+            or canonical_networks is None
             or not live_ports_empty
             or len(normalized_mounts) != 1
             or type(normalized_mounts[0]["source"]) is not str
@@ -10514,7 +10565,7 @@ class LocalEnvoyController:
             "entrypoint": entrypoint,
             "command": command,
             "mounts": normalized_mounts,
-            "networks": networks,
+            "networks": canonical_networks,
             "port_bindings": port_bindings,
             "published_ports": published_ports,
         }

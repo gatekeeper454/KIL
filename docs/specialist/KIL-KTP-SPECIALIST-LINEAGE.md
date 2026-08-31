@@ -6190,3 +6190,97 @@ local and public main, then execute exactly one request-free live
 `preflight -> up -> readiness -> down` lifecycle with visible status updates.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-119 — 2026-08-31 — First driver-era live gate stops at a closed Docker null-network representation
+
+**Input:** After PR #11 merged, synchronize local, origin, and GitHub `main`,
+then execute the Task 10 request-free live gate visibly from the exact
+published commit without invoking the central `run` command.
+
+**Interpretation:** The gate must preserve the pre-existing host state, pass
+preflight, create only the dedicated local runtime, obtain three driver
+readiness records, cancel all three drivers without instructions, and tear down
+exactly. Any failure after runtime mutation must preserve the first error,
+forbid request traffic, and enter bounded recovery rather than retrying the
+experiment.
+
+**Decision status:** Confirmed rejected first live attempt; narrow correction
+approved but not yet published. PR #11 merged as
+`81758e82a60a3eea0758c5ef4660b3d8b6f2b7a5`; both required GitHub bootstrap
+checks passed, and local `main`, `origin/main`, and GitHub `main` matched that
+commit with clean primary and feature worktrees. The host inventory contained
+only the stopped foreign `default` profile with containerd, aarch64, 4 CPU,
+4 GiB memory, and 20 GiB disk.
+
+The first preflight stopped before mutation because the ignored local tool lock
+still bound the pre-driver profile SHA-256
+`8d6da1c20bf0def2ab5495dc5c87586b99d0ef024cd6c42236b2dc8bfd4afe62`
+instead of published profile-v2 SHA-256
+`567fb0472c596d651e79ce6457f3f3929a9712776058900499b4d377233c3399`.
+All three source URLs, executable digests, modes, and live versions remained
+exact. The canonical `make v3b-tools` installer refreshed the ignored binding;
+fresh verification passed with unchanged executable digests, no tracked
+change, and no runtime mutation. Lifecycle preflight then passed.
+
+`up` created and attested only the dedicated Colima boundary through manifest
+persistence, then stopped while inspecting the first exited Envoy validator
+with `Envoy validator immutable/sandbox attestation failed`. The mandatory
+single `down` preserved the same failure and left the isolated runtime
+untouched. Read-only inspection established the root cause: Docker 29.7.2
+represents an exited container created with `--network none` as
+`HostConfig.NetworkMode = "none"` plus one closed
+`NetworkSettings.Networks["none"]` record. The controller admitted only the
+older empty `{}` representation even though the observed record had no
+endpoint, address, gateway, MAC, alias, link, DNS, IPAM, driver option, port
+binding, or published port. The validator exited zero and every other immutable
+property matched.
+
+The isolated correction commit
+`89d52a60635defb590ade0589b5209b62162b711` admits only the exact closed
+Docker null-network sentinel or legacy `{}`, requires a lowercase 64-hex null
+network ID and empty/zero/null connectivity fields with exact types, rejects
+missing, extra, custom, populated, or malformed network state, and canonicalizes
+both accepted forms back to `{}`. It does not weaken the authoritative
+`NetworkMode = "none"`, no-binding, no-publication, immutable-image, identity,
+mount, namespace, capability, or read-only-root requirements.
+
+**Rationale:** A Docker API representation difference is not evidence of
+connectivity, but permissive normalization could hide a real attachment. A
+closed, typed sentinel contract preserves fail-closed sandbox attestation and
+deterministic recovery equality while allowing the exact pinned runtime output
+actually observed in the lab.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- ignored `artifacts/generated/v3b1-task6-live-status.md`
+- ignored local `.tools/locks/v3b-tools.json`
+- private lifecycle `v3b1-e81dc498e2ef1693640b56a7b04575c8ff5a788cb931e371bf7087830de129b7`
+
+**Verification:** The exact observed Docker 29.7.2 record reproduced the prior
+failure before the correction and passed afterward. Nineteen malformed or
+connected variants remain rejected. Independent specification and
+quality/security reviews approved the correction with no Critical or Important
+finding. Eight runtime-attestation tests, 222 local-Envoy tests, and the full
+474-test repository suite pass; Python compilation and diff hygiene pass. No
+`readiness`, driver instruction, request intent, HTTP action, evidence
+promotion, or central `run` occurred.
+
+**Unresolved questions:** The correction must pass public CI and merge before
+it may govern recovery. The currently isolated dedicated profile contains only
+the exited first validator and must be removed through the corrected bounded
+recovery path. The complete request-free lifecycle, three clean cancellations,
+nine empty authoritative source copies, checksum verification, exact teardown,
+foreign-state restoration, and the later one-shot central proof remain pending.
+
+**Next gate:** Publish and merge the closed null-network correction, synchronize
+all `main` references, execute bounded recovery for the rejected attempt, and
+verify exact profile and foreign-state restoration. Then start one fresh
+request-free `preflight -> up -> readiness -> down` lifecycle from the new
+published commit. Do not invoke the central `run` command unless that fresh gate
+passes and its public-safe record is merged.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
