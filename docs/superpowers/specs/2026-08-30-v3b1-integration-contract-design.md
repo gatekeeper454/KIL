@@ -97,7 +97,66 @@ is present and still matches the recorded immutable identity, it issues one
 exact delete. No wildcard, prefix discovery, global Docker context mutation, or
 unrecorded object deletion is permitted.
 
-## 6. Transcript and smoke validation
+Ownership is never inferred from a fixed name alone. The object kind, fixed
+name, and full ID must be durably paired before recovery can adopt or mutate a
+present object. The transient image validators run without Docker `--rm`; each
+validator has an explicit persisted full ID, exit and immutable-configuration
+attestation, stop transition, removal intent, and survivor-inventory proof.
+
+Container and custom-network inventories are one joint recovery observation.
+Pending-and-absent removals, including validators, are collected first; the
+journal records completion only after both command-local snapshots validate
+the exact survivor sets. Any ambiguity in either snapshot causes no journal
+mutation and no deletion.
+
+## 6. Partial-up failure recovery
+
+When `up_complete` is absent, teardown cannot claim source evidence and must not
+enter the nine-source freeze. It immutably records the exact survivors first
+observed in `partial_up_evidence_rejected`, stops and attests any recovered
+containers as applicable, and rejoins the full-ID inventory removal path. On a
+retry, that initial survivor attestation remains unchanged while the durable
+creation and removal transitions authorize the legitimately shrinking current
+set. Replacement IDs and names remain fail-closed and untouched.
+
+The fixed post-teardown failure-bundle replacement intent is persisted before
+any container, network, or dedicated-profile mutation. Once both inventories
+are empty and profile absence is verified, recovery may materialize only the
+deterministic incomplete, nonpromotable failure bundle authorized by the
+durable partial-up rejection and replacement intent. Profile-absent recovery
+does not require a provisional attestation that could not have existed before
+profile deletion, and it never invents source evidence.
+
+## 7. Authoritative offline presenter
+
+An accepted completed bundle contains deterministic `live.html` bytes derived
+only from the closed public manifest, normalized decisions, joined outcomes,
+and fixed causal reasons. The page has a deny-by-default content-security
+policy, inline CSS only, no scripts or external assets, escaped projected
+values, and explicit `local`, `intermediate`, and `not promoted` limitations.
+It is checksummed and part of the authoritative bundle, but it neither decides
+acceptance nor contributes to the content-addressed run ID.
+
+The public manifest publishes the safe `kil.v3b1-content-identity.v2` preimage:
+the raw Docker socket is represented by the fixed logical Colima-profile
+endpoint and the execution nonce by its SHA-256. An offline verifier recomputes
+the content identity, run ID, cross-field pins, all canonical public records,
+source-byte bindings, joins, presenter bytes, and the non-circular public
+commitment. It retains no-follow directory descriptors and file identities
+through semantic verification, rejects sensitive strings recursively, and
+accepts only the exact completed `permit / permit / deny`, `200 / 200 / 403`,
+and `1 / 1 / 0` local-boundary proof. The `view --bundle PATH` command performs
+no writes, browser action, Docker action, or Colima action and prints only the
+verified presenter path.
+
+Publication uses descriptor-relative, no-follow atomic rename plus directory
+fsync and post-rename reattestation. A failed final check moves the exact entry
+to a collision-safe private quarantine rather than exposing or deleting it.
+The public commitment proves internal bundle consistency, not publisher
+authenticity; a trusted Git revision, release signature, or separately conveyed
+checksum remains an external distribution requirement.
+
+## 8. Transcript and smoke validation
 
 Tracked tests replay the sanitized installed-runtime shapes from the three
 failed cycles: immutable image-label merge, one-object network JSON, a staged
@@ -122,12 +181,24 @@ proof is accepted only for `local_envoy_boundary` when the joined outcomes are
 `permit / permit / deny`, target markers are `1 / 1 / 0`, every source is
 complete, all checksums pass, and exact teardown passes.
 
-## 7. Publication and backup boundary
+## 9. Publication and backup boundary
 
 The accepted implementation, tracked fixtures, tests, design, plan, progress,
 lineage, and public evidence references are committed on the feature branch.
 Private failed runs, downloaded tools, private journals, credentials, keys, and
 unredacted runtime material remain ignored and are never pushed.
+
+The generated artifact root remains broadly ignored. Only after `view` accepts
+one exact completed run and a closed checksum and secret review passes may that
+single directory be staged with:
+
+```bash
+git add -f artifacts/generated/v3b1-local-envoy/<accepted-run-id>/
+```
+
+Never force-add `artifacts/generated/`, its V3B-1 parent, a wildcard, a failed
+run, or `live.html` by itself. The presenter travels only with its exact public
+JSONL, manifest, raw decision sources, summary, and `SHA256SUMS` bundle.
 
 After review and CI, the feature branch is pushed, merged through GitHub, and
 local `main` is fast-forwarded to the exact public `origin/main`. Final readback

@@ -296,11 +296,11 @@ The original planning target was:
 | Application runtime | Python 3.12.13 |
 | Ed25519 library | `cryptography` 50.0.0 |
 
-The released, mutually supported V3B profile resolved on 2026-08-30 is:
+The mutually supported V3B profile resolved and pinned on 2026-08-30 is:
 
 | Component | Resolved V3B identity |
 |---|---|
-| Host | macOS 26.6.1, arm64 |
+| Host | macOS (Darwin), arm64; exact OS build recorded per run |
 | Host runtime | Colima 0.10.3 on Lima 2.2.0, profile `kil-v3-lab` |
 | Docker client | Docker CLI 29.7.2 |
 | Cluster tool | Kind 0.32.0 |
@@ -311,15 +311,17 @@ The released, mutually supported V3B profile resolved on 2026-08-30 is:
 | Application runtime | Python 3.12.13 |
 | Ed25519 library | `cryptography` 50.0.0 |
 
-The tracked source of truth is `deploy/kind/v3b-profile.json`. Kind 0.33.0 and
-the Kubernetes 1.37.0 node image were not available as the resolved stable
-profile. The initial V3B profile therefore selected the available Envoy 1.39.0
-image; that component was corrected to 1.39.1 on 2026-08-30 after the August 27
-security release became available with two HTTP `ext_authz` fixes. These
-release corrections do not change the founder-approved topology,
-authorization semantics, comparison tracks, or evidence boundary. V3B-1 first
-proves the pinned local Envoy boundary; V3B-2 then reuses the same artifacts in
-the approved Kind/Calico topology.
+The tracked component pins are in `deploy/kind/v3b-profile.json`. Exact host OS
+build, engine provenance, Python identity, and library identity are recorded by
+preflight in each run manifest. Kind 0.33.0 and the Kubernetes 1.37.0 node image
+were not available as the resolved stable profile. The initial V3B profile
+therefore selected the available Envoy 1.39.0 image; that component was
+corrected to 1.39.1 on 2026-08-30 after the August 27 security release became
+available with two HTTP `ext_authz` fixes. These release corrections do not
+change the founder-approved topology, authorization semantics, comparison
+tracks, or evidence boundary. V3B-1 first proves the pinned local Envoy
+boundary; V3B-2 then reuses the same artifacts in the approved Kind/Calico
+topology.
 
 Before cluster creation, preflight records the executable hashes and version
 outputs, resolves every mutable image tag to a digest, and writes the lock into
@@ -356,9 +358,11 @@ Each V3 run produces:
 - `live.html` — read-only visualization of the same records; and
 - `SHA256SUMS` — hashes for every published artifact.
 
-The live dashboard is regenerated from the JSONL sources and excluded from the
-run identity to avoid presentation-only nondeterminism. Every paper figure and
-validated statement must cite the run ID and source artifact.
+`live.html` is a deterministic read-only rendering, checksummed and included in
+the authoritative bundle attestation. It does not determine enforcement
+acceptance and is excluded from the content-addressed run ID. Offline `view`
+must rederive it from the accepted public records before presentation. Every
+paper figure and validated statement must cite the run ID and source artifact.
 
 ## 13. Implementation stages and acceptance
 

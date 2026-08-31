@@ -4532,3 +4532,68 @@ zero-request smoke and single accepted proof run before publication and the
 verified offline backup.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-091 — 2026-08-30 — V3B-1 publication documentation matches the completed static harness
+
+**Input:** Prepare the completed V3B-1 static harness and authoritative offline
+presenter for a first public pull request without changing runtime behavior,
+claiming a live result, exposing private paths, broadening generated-artifact
+tracking, or silently selecting a license for original KIL material.
+
+**Interpretation:** Publication readiness requires the tracked status, approved
+designs, execution plans, contribution and security boundaries, and private
+operator board to describe the same gate as implementation commit
+`14ed92dfb1431fb2e4c3f588ff19ad07122f11fe`. Static harness and presenter
+completion are implementation facts; they do not accept, promote, or validate
+any of the three rejected exploratory cycles.
+
+**Decision status:** Confirmed documentation-only alignment complete. Public
+documentation now records 166 controller tests and 381 repository tests at the
+reviewed implementation checkpoint, the completed transcript-driven readiness,
+evidence-freeze, exact-inventory recovery and offline presenter contracts, and
+the still-mandatory zero-request smoke. The fixed bearer string and
+deterministic signing seeds are identified as public non-secret laboratory
+fixtures. Personal Python paths were replaced with the repository virtual
+environment, while synthetic `/Users/lab` adversarial fixtures remain intact.
+
+The authoritative design now includes retained full-ID validators, joint
+container/network inventory completion, retry-safe partial-up rejection and
+failure-bundle ordering, safe public run identity, recursive privacy checks,
+atomic presenter publication, and descriptor-held offline verification. The
+generated root remains ignored: only one exact accepted run may be force-added
+after `view`, checksum, and secret review; broad force-adds and standalone
+`live.html` publication are prohibited.
+
+**Rationale:** A public repository must not imply that static tests or an
+offline visualization are live enforcement evidence. Aligning status and
+publication instructions before the smoke prevents stale V3A-era language,
+private filesystem disclosure, accidental failed-run publication, and a
+presenter detached from its authoritative source bundle.
+
+**Affected artifacts:**
+
+- `README.md`
+- `docs/lab/V3-PROGRESS.md`
+- `adapters/envoy/README.md`
+- `CONTRIBUTING.md`
+- `SECURITY.md`
+- `docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md`
+- `docs/superpowers/specs/2026-08-30-v3b1-integration-contract-design.md`
+- `docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md`
+- `docs/superpowers/plans/2026-08-30-v3b1-toolchain-http-boundary.md`
+- `artifacts/generated/v3b1-task6-live-status.md` (ignored private operator
+  board)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No Docker, Colima, browser, KIL, authorization,
+Envoy, target, or central-request operation occurred. No V3B-1 run is accepted,
+promoted, or validated. Publisher authenticity remains external to the bundle,
+and the explicit no-license posture for original KIL material remains unchanged
+pending a separate founder and legal decision.
+
+**Next gate:** Commit this documentation-only checkpoint, then execute exactly
+one zero-request `preflight` / `up` / `down` smoke from the final committed
+identity. A central request remains prohibited until the smoke bundle and exact
+teardown pass review.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

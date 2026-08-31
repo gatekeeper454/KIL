@@ -1,8 +1,9 @@
 # Envoy adapter boundary — Gate V3B
 
-Gate V3B will place three independently configured Envoy `ext_authz` routes in
-front of harmless target workloads. Each authorization service instance fixes
-one track at startup:
+V3B-1 implements three independently configured local Envoy `ext_authz` routes
+in front of harmless target workloads. Each authorization service instance
+fixes one track at startup. V3B-2 will reuse the same fixed tracks in the Kind
+topology. No V3B-1 proof has yet been accepted, promoted, or labeled validated:
 
 1. `credential_policy_baseline`
 2. `signed_state_only`

@@ -16,11 +16,16 @@ KTP-Transport, KTP-Enforce, KTP-Gravity, or Vector Identity constructs.
 ## Status
 
 The deterministic V1 decision kernel, V2 historical replay, and V3A signed-
-state authorization core are locally executable. V3A verifies an experimental
-Ed25519 composite-state envelope, three infrastructure-fixed comparison tracks,
-and a process-level forward-or-withhold proof with harmless target markers. Its
-visible bundle is **modeled** and limited to a `process_contract_only` scope.
-Envoy and Kind behavior remain the V3B live-cluster validation gate.
+state authorization core remain locally executable modeled assets. V3B-1 now
+implements the pinned local Envoy `ext_authz` boundary, a hardened transcript-
+driven lifecycle and evidence harness, and an authoritative offline presenter.
+Three exploratory local cycles were rejected and remain private. No V3B-1 run
+has been accepted, promoted, or labeled validated.
+
+The next execution gate is exactly one committed zero-request `preflight` / `up`
+/ `down` smoke. A central request remains prohibited until that smoke passes.
+Kind/Calico validation (V3B-2) and repetition and performance promotion (V3C)
+remain unexecuted.
 
 ## Evidence classes
 
@@ -75,6 +80,19 @@ make test
 
 This installs the pinned V3A cryptography library. No cluster dependency is
 installed or downloaded by the bootstrap.
+
+The V3B-1 tool bootstrap and preflight are separate, opt-in commands:
+
+```bash
+make v3b-tools PYTHON=.venv/bin/python
+make v3b-preflight PYTHON=.venv/bin/python
+```
+
+The tool command downloads only the resolved laboratory clients into ignored
+`.tools/`; neither command installs a system-wide dependency. The fixed bearer
+string and deterministic Ed25519 seeds used by V3B-1 are public, non-secret
+laboratory fixtures. They must never be reused as production credentials or
+keys.
 
 ## Historical replay
 

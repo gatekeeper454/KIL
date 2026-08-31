@@ -1,8 +1,11 @@
 # Contributing
 
-The design is still being specified. Until the first design and implementation
-plans are approved, contributions should focus on source provenance, factual
-corrections, threat-model gaps, and testable requirements.
+KIL uses versioned design specifications, test-first implementation plans, and
+explicit evidence gates. Contributions must preserve the approved scope,
+include tests for behavior changes, update affected progress and publication
+records, and append specialist lineage for substantive design, protocol,
+experiment, or evidence changes. Source provenance, factual corrections,
+threat-model gaps, and testable requirements remain welcome.
 
 All claims must preserve the `observed`, `modeled`, and `validated` distinction
 defined in the root README. Changes that use named KTP constructs must cite the

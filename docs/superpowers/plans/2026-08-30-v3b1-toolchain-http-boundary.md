@@ -14,7 +14,7 @@
 
 The founder-approved topology and HTTP contract remain unchanged. The version
 table in the approved design was explicitly planned rather than resolved. The
-released, mutually supported profile on 2026-08-30 is:
+mutually supported profile resolved and pinned on 2026-08-30 is:
 
 | Component | V3B-1 identity |
 |---|---|
@@ -110,7 +110,7 @@ class V3BProfileTest(unittest.TestCase):
 Run:
 
 ```bash
-PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_v3b_preflight -v
+PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b_preflight -v
 ```
 
 Expected: `ModuleNotFoundError: No module named 'kil.v3b_preflight'`.
@@ -172,8 +172,8 @@ the authorization evaluation.
 - [x] **Step 6: Verify and commit Task 1**
 
 ```bash
-PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_v3b_preflight -v
-make validate PYTHON=/Users/mistorm/.local/bin/python3.12
+PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b_preflight -v
+make validate PYTHON=.venv/bin/python
 git add deploy/kind/v3b-profile.json src/kil/v3b_preflight.py tests/test_v3b_preflight.py docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md adapters/envoy/README.md
 git commit -m "Resolve the V3B stable toolchain profile"
 ```
@@ -212,7 +212,7 @@ class V3BToolBootstrapTest(unittest.TestCase):
 - [x] **Step 2: Verify RED**
 
 ```bash
-PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_v3b_tool_bootstrap -v
+PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b_tool_bootstrap -v
 ```
 
 Expected: import failure because `tools/bootstrap_v3b_tools.py` does not exist.
@@ -239,8 +239,8 @@ and `make v3b-preflight` with `PATH=$(CURDIR)/.tools/bin:$(PATH)`.
 - [x] **Step 4: Verify unit behavior before host/network mutation**
 
 ```bash
-PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_v3b_tool_bootstrap -v
-make validate PYTHON=/Users/mistorm/.local/bin/python3.12
+PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b_tool_bootstrap -v
+make validate PYTHON=.venv/bin/python
 ```
 
 - [x] **Step 5: Execute the explicit host/network gate**
@@ -248,7 +248,7 @@ make validate PYTHON=/Users/mistorm/.local/bin/python3.12
 After action approval, run:
 
 ```bash
-make v3b-tools PYTHON=/Users/mistorm/.local/bin/python3.12
+make v3b-tools PYTHON=.venv/bin/python
 PATH="$PWD/.tools/bin:$PATH" docker --version
 PATH="$PWD/.tools/bin:$PATH" kind version
 PATH="$PWD/.tools/bin:$PATH" kubectl version --client -o json
@@ -305,7 +305,7 @@ def test_log_record_redacts_credential_and_signed_state(self):
 - [x] **Step 2: Verify RED**
 
 ```bash
-PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_ext_authz_http -v
+PYTHONPATH=src .venv/bin/python -m unittest tests.test_ext_authz_http -v
 ```
 
 - [x] **Step 3: Implement the thin adapter**
@@ -333,8 +333,8 @@ the request body to zero bytes, binds inside the container only, and handles
 - [x] **Step 4: Verify and commit Task 3**
 
 ```bash
-PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_ext_authz_http -v
-make validate PYTHON=/Users/mistorm/.local/bin/python3.12
+PYTHONPATH=src .venv/bin/python -m unittest tests.test_ext_authz_http -v
+make validate PYTHON=.venv/bin/python
 git add src/kil/ext_authz_http.py tests/test_ext_authz_http.py
 git commit -m "Expose the fixed KIL ext authz HTTP boundary"
 ```
@@ -371,7 +371,7 @@ def test_ledger_never_persists_authorization_or_q_state(self):
 - [x] **Step 2: Verify RED**
 
 ```bash
-PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_target_http -v
+PYTHONPATH=src .venv/bin/python -m unittest tests.test_target_http -v
 ```
 
 - [x] **Step 3: Implement append-before-response semantics**
@@ -387,8 +387,8 @@ or administrative side effects beyond appending to the dedicated ledger file.
 - [x] **Step 4: Verify and commit Task 4**
 
 ```bash
-PYTHONPATH=src /Users/mistorm/.local/bin/python3.12 -m unittest tests.test_target_http -v
-make validate PYTHON=/Users/mistorm/.local/bin/python3.12
+PYTHONPATH=src .venv/bin/python -m unittest tests.test_target_http -v
+make validate PYTHON=.venv/bin/python
 git add src/kil/target_http.py tests/test_target_http.py
 git commit -m "Add the harmless V3B target ledger"
 ```
@@ -527,6 +527,12 @@ make validate PYTHON=.venv/bin/python
 ```
 
 - [ ] **Step 5: Execute the explicit runtime-mutation gate**
+
+Historical execution note: three explicitly authorized exploratory cycles
+entered this gate. All three were rejected and retained privately; none was
+accepted, promoted, or labeled validated. This runtime gate is superseded by
+Task 6 of the transcript-driven integration plan and remains unchecked because
+its acceptance criteria were not met.
 
 Before any live mutation, commit the reviewed controller and tests on a clean
 tree. The runtime manifest must record that exact implementation commit. This
