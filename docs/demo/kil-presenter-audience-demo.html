@@ -26,12 +26,35 @@
     .kil-eyebrow { color: var(--kil-blue); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
     .kil-meta, .kil-controls, .kil-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     [data-visual] { min-height: 360px; margin: 20px 0; padding: 20px; background: var(--kil-panel); border: 1px solid var(--kil-line); }
+    [data-visual] svg { display: block; width: 100%; height: auto; max-height: 560px; }
+    .diagram-bg { fill: var(--kil-panel); }
+    .diagram-panel { fill: var(--kil-bg); stroke: var(--kil-line); stroke-width: 2; }
+    .diagram-line { fill: none; stroke: var(--kil-line); stroke-width: 3; }
+    .diagram-blue { fill: none; stroke: var(--kil-blue); stroke-width: 6; }
+    .diagram-red { fill: none; stroke: var(--kil-red); stroke-width: 6; }
+    .diagram-green { fill: none; stroke: var(--kil-green); stroke-width: 6; }
+    .diagram-text { fill: var(--kil-text); font: 600 20px Inter, ui-sans-serif, system-ui, sans-serif; }
+    .diagram-small { fill: var(--kil-muted); font: 500 16px Inter, ui-sans-serif, system-ui, sans-serif; }
+    .diagram-label { fill: var(--kil-blue); font: 700 16px Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+    .diagram-red-fill { fill: var(--kil-red); }
+    .diagram-blue-fill { fill: var(--kil-blue); }
+    .diagram-green-fill { fill: var(--kil-green); }
     [data-presenter-notes] { margin-top: 20px; padding: 20px; background: var(--kil-panel); border-left: 4px solid var(--kil-blue); }
     .kil-placeholder { display: grid; min-height: 318px; place-content: center; text-align: center; color: var(--kil-muted); }
     .kil-placeholder strong { color: var(--kil-text); }
     [data-source], footer { color: var(--kil-muted); }
     footer { margin-top: 28px; font-size: .9rem; }
     footer a { color: inherit; }
+    @media (max-width: 640px) {
+      #kil-demo-app { padding: 12px; }
+      h1 { font-size: 1.7rem; }
+      [data-visual] { min-height: 260px; padding: 8px; }
+      .diagram-text { font-size: 23px; }
+      .diagram-small { font-size: 19px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+    }
   </style>
 </head>
 <body>
@@ -304,6 +327,101 @@
         }));
       }
 
+      function svgShell(title, description, content, viewBox = '0 0 1000 500') {
+        return `<svg role="img" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg">
+          <title>${escapeText(title)}</title><desc>${escapeText(description)}</desc>
+          <defs>
+            <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" class="diagram-blue-fill"/></marker>
+            <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" class="diagram-red-fill"/></marker>
+          </defs>
+          <rect width="1000" height="500" rx="16" class="diagram-bg"/>${content}</svg>`;
+      }
+
+      function renderAmbientBreach() {
+        return svgShell(
+          'Ambient breach requires ambient enforcement',
+          'A valid credential passes a static checkpoint, after which machine-speed actions fan out beyond the human response loop.',
+          `<text x="48" y="58" class="diagram-label">The checkpoint gap</text>
+           <g transform="translate(55 165)">
+             <circle cx="70" cy="70" r="62" class="diagram-panel"/><text x="70" y="62" text-anchor="middle" class="diagram-text">AI</text><text x="70" y="88" text-anchor="middle" class="diagram-small">agent</text>
+             <path d="M140 70 H305" class="diagram-red" marker-end="url(#arrow-red)"/>
+             <rect x="310" y="5" width="165" height="130" rx="10" class="diagram-panel"/><text x="392" y="57" text-anchor="middle" class="diagram-text">Credential</text><text x="392" y="84" text-anchor="middle" class="diagram-small">valid + allowed</text><text x="392" y="111" text-anchor="middle" class="diagram-small">PASS</text>
+             <path d="M475 70 H590" class="diagram-red"/>
+             <path d="M590 70 L805 5 M590 70 L805 45 M590 70 L805 85 M590 70 L805 125" class="diagram-red" marker-end="url(#arrow-red)"/>
+             <text x="680" y="-12" class="diagram-small">novel actions at agent speed</text>
+           </g>
+           <rect x="58" y="365" width="884" height="86" rx="12" class="diagram-panel"/>
+           <text x="86" y="403" class="diagram-text">The control was correct about the credential.</text>
+           <text x="86" y="431" class="diagram-small">It did not continuously establish that the behavior remained legitimate.</text>`
+        );
+      }
+
+      function renderKILComparison() {
+        return svgShell(
+          'From credential checkpoints to kinetic authority',
+          'Classic authorization checks a credential once; KIL consumes live class-bound authority at the infrastructure boundary.',
+          `<text x="50" y="50" class="diagram-label">Two different questions</text>
+           <rect x="45" y="90" width="420" height="315" rx="14" class="diagram-panel"/>
+           <text x="255" y="135" text-anchor="middle" class="diagram-text">Credential checkpoint</text>
+           <circle cx="155" cy="235" r="55" class="diagram-panel"/><text x="155" y="242" text-anchor="middle" class="diagram-text">TOKEN</text>
+           <path d="M215 235 H345" class="diagram-line" marker-end="url(#arrow-blue)"/>
+           <rect x="345" y="190" width="82" height="90" rx="9" class="diagram-panel"/><text x="386" y="242" text-anchor="middle" class="diagram-text">PASS</text>
+           <text x="255" y="336" text-anchor="middle" class="diagram-small">Is this credential valid?</text>
+           <text x="255" y="368" text-anchor="middle" class="diagram-small">Authority persists until expiry.</text>
+           <rect x="535" y="90" width="420" height="315" rx="14" class="diagram-panel"/>
+           <text x="745" y="135" text-anchor="middle" class="diagram-text">Ambient enforcement</text>
+           <path d="M585 248 C650 145 755 145 825 225 S900 340 925 225" class="diagram-blue" marker-end="url(#arrow-blue)"/>
+           <line x1="790" y1="155" x2="790" y2="330" class="diagram-line"/>
+           <text x="790" y="350" text-anchor="middle" class="diagram-small">infrastructure boundary</text>
+           <text x="745" y="376" text-anchor="middle" class="diagram-small">Does this trajectory earn authority now?</text>
+           <text x="745" y="435" text-anchor="middle" class="diagram-label">Authority becomes a property of motion</text>`
+        );
+      }
+
+      function renderHybridArchitecture() {
+        return svgShell(
+          'KIL hybrid two-timescale architecture',
+          'KTP derives signed short-lived composite state in the authoritative loop; the infrastructure fast path verifies it and may only reduce authority.',
+          `<text x="45" y="48" class="diagram-label">KTP authoritative loop — slower</text>
+           <rect x="45" y="74" width="910" height="130" rx="14" class="diagram-panel"/>
+           <rect x="85" y="105" width="235" height="66" rx="9" class="diagram-panel"/><text x="202" y="132" text-anchor="middle" class="diagram-text">KTP constructs</text><text x="202" y="158" text-anchor="middle" class="diagram-small">identity · trajectory · vetoes</text>
+           <path d="M320 138 H418" class="diagram-blue" marker-end="url(#arrow-blue)"/>
+           <rect x="430" y="92" width="440" height="92" rx="10" class="diagram-panel"/><text x="650" y="126" text-anchor="middle" class="diagram-text">Signed, short-lived composite KTP enforcement state</text><text x="650" y="158" text-anchor="middle" class="diagram-small">identity × authority class × envelope × expiry</text>
+           <path d="M650 184 V270" class="diagram-blue" marker-end="url(#arrow-blue)"/>
+           <text x="45" y="264" class="diagram-label">Infrastructure enforcement loop — fast</text>
+           <rect x="45" y="290" width="910" height="150" rx="14" class="diagram-panel"/>
+           <rect x="85" y="330" width="220" height="70" rx="9" class="diagram-panel"/><text x="195" y="360" text-anchor="middle" class="diagram-text">Verify state</text><text x="195" y="386" text-anchor="middle" class="diagram-small">signature · freshness · veto</text>
+           <path d="M305 365 H405" class="diagram-blue" marker-end="url(#arrow-blue)"/>
+           <rect x="420" y="318" width="260" height="94" rx="9" class="diagram-panel"/><text x="550" y="352" text-anchor="middle" class="diagram-text">Reducing-only local overlay</text><text x="550" y="380" text-anchor="middle" class="diagram-small">fresh evidence can clamp ↓</text>
+           <path d="M680 365 H790" class="diagram-blue" marker-end="url(#arrow-blue)"/>
+           <rect x="800" y="330" width="115" height="70" rx="9" class="diagram-panel"/><text x="857" y="360" text-anchor="middle" class="diagram-text">Enforce</text><text x="857" y="386" text-anchor="middle" class="diagram-small">now</text>
+           <text x="500" y="476" text-anchor="middle" class="diagram-small">Invariant: local evidence cannot create authority, widen the envelope, or clear a KTP veto.</text>`
+        );
+      }
+
+      function renderTrustPhysics() {
+        return svgShell(
+          'The formal intuition of kinetic authority',
+          'Authority accumulates slowly, decays during silence, remains isolated by class, and drops quickly under high divergence.',
+          `<text x="45" y="48" class="diagram-label">Asymmetric authority dynamics</text>
+           <line x1="90" y1="390" x2="930" y2="390" class="diagram-line"/>
+           <line x1="90" y1="95" x2="90" y2="390" class="diagram-line"/>
+           <path d="M90 390 H160 V355 H230 V320 H300 V285 H370 V250 H440 V215" class="diagram-blue"/>
+           <path d="M440 215 C540 220 610 265 700 310" class="diagram-blue"/>
+           <path d="M700 310 L715 112 L730 388 H930" class="diagram-red"/>
+           <text x="245" y="198" class="diagram-text">Earn slowly</text><text x="515" y="242" class="diagram-text">Passive decay</text><text x="745" y="96" class="diagram-text">Lose quickly</text>
+           <text x="210" y="430" class="diagram-small">consistent, class-matched history</text><text x="520" y="430" class="diagram-small">state ages without fresh evidence</text><text x="790" y="430" class="diagram-small">high divergence</text>
+           <rect x="735" y="190" width="185" height="86" rx="10" class="diagram-panel"/><text x="827" y="222" text-anchor="middle" class="diagram-small">Per-class isolation</text><text x="827" y="248" text-anchor="middle" class="diagram-small">read ≠ admin</text>`
+        );
+      }
+
+      const visualRenderers = {
+        'ambient-breach': renderAmbientBreach,
+        'kil-comparison': renderKILComparison,
+        'hybrid-architecture': renderHybridArchitecture,
+        'trust-physics': renderTrustPhysics
+      };
+
       function render(scene) {
         activeAct = scene.act;
         app.querySelector('[data-title]').textContent = scene.title;
@@ -312,7 +430,10 @@
         app.querySelector('[data-takeaway]').textContent = scene.takeaway;
         app.querySelector('[data-script]').textContent = scene.script;
         app.querySelector('[data-source]').textContent = scene.source;
-        visual.innerHTML = `<div class="kil-placeholder"><strong>${escapeText(scene.title)}</strong><span>${escapeText(scene.takeaway)}</span></div>`;
+        const visualRenderer = visualRenderers[scene.visual];
+        visual.innerHTML = visualRenderer
+          ? visualRenderer()
+          : `<div class="kil-placeholder"><strong>${escapeText(scene.title)}</strong><span>${escapeText(scene.takeaway)}</span></div>`;
         previous.disabled = currentIndex === 0;
         next.disabled = currentIndex === scenes.length - 1;
         renderActControls();

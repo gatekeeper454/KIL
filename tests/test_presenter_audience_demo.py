@@ -66,6 +66,13 @@ PROHIBITED_PUBLIC_CLAIMS = (
     "validated live kubernetes",
 )
 
+PRIMER_VISUALS = {
+    "ambient-breach": "renderAmbientBreach",
+    "kil-comparison": "renderKILComparison",
+    "hybrid-architecture": "renderHybridArchitecture",
+    "trust-physics": "renderTrustPhysics",
+}
+
 
 class PresenterAudienceDemoContractTest(unittest.TestCase):
     def _html(self) -> str:
@@ -117,6 +124,21 @@ class PresenterAudienceDemoContractTest(unittest.TestCase):
         for claim in PROHIBITED_PUBLIC_CLAIMS:
             with self.subTest(claim=claim):
                 self.assertNotIn(claim, html)
+
+    def test_primer_visuals_have_dedicated_renderers(self):
+        html = self._html()
+        scenes = self._scenes()
+        self.assertEqual(
+            [scene["visual"] for scene in scenes[:4]],
+            list(PRIMER_VISUALS),
+        )
+        for visual, renderer in PRIMER_VISUALS.items():
+            with self.subTest(visual=visual):
+                self.assertIn(f"function {renderer}(", html)
+        self.assertIn("Signed, short-lived composite KTP enforcement state", html)
+        self.assertIn("Reducing-only local overlay", html)
+        self.assertIn("Earn slowly", html)
+        self.assertIn("Lose quickly", html)
 
 
 if __name__ == "__main__":
