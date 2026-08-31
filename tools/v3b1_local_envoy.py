@@ -5,7 +5,6 @@ from argparse import ArgumentParser
 from base64 import urlsafe_b64encode
 from dataclasses import dataclass
 from decimal import Decimal
-import errno as errno_module
 from hashlib import sha256
 from html import escape
 import json
@@ -32,6 +31,7 @@ from kil.v3b_envoy import render_envoy_json
 from kil.v3b1_driver_protocol import (
     DRIVER_RUNTIME_POLICY,
     DriverProtocolError,
+    LINUX_ERRNO_NAMES,
     canonical_record,
     driver_definition,
     parse_instruction as parse_driver_instruction,
@@ -203,6 +203,32 @@ _DRIVER_READINESS_CONTROLLER_STAGES = {
     "diagnostic_complete",
 }
 _DRIVER_CLEANUP_OUTCOMES = {"already_exited", "terminated", "killed"}
+
+
+@dataclass(frozen=True, slots=True)
+class _DriverCancellationOutcome:
+    track: LiveTrack
+    driver_id: str
+    status: str
+    category: str | None
+
+    def __post_init__(self) -> None:
+        _require_sha256("cancelled driver full ID", self.driver_id)
+        if self.status not in {
+            "clean_cancel",
+            "cleanup_complete",
+            "cleanup_failed",
+            "cleanup_ambiguous",
+        }:
+            raise ControllerError("driver cancellation outcome is invalid")
+        if (self.status in {"clean_cancel", "cleanup_complete"}) is not (
+            self.category is None
+        ):
+            raise ControllerError("driver cancellation category is invalid")
+        if self.category is not None and self.category not in (
+            _DRIVER_READINESS_FAILURE_CATEGORIES | {"cleanup_persistence"}
+        ):
+            raise ControllerError("driver cancellation failure is invalid")
 ADVERSARIAL_HEADERS = {
     "x-kil-decision-digest": "f" * 64,
     "x-kil-issuer": "https://attacker.invalid",
@@ -976,7 +1002,7 @@ def _validate_lifecycle_event_details(
             try:
                 RequestFailureProvenance.from_mapping(provenance)
             except HarnessContractError:
-                _validate_driver_control_provenance(provenance)
+                _validate_request_failure_provenance(provenance)
             if requests is not None:
                 request = requests.get(track.value)
                 if (
@@ -1006,6 +1032,7 @@ def _validate_lifecycle_event_details(
         return
     if event_name == "driver_result_persisted":
         if set(details) != {
+            "driver_definition_sha256",
             "readiness_nonce",
             "track",
             "driver_id",
@@ -1018,6 +1045,7 @@ def _validate_lifecycle_event_details(
             ("driver result full ID", "driver_id"),
             ("driver result request intent", "intent_id"),
             ("driver result digest", "result_sha256"),
+            ("driver result definition", "driver_definition_sha256"),
         ):
             _require_sha256(label, details[field])
         try:
@@ -1114,6 +1142,7 @@ def _validate_lifecycle_history(
     request_driver_stages: dict[str, str] = {
         track.value: "not_attempted" for track in _TRACKS
     }
+    request_driver_results: dict[str, Mapping[str, object]] = {}
     freeze_epoch: str | None = None
     freeze_intents: dict[tuple[str, str], Mapping[str, object]] = {}
     freeze_bytes: dict[tuple[str, str], Mapping[str, object]] = {}
@@ -1548,6 +1577,7 @@ def _validate_lifecycle_history(
                 or request_driver_stages[track] != "instruction_intent"
             ):
                 raise ControllerError("driver result lacks exact instruction binding")
+            request_driver_results[track] = details
             request_driver_stages[track] = "result_persisted"
         elif event_name == "request_record_persisted":
             track = str(details["track"])
@@ -1568,6 +1598,27 @@ def _validate_lifecycle_history(
                 not in {"request_intent", "request_persisted"}
             ):
                 raise ControllerError("request completion lacks persisted request record")
+            provenance = details.get("provenance")
+            if (
+                event_name == "request_send_failed"
+                and type(provenance) is dict
+                and provenance.get("provenance_source")
+                == "linux_request_driver"
+            ):
+                persisted = request_driver_results.get(track)
+                if (
+                    persisted is None
+                    or provenance.get("track") != track
+                    or provenance.get("driver_full_id")
+                    != persisted.get("driver_id")
+                    or provenance.get("driver_result_sha256")
+                    != persisted.get("result_sha256")
+                    or provenance.get("driver_definition_sha256")
+                    != persisted.get("driver_definition_sha256")
+                ):
+                    raise ControllerError(
+                        "driver transport provenance lacks exact result binding"
+                    )
             replayed[track]["status"] = (
                 "completed" if event_name == "request_send_complete" else "failed"
             )
@@ -1885,6 +1936,23 @@ _DRIVER_CONTROL_STAGES = {
     "process_wait",
     "termination",
 }
+_DRIVER_WAIT_FAILURE_CATEGORIES = {
+    "clock_failure",
+    "deadline_expired",
+    "process_wait",
+    "process_wait_timeout",
+}
+
+
+def _driver_control_failure_stage(stage: str, error: Exception) -> str:
+    if stage != "process_wait":
+        return stage
+    if (
+        isinstance(error, DriverTransportError)
+        and error.category not in _DRIVER_WAIT_FAILURE_CATEGORIES
+    ):
+        return "termination"
+    return "process_wait"
 
 
 def _validate_driver_control_provenance(value: object) -> dict[str, object]:
@@ -1913,6 +1981,89 @@ def _validate_driver_control_provenance(value: object) -> dict[str, object]:
     return value
 
 
+def _validate_driver_transport_provenance(
+    value: object,
+) -> dict[str, object]:
+    expected = {
+        "attempt_count",
+        "connect_monotonic_ns",
+        "driver_definition_sha256",
+        "driver_full_id",
+        "driver_request_bytes_may_have_been_sent",
+        "driver_result_schema_version",
+        "driver_result_sha256",
+        "driver_status",
+        "errno",
+        "errno_name",
+        "exception_class",
+        "failure_monotonic_ns",
+        "provenance_source",
+        "request_bytes_may_have_been_sent",
+        "retry_performed",
+        "send_monotonic_ns",
+        "stage",
+        "track",
+    }
+    if type(value) is not dict or set(value) != expected:
+        raise ControllerError("driver transport provenance is not closed")
+    if (
+        value["provenance_source"] != "linux_request_driver"
+        or value["driver_result_schema_version"]
+        != "kil.v3b1-driver-result.v1"
+        or value["driver_status"] != "transport_failure"
+        or value["request_bytes_may_have_been_sent"] is not True
+    ):
+        raise ControllerError("driver transport provenance source is invalid")
+    _require_sha256("driver transport full ID", value["driver_full_id"])
+    _require_sha256(
+        "driver transport definition", value["driver_definition_sha256"]
+    )
+    _require_sha256("driver transport result", value["driver_result_sha256"])
+    source_result = {
+        "attempt_count": value["attempt_count"],
+        "connect_monotonic_ns": value["connect_monotonic_ns"],
+        "errno": value["errno"],
+        "errno_name": value["errno_name"],
+        "exception_class": value["exception_class"],
+        "failure_monotonic_ns": value["failure_monotonic_ns"],
+        "request_bytes_may_have_been_sent": value[
+            "driver_request_bytes_may_have_been_sent"
+        ],
+        "retry_performed": value["retry_performed"],
+        "schema_version": value["driver_result_schema_version"],
+        "send_monotonic_ns": value["send_monotonic_ns"],
+        "stage": value["stage"],
+        "status": value["driver_status"],
+        "track": value["track"],
+    }
+    try:
+        parsed = parse_driver_result(
+            canonical_record(source_result),
+            expected_track=str(value["track"]),
+        )
+    except (DriverProtocolError, TypeError, ValueError):
+        raise ControllerError("driver transport provenance is invalid") from None
+    number = parsed["errno"]
+    name = parsed["errno_name"]
+    if number is not None and LINUX_ERRNO_NAMES.get(number) != name:
+        raise ControllerError("driver transport provenance errno is invalid")
+    if _digest_bytes(canonical_record(source_result)) != value[
+        "driver_result_sha256"
+    ]:
+        raise ControllerError(
+            "driver transport provenance lacks exact result binding"
+        )
+    return value
+
+
+def _validate_request_failure_provenance(
+    value: object,
+) -> dict[str, object]:
+    if type(value) is dict and value.get("provenance_source") is not None:
+        return _validate_driver_transport_provenance(value)
+    return _validate_driver_control_provenance(value)
+
+
 def _complete_request_attempt(
     journal_path: Path,
     track: LiveTrack,
@@ -1936,7 +2087,7 @@ def _complete_request_attempt(
         if isinstance(failure_provenance, RequestFailureProvenance):
             provenance_mapping = failure_provenance.to_mapping()
         else:
-            provenance_mapping = _validate_driver_control_provenance(
+            provenance_mapping = _validate_request_failure_provenance(
                 failure_provenance
             )
     else:
@@ -11395,17 +11546,121 @@ class LocalEnvoyController:
         except Exception:
             pass
 
+    @staticmethod
+    def _driver_cleanup_failure_category(error: Exception) -> str:
+        if (
+            isinstance(error, DriverTransportError)
+            and error.category in _DRIVER_READINESS_FAILURE_CATEGORIES
+        ):
+            return error.category
+        return "protocol_invalid"
+
+    def _recover_uncommanded_driver(
+        self,
+        *,
+        track: LiveTrack,
+        session: DriverSession,
+        identity: Mapping[str, object],
+        observed_cleanup_error: Exception | None = None,
+    ) -> _DriverCancellationOutcome:
+        """Physically clean and durably close one ambiguous cancellation."""
+        cleanup_intent = False
+        try:
+            journal_event(self.journal_path, "driver_cleanup_intent", identity)
+            cleanup_intent = True
+        except Exception:
+            pass
+
+        cleanup = None
+        cleanup_category = (
+            None
+            if observed_cleanup_error is None
+            else self._driver_cleanup_failure_category(observed_cleanup_error)
+        )
+        if observed_cleanup_error is None:
+            try:
+                cleanup = cleanup_driver_process(
+                    session,
+                    deadline_ns=(
+                        time.monotonic_ns() + _DRIVER_CLEANUP_DEADLINE_NS
+                    ),
+                    monotonic_ns=time.monotonic_ns,
+                )
+            except Exception as error:
+                cleanup_category = self._driver_cleanup_failure_category(error)
+
+        if not cleanup_intent:
+            try:
+                journal_event(self.journal_path, "driver_cleanup_intent", identity)
+                cleanup_intent = True
+            except Exception:
+                return _DriverCancellationOutcome(
+                    track=track,
+                    driver_id=session.full_id,
+                    status="cleanup_ambiguous",
+                    category="cleanup_persistence",
+                )
+
+        if cleanup_category is None and cleanup is not None:
+            event_name = "driver_cleanup_complete"
+            details = {
+                **identity,
+                "outcome": cleanup.outcome,
+                "exit_code": cleanup.exit_code,
+            }
+            outcome = _DriverCancellationOutcome(
+                track=track,
+                driver_id=session.full_id,
+                status="cleanup_complete",
+                category=None,
+            )
+        else:
+            event_name = "driver_cleanup_failed"
+            details = {
+                **identity,
+                "category": cleanup_category or "protocol_invalid",
+            }
+            outcome = _DriverCancellationOutcome(
+                track=track,
+                driver_id=session.full_id,
+                status="cleanup_failed",
+                category=cleanup_category or "protocol_invalid",
+            )
+        try:
+            journal_event(self.journal_path, event_name, details)
+            return outcome
+        except Exception:
+            fallback = {**identity, "category": "cleanup_persistence"}
+            try:
+                journal_event(
+                    self.journal_path,
+                    "driver_cleanup_failed",
+                    fallback,
+                )
+            except Exception:
+                return _DriverCancellationOutcome(
+                    track=track,
+                    driver_id=session.full_id,
+                    status="cleanup_ambiguous",
+                    category="cleanup_persistence",
+                )
+            return _DriverCancellationOutcome(
+                track=track,
+                driver_id=session.full_id,
+                status="cleanup_failed",
+                category="cleanup_persistence",
+            )
+
     def _cancel_uncommanded_drivers(
         self,
         *,
         first_track: LiveTrack,
         readiness_nonce: str,
-        deadline_ns: int,
         sessions: Mapping[LiveTrack, DriverSession],
-    ) -> bool:
+    ) -> tuple[_DriverCancellationOutcome, ...]:
         cancel = False
-        complete = True
         selected: list[tuple[LiveTrack, DriverSession, dict[str, object]]] = []
+        signal_failures: dict[LiveTrack, Exception] = {}
         for track in _TRACKS:
             if track is first_track:
                 cancel = True
@@ -11416,19 +11671,31 @@ class LocalEnvoyController:
             selected.append((track, session, identity))
             try:
                 journal_event(self.journal_path, "readiness_cancel_intent", identity)
+            except Exception as error:
+                signal_failures[track] = error
+            try:
                 close_instruction_stream(session)
-            except Exception:
-                complete = False
-                try:
-                    close_instruction_stream(session)
-                except Exception:
-                    pass
-        for _, session, identity in selected:
+            except Exception as error:
+                signal_failures.setdefault(track, error)
+
+        outcomes: list[_DriverCancellationOutcome] = []
+        for track, session, identity in selected:
+            if track in signal_failures:
+                outcomes.append(
+                    self._recover_uncommanded_driver(
+                        track=track,
+                        session=session,
+                        identity=identity,
+                    )
+                )
+                continue
             try:
                 exit_code = attest_cancelled_exit(
                     session,
-                    deadline_ns=deadline_ns,
-                    monotonic_ns=self.monotonic_ns,
+                    deadline_ns=(
+                        time.monotonic_ns() + _DRIVER_CLEANUP_DEADLINE_NS
+                    ),
+                    monotonic_ns=time.monotonic_ns,
                 )
                 journal_event(
                     self.journal_path,
@@ -11436,9 +11703,41 @@ class LocalEnvoyController:
                     {**identity, "exit_code": exit_code},
                 )
             except Exception:
-                complete = False
-            self._cleanup_request_driver(session)
-        return complete
+                outcomes.append(
+                    self._recover_uncommanded_driver(
+                        track=track,
+                        session=session,
+                        identity=identity,
+                    )
+                )
+                continue
+            try:
+                cleanup_driver_process(
+                    session,
+                    deadline_ns=(
+                        time.monotonic_ns() + _DRIVER_CLEANUP_DEADLINE_NS
+                    ),
+                    monotonic_ns=time.monotonic_ns,
+                )
+            except Exception as error:
+                outcomes.append(
+                    self._recover_uncommanded_driver(
+                        track=track,
+                        session=session,
+                        identity=identity,
+                        observed_cleanup_error=error,
+                    )
+                )
+                continue
+            outcomes.append(
+                _DriverCancellationOutcome(
+                    track=track,
+                    driver_id=session.full_id,
+                    status="clean_cancel",
+                    category=None,
+                )
+            )
+        return tuple(outcomes)
 
     def _record_driver_control_failure(
         self,
@@ -11496,7 +11795,7 @@ class LocalEnvoyController:
         active_stage = "instruction_write"
         instruction_delivery_started = False
         driver_terminal = False
-        transport_provenance: RequestFailureProvenance | None = None
+        transport_provenance: Mapping[str, object] | None = None
         q_state: str | None = None
         headers: dict[str, str] = {}
         instruction_payload = b""
@@ -11628,6 +11927,8 @@ class LocalEnvoyController:
                 )
 
                 result_sha = _digest_bytes(raw_result)
+                definition = definitions[track.value]
+                definition_sha = _digest_bytes(canonical_record(definition))
                 raw_root = (
                     self.private_root
                     / "driver-results"
@@ -11641,34 +11942,37 @@ class LocalEnvoyController:
                 journal_event(
                     self.journal_path,
                     "driver_result_persisted",
-                    {**identity, "result_sha256": result_sha},
+                    {
+                        **identity,
+                        "driver_definition_sha256": definition_sha,
+                        "result_sha256": result_sha,
+                    },
                 )
 
                 if result["status"] == "transport_failure":
-                    errno_name = result["errno_name"]
-                    host_errno = (
-                        None
-                        if errno_name is None
-                        else getattr(errno_module, str(errno_name), None)
-                    )
-                    transport_provenance = RequestFailureProvenance(
-                        stage=str(result["stage"]),
-                        exception_class=str(result["exception_class"]),
-                        errno=host_errno,
-                        errno_name=(
-                            None if host_errno is None else str(errno_name)
-                        ),
-                        connect_monotonic_ns=int(
-                            result["connect_monotonic_ns"]
-                        ),
-                        send_monotonic_ns=int(result["send_monotonic_ns"]),
-                        failure_monotonic_ns=int(
-                            result["failure_monotonic_ns"]
-                        ),
-                        request_bytes_may_have_been_sent=True,
-                        attempt_count=1,
-                        retry_performed=False,
-                    )
+                    transport_provenance = {
+                        "attempt_count": result["attempt_count"],
+                        "connect_monotonic_ns": result["connect_monotonic_ns"],
+                        "driver_definition_sha256": definition_sha,
+                        "driver_full_id": session.full_id,
+                        "driver_request_bytes_may_have_been_sent": result[
+                            "request_bytes_may_have_been_sent"
+                        ],
+                        "driver_result_schema_version": result["schema_version"],
+                        "driver_result_sha256": result_sha,
+                        "driver_status": result["status"],
+                        "errno": result["errno"],
+                        "errno_name": result["errno_name"],
+                        "exception_class": result["exception_class"],
+                        "failure_monotonic_ns": result["failure_monotonic_ns"],
+                        "provenance_source": "linux_request_driver",
+                        "request_bytes_may_have_been_sent": True,
+                        "retry_performed": result["retry_performed"],
+                        "send_monotonic_ns": result["send_monotonic_ns"],
+                        "stage": result["stage"],
+                        "track": track.value,
+                    }
+                    _validate_driver_transport_provenance(transport_provenance)
                     raise ControllerError(
                         "driver reported terminal transport failure"
                     )
@@ -11684,7 +11988,6 @@ class LocalEnvoyController:
                     raise ControllerError("driver response status is invalid")
 
                 driver_object = objects[(track.value, "driver")]
-                definition = definitions[track.value]
                 record = {
                     "schema_version": "kil.v3b1-request.v2",
                     "run_id": manifest["run_id"],
@@ -11710,9 +12013,7 @@ class LocalEnvoyController:
                     "driver_role": "request_driver",
                     "driver_full_id": session.full_id,
                     "driver_image_id": driver_object["image_id"],
-                    "driver_definition_sha256": _digest_bytes(
-                        canonical_record(definition)
-                    ),
+                    "driver_definition_sha256": definition_sha,
                     "driver_result_sha256": result_sha,
                 }
                 _request_closed(record)
@@ -11734,10 +12035,13 @@ class LocalEnvoyController:
                     success=True,
                     record_sha256=record_sha,
                 )
-        except Exception:
+        except Exception as request_error:
             instruction_payload = b""
             headers = {}
             q_state = None
+            failure_stage = _driver_control_failure_stage(
+                active_stage, request_error
+            )
             self._poison_request_driver_session(
                 execution_nonce=execution_nonce,
                 readiness_nonce=readiness_nonce,
@@ -11765,7 +12069,7 @@ class LocalEnvoyController:
                     else:
                         self._record_driver_control_failure(
                             active_track,
-                            stage=active_stage,
+                            stage=failure_stage,
                             request_bytes_may_have_been_sent=True,
                         )
                 except Exception:
@@ -11777,12 +12081,25 @@ class LocalEnvoyController:
             else:
                 cancel_index = current_index
             if cancel_index < len(_TRACKS):
-                self._cancel_uncommanded_drivers(
+                cancellation_outcomes = self._cancel_uncommanded_drivers(
                     first_track=_TRACKS[cancel_index],
                     readiness_nonce=readiness_nonce,
-                    deadline_ns=deadline_ns,
                     sessions=sessions,
                 )
+                expected_cancellations = _TRACKS[cancel_index:]
+                if (
+                    tuple(item.track for item in cancellation_outcomes)
+                    != expected_cancellations
+                    or any(
+                        item.status
+                        not in {"clean_cancel", "cleanup_complete"}
+                        for item in cancellation_outcomes
+                    )
+                ):
+                    self._poison_request_driver_session(
+                        execution_nonce=execution_nonce,
+                        readiness_nonce=readiness_nonce,
+                    )
             raise ControllerError(
                 "driver request failed terminally; teardown is required"
             ) from None

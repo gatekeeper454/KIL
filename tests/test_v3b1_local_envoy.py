@@ -3547,6 +3547,7 @@ class _DriverInput(io.BytesIO):
 
     def write(self, payload):
         self.events.append(("stdin_write", self.owner.full_id, bytes(payload)))
+        self.owner.clock.advance(self.owner.advance_write_ns)
         if self.owner.write_error is not None:
             raise self.owner.write_error
         if self.owner.partial_write is not None:
@@ -3558,6 +3559,9 @@ class _DriverInput(io.BytesIO):
     def close(self):
         if not self.closed:
             self.events.append(("stdin_close", self.owner.full_id))
+        if self.owner.stdin_close_error:
+            self.owner.stdin_close_error = False
+            raise OSError("private stdin close failure")
         super().close()
 
 
@@ -3630,6 +3634,8 @@ class _DriverProcess:
         write_error=None,
         partial_write=None,
         poll_result=None,
+        advance_write_ns=0,
+        stdin_close_error=False,
     ):
         self.full_id = full_id
         self.events = events
@@ -3640,6 +3646,9 @@ class _DriverProcess:
         self.write_error = write_error
         self.partial_write = partial_write
         self.poll_result = poll_result
+        self.advance_write_ns = advance_write_ns
+        self.stdin_close_error = stdin_close_error
+        self.clock = clock
         self.exited = False
         self.terminated = False
         self.killed = False
@@ -4679,15 +4688,21 @@ class DriverRequestSequencingTest(unittest.TestCase):
         }
 
     @staticmethod
-    def transport_failure(track):
+    def transport_failure(
+        track,
+        *,
+        errno_number=104,
+        errno_name="ECONNRESET",
+        request_bytes_may_have_been_sent=True,
+    ):
         return {
             "attempt_count": 1,
             "connect_monotonic_ns": 10,
-            "errno": 104,
-            "errno_name": "ECONNRESET",
+            "errno": errno_number,
+            "errno_name": errno_name,
             "exception_class": "ConnectionResetError",
             "failure_monotonic_ns": 30,
-            "request_bytes_may_have_been_sent": True,
+            "request_bytes_may_have_been_sent": request_bytes_may_have_been_sent,
             "retry_performed": False,
             "schema_version": "kil.v3b1-driver-result.v1",
             "send_monotonic_ns": 20,
@@ -4960,6 +4975,83 @@ class DriverRequestSequencingTest(unittest.TestCase):
                 },
                 later_ids,
             )
+
+    def test_expired_request_deadline_uses_fresh_structured_later_cleanup(self):
+        baseline = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
+        signed = LiveTrack.SIGNED_STATE_ONLY.value
+        local = LiveTrack.SIGNED_PLUS_LOCAL_REDUCE.value
+        cases = {
+            "wait_failure": {
+                "wait_error": subprocess.TimeoutExpired("private", 1),
+                "terminate_exits": False,
+                "expected": "driver_cleanup_complete",
+            },
+            "pipe_failure": {
+                "stdin_close_error": True,
+                "expected": "driver_cleanup_complete",
+            },
+            "cleanup_failure": {
+                "wait_error": subprocess.TimeoutExpired("private", 1),
+                "terminate_exits": False,
+                "stdout_close_error": True,
+                "expected": "driver_cleanup_failed",
+            },
+        }
+        for name, signed_case in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                signed_change = dict(signed_case)
+                expected_event = signed_change.pop("expected")
+                controller, factory, drivers, events, _ = self.make_controller(
+                    directory,
+                    {
+                        baseline: {
+                            "partial_write": 1,
+                            "advance_write_ns": 31_000_000_000,
+                        },
+                        signed: signed_change,
+                    },
+                )
+
+                with self.assertRaisesRegex(ControllerError, "terminal|teardown"):
+                    controller.run()
+
+                journal = load_lifecycle_journal(controller.journal_path)
+                self.assertTrue(controller.readiness_poison_path.is_file())
+                self.assertEqual(
+                    [journal["requests"][track]["status"] for track in (signed, local)],
+                    ["not_attempted", "not_attempted"],
+                )
+                later_ids = {drivers[signed]["id"], drivers[local]["id"]}
+                self.assertEqual(
+                    {
+                        event[1] for event in events
+                        if event[0] == "stdin_close" and event[1] in later_ids
+                    },
+                    later_ids,
+                )
+                self.assertTrue(all(process.exited for process in factory.processes[1:]))
+                self.assertTrue(all(process.reaped for process in factory.processes[1:]))
+                terminal_by_id = {
+                    event["details"]["driver_id"]: event["event"]
+                    for event in journal["events"]
+                    if event["event"] in {
+                        "readiness_cancel_complete",
+                        "driver_cleanup_complete",
+                        "driver_cleanup_failed",
+                    }
+                    and event["details"]["driver_id"] in later_ids
+                }
+                self.assertEqual(
+                    terminal_by_id[drivers[signed]["id"]], expected_event
+                )
+                self.assertEqual(
+                    terminal_by_id[drivers[local]["id"]],
+                    "readiness_cancel_complete",
+                )
+                self.assertEqual(
+                    len([event for event in events if event[0] == "start"]), 3
+                )
+                self.assertNotIn("private stdin close failure", controller.journal_path.read_text())
 
     def test_run_readiness_failures_use_shared_poisoned_failure_path(self):
         wrong = {
@@ -5334,14 +5426,139 @@ class DriverRequestSequencingTest(unittest.TestCase):
             self.assertTrue(controller.readiness_poison_path.is_file())
             self.assertTrue(all(process.stdin.closed for process in factory.processes[1:]))
 
+    def test_linux_driver_errno_provenance_is_exact_and_raw_result_bound(self):
+        baseline = LiveTrack.CREDENTIAL_POLICY_BASELINE
+        for number, name in (
+            (104, "ECONNRESET"),
+            (111, "ECONNREFUSED"),
+            (133, "EHWPOISON"),
+        ):
+            with self.subTest(errno=number), tempfile.TemporaryDirectory() as directory:
+                result = self.transport_failure(
+                    baseline,
+                    errno_number=number,
+                    errno_name=name,
+                )
+                readiness = {
+                    "schema_version": "kil.v3b1-driver-readiness.v1",
+                    "track": baseline.value,
+                    "status": "ready",
+                    "connect_monotonic_ns": 1,
+                    "ready_monotonic_ns": 2,
+                }
+                raw_result = (canonical_json(result) + "\n").encode()
+                controller, _, drivers, _, _ = self.make_controller(
+                    directory,
+                    {
+                        baseline.value: {
+                            "payload": (
+                                canonical_json(readiness) + "\n"
+                            ).encode()
+                            + raw_result,
+                            "returncode": 1,
+                        }
+                    },
+                )
+
+                with self.assertRaisesRegex(ControllerError, "terminal|teardown"):
+                    controller.run()
+
+                journal = load_lifecycle_journal(controller.journal_path)
+                failure = next(
+                    event for event in journal["events"]
+                    if event["event"] == "request_send_failed"
+                )
+                provenance = failure["details"]["provenance"]
+                definition = next(
+                    item for item in controller.bound_manifest["driver_definitions"]
+                    if item["track"] == baseline.value
+                )
+                self.assertEqual(provenance["provenance_source"], "linux_request_driver")
+                self.assertEqual((provenance["errno"], provenance["errno_name"]), (number, name))
+                self.assertEqual(provenance["track"], baseline.value)
+                self.assertEqual(
+                    provenance["driver_full_id"], drivers[baseline.value]["id"]
+                )
+                self.assertEqual(
+                    provenance["driver_definition_sha256"],
+                    sha256(local_envoy_module.canonical_record(definition)).hexdigest(),
+                )
+                self.assertEqual(
+                    provenance["driver_result_sha256"], sha256(raw_result).hexdigest()
+                )
+                raw_path = (
+                    controller.private_root
+                    / "driver-results"
+                    / str(controller.bound_manifest["run_id"])
+                    / f"{baseline.value}.json"
+                )
+                self.assertEqual(raw_path.read_bytes(), raw_result)
+                self.assertEqual(
+                    (provenance["connect_monotonic_ns"], provenance["send_monotonic_ns"], provenance["failure_monotonic_ns"]),
+                    (result["connect_monotonic_ns"], result["send_monotonic_ns"], result["failure_monotonic_ns"]),
+                )
+
+                bad_errno = dict(provenance)
+                bad_errno["errno_name"] = "EIO"
+                with self.assertRaisesRegex(ControllerError, "driver.*provenance|errno"):
+                    local_envoy_module._validate_driver_transport_provenance(bad_errno)
+
+                rebound_fact = dict(provenance)
+                rebound_fact["errno"], rebound_fact["errno_name"] = (
+                    (111, "ECONNREFUSED")
+                    if number != 111
+                    else (104, "ECONNRESET")
+                )
+                with self.assertRaisesRegex(ControllerError, "driver.*result|binding"):
+                    local_envoy_module._validate_driver_transport_provenance(
+                        rebound_fact
+                    )
+
+                mutated = json.loads(json.dumps(journal))
+                mutated_failure = next(
+                    event for event in mutated["events"]
+                    if event["event"] == "request_send_failed"
+                )
+                mutated_failure["details"]["provenance"]["driver_result_sha256"] = HEX_C
+                with self.assertRaisesRegex(ControllerError, "driver.*binding|result"):
+                    local_envoy_module._validate_lifecycle_history(
+                        mutated["events"], mutated["requests"]
+                    )
+
     def test_post_result_terminal_anomalies_are_closed_and_cancel_later(self):
         cases = {
-            "stderr": {"stderr": b"private post-result stderr"},
-            "ambiguous_exit": {"poll_result": 9},
+            "timeout": (
+                {"wait_error": subprocess.TimeoutExpired("private", 1)},
+                "process_wait",
+            ),
+            "wait_error": ({"wait_error": OSError("private wait error")}, "process_wait"),
+            "stderr": ({"stderr": b"private post-result stderr"}, "termination"),
+            "ambiguous_exit": ({"poll_result": 9}, "termination"),
+            "extra_stdout": ({"payload": None}, "termination"),
+            "wrong_exit": ({"returncode": 7}, "termination"),
         }
         baseline = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
-        for name, change in cases.items():
+        for name, (change, expected_stage) in cases.items():
             with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                if name == "extra_stdout":
+                    readiness = {
+                        "schema_version": "kil.v3b1-driver-readiness.v1",
+                        "track": baseline,
+                        "status": "ready",
+                        "connect_monotonic_ns": 1,
+                        "ready_monotonic_ns": 2,
+                    }
+                    result = self.success_result(
+                        LiveTrack.CREDENTIAL_POLICY_BASELINE
+                    )
+                    change = {
+                        "payload": (
+                            canonical_json(readiness)
+                            + "\n"
+                            + canonical_json(result)
+                            + "\n{}\n"
+                        ).encode()
+                    }
                 controller, factory, _, _, _ = self.make_controller(
                     directory, {baseline: change}
                 )
@@ -5355,7 +5572,7 @@ class DriverRequestSequencingTest(unittest.TestCase):
                     if event["event"] == "request_send_failed"
                 )
                 self.assertEqual(
-                    failure["details"]["provenance"]["stage"], "process_wait"
+                    failure["details"]["provenance"]["stage"], expected_stage
                 )
                 self.assertTrue(
                     failure["details"]["provenance"]
