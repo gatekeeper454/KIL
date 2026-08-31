@@ -19,12 +19,16 @@
     }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--kil-bg); color: var(--kil-text); }
-    button { font: inherit; min-height: 44px; }
+    button { font: inherit; min-height: 44px; padding: 8px 12px; color: inherit; background: var(--kil-panel); border: 1px solid var(--kil-line); cursor: pointer; }
+    button[aria-pressed="true"] { color: var(--kil-panel); background: var(--kil-blue); border-color: var(--kil-blue); }
+    button:disabled { cursor: not-allowed; opacity: .45; }
     #kil-demo-app { width: min(1180px, 100%); margin: 0 auto; padding: 20px; }
     .kil-eyebrow { color: var(--kil-blue); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
     .kil-meta, .kil-controls, .kil-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     [data-visual] { min-height: 360px; margin: 20px 0; padding: 20px; background: var(--kil-panel); border: 1px solid var(--kil-line); }
     [data-presenter-notes] { margin-top: 20px; padding: 20px; background: var(--kil-panel); border-left: 4px solid var(--kil-blue); }
+    .kil-placeholder { display: grid; min-height: 318px; place-content: center; text-align: center; color: var(--kil-muted); }
+    .kil-placeholder strong { color: var(--kil-text); }
     [data-source], footer { color: var(--kil-muted); }
     footer { margin-top: 28px; font-size: .9rem; }
     footer a { color: inherit; }
@@ -211,14 +215,126 @@
   <script>
     (() => {
       const scenes = JSON.parse(document.getElementById('kil-demo-scenes').textContent);
-      const first = scenes[0];
-      document.querySelector('[data-title]').textContent = first.title;
-      document.querySelector('[data-status]').textContent = first.status;
-      document.querySelector('[data-progress]').textContent = 'Primer P1 of P4';
-      document.querySelector('[data-takeaway]').textContent = first.takeaway;
-      document.querySelector('[data-script]').textContent = first.script;
-      document.querySelector('[data-source]').textContent = first.source;
-      document.querySelector('[data-visual]').textContent = first.takeaway;
+      const validModes = new Set(['presenter', 'audience', 'standalone']);
+      const params = new URLSearchParams(location.search);
+      const requestedMode = params.get('mode') || 'standalone';
+      const mode = validModes.has(requestedMode) ? requestedMode : 'standalone';
+      const byId = new Map(scenes.map((scene, index) => [scene.id, {scene, index}]));
+      const modeNames = {presenter: 'Presenter', audience: 'Audience', standalone: 'Standalone'};
+      const app = document.getElementById('kil-demo-app');
+      const actControls = app.querySelector('[data-act-controls]');
+      const sceneControls = app.querySelector('[data-scene-controls]');
+      const visual = app.querySelector('[data-visual]');
+      const notes = app.querySelector('[data-presenter-notes]');
+      const openAudience = app.querySelector('[data-open-audience]');
+      const previous = app.querySelector('[data-prev]');
+      const next = app.querySelector('[data-next]');
+      let currentIndex = 0;
+      let activeAct = scenes[0].act;
+
+      document.documentElement.dataset.mode = mode;
+      app.querySelector('[data-mode-label]').textContent = modeNames[mode];
+      notes.hidden = !(mode === 'presenter' || (mode === 'standalone' && params.get('notes') === '1'));
+      openAudience.hidden = mode !== 'presenter';
+      if (mode === 'audience') {
+        actControls.hidden = true;
+        sceneControls.hidden = true;
+        previous.hidden = true;
+        next.hidden = true;
+      }
+
+      function escapeText(value) {
+        return String(value).replace(/[&<>"']/g, character => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[character]);
+      }
+
+      function progressFor(scene) {
+        const inAct = scenes.filter(item => item.act === scene.act);
+        const position = inAct.findIndex(item => item.id === scene.id) + 1;
+        return scene.act === 'primer'
+          ? `Primer P${position} of P${inAct.length}`
+          : `Case study ${position} of ${inAct.length}`;
+      }
+
+      function renderActControls() {
+        const acts = [
+          ['primer', 'KIL primer'],
+          ['case-study', 'Hugging Face case study']
+        ];
+        actControls.replaceChildren(...acts.map(([id, label]) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.dataset.act = id;
+          button.textContent = label;
+          button.setAttribute('aria-pressed', String(activeAct === id));
+          button.addEventListener('click', () => {
+            const first = scenes.find(scene => scene.act === id);
+            if (first) selectScene(first.id);
+          });
+          return button;
+        }));
+      }
+
+      function renderSceneControls() {
+        const peers = scenes.filter(scene => scene.act === activeAct);
+        sceneControls.replaceChildren(...peers.map(scene => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.dataset.sceneId = scene.id;
+          button.textContent = scene.act === 'primer' ? `P${scene.order}` : String(scene.order - 4);
+          button.setAttribute('aria-label', scene.title);
+          button.setAttribute('aria-pressed', String(scenes[currentIndex].id === scene.id));
+          button.addEventListener('click', () => selectScene(scene.id));
+          return button;
+        }));
+      }
+
+      function render(scene) {
+        activeAct = scene.act;
+        app.querySelector('[data-title]').textContent = scene.title;
+        app.querySelector('[data-status]').textContent = scene.status;
+        app.querySelector('[data-progress]').textContent = progressFor(scene);
+        app.querySelector('[data-takeaway]').textContent = scene.takeaway;
+        app.querySelector('[data-script]').textContent = scene.script;
+        app.querySelector('[data-source]').textContent = scene.source;
+        visual.innerHTML = `<div class="kil-placeholder"><strong>${escapeText(scene.title)}</strong><span>${escapeText(scene.takeaway)}</span></div>`;
+        previous.disabled = currentIndex === 0;
+        next.disabled = currentIndex === scenes.length - 1;
+        renderActControls();
+        renderSceneControls();
+      }
+
+      function publishState() {}
+
+      function selectScene(id, {broadcast = true} = {}) {
+        const entry = byId.get(id);
+        if (!entry) return false;
+        currentIndex = entry.index;
+        render(entry.scene);
+        if (broadcast && mode === 'presenter') publishState();
+        return true;
+      }
+
+      previous.addEventListener('click', () => {
+        if (currentIndex > 0) selectScene(scenes[currentIndex - 1].id);
+      });
+      next.addEventListener('click', () => {
+        if (currentIndex < scenes.length - 1) selectScene(scenes[currentIndex + 1].id);
+      });
+      openAudience.addEventListener('click', () => {
+        const session = params.get('session') || crypto.randomUUID();
+        const url = new URL(location.href);
+        url.search = new URLSearchParams({mode: 'audience', session}).toString();
+        window.open(url, '_blank', 'noopener');
+      });
+      document.addEventListener('keydown', event => {
+        if (event.target instanceof HTMLButtonElement || event.target instanceof HTMLInputElement) return;
+        if (event.key === 'ArrowRight' && currentIndex < scenes.length - 1) selectScene(scenes[currentIndex + 1].id);
+        if (event.key === 'ArrowLeft' && currentIndex > 0) selectScene(scenes[currentIndex - 1].id);
+      });
+
+      selectScene(scenes[0].id, {broadcast: false});
     })();
   </script>
 </body>
