@@ -10775,6 +10775,222 @@ class LocalEnvoyController:
             return False
         raise ControllerError("driver container state inspection is ambiguous")
 
+    def _fail_driver_readiness_sessions(
+        self,
+        *,
+        execution_nonce: str,
+        readiness_nonce: str,
+        deadline_ns: int,
+        sessions: Mapping[LiveTrack, DriverSession],
+        active_identity: tuple[str, LiveTrack | None, str | None, str],
+        error: Exception,
+        primary: tuple[
+            str, LiveTrack | None, str | None, str, DriverTransportError
+        ]
+        | None = None,
+        cancellation_intents: set[LiveTrack] | None = None,
+        cancellation_attempts: set[LiveTrack] | None = None,
+        cancellation_completions: set[LiveTrack] | None = None,
+    ) -> None:
+        """Poison, cancel, and clean one failed attached-driver readiness set."""
+        intents = cancellation_intents if cancellation_intents is not None else set()
+        attempts = cancellation_attempts if cancellation_attempts is not None else set()
+        completions = (
+            cancellation_completions
+            if cancellation_completions is not None
+            else set()
+        )
+        if primary is None:
+            primary = (
+                active_identity[0],
+                active_identity[1],
+                active_identity[2],
+                active_identity[3],
+                error
+                if isinstance(error, DriverTransportError)
+                else DriverTransportError("controller_persistence"),
+            )
+        failed_scope, failed_track, failed_id, failed_stage, primary_error = primary
+        category = primary_error.category
+        try:
+            self._persist_readiness_poison_independent(
+                execution_nonce=execution_nonce,
+                readiness_nonce=readiness_nonce,
+                reason_category="driver_readiness_failed",
+            )
+        except Exception:
+            pass
+        for track, session in sessions.items():
+            if track in intents:
+                continue
+            try:
+                journal_event(
+                    self.journal_path,
+                    "readiness_cancel_intent",
+                    self._driver_identity_details(session, readiness_nonce),
+                )
+                intents.add(track)
+            except Exception:
+                pass
+            try:
+                close_instruction_stream(session)
+            except Exception:
+                pass
+        for track, session in sessions.items():
+            if track in attempts or track in completions:
+                continue
+            attempts.add(track)
+            try:
+                exit_code = attest_cancelled_exit(
+                    session,
+                    deadline_ns=deadline_ns,
+                    monotonic_ns=self.monotonic_ns,
+                )
+            except Exception:
+                continue
+            if track not in intents:
+                continue
+            try:
+                journal_event(
+                    self.journal_path,
+                    "readiness_cancel_complete",
+                    {
+                        **self._driver_identity_details(session, readiness_nonce),
+                        "exit_code": exit_code,
+                    },
+                )
+                completions.add(track)
+            except Exception:
+                pass
+        for session in sessions.values():
+            identity = self._driver_identity_details(session, readiness_nonce)
+            container_category: str | None = None
+            try:
+                running = self._inspect_driver_cleanup_running(session.full_id)
+            except Exception:
+                running = None
+                container_category = "container_inspect"
+            if running is True:
+                try:
+                    journal_event(self.journal_path, "driver_stop_intent", identity)
+                except Exception:
+                    container_category = "cleanup_persistence"
+                else:
+                    stop_deadline_ns = (
+                        time.monotonic_ns() + _DRIVER_CLEANUP_DEADLINE_NS
+                    )
+                    try:
+                        self._execute(
+                            self.docker_command(
+                                "stop", "--timeout", "1", session.full_id
+                            ),
+                            timeout_s=min(
+                                5.0,
+                                remaining_seconds(
+                                    stop_deadline_ns, time.monotonic_ns
+                                ),
+                            ),
+                            docker=True,
+                        )
+                    except Exception:
+                        container_category = "container_stop"
+                    if container_category is None:
+                        try:
+                            still_running = self._inspect_driver_cleanup_running(
+                                session.full_id
+                            )
+                        except Exception:
+                            container_category = "container_inspect"
+                        else:
+                            if still_running:
+                                container_category = "container_stop_verify"
+                    try:
+                        journal_event(
+                            self.journal_path,
+                            (
+                                "driver_stop_complete"
+                                if container_category is None
+                                else "driver_stop_failed"
+                            ),
+                            (
+                                identity
+                                if container_category is None
+                                else {**identity, "category": container_category}
+                            ),
+                        )
+                    except Exception:
+                        container_category = "cleanup_persistence"
+            cleanup_intent = False
+            try:
+                journal_event(self.journal_path, "driver_cleanup_intent", identity)
+                cleanup_intent = True
+            except Exception:
+                pass
+            cleanup = None
+            process_category: str | None = None
+            try:
+                cleanup = cleanup_driver_process(
+                    session,
+                    deadline_ns=time.monotonic_ns()
+                    + _DRIVER_CLEANUP_DEADLINE_NS,
+                    monotonic_ns=time.monotonic_ns,
+                )
+            except Exception as cleanup_error:
+                process_category = (
+                    cleanup_error.category
+                    if isinstance(cleanup_error, DriverTransportError)
+                    and cleanup_error.category in _DRIVER_READINESS_FAILURE_CATEGORIES
+                    else "protocol_invalid"
+                )
+            cleanup_category = container_category or process_category
+            if not cleanup_intent:
+                cleanup_category = cleanup_category or "cleanup_persistence"
+            if cleanup_intent:
+                try:
+                    if cleanup_category is None and cleanup is not None:
+                        journal_event(
+                            self.journal_path,
+                            "driver_cleanup_complete",
+                            {
+                                **identity,
+                                "outcome": cleanup.outcome,
+                                "exit_code": cleanup.exit_code,
+                            },
+                        )
+                    else:
+                        journal_event(
+                            self.journal_path,
+                            "driver_cleanup_failed",
+                            {
+                                **identity,
+                                "category": cleanup_category or "protocol_invalid",
+                            },
+                        )
+                except Exception:
+                    pass
+        if category not in _DRIVER_READINESS_FAILURE_CATEGORIES:
+            category = "protocol_invalid"
+        try:
+            journal_event(
+                self.journal_path,
+                "driver_readiness_failed",
+                {
+                    "readiness_nonce": readiness_nonce,
+                    "scope": failed_scope,
+                    "track": (
+                        failed_track.value if failed_track is not None else None
+                    ),
+                    "driver_id": failed_id,
+                    "category": category,
+                    "stage": failed_stage,
+                },
+            )
+        except Exception:
+            pass
+        raise ControllerError(
+            "driver readiness failed closed; down is required"
+        ) from None
+
     def readiness(self) -> dict[str, object]:
         """Run the request-free attached-driver readiness diagnostic once."""
         self._assert_no_readiness_poison()
@@ -10995,218 +11211,19 @@ class LocalEnvoyController:
                 "ready_tracks": [track.value for track in _TRACKS],
             }
         except (ControllerError, DriverTransportError) as error:
-            if primary is None:
-                primary = (
-                    active_identity[0],
-                    active_identity[1],
-                    active_identity[2],
-                    active_identity[3],
-                    error
-                    if isinstance(error, DriverTransportError)
-                    else DriverTransportError("controller_persistence"),
-                )
-            (
-                failed_scope,
-                failed_track,
-                failed_id,
-                failed_stage,
-                primary_error,
-            ) = primary
-            category = primary_error.category
-            persistence_failures: list[str] = []
-            try:
-                self._persist_readiness_poison_independent(
-                    execution_nonce=execution_nonce,
-                    readiness_nonce=readiness_nonce,
-                    reason_category="driver_readiness_failed",
-                )
-            except Exception:
-                persistence_failures.append("poison_persist")
-            for track, session in sessions.items():
-                if track in cancellation_intents:
-                    continue
-                try:
-                    journal_event(
-                        self.journal_path,
-                        "readiness_cancel_intent",
-                        self._driver_identity_details(session, readiness_nonce),
-                    )
-                    cancellation_intents.add(track)
-                except (ControllerError, DriverTransportError):
-                    persistence_failures.append("cancel_intent_persist")
-                try:
-                    close_instruction_stream(session)
-                except (ControllerError, DriverTransportError):
-                    pass
-            for track, session in sessions.items():
-                if (
-                    track not in cancellation_intents
-                    or track in cancellation_attempts
-                    or track in cancellation_completions
-                ):
-                    continue
-                cancellation_attempts.add(track)
-                try:
-                    exit_code = attest_cancelled_exit(
-                        session,
-                        deadline_ns=deadline_ns,
-                        monotonic_ns=self.monotonic_ns,
-                    )
-                except (ControllerError, DriverTransportError):
-                    continue
-                try:
-                    journal_event(
-                        self.journal_path,
-                        "readiness_cancel_complete",
-                        {
-                            **self._driver_identity_details(session, readiness_nonce),
-                            "exit_code": exit_code,
-                        },
-                    )
-                    cancellation_completions.add(track)
-                except (ControllerError, DriverTransportError):
-                    persistence_failures.append("cancel_complete_persist")
-            for track, session in sessions.items():
-                identity = self._driver_identity_details(session, readiness_nonce)
-                container_category: str | None = None
-                running: bool | None = None
-                try:
-                    running = self._inspect_driver_cleanup_running(session.full_id)
-                except ControllerError:
-                    container_category = "container_inspect"
-                if running is True:
-                    stop_intent_recorded = False
-                    try:
-                        journal_event(
-                            self.journal_path, "driver_stop_intent", identity
-                        )
-                        stop_intent_recorded = True
-                    except ControllerError:
-                        persistence_failures.append("stop_intent_persist")
-                        container_category = "cleanup_persistence"
-                    if stop_intent_recorded:
-                        stop_deadline_ns = (
-                            time.monotonic_ns() + _DRIVER_CLEANUP_DEADLINE_NS
-                        )
-                        try:
-                            self._execute(
-                                self.docker_command(
-                                    "stop", "--timeout", "1", session.full_id
-                                ),
-                                timeout_s=min(
-                                    5.0,
-                                    remaining_seconds(
-                                        stop_deadline_ns, time.monotonic_ns
-                                    ),
-                                ),
-                                docker=True,
-                            )
-                        except (ControllerError, DriverTransportError):
-                            container_category = "container_stop"
-                        if container_category is None:
-                            try:
-                                still_running = self._inspect_driver_cleanup_running(
-                                    session.full_id
-                                )
-                            except ControllerError:
-                                container_category = "container_inspect"
-                            else:
-                                if still_running:
-                                    container_category = "container_stop_verify"
-                        try:
-                            if container_category is None:
-                                journal_event(
-                                    self.journal_path,
-                                    "driver_stop_complete",
-                                    identity,
-                                )
-                            else:
-                                journal_event(
-                                    self.journal_path,
-                                    "driver_stop_failed",
-                                    {**identity, "category": container_category},
-                                )
-                        except ControllerError:
-                            persistence_failures.append("stop_terminal_persist")
-                            container_category = "cleanup_persistence"
-                cleanup_deadline_ns = (
-                    time.monotonic_ns() + _DRIVER_CLEANUP_DEADLINE_NS
-                )
-                cleanup_intent_recorded = False
-                try:
-                    journal_event(
-                        self.journal_path, "driver_cleanup_intent", identity
-                    )
-                    cleanup_intent_recorded = True
-                except ControllerError:
-                    persistence_failures.append("cleanup_intent_persist")
-                cleanup = None
-                process_category: str | None = None
-                try:
-                    cleanup = cleanup_driver_process(
-                        session,
-                        deadline_ns=cleanup_deadline_ns,
-                        monotonic_ns=time.monotonic_ns,
-                    )
-                except (ControllerError, DriverTransportError) as cleanup_error:
-                    process_category = (
-                        cleanup_error.category
-                        if isinstance(cleanup_error, DriverTransportError)
-                        and cleanup_error.category
-                        in _DRIVER_READINESS_FAILURE_CATEGORIES
-                        else "protocol_invalid"
-                    )
-                cleanup_category = container_category or process_category
-                if not cleanup_intent_recorded:
-                    cleanup_category = cleanup_category or "cleanup_persistence"
-                if cleanup_intent_recorded:
-                    try:
-                        if cleanup_category is None and cleanup is not None:
-                            journal_event(
-                                self.journal_path,
-                                "driver_cleanup_complete",
-                                {
-                                    **identity,
-                                    "outcome": cleanup.outcome,
-                                    "exit_code": cleanup.exit_code,
-                                },
-                            )
-                        else:
-                            journal_event(
-                                self.journal_path,
-                                "driver_cleanup_failed",
-                                {
-                                    **identity,
-                                    "category": cleanup_category
-                                    or "protocol_invalid",
-                                },
-                            )
-                    except ControllerError:
-                        persistence_failures.append("cleanup_terminal_persist")
-            if category not in _DRIVER_READINESS_FAILURE_CATEGORIES:
-                category = "protocol_invalid"
-            try:
-                journal_event(
-                    self.journal_path,
-                    "driver_readiness_failed",
-                    {
-                        "readiness_nonce": readiness_nonce,
-                        "scope": failed_scope,
-                        "track": (
-                            failed_track.value
-                            if failed_track is not None
-                            else None
-                        ),
-                        "driver_id": failed_id,
-                        "category": category,
-                        "stage": failed_stage,
-                    },
-                )
-            except Exception:
-                persistence_failures.append("terminal_failure_persist")
-            raise ControllerError(
-                "driver readiness failed closed; down is required"
-            ) from None
+            self._fail_driver_readiness_sessions(
+                execution_nonce=execution_nonce,
+                readiness_nonce=readiness_nonce,
+                deadline_ns=deadline_ns,
+                sessions=sessions,
+                active_identity=active_identity,
+                error=error,
+                primary=primary,
+                cancellation_intents=cancellation_intents,
+                cancellation_attempts=cancellation_attempts,
+                cancellation_completions=cancellation_completions,
+            )
+            raise AssertionError("unreachable")
 
     def _start_ready_driver_set(
         self,
@@ -11222,6 +11239,9 @@ class LocalEnvoyController:
         }
         if set(drivers) != {track.value for track in _TRACKS}:
             raise ControllerError("exact driver readiness identities are unavailable")
+        journal = load_lifecycle_journal(self.journal_path)
+        execution_nonce = str(journal["execution_nonce"])
+        _require_sha256("driver readiness execution nonce", execution_nonce)
         readiness_nonce = secrets.token_hex(32)
         journal_event(
             self.journal_path,
@@ -11230,6 +11250,15 @@ class LocalEnvoyController:
         )
         deadline_ns = self._monotonic_now() + _READINESS_DEADLINE_NS
         sessions: dict[LiveTrack, DriverSession] = {}
+        primary: tuple[
+            str, LiveTrack | None, str | None, str, DriverTransportError
+        ] | None = None
+        active_identity: tuple[str, LiveTrack | None, str | None, str] = (
+            "driver",
+            _TRACKS[0],
+            str(drivers[_TRACKS[0].value]["id"]),
+            "start_intent",
+        )
         try:
             for track in _TRACKS:
                 full_id = str(drivers[track.value]["id"])
@@ -11238,7 +11267,9 @@ class LocalEnvoyController:
                     "track": track.value,
                     "driver_id": full_id,
                 }
+                active_identity = ("driver", track, full_id, "start_intent")
                 journal_event(self.journal_path, "driver_start_intent", identity)
+                active_identity = ("driver", track, full_id, "process_start")
                 session = start_attached_driver(
                     self.driver_process_factory,
                     docker_binary=str(self.docker_binary),
@@ -11246,21 +11277,51 @@ class LocalEnvoyController:
                     full_id=full_id,
                 )
                 sessions[track] = session
+                active_identity = ("driver", track, full_id, "start_complete")
                 journal_event(self.journal_path, "driver_start_complete", identity)
             for track in _TRACKS:
                 session = sessions[track]
-                payload = read_readiness_record(
-                    session,
-                    deadline_ns=deadline_ns,
-                    monotonic_ns=self.monotonic_ns,
+                active_identity = (
+                    "driver", track, session.full_id, "readiness_record"
                 )
-                record = parse_driver_result(payload, expected_track=track.value)
-                if (
-                    record.get("schema_version")
-                    != "kil.v3b1-driver-readiness.v1"
-                    or record.get("status") != "ready"
-                ):
-                    raise DriverProtocolError("driver readiness record is invalid")
+                try:
+                    payload = read_readiness_record(
+                        session,
+                        deadline_ns=deadline_ns,
+                        monotonic_ns=self.monotonic_ns,
+                    )
+                    record = parse_driver_result(payload, expected_track=track.value)
+                    if (
+                        record.get("schema_version")
+                        != "kil.v3b1-driver-readiness.v1"
+                        or record.get("status") != "ready"
+                    ):
+                        raise DriverProtocolError(
+                            "driver readiness schema/status is invalid"
+                        )
+                except DriverProtocolError:
+                    if primary is None:
+                        primary = (
+                            "driver",
+                            track,
+                            session.full_id,
+                            "readiness_record",
+                            DriverTransportError("protocol_invalid"),
+                        )
+                    continue
+                except DriverTransportError as error:
+                    if primary is None:
+                        primary = (
+                            "driver",
+                            track,
+                            session.full_id,
+                            "readiness_record",
+                            error,
+                        )
+                    continue
+                active_identity = (
+                    "driver", track, session.full_id, "readiness_complete"
+                )
                 journal_event(
                     self.journal_path,
                     "driver_readiness_complete",
@@ -11269,6 +11330,11 @@ class LocalEnvoyController:
                         "record_sha256": _digest_bytes(payload),
                     },
                 )
+            if primary is not None:
+                raise primary[4]
+            active_identity = (
+                "controller", None, None, "readiness_set_complete"
+            )
             journal_event(
                 self.journal_path,
                 "driver_readiness_set_complete",
@@ -11279,55 +11345,73 @@ class LocalEnvoyController:
                 },
             )
             return readiness_nonce, deadline_ns, sessions
-        except (ControllerError, DriverProtocolError, DriverTransportError):
-            for track, session in sessions.items():
-                identity = self._driver_identity_details(session, readiness_nonce)
-                try:
-                    journal_event(self.journal_path, "readiness_cancel_intent", identity)
-                    close_instruction_stream(session)
-                    exit_code = attest_cancelled_exit(
-                        session,
-                        deadline_ns=deadline_ns,
-                        monotonic_ns=self.monotonic_ns,
-                    )
-                    journal_event(
-                        self.journal_path,
-                        "readiness_cancel_complete",
-                        {**identity, "exit_code": exit_code},
-                    )
-                except (ControllerError, DriverTransportError):
-                    try:
-                        cleanup_driver_process(
-                            session,
-                            deadline_ns=time.monotonic_ns()
-                            + _DRIVER_CLEANUP_DEADLINE_NS,
-                            monotonic_ns=time.monotonic_ns,
-                        )
-                    except DriverTransportError:
-                        pass
-            raise ControllerError("driver readiness failed closed; down is required") from None
+        except (ControllerError, DriverProtocolError, DriverTransportError) as error:
+            self._fail_driver_readiness_sessions(
+                execution_nonce=execution_nonce,
+                readiness_nonce=readiness_nonce,
+                deadline_ns=deadline_ns,
+                sessions=sessions,
+                active_identity=active_identity,
+                error=error,
+                primary=primary,
+            )
+            raise AssertionError("unreachable")
 
-    def _cancel_later_drivers(
+    def _poison_request_driver_session(
         self,
         *,
-        failed_track: LiveTrack,
+        execution_nonce: str,
+        readiness_nonce: str,
+    ) -> None:
+        try:
+            self._persist_readiness_poison_independent(
+                execution_nonce=execution_nonce,
+                readiness_nonce=readiness_nonce,
+                reason_category="driver_readiness_failed",
+            )
+        except Exception:
+            pass
+
+    def _cleanup_request_driver(self, session: DriverSession) -> None:
+        try:
+            cleanup_driver_process(
+                session,
+                deadline_ns=time.monotonic_ns() + _DRIVER_CLEANUP_DEADLINE_NS,
+                monotonic_ns=time.monotonic_ns,
+            )
+        except Exception:
+            pass
+
+    def _cancel_uncommanded_drivers(
+        self,
+        *,
+        first_track: LiveTrack,
         readiness_nonce: str,
         deadline_ns: int,
         sessions: Mapping[LiveTrack, DriverSession],
     ) -> bool:
         cancel = False
         complete = True
+        selected: list[tuple[LiveTrack, DriverSession, dict[str, object]]] = []
         for track in _TRACKS:
-            if track is failed_track:
+            if track is first_track:
                 cancel = True
-                continue
             if not cancel:
                 continue
             session = sessions[track]
             identity = self._driver_identity_details(session, readiness_nonce)
+            selected.append((track, session, identity))
             try:
                 journal_event(self.journal_path, "readiness_cancel_intent", identity)
                 close_instruction_stream(session)
+            except Exception:
+                complete = False
+                try:
+                    close_instruction_stream(session)
+                except Exception:
+                    pass
+        for _, session, identity in selected:
+            try:
                 exit_code = attest_cancelled_exit(
                     session,
                     deadline_ns=deadline_ns,
@@ -11338,21 +11422,9 @@ class LocalEnvoyController:
                     "readiness_cancel_complete",
                     {**identity, "exit_code": exit_code},
                 )
-            except (ControllerError, DriverTransportError):
+            except Exception:
                 complete = False
-                try:
-                    close_instruction_stream(session)
-                except DriverTransportError:
-                    pass
-                try:
-                    cleanup_driver_process(
-                        session,
-                        deadline_ns=time.monotonic_ns()
-                        + _DRIVER_CLEANUP_DEADLINE_NS,
-                        monotonic_ns=time.monotonic_ns,
-                    )
-                except DriverTransportError:
-                    pass
+            self._cleanup_request_driver(session)
         return complete
 
     def _record_driver_control_failure(
@@ -11404,87 +11476,104 @@ class LocalEnvoyController:
         ):
             raise ControllerError("central request was already attempted; replay is forbidden")
 
+        execution_nonce = str(journal["execution_nonce"])
+        _require_sha256("request execution nonce", execution_nonce)
         readiness_nonce, deadline_ns, sessions = self._start_ready_driver_set(state)
-        private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
-        records: list[dict[str, object]] = []
-        comparison = {
-            "method": "POST",
-            "path": "/consequential/admin",
-            "authorization_sha256": _digest_bytes(AUTHORIZATION.encode("utf-8")),
-            "adversarial_headers": dict(ADVERSARIAL_HEADERS),
-            "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
-        }
-        comparison_sha = comparison_facts_sha256(comparison)
-        objects = {
-            (str(item["track"]), str(item["role"])): item
-            for item in state["objects"]  # type: ignore[index]
-            if type(item) is dict
-        }
-        definitions = {
-            str(item["track"]): item
-            for item in manifest["driver_definitions"]  # type: ignore[index]
-            if type(item) is dict
-        }
-
-        for track in _TRACKS:
-            session = sessions[track]
-            issued = int(time.time())
-            q_state = None
-            if track is LiveTrack.SIGNED_STATE_ONLY:
-                q_state = issue_q_state(_claims("kil-v3-signed", issued), private_key)
-            elif track is LiveTrack.SIGNED_PLUS_LOCAL_REDUCE:
-                q_state = issue_q_state(_claims("kil-v3-local", issued), private_key)
-            if q_state is not None and int(time.time()) >= issued + 10:
-                self._cancel_later_drivers(
-                    failed_track=track,
-                    readiness_nonce=readiness_nonce,
-                    deadline_ns=deadline_ns,
-                    sessions=sessions,
-                )
-                raise ControllerError("signed-state request validity expired before intent")
-
-            intent = claim_request_attempt(
-                self.journal_path,
-                track,
-                readiness_nonce=readiness_nonce,
-            )
-            headers = {
-                "authorization": AUTHORIZATION,
-                "x-request-id": str(manifest["request_id"]),
-                "x-kil-run-id": str(manifest["run_id"]),
-                **ADVERSARIAL_HEADERS,
-                **RETRY_CONTROL_HEADERS,
-            }
-            if q_state is not None:
-                headers["x-kil-q-state"] = q_state
-            instruction = {
-                "schema_version": "kil.v3b1-driver-instruction.v1",
-                "track": track.value,
+        active_track = _TRACKS[0]
+        active_stage = "instruction_write"
+        instruction_delivery_started = False
+        driver_terminal = False
+        transport_provenance: RequestFailureProvenance | None = None
+        q_state: str | None = None
+        headers: dict[str, str] = {}
+        instruction_payload = b""
+        try:
+            private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+            records: list[dict[str, object]] = []
+            comparison = {
                 "method": "POST",
                 "path": "/consequential/admin",
-                "body_byte_count": 0,
-                "headers": headers,
+                "authorization_sha256": _digest_bytes(
+                    AUTHORIZATION.encode("utf-8")
+                ),
+                "adversarial_headers": dict(ADVERSARIAL_HEADERS),
+                "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
             }
-            instruction_payload = canonical_record(instruction)
-            parse_driver_instruction(instruction_payload, expected_track=track.value)
-            q_state_sha256 = (
-                None
-                if q_state is None
-                else _digest_bytes(q_state.encode("utf-8"))
-            )
-            identity = {
-                **self._driver_identity_details(session, readiness_nonce),
-                "intent_id": intent["intent_id"],
+            comparison_sha = comparison_facts_sha256(comparison)
+            objects = {
+                (str(item["track"]), str(item["role"])): item
+                for item in state["objects"]  # type: ignore[index]
+                if type(item) is dict
             }
-            instruction_started = False
-            stage = "instruction_write"
-            try:
+            definitions = {
+                str(item["track"]): item
+                for item in manifest["driver_definitions"]  # type: ignore[index]
+                if type(item) is dict
+            }
+
+            for track in _TRACKS:
+                active_track = track
+                active_stage = "instruction_write"
+                instruction_delivery_started = False
+                driver_terminal = False
+                transport_provenance = None
+                session = sessions[track]
+                issued = int(time.time())
+                q_state = None
+                if track is LiveTrack.SIGNED_STATE_ONLY:
+                    q_state = issue_q_state(
+                        _claims("kil-v3-signed", issued), private_key
+                    )
+                elif track is LiveTrack.SIGNED_PLUS_LOCAL_REDUCE:
+                    q_state = issue_q_state(
+                        _claims("kil-v3-local", issued), private_key
+                    )
+                if q_state is not None and int(time.time()) >= issued + 10:
+                    raise ControllerError(
+                        "signed-state request validity expired before intent"
+                    )
+
+                intent = claim_request_attempt(
+                    self.journal_path,
+                    track,
+                    readiness_nonce=readiness_nonce,
+                )
+                headers = {
+                    "authorization": AUTHORIZATION,
+                    "x-request-id": str(manifest["request_id"]),
+                    "x-kil-run-id": str(manifest["run_id"]),
+                    **ADVERSARIAL_HEADERS,
+                    **RETRY_CONTROL_HEADERS,
+                }
+                if q_state is not None:
+                    headers["x-kil-q-state"] = q_state
+                instruction = {
+                    "schema_version": "kil.v3b1-driver-instruction.v1",
+                    "track": track.value,
+                    "method": "POST",
+                    "path": "/consequential/admin",
+                    "body_byte_count": 0,
+                    "headers": headers,
+                }
+                instruction_payload = canonical_record(instruction)
+                parse_driver_instruction(
+                    instruction_payload, expected_track=track.value
+                )
+                q_state_sha256 = (
+                    None
+                    if q_state is None
+                    else _digest_bytes(q_state.encode("utf-8"))
+                )
+                identity = {
+                    **self._driver_identity_details(session, readiness_nonce),
+                    "intent_id": intent["intent_id"],
+                }
                 journal_event(
                     self.journal_path,
                     "driver_instruction_write_intent",
                     identity,
                 )
-                instruction_started = True
+                instruction_delivery_started = True
                 write_instruction(
                     session,
                     instruction_payload,
@@ -11495,16 +11584,20 @@ class LocalEnvoyController:
                 instruction_payload = b""
                 headers = {}
                 q_state = None
-                stage = "stdout_read"
+                active_stage = "stdout_read"
                 raw_result = read_driver_result(
                     session,
                     deadline_ns=deadline_ns,
                     monotonic_ns=self.monotonic_ns,
                 )
-                result = parse_driver_result(raw_result, expected_track=track.value)
+                result = parse_driver_result(
+                    raw_result, expected_track=track.value
+                )
                 if result["schema_version"] != "kil.v3b1-driver-result.v1":
-                    raise DriverProtocolError("terminal driver result schema is invalid")
-                stage = "process_wait"
+                    raise DriverProtocolError(
+                        "terminal driver result schema is invalid"
+                    )
+                active_stage = "process_wait"
                 expected_exit = 0 if result["status"] == "complete" else 1
                 attest_driver_result_exit(
                     session,
@@ -11512,160 +11605,174 @@ class LocalEnvoyController:
                     deadline_ns=deadline_ns,
                     monotonic_ns=self.monotonic_ns,
                 )
-                stage = "termination"
-            except (ControllerError, DriverProtocolError, DriverTransportError):
-                try:
-                    self._record_driver_control_failure(
-                        track,
-                        stage=stage,
-                        request_bytes_may_have_been_sent=instruction_started,
-                    )
-                finally:
-                    self._cancel_later_drivers(
-                        failed_track=track,
-                        readiness_nonce=readiness_nonce,
-                        deadline_ns=deadline_ns,
-                        sessions=sessions,
-                    )
-                    try:
-                        cleanup_driver_process(
-                            session,
-                            deadline_ns=time.monotonic_ns()
-                            + _DRIVER_CLEANUP_DEADLINE_NS,
-                            monotonic_ns=time.monotonic_ns,
-                        )
-                    except DriverTransportError:
-                        pass
-                raise ControllerError(
-                    "driver request failed terminally; teardown is required"
-                ) from None
-
-            result_sha = _digest_bytes(raw_result)
-            raw_root = self.private_root / "driver-results" / str(manifest["run_id"])
-            _require_contained(raw_root, self.private_root, "private driver result root")
-            raw_path = raw_root / f"{track.value}.json"
-            _write_file(raw_path, raw_result, 0o600)
-            journal_event(
-                self.journal_path,
-                "driver_result_persisted",
-                {**identity, "result_sha256": result_sha},
-            )
-
-            if result["status"] == "transport_failure":
-                errno_name = result["errno_name"]
-                host_errno = (
-                    None
-                    if errno_name is None
-                    else getattr(errno_module, str(errno_name), None)
+                driver_terminal = True
+                active_stage = "termination"
+                cleanup_driver_process(
+                    session,
+                    deadline_ns=time.monotonic_ns()
+                    + _DRIVER_CLEANUP_DEADLINE_NS,
+                    monotonic_ns=time.monotonic_ns,
                 )
-                provenance = RequestFailureProvenance(
-                    stage=str(result["stage"]),
-                    exception_class=str(result["exception_class"]),
-                    errno=host_errno,
-                    errno_name=(None if host_errno is None else str(errno_name)),
-                    connect_monotonic_ns=int(result["connect_monotonic_ns"]),
-                    send_monotonic_ns=int(result["send_monotonic_ns"]),
-                    failure_monotonic_ns=int(result["failure_monotonic_ns"]),
-                    request_bytes_may_have_been_sent=bool(
-                        result["request_bytes_may_have_been_sent"]
+
+                result_sha = _digest_bytes(raw_result)
+                raw_root = (
+                    self.private_root
+                    / "driver-results"
+                    / str(manifest["run_id"])
+                )
+                _require_contained(
+                    raw_root, self.private_root, "private driver result root"
+                )
+                raw_path = raw_root / f"{track.value}.json"
+                _write_file(raw_path, raw_result, 0o600)
+                journal_event(
+                    self.journal_path,
+                    "driver_result_persisted",
+                    {**identity, "result_sha256": result_sha},
+                )
+
+                if result["status"] == "transport_failure":
+                    errno_name = result["errno_name"]
+                    host_errno = (
+                        None
+                        if errno_name is None
+                        else getattr(errno_module, str(errno_name), None)
+                    )
+                    transport_provenance = RequestFailureProvenance(
+                        stage=str(result["stage"]),
+                        exception_class=str(result["exception_class"]),
+                        errno=host_errno,
+                        errno_name=(
+                            None if host_errno is None else str(errno_name)
+                        ),
+                        connect_monotonic_ns=int(
+                            result["connect_monotonic_ns"]
+                        ),
+                        send_monotonic_ns=int(result["send_monotonic_ns"]),
+                        failure_monotonic_ns=int(
+                            result["failure_monotonic_ns"]
+                        ),
+                        request_bytes_may_have_been_sent=True,
+                        attempt_count=1,
+                        retry_performed=False,
+                    )
+                    raise ControllerError(
+                        "driver reported terminal transport failure"
+                    )
+                if result["status"] != "complete":
+                    raise ControllerError("driver result status is terminal")
+
+                expected_status = (
+                    403
+                    if track is LiveTrack.SIGNED_PLUS_LOCAL_REDUCE
+                    else 200
+                )
+                if result["response_status"] != expected_status:
+                    raise ControllerError("driver response status is invalid")
+
+                driver_object = objects[(track.value, "driver")]
+                definition = definitions[track.value]
+                record = {
+                    "schema_version": "kil.v3b1-request.v2",
+                    "run_id": manifest["run_id"],
+                    "request_id": manifest["request_id"],
+                    "track": track.value,
+                    "method": "POST",
+                    "path": "/consequential/admin",
+                    "attempt_count": 1,
+                    "retry_observed": False,
+                    "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
+                    "authorization_sha256": comparison["authorization_sha256"],
+                    "q_state_present": (
+                        track is not LiveTrack.CREDENTIAL_POLICY_BASELINE
                     ),
-                    attempt_count=1,
-                    retry_performed=False,
+                    "q_state_sha256": q_state_sha256,
+                    "adversarial_headers": dict(ADVERSARIAL_HEADERS),
+                    "comparison_facts_sha256": comparison_sha,
+                    "send_monotonic_ns": result["send_monotonic_ns"],
+                    "receive_monotonic_ns": result["receive_monotonic_ns"],
+                    "client_response_status": result["response_status"],
+                    "client_decision_digest": result["decision_digest"],
+                    "request_transport": "in_network_request_driver",
+                    "driver_role": "request_driver",
+                    "driver_full_id": session.full_id,
+                    "driver_image_id": driver_object["image_id"],
+                    "driver_definition_sha256": _digest_bytes(
+                        canonical_record(definition)
+                    ),
+                    "driver_result_sha256": result_sha,
+                }
+                _request_closed(record)
+                records.append(record)
+                _write_file(request_path, _jsonl_payload(records), 0o444)
+                record_sha = _digest_bytes(_canonical_bytes(record))
+                journal_event(
+                    self.journal_path,
+                    "request_record_persisted",
+                    {
+                        "track": track.value,
+                        "intent_id": intent["intent_id"],
+                        "record_sha256": record_sha,
+                    },
                 )
                 _complete_request_attempt(
                     self.journal_path,
                     track,
-                    success=False,
-                    record_sha256=None,
-                    failure_provenance=provenance,
+                    success=True,
+                    record_sha256=record_sha,
                 )
-                self._cancel_later_drivers(
-                    failed_track=track,
+        except Exception:
+            instruction_payload = b""
+            headers = {}
+            q_state = None
+            self._poison_request_driver_session(
+                execution_nonce=execution_nonce,
+                readiness_nonce=readiness_nonce,
+            )
+            request_status = None
+            try:
+                failed_journal = load_lifecycle_journal(self.journal_path)
+                failed_requests = failed_journal["requests"]
+                assert isinstance(failed_requests, dict)
+                failed_request = failed_requests[active_track.value]
+                assert isinstance(failed_request, dict)
+                request_status = failed_request["status"]
+            except Exception:
+                request_status = None
+            if request_status == "intent_persisted":
+                try:
+                    if transport_provenance is not None:
+                        _complete_request_attempt(
+                            self.journal_path,
+                            active_track,
+                            success=False,
+                            record_sha256=None,
+                            failure_provenance=transport_provenance,
+                        )
+                    else:
+                        self._record_driver_control_failure(
+                            active_track,
+                            stage=active_stage,
+                            request_bytes_may_have_been_sent=True,
+                        )
+                except Exception:
+                    pass
+            current_index = _TRACKS.index(active_track)
+            if instruction_delivery_started or driver_terminal:
+                self._cleanup_request_driver(sessions[active_track])
+                cancel_index = current_index + 1
+            else:
+                cancel_index = current_index
+            if cancel_index < len(_TRACKS):
+                self._cancel_uncommanded_drivers(
+                    first_track=_TRACKS[cancel_index],
                     readiness_nonce=readiness_nonce,
                     deadline_ns=deadline_ns,
                     sessions=sessions,
                 )
-                raise ControllerError(
-                    "driver reported terminal transport failure; teardown is required"
-                )
-            if result["status"] != "complete":
-                self._record_driver_control_failure(
-                    track,
-                    stage="stdout_read",
-                    request_bytes_may_have_been_sent=True,
-                )
-                self._cancel_later_drivers(
-                    failed_track=track,
-                    readiness_nonce=readiness_nonce,
-                    deadline_ns=deadline_ns,
-                    sessions=sessions,
-                )
-                raise ControllerError("driver result status is terminal; teardown is required")
-
-            expected_status = (
-                403 if track is LiveTrack.SIGNED_PLUS_LOCAL_REDUCE else 200
-            )
-            if result["response_status"] != expected_status:
-                self._record_driver_control_failure(
-                    track,
-                    stage="stdout_read",
-                    request_bytes_may_have_been_sent=True,
-                )
-                self._cancel_later_drivers(
-                    failed_track=track,
-                    readiness_nonce=readiness_nonce,
-                    deadline_ns=deadline_ns,
-                    sessions=sessions,
-                )
-                raise ControllerError("driver response status is invalid; teardown is required")
-
-            driver_object = objects[(track.value, "driver")]
-            definition = definitions[track.value]
-            record = {
-                "schema_version": "kil.v3b1-request.v2",
-                "run_id": manifest["run_id"],
-                "request_id": manifest["request_id"],
-                "track": track.value,
-                "method": "POST",
-                "path": "/consequential/admin",
-                "attempt_count": 1,
-                "retry_observed": False,
-                "retry_control_headers": dict(RETRY_CONTROL_HEADERS),
-                "authorization_sha256": comparison["authorization_sha256"],
-                "q_state_present": track is not LiveTrack.CREDENTIAL_POLICY_BASELINE,
-                "q_state_sha256": q_state_sha256,
-                "adversarial_headers": dict(ADVERSARIAL_HEADERS),
-                "comparison_facts_sha256": comparison_sha,
-                "send_monotonic_ns": result["send_monotonic_ns"],
-                "receive_monotonic_ns": result["receive_monotonic_ns"],
-                "client_response_status": result["response_status"],
-                "client_decision_digest": result["decision_digest"],
-                "request_transport": "in_network_request_driver",
-                "driver_role": "request_driver",
-                "driver_full_id": session.full_id,
-                "driver_image_id": driver_object["image_id"],
-                "driver_definition_sha256": _digest_bytes(canonical_record(definition)),
-                "driver_result_sha256": result_sha,
-            }
-            _request_closed(record)
-            records.append(record)
-            _write_file(request_path, _jsonl_payload(records), 0o444)
-            record_sha = _digest_bytes(_canonical_bytes(record))
-            journal_event(
-                self.journal_path,
-                "request_record_persisted",
-                {
-                    "track": track.value,
-                    "intent_id": intent["intent_id"],
-                    "record_sha256": record_sha,
-                },
-            )
-            _complete_request_attempt(
-                self.journal_path,
-                track,
-                success=True,
-                record_sha256=record_sha,
-            )
+            raise ControllerError(
+                "driver request failed terminally; teardown is required"
+            ) from None
         return self.collect()
 
     def _assert_only_recorded_managed(

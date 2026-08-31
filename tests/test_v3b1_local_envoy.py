@@ -1,4 +1,5 @@
 from dataclasses import FrozenInstanceError
+from contextlib import ExitStack
 import errno
 from hashlib import sha256
 import http.client
@@ -3628,6 +3629,7 @@ class _DriverProcess:
         stdout_close_error=False,
         write_error=None,
         partial_write=None,
+        poll_result=None,
     ):
         self.full_id = full_id
         self.events = events
@@ -3637,6 +3639,7 @@ class _DriverProcess:
         self.stdout_close_error = stdout_close_error
         self.write_error = write_error
         self.partial_write = partial_write
+        self.poll_result = poll_result
         self.exited = False
         self.terminated = False
         self.killed = False
@@ -3649,7 +3652,9 @@ class _DriverProcess:
         self.stderr = io.BytesIO(stderr)
 
     def poll(self):
-        return self.returncode if self.exited else None
+        if not self.exited:
+            return None
+        return self.returncode if self.poll_result is None else self.poll_result
 
     def wait(self, timeout):
         self.events.append(("wait", self.full_id, timeout))
@@ -4868,6 +4873,431 @@ class DriverRequestSequencingTest(unittest.TestCase):
                 },
                 later_ids,
             )
+
+    def test_run_readiness_failures_use_shared_poisoned_failure_path(self):
+        wrong = {
+            "schema_version": "kil.v3b1-driver-readiness.v1",
+            "track": LiveTrack.SIGNED_STATE_ONLY.value,
+            "status": "ready",
+            "connect_monotonic_ns": 1,
+            "ready_monotonic_ns": 2,
+        }
+        cases = {
+            "malformed": {
+                "change": {"payload": b"private malformed readiness\n"},
+                "failed_event": None,
+            },
+            "wrong_track": {
+                "change": {"payload": (canonical_json(wrong) + "\n").encode()},
+                "failed_event": None,
+            },
+            "timeout": {
+                "change": {"advance_ns": 31_000_000_000},
+                "failed_event": None,
+            },
+            "start": {
+                "change": {"start_error": DriverTransportError("process_start")},
+                "failed_event": None,
+            },
+            "persistence": {
+                "change": {},
+                "failed_event": "driver_readiness_complete",
+            },
+        }
+        baseline = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
+        for name, case in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                controller, factory, drivers, events, _ = self.make_controller(
+                    directory, {baseline: case["change"]}
+                )
+                real_journal_event = local_envoy_module.journal_event
+                failed_once = False
+
+                def fail_selected_event(path, event, details):
+                    nonlocal failed_once
+                    if (
+                        not failed_once
+                        and event == case["failed_event"]
+                        and details.get("track") == baseline
+                    ):
+                        failed_once = True
+                        raise ControllerError("private readiness persistence failure")
+                    return real_journal_event(path, event, details)
+
+                with mock.patch(
+                    "tools.v3b1_local_envoy.journal_event",
+                    side_effect=fail_selected_event,
+                ):
+                    with self.assertRaisesRegex(ControllerError, "readiness|failed closed|down"):
+                        controller.run()
+
+                journal = load_lifecycle_journal(controller.journal_path)
+                self.assertEqual(
+                    {record["status"] for record in journal["requests"].values()},
+                    {"not_attempted"},
+                )
+                self.assertTrue(controller.readiness_poison_path.is_file())
+                failure = next(
+                    event for event in journal["events"]
+                    if event["event"] == "driver_readiness_failed"
+                )
+                self.assertEqual(failure["details"]["track"], baseline)
+                self.assertEqual(
+                    failure["details"]["driver_id"],
+                    drivers[baseline]["id"],
+                )
+                if name == "persistence":
+                    self.assertEqual(
+                        failure["details"]["category"], "controller_persistence"
+                    )
+                    self.assertEqual(
+                        failure["details"]["stage"], "readiness_complete"
+                    )
+                self.assertTrue(all(process.stdin.closed for process in factory.processes))
+                self.assertTrue(all(process.exited for process in factory.processes))
+                self.assertTrue(all(process.reaped for process in factory.processes))
+                raw = controller.journal_path.read_text()
+                self.assertNotIn("private malformed readiness", raw)
+                self.assertNotIn("private readiness persistence failure", raw)
+                starts = len([event for event in events if event[0] == "start"])
+                with self.assertRaisesRegex(ControllerError, "poison|incomplete|down"):
+                    controller.run()
+                self.assertEqual(
+                    len([event for event in events if event[0] == "start"]), starts
+                )
+
+    def test_pre_instruction_failures_cancel_every_uncommanded_driver_and_poison(self):
+        cases = {
+            "claim_persistence": {
+                "patch": "claim",
+                "failed_track": LiveTrack.CREDENTIAL_POLICY_BASELINE,
+                "expected": ["not_attempted", "not_attempted", "not_attempted"],
+            },
+            "q_state_issue": {
+                "patch": "q_issue",
+                "failed_track": LiveTrack.SIGNED_STATE_ONLY,
+                "expected": ["completed", "not_attempted", "not_attempted"],
+            },
+            "q_state_expiry": {
+                "patch": "q_expiry",
+                "failed_track": LiveTrack.SIGNED_STATE_ONLY,
+                "expected": ["completed", "not_attempted", "not_attempted"],
+            },
+            "instruction_canonicalization": {
+                "patch": "instruction",
+                "failed_track": LiveTrack.CREDENTIAL_POLICY_BASELINE,
+                "expected": ["failed", "not_attempted", "not_attempted"],
+            },
+        }
+        for name, case in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                controller, factory, _, events, _ = self.make_controller(directory)
+                with ExitStack() as stack:
+                    if case["patch"] == "claim":
+                        stack.enter_context(
+                            mock.patch(
+                                "tools.v3b1_local_envoy.claim_request_attempt",
+                                side_effect=ControllerError(
+                                    "private claim persistence failure"
+                                ),
+                            )
+                        )
+                    elif case["patch"] == "q_issue":
+                        stack.enter_context(
+                            mock.patch(
+                                "tools.v3b1_local_envoy.issue_q_state",
+                                side_effect=RuntimeError("private q-state failure"),
+                            )
+                        )
+                    elif case["patch"] == "q_expiry":
+                        stack.enter_context(
+                            mock.patch(
+                                "tools.v3b1_local_envoy.time.time",
+                                side_effect=[100, 100, 111],
+                            )
+                        )
+                    else:
+                        stack.enter_context(
+                            mock.patch(
+                                "tools.v3b1_local_envoy.parse_driver_instruction",
+                                side_effect=DriverTransportError(
+                                    "private_instruction_parser"
+                                ),
+                            )
+                        )
+                    with self.assertRaisesRegex(
+                        ControllerError,
+                        "failed|terminal|expired|teardown|down",
+                    ):
+                        controller.run()
+
+                journal = load_lifecycle_journal(controller.journal_path)
+                self.assertEqual(
+                    [journal["requests"][track.value]["status"] for track in LiveTrack],
+                    case["expected"],
+                )
+                self.assertTrue(controller.readiness_poison_path.is_file())
+                failed_index = list(LiveTrack).index(case["failed_track"])
+                uncommanded_ids = {
+                    process.full_id for process in factory.processes[failed_index:]
+                }
+                self.assertEqual(
+                    {
+                        event[1] for event in events
+                        if event[0] == "stdin_close" and event[1] in uncommanded_ids
+                    },
+                    uncommanded_ids,
+                )
+                self.assertTrue(
+                    all(
+                        process.exited and process.reaped
+                        for process in factory.processes[failed_index:]
+                    )
+                )
+                raw = controller.journal_path.read_text()
+                for secret in (
+                    "private claim persistence failure",
+                    "private q-state failure",
+                    "private_instruction_parser",
+                ):
+                    self.assertNotIn(secret, raw)
+                starts = len([event for event in events if event[0] == "start"])
+                with self.assertRaisesRegex(ControllerError, "poison|incomplete|down"):
+                    controller.run()
+                self.assertEqual(
+                    len([event for event in events if event[0] == "start"]), starts
+                )
+
+    def test_q_state_issue_is_after_aggregate_readiness_and_before_bound_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, events, _ = self.make_controller(directory)
+            real_issue = local_envoy_module.issue_q_state
+            real_claim = local_envoy_module.claim_request_attempt
+
+            def observed_issue(claims, private_key):
+                journal = load_lifecycle_journal(controller.journal_path)
+                self.assertTrue(
+                    any(
+                        event["event"] == "driver_readiness_set_complete"
+                        for event in journal["events"]
+                    )
+                )
+                events.append(("q_issue", claims.audience))
+                return real_issue(claims, private_key)
+
+            def observed_claim(path, track, *, readiness_nonce):
+                events.append(("request_claim", track.value))
+                return real_claim(path, track, readiness_nonce=readiness_nonce)
+
+            with mock.patch(
+                "tools.v3b1_local_envoy.issue_q_state", side_effect=observed_issue
+            ), mock.patch(
+                "tools.v3b1_local_envoy.claim_request_attempt",
+                side_effect=observed_claim,
+            ):
+                controller.run()
+
+            for track, audience in (
+                (LiveTrack.SIGNED_STATE_ONLY, "kil-v3-signed"),
+                (LiveTrack.SIGNED_PLUS_LOCAL_REDUCE, "kil-v3-local"),
+            ):
+                issue_index = events.index(("q_issue", audience))
+                claim_index = events.index(("request_claim", track.value))
+                write_index = next(
+                    index for index, event in enumerate(events)
+                    if event[0] == "stdin_write"
+                    and json.loads(event[2])["track"] == track.value
+                )
+                self.assertEqual(claim_index, issue_index + 1)
+                self.assertLess(claim_index, write_index)
+                self.assertGreaterEqual(
+                    len(
+                        [
+                            event for event in events[:issue_index]
+                            if event[0] == "stdout_readline"
+                        ]
+                    ),
+                    3,
+                )
+
+    def test_false_request_send_result_is_normalized_conservatively(self):
+        baseline = LiveTrack.CREDENTIAL_POLICY_BASELINE
+        result = self.transport_failure(baseline)
+        result["stage"] = "request_send"
+        result["request_bytes_may_have_been_sent"] = False
+        readiness = {
+            "schema_version": "kil.v3b1-driver-readiness.v1",
+            "track": baseline.value,
+            "status": "ready",
+            "connect_monotonic_ns": 1,
+            "ready_monotonic_ns": 2,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, _, _ = self.make_controller(
+                directory,
+                {
+                    baseline.value: {
+                        "payload": (
+                            canonical_json(readiness)
+                            + "\n"
+                            + canonical_json(result)
+                            + "\n"
+                        ).encode(),
+                        "returncode": 1,
+                    }
+                },
+            )
+
+            with self.assertRaisesRegex(ControllerError, "transport failure|teardown"):
+                controller.run()
+
+            journal = load_lifecycle_journal(controller.journal_path)
+            provenance = next(
+                event["details"]["provenance"]
+                for event in journal["events"]
+                if event["event"] == "request_send_failed"
+            )
+            self.assertTrue(provenance["request_bytes_may_have_been_sent"])
+            self.assertFalse(provenance["retry_performed"])
+            self.assertTrue(controller.readiness_poison_path.is_file())
+            self.assertTrue(all(process.stdin.closed for process in factory.processes[1:]))
+
+    def test_post_result_terminal_anomalies_are_closed_and_cancel_later(self):
+        cases = {
+            "stderr": {"stderr": b"private post-result stderr"},
+            "ambiguous_exit": {"poll_result": 9},
+        }
+        baseline = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
+        for name, change in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                controller, factory, _, _, _ = self.make_controller(
+                    directory, {baseline: change}
+                )
+
+                with self.assertRaisesRegex(ControllerError, "terminal|teardown"):
+                    controller.run()
+
+                journal = load_lifecycle_journal(controller.journal_path)
+                failure = next(
+                    event for event in journal["events"]
+                    if event["event"] == "request_send_failed"
+                )
+                self.assertEqual(
+                    failure["details"]["provenance"]["stage"], "process_wait"
+                )
+                self.assertTrue(
+                    failure["details"]["provenance"]
+                    ["request_bytes_may_have_been_sent"]
+                )
+                self.assertTrue(controller.readiness_poison_path.is_file())
+                self.assertTrue(all(process.stdin.closed for process in factory.processes[1:]))
+                self.assertNotIn(
+                    "private post-result stderr", controller.journal_path.read_text()
+                )
+
+    def test_post_intent_persistence_failures_use_termination_stage_and_cancel(self):
+        cases = (
+            "raw_result_file",
+            "raw_result_journal",
+            "normalized_request_file",
+            "normalized_request_journal",
+            "request_completion_journal",
+        )
+        baseline = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
+        for name in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                controller, factory, _, _, _ = self.make_controller(directory)
+                request_path = (
+                    _runtime_root(controller.root, controller.bound_manifest)
+                    / "requests.jsonl"
+                )
+                real_write = local_envoy_module._write_file
+                real_journal_event = local_envoy_module.journal_event
+                real_persist_journal = local_envoy_module._persist_journal
+                failed_once = False
+
+                def fail_selected_write(path, payload, mode):
+                    nonlocal failed_once
+                    candidate = Path(path)
+                    raw_result = "driver-results" in candidate.parts
+                    selected = (
+                        name == "raw_result_file" and raw_result
+                    ) or (
+                        name == "normalized_request_file" and candidate == request_path
+                    )
+                    if not failed_once and selected:
+                        failed_once = True
+                        raise ControllerError("private file persistence failure")
+                    return real_write(path, payload, mode)
+
+                selected_event = {
+                    "raw_result_journal": "driver_result_persisted",
+                    "normalized_request_journal": "request_record_persisted",
+                    "request_completion_journal": "request_send_complete",
+                }.get(name)
+
+                def fail_selected_journal(path, event, details):
+                    nonlocal failed_once
+                    if (
+                        not failed_once
+                        and selected_event is not None
+                        and event == selected_event
+                        and details.get("track") == baseline
+                    ):
+                        failed_once = True
+                        raise ControllerError("private journal persistence failure")
+                    return real_journal_event(path, event, details)
+
+                def fail_selected_persist(path, value):
+                    nonlocal failed_once
+                    if (
+                        not failed_once
+                        and name == "request_completion_journal"
+                        and value.get("phase") == "request_send_complete"
+                    ):
+                        failed_once = True
+                        raise ControllerError("private completion persistence failure")
+                    return real_persist_journal(path, value)
+
+                with mock.patch(
+                    "tools.v3b1_local_envoy._write_file",
+                    side_effect=fail_selected_write,
+                ), mock.patch(
+                    "tools.v3b1_local_envoy.journal_event",
+                    side_effect=fail_selected_journal,
+                ), mock.patch(
+                    "tools.v3b1_local_envoy._persist_journal",
+                    side_effect=fail_selected_persist,
+                ):
+                    with self.assertRaisesRegex(ControllerError, "terminal|teardown"):
+                        controller.run()
+
+                journal = load_lifecycle_journal(controller.journal_path)
+                self.assertEqual(journal["requests"][baseline]["status"], "failed")
+                self.assertEqual(
+                    [
+                        journal["requests"][track.value]["status"]
+                        for track in tuple(LiveTrack)[1:]
+                    ],
+                    ["not_attempted", "not_attempted"],
+                )
+                failure = next(
+                    event for event in journal["events"]
+                    if event["event"] == "request_send_failed"
+                )
+                self.assertEqual(
+                    failure["details"]["provenance"]["stage"], "termination"
+                )
+                self.assertTrue(
+                    failure["details"]["provenance"]
+                    ["request_bytes_may_have_been_sent"]
+                )
+                self.assertTrue(controller.readiness_poison_path.is_file())
+                self.assertTrue(all(process.stdin.closed for process in factory.processes[1:]))
+                raw = controller.journal_path.read_text()
+                self.assertNotIn("private file persistence failure", raw)
+                self.assertNotIn("private journal persistence failure", raw)
+                self.assertNotIn("private completion persistence failure", raw)
 
 
 def _record_test_readiness(journal_path: Path, nonce: str = HEX_B) -> str:
