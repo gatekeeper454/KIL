@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import stat
+from types import MappingProxyType
 from typing import Mapping
 
 
@@ -86,6 +87,15 @@ _EXCEPTION_CLASSES = {
     "ConnectionResetError",
 }
 _FAILURE_STAGES = {"request_send", "response_headers", "response_body"}
+_DRIVER_LIFECYCLE_EVENTS = {
+    "driver_start_intent",
+    "driver_start_complete",
+    "driver_readiness_complete",
+    "driver_readiness_set_complete",
+    "readiness_cancel_intent",
+    "readiness_cancel_complete",
+    "readiness_diagnostic_complete",
+}
 _FORBIDDEN_KEYS = {
     "authorization",
     "credential",
@@ -584,6 +594,89 @@ class DockerInventory:
             raise ContractError("Docker inventory contains a duplicate name")
 
 
+@dataclass(frozen=True, slots=True)
+class DriverLifecycleRecord:
+    """One sanitized, v2-only attached-driver lifecycle transcript record."""
+
+    event: str
+    details: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        if self.event not in _DRIVER_LIFECYCLE_EVENTS:
+            raise ContractError("driver lifecycle event is invalid")
+        if type(self.details) is not dict:
+            raise ContractError("driver lifecycle details are invalid")
+        reject_sensitive_material(self.details)
+        details = dict(self.details)
+        base = {"driver_id", "readiness_nonce", "track"}
+        expected = {
+            "driver_start_intent": base,
+            "driver_start_complete": base,
+            "driver_readiness_complete": base | {"record_sha256"},
+            "driver_readiness_set_complete": {
+                "readiness_nonce",
+                "tracks",
+                "complete_monotonic_ns",
+            },
+            "readiness_cancel_intent": base,
+            "readiness_cancel_complete": base | {"exit_code"},
+            "readiness_diagnostic_complete": {
+                "readiness_nonce",
+                "lifecycle_mode",
+            },
+        }[self.event]
+        if set(details) != expected:
+            raise ContractError("driver lifecycle fields are not closed")
+        nonce = details.get("readiness_nonce")
+        if type(nonce) is not str or _HEX.fullmatch(nonce) is None:
+            raise ContractError("driver lifecycle nonce is invalid")
+        if self.event == "driver_readiness_set_complete":
+            if (
+                details["tracks"]
+                != [
+                    "credential_policy_baseline",
+                    "signed_state_only",
+                    "signed_plus_local_reduce",
+                ]
+                or type(details["complete_monotonic_ns"]) is not int
+                or details["complete_monotonic_ns"] < 0
+            ):
+                raise ContractError("driver readiness set is invalid")
+        elif self.event == "readiness_diagnostic_complete":
+            if details["lifecycle_mode"] != "diagnostic_only":
+                raise ContractError("driver diagnostic mode is invalid")
+        else:
+            _require_object_id(details.get("driver_id"))
+            if details.get("track") not in _TRACKS:
+                raise ContractError("driver lifecycle track is invalid")
+            if self.event == "driver_readiness_complete":
+                digest = details["record_sha256"]
+                if type(digest) is not str or _HEX.fullmatch(digest) is None:
+                    raise ContractError("driver readiness record digest is invalid")
+            if (
+                self.event == "readiness_cancel_complete"
+                and details["exit_code"] != 0
+            ):
+                raise ContractError("driver readiness exit is invalid")
+        object.__setattr__(self, "details", MappingProxyType(details))
+
+    @classmethod
+    def from_mapping(
+        cls,
+        value: object,
+        *,
+        schema_version: str,
+    ) -> DriverLifecycleRecord:
+        if schema_version != DRIVER_TOPOLOGY_SCHEMA_VERSION:
+            raise ContractError("driver lifecycle records require the v2 schema")
+        record = _require_fields(value, {"event", "details"}, "driver lifecycle")
+        event = record["event"]
+        details = record["details"]
+        if type(event) is not str or type(details) is not dict:
+            raise ContractError("driver lifecycle record is invalid")
+        return cls(event=event, details=details)
+
+
 def parse_inventory_rows(
     payload: str | bytes,
     kind: str,
@@ -646,7 +739,12 @@ class TranscriptCase:
     name: str
     provenance: str
     record_type: str
-    record: RequestFailureProvenance | SourceCollectionStatus | DockerInventory
+    record: (
+        RequestFailureProvenance
+        | SourceCollectionStatus
+        | DockerInventory
+        | DriverLifecycleRecord
+    )
 
     def __post_init__(self) -> None:
         if type(self.name) is not str or _CASE_NAME.fullmatch(self.name) is None:
@@ -662,6 +760,7 @@ class TranscriptCase:
             "request_failure": RequestFailureProvenance,
             "source_collection": SourceCollectionStatus,
             "docker_inventory": DockerInventory,
+            "driver_lifecycle": DriverLifecycleRecord,
         }.get(self.record_type)
         if expected_type is None or not isinstance(self.record, expected_type):
             raise ContractError("transcript record type does not match its record")
@@ -706,9 +805,12 @@ def _load_case(value: object, schema_version: str) -> TranscriptCase:
     ):
         raise ContractError("transcript case labels must be strings")
     if record_type == "request_failure":
-        record: RequestFailureProvenance | SourceCollectionStatus | DockerInventory = (
-            RequestFailureProvenance.from_mapping(case["record"])
-        )
+        record: (
+            RequestFailureProvenance
+            | SourceCollectionStatus
+            | DockerInventory
+            | DriverLifecycleRecord
+        ) = RequestFailureProvenance.from_mapping(case["record"])
     elif record_type == "source_collection":
         record = SourceCollectionStatus.from_mapping(case["record"])
     elif record_type == "docker_inventory":
@@ -728,6 +830,10 @@ def _load_case(value: object, schema_version: str) -> TranscriptCase:
                 for row in rows
             ),
             schema,
+        )
+    elif record_type == "driver_lifecycle":
+        record = DriverLifecycleRecord.from_mapping(
+            case["record"], schema_version=schema
         )
     else:
         raise ContractError("transcript record type is invalid")

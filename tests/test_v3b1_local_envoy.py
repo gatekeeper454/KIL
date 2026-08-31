@@ -22,6 +22,7 @@ from kil.v3b_preflight import V3BProfile
 from tools.v3b1_harness_contract import (
     ContractError,
     DRIVER_TOPOLOGY_SCHEMA_VERSION,
+    DriverLifecycleRecord,
     DockerInventory,
     IntegrationContractFixture,
     RequestFailureProvenance,
@@ -30,6 +31,10 @@ from tools.v3b1_harness_contract import (
     load_integration_contract,
     normalize_transport_exception,
     parse_inventory_rows,
+)
+from tools.v3b1_driver_transport import (
+    DriverTransportError,
+    SubprocessDriverProcessFactory,
 )
 from tools.v3b1_local_envoy import (
     _complete_request_attempt,
@@ -233,8 +238,60 @@ class HarnessIntegrationContractTest(unittest.TestCase):
                 "cycle-4-backend-network-reconstructed-inventory",
                 "cycle-4-driver-container-reconstructed-inventory",
                 "cycle-4-frontend-network-reconstructed-inventory",
+                "cycle-5-driver-start-reconstructed-lifecycle",
+                "cycle-5-driver-readiness-reconstructed-lifecycle",
+                "cycle-5-driver-cancel-reconstructed-lifecycle",
+                "cycle-5-diagnostic-only-reconstructed-lifecycle",
             },
         )
+        lifecycle = [
+            case.record
+            for case in fixture.cases
+            if case.record_type == "driver_lifecycle"
+        ]
+        self.assertEqual(len(lifecycle), 4)
+        self.assertTrue(all(isinstance(item, DriverLifecycleRecord) for item in lifecycle))
+        self.assertEqual(
+            {item.event for item in lifecycle},
+            {
+                "driver_start_complete",
+                "driver_readiness_complete",
+                "readiness_cancel_complete",
+                "readiness_diagnostic_complete",
+            },
+        )
+
+    def test_driver_lifecycle_transcripts_are_v2_only_closed_and_secret_free(self):
+        value = json.loads(self.DRIVER_FIXTURE.read_text())
+        lifecycle_case = next(
+            case for case in value["cases"]
+            if case["record_type"] == "driver_lifecycle"
+        )
+        with tempfile.TemporaryDirectory(dir=self.DRIVER_FIXTURE.parent) as directory:
+            path = Path(directory) / "fixture.json"
+            legacy = {
+                "schema_version": "kil.v3b1-integration-contract.v1",
+                "cases": [lifecycle_case],
+            }
+            path.write_text(canonical_json(legacy) + "\n")
+            with self.assertRaisesRegex(ContractError, "v2|schema|record type"):
+                load_integration_contract(path)
+
+            for mutation in (
+                {"stderr": "private output"},
+                {"driver_id": "d" * 12},
+                {"track": "unexpected"},
+            ):
+                changed = json.loads(json.dumps(value))
+                selected = next(
+                    case for case in changed["cases"]
+                    if case["record_type"] == "driver_lifecycle"
+                    and case["record"]["event"] == "driver_start_complete"
+                )
+                selected["record"]["details"].update(mutation)
+                path.write_text(canonical_json(changed) + "\n")
+                with self.assertRaises(ContractError):
+                    load_integration_contract(path)
 
     def test_request_failure_provenance_is_closed_and_sanitized(self):
         record = RequestFailureProvenance.from_mapping(
@@ -2148,10 +2205,10 @@ class ControllerContractTest(unittest.TestCase):
                             ):
                                 controller._load_for_down()
 
-    def test_cli_exposes_only_the_six_approved_subcommands(self):
+    def test_cli_exposes_only_the_seven_approved_subcommands(self):
         parser = make_parser()
 
-        for name in ("preflight", "up", "run", "collect", "down"):
+        for name in ("preflight", "up", "readiness", "run", "collect", "down"):
             self.assertEqual(parser.parse_args([name]).command, name)
         view = parser.parse_args(["view", "--bundle", "/tmp/evidence"])
         self.assertEqual(view.command, "view")
@@ -3625,6 +3682,390 @@ class _RunConnectionFactory:
         )
         self.connections.append(connection)
         return connection
+
+
+class _DriverInput(io.BytesIO):
+    def __init__(self, owner, events):
+        super().__init__()
+        self.owner = owner
+        self.events = events
+
+    def close(self):
+        if not self.closed:
+            self.events.append(("stdin_close", self.owner.full_id))
+        super().close()
+
+
+class _DriverOutput(io.BytesIO):
+    def __init__(self, owner, payload, events, factory, clock, advance_ns):
+        super().__init__(payload)
+        self.owner = owner
+        self.events = events
+        self.factory = factory
+        self.clock = clock
+        self.advance_ns = advance_ns
+
+    def readline(self, size=-1):
+        self.events.append(("stdout_readline", self.owner.full_id, size))
+        if len(self.factory.processes) != 3:
+            raise AssertionError("readiness was consumed before all drivers started")
+        self.clock.advance(self.advance_ns)
+        return super().readline(size)
+
+    def read(self, size=-1):
+        self.events.append(("stdout_read", self.owner.full_id, size))
+        return super().read(size)
+
+
+class _DriverProcess:
+    def __init__(
+        self,
+        *,
+        full_id,
+        payload,
+        events,
+        factory,
+        clock,
+        advance_ns=0,
+        returncode=0,
+        stderr=b"",
+        wait_error=None,
+    ):
+        self.full_id = full_id
+        self.events = events
+        self.returncode = returncode
+        self.wait_error = wait_error
+        self.exited = False
+        self.stdin = _DriverInput(self, events)
+        self.stdout = _DriverOutput(
+            self, payload, events, factory, clock, advance_ns
+        )
+        self.stderr = io.BytesIO(stderr)
+
+    def poll(self):
+        return self.returncode if self.exited else None
+
+    def wait(self, timeout):
+        self.events.append(("wait", self.full_id, timeout))
+        if self.wait_error is not None:
+            raise self.wait_error
+        self.exited = True
+        return self.returncode
+
+
+class _DriverProcessFactory:
+    def __init__(self, behaviors, *, events, clock):
+        self.behaviors = dict(behaviors)
+        self.events = events
+        self.clock = clock
+        self.processes = []
+
+    def start(self, command):
+        argv = list(command)
+        full_id = argv[-1]
+        self.events.append(("start", argv))
+        behavior = dict(self.behaviors[full_id])
+        process = _DriverProcess(
+            full_id=full_id,
+            events=self.events,
+            factory=self,
+            clock=self.clock,
+            **behavior,
+        )
+        self.processes.append(process)
+        return process
+
+
+class DriverReadinessTest(unittest.TestCase):
+    def make_controller(self, directory, behavior_changes=None):
+        root = Path(directory) / "repo"
+        profile_path = root / "deploy/kind/v3b-profile.json"
+        profile_path.parent.mkdir(parents=True)
+        profile_path.write_bytes((ROOT / "deploy/kind/v3b-profile.json").read_bytes())
+        events = []
+        clock = _RunClock()
+        value = manifest(docker_host=f"unix://{Path(directory)}/docker.sock")
+
+        class ReadinessOnlyController(LocalEnvoyController):
+            def _load_and_reverify(self):
+                return self.bound_state, self.bound_manifest
+
+        controller = ReadinessOnlyController(
+            root,
+            FakeRunner(),
+            home=Path(directory) / "home",
+            port_probe=lambda port: False,
+            tool_verifier=lambda: TOOL_IDENTITIES,
+            monotonic_ns=clock.monotonic_ns,
+        )
+        controller._prepare_private_roots()
+        private_manifest = controller.manifest_root / f"{value['run_id']}.json"
+        private_manifest.parent.mkdir(parents=True, exist_ok=True)
+        private_manifest.write_text(canonical_json(value) + "\n")
+        create_lifecycle_journal(
+            controller.journal_path,
+            private_root=controller.private_root,
+            repository_root=root,
+            docker_host=controller.docker_host,
+            source_commit="d" * 40,
+            execution_nonce=HEX_A,
+            global_context="personal",
+        )
+        _bind_journal_manifest(controller.journal_path, private_manifest, value)
+        persist_active_state(controller.state_path, private_manifest, value)
+        controller.bound_state = load_bound_active_state(controller.state_path)
+        controller.bound_manifest = value
+        drivers = {
+            item["track"]: item
+            for item in controller.bound_state["objects"]
+            if item["role"] == "driver"
+        }
+        changes = behavior_changes or {}
+        behaviors = {}
+        for track in LiveTrack:
+            record = {
+                "schema_version": "kil.v3b1-driver-readiness.v1",
+                "track": track.value,
+                "status": "ready",
+                "connect_monotonic_ns": 10,
+                "ready_monotonic_ns": 20,
+            }
+            behavior = {"payload": (canonical_json(record) + "\n").encode()}
+            behavior.update(changes.get(track.value, {}))
+            behaviors[drivers[track.value]["id"]] = behavior
+        factory = _DriverProcessFactory(behaviors, events=events, clock=clock)
+        controller.driver_process_factory = factory
+        return controller, factory, clock, drivers, events
+
+    def test_constructor_injects_driver_factory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            profile_path = root / "deploy/kind/v3b-profile.json"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_bytes(
+                (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+            )
+            factory = object()
+
+            controller = LocalEnvoyController(
+                root,
+                FakeRunner(),
+                home=Path(directory) / "home",
+                port_probe=lambda port: False,
+                tool_verifier=lambda: TOOL_IDENTITIES,
+                driver_process_factory=factory,
+            )
+
+            self.assertIs(controller.driver_process_factory, factory)
+
+    def test_subprocess_factory_uses_binary_pipes_without_shell(self):
+        fake_process = mock.Mock(
+            stdin=io.BytesIO(), stdout=io.BytesIO(), stderr=io.BytesIO()
+        )
+        factory = SubprocessDriverProcessFactory(
+            cwd=ROOT,
+            env={"PATH": "/locked"},
+        )
+        command = ["/locked/docker", "start", "--attach", "--interactive", HEX_A]
+
+        with mock.patch(
+            "tools.v3b1_driver_transport.subprocess.Popen",
+            return_value=fake_process,
+        ) as popen:
+            self.assertIs(factory.start(command), fake_process)
+
+        popen.assert_called_once_with(
+            command,
+            cwd=ROOT,
+            env={"PATH": "/locked"},
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+            text=False,
+            shell=False,
+        )
+
+    def test_factory_is_injected_and_exact_attached_commands_start_before_reads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, drivers, events = self.make_controller(directory)
+
+            controller.readiness()
+
+            expected = [
+                [
+                    str(controller.docker_binary),
+                    "start",
+                    "--attach",
+                    "--interactive",
+                    drivers[track.value]["id"],
+                ]
+                for track in LiveTrack
+            ]
+            self.assertEqual(
+                [event[1] for event in events if event[0] == "start"], expected
+            )
+            first_read = next(
+                index for index, event in enumerate(events)
+                if event[0] == "stdout_readline"
+            )
+            self.assertEqual(
+                [event[0] for event in events[:first_read]].count("start"), 3
+            )
+            self.assertIs(controller.driver_process_factory, factory)
+
+    def test_readiness_only_closes_all_inputs_before_wait_and_records_closed_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, factory, _, drivers, events = self.make_controller(directory)
+
+            result = controller.readiness()
+
+            first_wait = next(index for index, event in enumerate(events) if event[0] == "wait")
+            self.assertEqual(
+                [event[0] for event in events[:first_wait]].count("stdin_close"), 3
+            )
+            self.assertTrue(all(process.stdin.closed for process in factory.processes))
+            self.assertTrue(all(process.exited for process in factory.processes))
+            self.assertEqual(result["status"], "diagnostic_only")
+            journal = load_lifecycle_journal(controller.journal_path)
+            self.assertEqual(
+                {record["status"] for record in journal["requests"].values()},
+                {"not_attempted"},
+            )
+            starts = [
+                event for event in journal["events"]
+                if event["event"] in {"driver_start_intent", "driver_start_complete"}
+            ]
+            ready = [
+                event for event in journal["events"]
+                if event["event"] == "driver_readiness_complete"
+            ]
+            cancels = [
+                event for event in journal["events"]
+                if event["event"] == "readiness_cancel_complete"
+            ]
+            self.assertEqual(len(starts), 6)
+            self.assertEqual(len(ready), 3)
+            self.assertEqual(len(cancels), 3)
+            nonce = result["readiness_nonce"]
+            for event in [*starts, *ready, *cancels]:
+                details = event["details"]
+                self.assertEqual(details["readiness_nonce"], nonce)
+                self.assertEqual(details["driver_id"], drivers[details["track"]]["id"])
+            self.assertTrue(
+                any(
+                    event["event"] == "readiness_diagnostic_complete"
+                    and event["details"] == {
+                        "readiness_nonce": nonce,
+                        "lifecycle_mode": "diagnostic_only",
+                    }
+                    for event in journal["events"]
+                )
+            )
+            with self.assertRaisesRegex(ControllerError, "diagnostic|down"):
+                controller.run()
+            with self.assertRaisesRegex(ControllerError, "diagnostic|down"):
+                journal_event(
+                    controller.journal_path,
+                    "readiness_session_started",
+                    {"readiness_nonce": HEX_C},
+                )
+
+    def test_one_common_deadline_bounds_all_reads_and_cancellation_waits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, _, events = self.make_controller(
+                directory,
+                {
+                    "credential_policy_baseline": {"advance_ns": 4_000_000_000},
+                    "signed_state_only": {"advance_ns": 5_000_000_000},
+                    "signed_plus_local_reduce": {"advance_ns": 6_000_000_000},
+                },
+            )
+
+            controller.readiness()
+
+            waits = [event[2] for event in events if event[0] == "wait"]
+            self.assertEqual(len(waits), 3)
+            self.assertTrue(all(0 < timeout <= 15.0 for timeout in waits))
+            self.assertEqual(waits, sorted(waits, reverse=True))
+
+    def test_malformed_extra_wrong_track_nonzero_stderr_and_ambiguous_exit_poison(self):
+        wrong = {
+            "schema_version": "kil.v3b1-driver-readiness.v1",
+            "track": "signed_state_only",
+            "status": "ready",
+            "connect_monotonic_ns": 1,
+            "ready_monotonic_ns": 2,
+        }
+        cases = {
+            "malformed": {"payload": b"not-json\n"},
+            "deadline": {"advance_ns": 31_000_000_000},
+            "extra": {
+                "payload": (
+                    b'{"connect_monotonic_ns":1,"ready_monotonic_ns":2,'
+                    b'"schema_version":"kil.v3b1-driver-readiness.v1",'
+                    b'"status":"ready","track":"credential_policy_baseline"}\n'
+                    b"{}\n"
+                )
+            },
+            "wrong_track": {"payload": (canonical_json(wrong) + "\n").encode()},
+            "nonzero": {"returncode": 7},
+            "stderr": {"stderr": b"private process diagnostic"},
+            "ambiguous": {"wait_error": subprocess.TimeoutExpired("docker", 1)},
+        }
+        for name, change in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                controller, factory, _, _, events = self.make_controller(
+                    directory, {"credential_policy_baseline": change}
+                )
+
+                with self.assertRaises((ControllerError, DriverTransportError)):
+                    controller.readiness()
+
+                journal = load_lifecycle_journal(controller.journal_path)
+                self.assertEqual(
+                    {record["status"] for record in journal["requests"].values()},
+                    {"not_attempted"},
+                )
+                self.assertTrue(controller.readiness_poison_path.is_file())
+                raw = controller.journal_path.read_text()
+                self.assertNotIn("private process diagnostic", raw)
+                self.assertNotIn("not-json", raw)
+                self.assertFalse(any(event[0] == "request" for event in events))
+                self.assertEqual(len(factory.processes), 3)
+                if name in {"extra", "nonzero", "stderr", "ambiguous"}:
+                    failed_id = next(
+                        item["details"]["driver_id"]
+                        for item in journal["events"]
+                        if item["event"] == "driver_readiness_failed"
+                    )
+                    self.assertFalse(
+                        any(
+                            item["event"] == "readiness_cancel_complete"
+                            and item["details"]["driver_id"] == failed_id
+                            for item in journal["events"]
+                        )
+                    )
+
+    def test_cli_exposes_readiness_subcommand(self):
+        self.assertEqual(make_parser().parse_args(["readiness"]).command, "readiness")
+
+    def test_driver_lifecycle_events_reject_extra_private_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, drivers, _ = self.make_controller(directory)
+            track = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
+
+            with self.assertRaisesRegex(ControllerError, "fields.*closed"):
+                journal_event(
+                    controller.journal_path,
+                    "driver_start_intent",
+                    {
+                        "readiness_nonce": HEX_B,
+                        "track": track,
+                        "driver_id": drivers[track]["id"],
+                        "stderr": "private output",
+                    },
+                )
 
 
 class GatewayReadinessTest(unittest.TestCase):
