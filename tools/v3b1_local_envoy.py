@@ -13927,17 +13927,21 @@ class LocalEnvoyController:
         )
         self._require_exact_inventory("network", networks, expected_networks)
 
-    def _attest_complete_topology_absence(
+    def _complete_topology_absence_details(
         self, manifest: Mapping[str, object]
-    ) -> None:
-        """Bind the exact fifteen/six owned identities to final empty inventories."""
-        bound = load_bound_active_state(self.state_path)
+    ) -> dict[str, object]:
+        """Reconstruct the exact fifteen/six identity commitment."""
         events = load_lifecycle_journal(self.journal_path)["events"]
         assert isinstance(events, list)
-        containers = [
-            {"id": str(item["id"]), "name": str(item["name"])}
-            for item in bound["objects"]  # type: ignore[union-attr]
-        ]
+        containers: list[dict[str, str]] = []
+        for item in manifest["containers"]:  # type: ignore[index]
+            name = str(item["name"])
+            transition, object_id = _creation_transition(
+                events, "container", name
+            )
+            if transition != "complete" or object_id is None:
+                raise ControllerError("complete lifecycle lacks container identity")
+            containers.append({"id": object_id, "name": name})
         for track in _TRACKS:
             name = (
                 f"kil-v3b1-validate-{_track_slug(track)}-"
@@ -13949,19 +13953,34 @@ class LocalEnvoyController:
             if transition != "complete" or object_id is None:
                 raise ControllerError("complete lifecycle lacks validator identity")
             containers.append({"id": object_id, "name": name})
-        networks = [
-            {"id": str(item["id"]), "name": str(item["name"])}
-            for item in bound["network_objects"]  # type: ignore[union-attr]
-        ]
+        networks: list[dict[str, str]] = []
+        for item in manifest["networks"]:  # type: ignore[index]
+            name = str(item["name"])
+            transition, object_id = _creation_transition(events, "network", name)
+            if transition != "complete" or object_id is None:
+                raise ControllerError("complete lifecycle lacks network identity")
+            networks.append({"id": object_id, "name": name})
         if len(containers) != 15 or len(networks) != 6:
             raise ControllerError("complete topology identity count is invalid")
+        for label, identities in (
+            ("container", containers),
+            ("network", networks),
+        ):
+            if len({item["id"] for item in identities}) != len(identities):
+                raise ControllerError(
+                    f"complete topology {label} identity is duplicated"
+                )
+            if len({item["name"] for item in identities}) != len(identities):
+                raise ControllerError(
+                    f"complete topology {label} name is duplicated"
+                )
         for identity in containers:
             if _removal_transition(events, "container", identity) != "complete":
                 raise ControllerError("complete topology container is not absent")
         for identity in networks:
             if _removal_transition(events, "network", identity) != "complete":
                 raise ControllerError("complete topology network is not absent")
-        details = {
+        return {
             "container_count": 15,
             "network_count": 6,
             "container_identity_sha256": _digest_bytes(
@@ -13977,6 +13996,14 @@ class LocalEnvoyController:
             "survivor_containers": [],
             "survivor_networks": [],
         }
+
+    def _attest_complete_topology_absence(
+        self, manifest: Mapping[str, object]
+    ) -> None:
+        """Bind the exact fifteen/six owned identities to final empty inventories."""
+        details = self._complete_topology_absence_details(manifest)
+        events = load_lifecycle_journal(self.journal_path)["events"]
+        assert isinstance(events, list)
         recorded = [
             event
             for event in events
@@ -13987,6 +14014,23 @@ class LocalEnvoyController:
                 raise ControllerError("topology absence attestation changed")
             return
         journal_event(self.journal_path, "topology_absence_attested", details)
+
+    def _require_complete_topology_absence(
+        self, manifest: Mapping[str, object]
+    ) -> None:
+        """Refuse publication unless its exact full-topology absence is durable."""
+        expected = self._complete_topology_absence_details(manifest)
+        events = load_lifecycle_journal(self.journal_path)["events"]
+        assert isinstance(events, list)
+        recorded = [
+            event
+            for event in events
+            if event.get("event") == "topology_absence_attested"
+        ]
+        if len(recorded) != 1 or recorded[0].get("details") != expected:
+            raise ControllerError(
+                "complete topology absence proof is required before publication"
+            )
 
     def _prepare_teardown_evidence(
         self,
@@ -14298,6 +14342,8 @@ class LocalEnvoyController:
             )
             _validate_manifest(manifest)
             published = self.evidence_root / str(manifest["run_id"])
+            if any(event["event"] == "up_complete" for event in events):
+                self._require_complete_topology_absence(manifest)
 
             def complete_publication(public_manifest_sha256: str) -> None:
                 _require_sha256(
@@ -14993,6 +15039,8 @@ class LocalEnvoyController:
             ),
             {},
         )
+        if up_complete_observed:
+            self._require_complete_topology_absence(manifest)
         journal_event(
             self.journal_path,
             "publication_intent",
