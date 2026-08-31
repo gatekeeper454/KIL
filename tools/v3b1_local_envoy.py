@@ -1696,12 +1696,13 @@ def validate_container_attestation(
         "restart_policy", "stop_timeout", "log_driver", "log_options", "tmpfs",
         "mounts", "networks", "network_aliases", "port_bindings",
         "published_ports", "platform", "entrypoint", "command", "environment",
-        "state", "stdin_open", "tty", "healthcheck",
+        "state", "stdin_open", "tty", "healthcheck", "privileged",
+        "network_mode", "pid_mode", "ipc_mode", "uts_mode", "userns_mode",
     }
     expected_fields = {
         "name", "role", "track", "image_id", "networks", "config_path",
         "config_sha256", "gateway_port", "required_aliases",
-        "driver_definition", "required_state",
+        "driver_definition", "required_state", "primary_network",
     }
     if type(actual) is not dict or set(actual) != actual_fields:
         raise ControllerError("container attestation fields are not closed")
@@ -1724,6 +1725,20 @@ def validate_container_attestation(
         raise ControllerError("container CPU/memory/pids resource attestation failed")
     if actual["restart_policy"] != "no" or actual["stop_timeout"] != 10:
         raise ControllerError("container restart/stop policy attestation failed")
+    if actual["privileged"] is not False:
+        raise ControllerError("container privileged mode is forbidden")
+    if (
+        type(expected["primary_network"]) is not str
+        or not expected["primary_network"]
+        or type(actual["network_mode"]) is not str
+        or actual["network_mode"] != expected["primary_network"]
+    ):
+        raise ControllerError("container primary network mode attestation failed")
+    if any(
+        type(actual[field]) is not str or actual[field] != ""
+        for field in ("pid_mode", "ipc_mode", "uts_mode", "userns_mode")
+    ):
+        raise ControllerError("container host namespace mode is forbidden")
     if actual["log_driver"] != "json-file" or actual["log_options"] != {"max-file": "1", "max-size": "1m"}:
         raise ControllerError("container bounded log attestation failed")
     role = expected["role"]
@@ -3431,6 +3446,16 @@ def _synthetic_state_object(
         "stdin_open": role == "driver",
         "tty": False,
         "healthcheck": "disabled" if role == "driver" else None,
+        "privileged": False,
+        "network_mode": str(
+            track_record["frontend_network"]
+            if role == "driver"
+            else track_record.get("backend_network", track_record.get("network"))
+        ),
+        "pid_mode": "",
+        "ipc_mode": "",
+        "uts_mode": "",
+        "userns_mode": "",
     }
     return {
         "name": name,
@@ -3595,6 +3620,13 @@ def _validate_state_objects(
             "required_aliases": required_aliases,
             "driver_definition": driver_definition_value,
             "required_state": "created" if item["role"] == "driver" else "running",
+            "primary_network": str(
+                track_record["frontend_network"]
+                if item["role"] == "driver"
+                else track_record.get(
+                    "backend_network", track_record.get("network")
+                )
+            ),
         }
         runtime = validate_container_attestation(
             item["runtime_attestation"], expected_runtime
@@ -7356,6 +7388,12 @@ class LocalEnvoyController:
             assert isinstance(mounts_value, list)
             image_reference = config_value["Image"]
             labels = config_value["Labels"]
+            privileged = host["Privileged"]
+            network_mode = host["NetworkMode"]
+            pid_mode = host["PidMode"]
+            ipc_mode = host["IpcMode"]
+            uts_mode = host["UTSMode"]
+            userns_mode = host["UsernsMode"]
         except (KeyError, TypeError, AssertionError) as error:
             raise ControllerError("container inspection required fields are missing") from error
         expected_labels = _object_labels(str(manifest["run_id"]), role, track)
@@ -7491,6 +7529,12 @@ class LocalEnvoyController:
                 if config_value.get("Healthcheck") is None
                 else "configured"
             ),
+            "privileged": privileged,
+            "network_mode": network_mode,
+            "pid_mode": pid_mode,
+            "ipc_mode": "" if ipc_mode == "private" else ipc_mode,
+            "uts_mode": uts_mode,
+            "userns_mode": userns_mode,
         }
         if role == "envoy":
             expected_networks = [
@@ -7539,6 +7583,13 @@ class LocalEnvoyController:
             "driver_definition": driver_definition_value,
             "required_state": (
                 "created" if role == "driver" else "running" if require_running else None
+            ),
+            "primary_network": str(
+                track_manifest["frontend_network"]
+                if role == "driver"
+                else track_manifest.get(
+                    "backend_network", track_manifest.get("network")
+                )
             ),
         }
         validate_container_attestation(actual, expected)

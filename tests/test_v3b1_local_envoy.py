@@ -7751,6 +7751,7 @@ class RuntimeAttestationTest(unittest.TestCase):
             },
             "driver_definition": None,
             "required_state": "running",
+            "primary_network": "kil-v3b1-network-track",
         }
         actual = {
             "id": "9" * 64,
@@ -7805,6 +7806,12 @@ class RuntimeAttestationTest(unittest.TestCase):
             "stdin_open": False,
             "tty": False,
             "healthcheck": None,
+            "privileged": False,
+            "network_mode": expected["primary_network"],
+            "pid_mode": "",
+            "ipc_mode": "",
+            "uts_mode": "",
+            "userns_mode": "",
         }
         validated = validate_container_attestation(actual, expected)
         self.assertEqual(validated["id"], "9" * 64)
@@ -7817,6 +7824,45 @@ class RuntimeAttestationTest(unittest.TestCase):
             broken[mutation[0]] = mutation[1]
             with self.assertRaisesRegex(ControllerError, message):
                 validate_container_attestation(broken, expected)
+        for field, value in (
+            ("privileged", True),
+            ("network_mode", "host"),
+            ("pid_mode", "host"),
+            ("ipc_mode", "host"),
+            ("uts_mode", "host"),
+            ("userns_mode", "host"),
+        ):
+            with self.subTest(field=field, value=value):
+                broken = dict(actual)
+                broken[field] = value
+                with self.assertRaisesRegex(
+                    ControllerError, "privileged|network|namespace|mode"
+                ):
+                    validate_container_attestation(broken, expected)
+        for field in (
+            "privileged",
+            "network_mode",
+            "pid_mode",
+            "ipc_mode",
+            "uts_mode",
+            "userns_mode",
+        ):
+            with self.subTest(missing=field):
+                broken = dict(actual)
+                del broken[field]
+                with self.assertRaisesRegex(ControllerError, "closed|fields"):
+                    validate_container_attestation(broken, expected)
+            with self.subTest(wrong_type=field):
+                broken = dict(actual)
+                broken[field] = None
+                with self.assertRaisesRegex(
+                    ControllerError, "privileged|network|namespace|mode"
+                ):
+                    validate_container_attestation(broken, expected)
+        unknown = dict(actual)
+        unknown["namespace_escape"] = False
+        with self.assertRaisesRegex(ControllerError, "closed|fields"):
+            validate_container_attestation(unknown, expected)
 
     def test_running_envoy_is_dual_homed_with_fixed_frontend_alias_and_no_publication(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -7879,6 +7925,12 @@ class RuntimeAttestationTest(unittest.TestCase):
                         "Env": ["PATH=/usr/local/bin"],
                     },
                     "HostConfig": {
+                        "Privileged": False,
+                        "NetworkMode": track_value["backend_network"],
+                        "PidMode": "",
+                        "IpcMode": "private",
+                        "UTSMode": "",
+                        "UsernsMode": "",
                         "ReadonlyRootfs": True,
                         "CapDrop": ["ALL"],
                         "SecurityOpt": ["no-new-privileges"],
@@ -7965,6 +8017,25 @@ class RuntimeAttestationTest(unittest.TestCase):
             self.assertIsNone(
                 inspected["runtime_attestation"]["published_ports"]
             )
+            self.assertFalse(
+                inspected["runtime_attestation"]["privileged"]
+            )
+            self.assertEqual(
+                inspected["runtime_attestation"]["network_mode"],
+                track_value["backend_network"],
+            )
+            self.assertEqual(
+                {
+                    inspected["runtime_attestation"][field]
+                    for field in (
+                        "pid_mode",
+                        "ipc_mode",
+                        "uts_mode",
+                        "userns_mode",
+                    )
+                },
+                {""},
+            )
 
             conflict_labels = {
                 **immutable_labels,
@@ -8038,6 +8109,32 @@ class RuntimeAttestationTest(unittest.TestCase):
                     "9" * 64, value, "envoy", track.value
                 )
 
+            for field, mutated_value in (
+                ("Privileged", True),
+                ("NetworkMode", track_value["frontend_network"]),
+                ("PidMode", "host"),
+                ("IpcMode", "host"),
+                ("UTSMode", "host"),
+                ("UsernsMode", "host"),
+            ):
+                with self.subTest(field=field, value=mutated_value):
+                    broken = json.loads(inspections()[0].stdout)
+                    broken["HostConfig"][field] = mutated_value
+                    controller.runner = FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(broken) + "\n", ""
+                            ),
+                            inspections()[1],
+                        ]
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError, "privileged|network|namespace|mode"
+                    ):
+                        controller._inspect_container(
+                            "9" * 64, value, "envoy", track.value
+                        )
+
     def test_stopped_driver_attests_created_state_exact_command_and_frontend_only(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "repo"
@@ -8084,6 +8181,12 @@ class RuntimeAttestationTest(unittest.TestCase):
                     "Healthcheck": {"Test": ["NONE"]},
                 },
                 "HostConfig": {
+                    "Privileged": False,
+                    "NetworkMode": track_value["frontend_network"],
+                    "PidMode": "",
+                    "IpcMode": "private",
+                    "UTSMode": "",
+                    "UsernsMode": "",
                     "ReadonlyRootfs": True,
                     "CapDrop": ["ALL"],
                     "SecurityOpt": ["no-new-privileges"],
@@ -8150,6 +8253,22 @@ class RuntimeAttestationTest(unittest.TestCase):
             self.assertEqual(runtime["mounts"], [])
             self.assertEqual(runtime["networks"], [track_value["frontend_network"]])
             self.assertNotIn(track_value["backend_network"], runtime["networks"])
+            self.assertFalse(runtime["privileged"])
+            self.assertEqual(
+                runtime["network_mode"], track_value["frontend_network"]
+            )
+            self.assertEqual(
+                {
+                    runtime[field]
+                    for field in (
+                        "pid_mode",
+                        "ipc_mode",
+                        "uts_mode",
+                        "userns_mode",
+                    )
+                },
+                {""},
+            )
 
             for mutation, message in (
                 (("OpenStdin", False), "stdin|driver"),
@@ -8172,6 +8291,92 @@ class RuntimeAttestationTest(unittest.TestCase):
                         track.value,
                         require_running=False,
                     )
+
+            for field, mutated_value in (
+                ("Privileged", True),
+                ("NetworkMode", "host"),
+                ("PidMode", "host"),
+                ("IpcMode", "host"),
+                ("UTSMode", "host"),
+                ("UsernsMode", "host"),
+            ):
+                with self.subTest(field=field, value=mutated_value):
+                    broken = json.loads(json.dumps(raw))
+                    broken["HostConfig"][field] = mutated_value
+                    controller.runner = FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(broken) + "\n", ""
+                            ),
+                            CommandResult(
+                                0, canonical_json(image) + "\n", ""
+                            ),
+                        ]
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError, "privileged|network|namespace|mode"
+                    ):
+                        controller._inspect_container(
+                            "7" * 64,
+                            value,
+                            "driver",
+                            track.value,
+                            require_running=False,
+                        )
+            for field in (
+                "Privileged",
+                "NetworkMode",
+                "PidMode",
+                "IpcMode",
+                "UTSMode",
+                "UsernsMode",
+            ):
+                with self.subTest(missing=field):
+                    broken = json.loads(json.dumps(raw))
+                    del broken["HostConfig"][field]
+                    controller.runner = FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(broken) + "\n", ""
+                            ),
+                            CommandResult(
+                                0, canonical_json(image) + "\n", ""
+                            ),
+                        ]
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError, "required fields|missing"
+                    ):
+                        controller._inspect_container(
+                            "7" * 64,
+                            value,
+                            "driver",
+                            track.value,
+                            require_running=False,
+                        )
+                with self.subTest(wrong_type=field):
+                    broken = json.loads(json.dumps(raw))
+                    broken["HostConfig"][field] = None
+                    controller.runner = FakeRunner(
+                        [
+                            CommandResult(
+                                0, canonical_json(broken) + "\n", ""
+                            ),
+                            CommandResult(
+                                0, canonical_json(image) + "\n", ""
+                            ),
+                        ]
+                    )
+                    with self.assertRaisesRegex(
+                        ControllerError, "privileged|network|namespace|mode"
+                    ):
+                        controller._inspect_container(
+                            "7" * 64,
+                            value,
+                            "driver",
+                            track.value,
+                            require_running=False,
+                        )
 
     def test_stopped_transient_validator_uses_exact_immutable_label_merge(self):
         with tempfile.TemporaryDirectory() as directory:
