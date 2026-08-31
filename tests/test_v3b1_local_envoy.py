@@ -7398,7 +7398,7 @@ def presenter_source_attestations(provisional, envoy, targets):
     ]
 
 
-def published_presenter_bundle(root, *, completed=True):
+def published_presenter_bundle(root, *, completed=True, global_context="personal"):
     value, requests, decisions, envoy, targets = JoinContractTest().all_records()
     if completed:
         joins = join_evidence(value, requests, decisions, envoy, targets)
@@ -7427,8 +7427,8 @@ def published_presenter_bundle(root, *, completed=True):
         source_attestations=source_attestations,
         tool_identities=TOOL_IDENTITIES,
         engine_provenance=ENGINE_PROVENANCE,
-        global_context_before="personal",
-        global_context_after="personal",
+        global_context_before=global_context,
+        global_context_after=global_context,
         completed=completed,
         authoritative_attestation=authority,
     )
@@ -7455,6 +7455,167 @@ def rewrite_public_bundle_hashes(bundle, *, repair_commitment=True):
 
 
 class EvidenceBundleTest(unittest.TestCase):
+    def test_public_boundary_recursively_rejects_sensitive_strings_and_contexts(self):
+        sensitive = (
+            "/Users/example/private",
+            "/home/example/private",
+            "C:\\Users\\example\\private",
+            "HOME=/Users/example\nPATH=/usr/bin",
+            "-----BEGIN PRIVATE KEY-----",
+            "ghp_" + ("a" * 36),
+            "AKIA" + ("A" * 16),
+            "Bearer do-not-publish",
+            "eyJhbGciOiJFZERTQSJ9.e30.signature",
+            "v3b1-lab-credential",
+        )
+        for token in sensitive:
+            with self.subTest(token=token):
+                with self.assertRaises(ControllerError):
+                    local_envoy_module._reject_public_secrets(
+                        {"outer": [{"nested": token}]}
+                    )
+                with tempfile.TemporaryDirectory() as directory:
+                    with self.assertRaises(ControllerError):
+                        published_presenter_bundle(
+                            Path(directory), global_context=token
+                        )
+        for context in ("", "x" * 4097, "\ud800"):
+            with self.subTest(context=repr(context)), tempfile.TemporaryDirectory() as directory:
+                with self.assertRaises(ControllerError):
+                    published_presenter_bundle(
+                        Path(directory), global_context=context
+                    )
+
+    def test_view_scans_every_nested_public_manifest_string(self):
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            manifest_path = published / "manifest.json"
+            public_manifest = json.loads(
+                manifest_path.read_text(encoding="utf-8")
+            )
+            public_manifest["verified_tool_identities"]["docker"][
+                "version_output"
+            ] += " Bearer nested-private-token"
+            manifest_path.chmod(0o600)
+            manifest_path.write_text(
+                canonical_json(public_manifest) + "\n", encoding="utf-8"
+            )
+            manifest_path.chmod(0o444)
+            rewrite_public_bundle_hashes(published)
+
+            with self.assertRaisesRegex(ControllerError, "secret|sensitive|private"):
+                local_envoy_module.verify_presenter_bundle(published)
+
+    def test_source_attestations_require_nine_distinct_closed_container_ids(self):
+        value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+        joins = join_evidence(value, requests, decisions, envoy, targets)
+        deeply_nested = []
+        for _ in range(10_000):
+            deeply_nested = [deeply_nested]
+        malformed = (
+            None,
+            [None, None, None],
+            [[], {}, {}],
+            [{"track": "\ud800"}, {}, {}],
+            deeply_nested,
+        )
+        for index, candidate in enumerate(malformed):
+            with self.subTest(candidate_index=index):
+                with self.assertRaises(ControllerError):
+                    local_envoy_module._validate_source_attestations(
+                        candidate, completed=True
+                    )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provisional = write_evidence_bundle(
+                root / "private",
+                value,
+                requests=requests,
+                decisions=decisions,
+                envoy=envoy,
+                targets=targets,
+                joins=joins,
+            )
+            source_attestations = presenter_source_attestations(
+                provisional, envoy, targets
+            )
+            source_attestations[0]["container_ids"]["target"] = (
+                source_attestations[0]["container_ids"]["authz"]
+            )
+            with self.assertRaisesRegex(ControllerError, "container IDs.*distinct"):
+                finalize_publication(
+                    provisional,
+                    root / "public",
+                    value,
+                    source_attestations=source_attestations,
+                    tool_identities=TOOL_IDENTITIES,
+                    engine_provenance=ENGINE_PROVENANCE,
+                    global_context_before="personal",
+                    global_context_after="personal",
+                    completed=True,
+                    authoritative_attestation=authoritative_bundle_attestation(
+                        provisional
+                    ),
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            published = published_presenter_bundle(Path(directory))
+            manifest_path = published / "manifest.json"
+            public_manifest = json.loads(
+                manifest_path.read_text(encoding="utf-8")
+            )
+            sources = public_manifest["source_attestations"]
+            sources[1]["container_ids"]["authz"] = sources[0][
+                "container_ids"
+            ]["authz"]
+            manifest_path.chmod(0o600)
+            manifest_path.write_text(
+                canonical_json(public_manifest) + "\n", encoding="utf-8"
+            )
+            manifest_path.chmod(0o444)
+            rewrite_public_bundle_hashes(published)
+            with self.assertRaisesRegex(ControllerError, "container IDs.*distinct"):
+                local_envoy_module.verify_presenter_bundle(published)
+
+    def test_view_totalizes_malformed_source_attestation_shapes(self):
+        candidates = (
+            "scalar",
+            [],
+            [[], {}, {}],
+            "\ud800",
+        )
+        for candidate in candidates:
+            with self.subTest(candidate=repr(candidate)), tempfile.TemporaryDirectory() as directory:
+                published = published_presenter_bundle(Path(directory))
+                manifest_path = published / "manifest.json"
+                public_manifest = json.loads(
+                    manifest_path.read_text(encoding="utf-8")
+                )
+                public_manifest["source_attestations"] = candidate
+                manifest_path.chmod(0o600)
+                manifest_path.write_text(
+                    json.dumps(
+                        public_manifest,
+                        ensure_ascii=True,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                manifest_path.chmod(0o444)
+                local_envoy_module._write_sums(published)
+
+                with self.assertRaises(ControllerError):
+                    local_envoy_module.verify_presenter_bundle(published)
+                with self.assertRaises(SystemExit) as caught:
+                    local_envoy_module.main(
+                        ["view", "--bundle", str(published)]
+                    )
+                self.assertTrue(
+                    str(caught.exception).startswith("v3b1-local-envoy:")
+                )
+
     def test_view_recomputes_safe_content_run_and_source_identity(self):
         mutations = ("source_commit", "content_identity", "run_id")
         for mutation in mutations:

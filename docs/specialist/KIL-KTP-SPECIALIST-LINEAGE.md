@@ -4427,3 +4427,53 @@ zero-request smoke and single accepted proof run before publication and the
 verified offline backup.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-089 — 2026-08-30 — Close the public presenter safety boundary
+
+**Input:** Close the final Task 5b public-boundary gaps: recursively reject
+sensitive material in every public-manifest string, bound and validate the
+global Docker context, require nine distinct source-container identities, and
+totalize malformed source-attestation structures.
+
+**Interpretation:** Closed top-level fields do not make nested strings public
+safe, and checksums cannot make credentials, environment material, private
+paths, or malformed provenance acceptable. Source identity also requires
+distinct authz, target, and Envoy containers per track and across the complete
+three-track run. Every untrusted JSON shape must fail as a controller error,
+never as a Python traceback.
+
+**Decision status:** Confirmed harness-only implementation complete, pending
+independent re-review and the final verification gate. Publication and offline
+view now share the integration contract's recursive sensitive-material scan
+over keys and values. It rejects personal Unix and Windows paths, environment
+records, private-key markers, GitHub and AWS credential forms, bearer tokens,
+compact JWS values, the fixed lab credential, forbidden sensitive keys, and
+invalid Unicode. The global context must be equal before/after, nonblank,
+valid UTF-8, at most 4096 bytes, and pass the same scan. Source attestations
+must be exactly three closed mappings in fixed track order; each track's three
+container IDs and all nine IDs globally must be distinct. Scalar, list,
+deeply nested, surrogate, and otherwise malformed source structures normalize
+to `ControllerError`, including through the `view` CLI.
+
+**Rationale:** The public manifest is an offline presentation boundary, so its
+privacy and provenance rules must apply recursively rather than relying on a
+small encoded-substring screen. Reusing one sanitizer prevents the transcript
+and presenter contracts from drifting, while early type checks eliminate
+exception paths before mapping access or canonicalization.
+
+**Affected artifacts:**
+
+- `tools/v3b1_harness_contract.py`
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker, Colima, browser, KIL, Envoy, authz,
+or target operation was performed. Publisher authenticity remains external to
+the internally consistent public bundle.
+
+**Next gate:** Independent Task 5b boundary re-review, then the committed
+zero-request smoke and single accepted proof run before publication and the
+verified offline backup.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

@@ -74,12 +74,14 @@ _FORBIDDEN_KEYS = {
     "credential",
     "credentials",
     "docker_host",
+    "docker_config",
     "env",
     "environ",
     "environment",
     "exception_message",
     "jws",
     "message",
+    "manifest_path",
     "password",
     "private_key",
     "private_path",
@@ -202,20 +204,31 @@ def _reject_sensitive_material(value: object) -> None:
             normalized = key.lower().replace("-", "_")
             if normalized in _FORBIDDEN_KEYS:
                 raise ContractError("transcript contains a forbidden sensitive field")
+            _reject_sensitive_material(key)
             _reject_sensitive_material(item)
         return
-    if type(value) is list:
+    if type(value) in (list, tuple):
         for item in value:
             _reject_sensitive_material(item)
         return
     if type(value) is not str:
         return
+    try:
+        value.encode("utf-8")
+    except UnicodeError as error:
+        raise ContractError("transcript contains invalid Unicode") from error
     if (
         value.startswith(("/", "~/", "~\\"))
         or _WINDOWS_ABSOLUTE.match(value) is not None
+        or "/Users/" in value
+        or "/home/" in value
+        or re.search(r"(?i)[A-Z]:[\\/]Users[\\/]", value) is not None
     ):
         raise ContractError("transcript contains an absolute private path")
-    if _ENVIRONMENT_VALUE.fullmatch(value) is not None:
+    if any(
+        _ENVIRONMENT_VALUE.fullmatch(line) is not None
+        for line in value.splitlines()
+    ):
         raise ContractError("transcript contains environment material")
     if (
         _PRIVATE_KEY_BLOCK.search(value) is not None
@@ -223,8 +236,19 @@ def _reject_sensitive_material(value: object) -> None:
         or _AWS_ACCESS_KEY.search(value) is not None
         or _BEARER_TOKEN.search(value) is not None
         or _contains_compact_jws(value)
+        or "v3b1-lab-credential" in value
     ):
         raise ContractError("transcript contains secret or credential material")
+
+
+def reject_sensitive_material(value: object) -> None:
+    """Reject recursively nested private material with a total public error."""
+    try:
+        _reject_sensitive_material(value)
+    except ContractError:
+        raise
+    except (AttributeError, TypeError, ValueError, UnicodeError, RecursionError) as error:
+        raise ContractError("transcript sensitive-material scan failed") from error
 
 
 def normalize_transport_exception(
@@ -327,7 +351,7 @@ class RequestFailureProvenance:
             "stage",
         }
         record = _require_fields(value, fields, "request failure provenance")
-        _reject_sensitive_material(record)
+        reject_sensitive_material(record)
         return cls(**record)  # type: ignore[arg-type]
 
     def to_mapping(self) -> dict[str, object]:
@@ -443,7 +467,7 @@ class SourceCollectionStatus:
             "track",
         }
         record = _require_fields(value, fields, "source collection status")
-        _reject_sensitive_material(record)
+        reject_sensitive_material(record)
         return cls(**record)  # type: ignore[arg-type]
 
     def to_mapping(self) -> dict[str, object]:
@@ -476,7 +500,7 @@ class DockerInventoryEntry:
     @classmethod
     def from_mapping(cls, value: object, kind: str) -> DockerInventoryEntry:
         record = _require_fields(value, {"id", "name"}, "Docker inventory entry")
-        _reject_sensitive_material(record)
+        reject_sensitive_material(record)
         return cls(  # type: ignore[arg-type]
             kind=kind,
             object_id=record["id"],
@@ -720,7 +744,7 @@ def load_integration_contract(path: Path) -> IntegrationContractFixture:
         raise
     except ValueError as error:
         raise ContractError("integration transcript fixture is not JSON") from error
-    _reject_sensitive_material(value)
+    reject_sensitive_material(value)
     if payload != (_canonical_json(value) + "\n").encode("utf-8"):
         raise ContractError("integration transcript fixture is not canonical JSON")
     fixture = _require_fields(value, {"cases", "schema_version"}, "integration transcript")

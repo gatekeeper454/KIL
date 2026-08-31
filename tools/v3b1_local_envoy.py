@@ -45,6 +45,7 @@ try:
         SourceCollectionStatus,
         normalize_transport_exception,
         parse_inventory_rows,
+        reject_sensitive_material,
     )
 except ModuleNotFoundError:  # Direct execution places ``tools`` on sys.path.
     from v3b1_harness_contract import (  # type: ignore[no-redef]
@@ -55,6 +56,7 @@ except ModuleNotFoundError:  # Direct execution places ``tools`` on sys.path.
         SourceCollectionStatus,
         normalize_transport_exception,
         parse_inventory_rows,
+        reject_sensitive_material,
     )
 
 
@@ -1326,6 +1328,7 @@ def _validate_public_provenance(
     }
     if type(tool_identities) is not dict or set(tool_identities) != set(versions):
         raise ControllerError("public tool identity set is not closed")
+    _reject_public_secrets(tool_identities)
     for name, marker in versions.items():
         record = tool_identities[name]
         if type(record) is not dict or set(record) != tool_fields:
@@ -1346,7 +1349,6 @@ def _validate_public_provenance(
             "locally_observed", "upstream_sidecar",
         }:
             raise ControllerError("public tool checksum attestation is invalid")
-    _reject_public_secrets(tool_identities)
     if engine_provenance is None:
         return
     engine_fields = {
@@ -1356,6 +1358,7 @@ def _validate_public_provenance(
     }
     if type(engine_provenance) is not dict or set(engine_provenance) != engine_fields:
         raise ControllerError("public engine provenance fields are not closed")
+    _reject_public_secrets(engine_provenance)
     if any(
         type(value) is not str
         or not value.strip()
@@ -1368,7 +1371,6 @@ def _validate_public_provenance(
         or engine_provenance["architecture"] != "arm64"
     ):
         raise ControllerError("public engine provenance is not linux/arm64")
-    _reject_public_secrets(engine_provenance)
 
 
 def claim_request_attempt(
@@ -3962,6 +3964,7 @@ def _public_bundle_snapshot(
 def _validate_public_manifest(
     value: Mapping[str, object], payloads: Mapping[str, bytes]
 ) -> None:
+    _reject_public_secrets(value)
     expected = {
         "schema_version", "run_id", "request_id", "evidence_scope",
         "bundle_class", "promotion_status", "run_complete", "platform",
@@ -4074,6 +4077,9 @@ def _validate_public_manifest(
     context = value["global_context_attestation"]
     if type(context) is not dict or set(context) != {"before", "after", "unchanged"} or context["unchanged"] is not True or context["before"] != context["after"] or type(context["before"]) is not str:
         raise ControllerError("public global context attestation is invalid")
+    _validate_global_context(
+        "public global Docker context", context["before"]
+    )
     if value["evidence_policy"] != {"inputs": "modeled", "outputs": "observed"}:
         raise ControllerError("public evidence policy is invalid")
     sources = value["source_attestations"]
@@ -4106,7 +4112,6 @@ def _validate_public_manifest(
         value, payloads
     ):
         raise ControllerError("public commitment does not bind the snapshot")
-    _reject_public_secrets(value)
 
 
 def _normalized_presenter_decision_closed(record: Mapping[str, object]) -> None:
@@ -4533,10 +4538,26 @@ def _public_summary(public_manifest: Mapping[str, object]) -> str:
 
 
 def _reject_public_secrets(value: object) -> None:
-    encoded = canonical_json(value)
-    forbidden = ("/Users/", "unix:///", "docker_host", "docker_config", "manifest_path")
-    if any(token in encoded for token in forbidden):
-        raise ControllerError("public manifest contains private host identity")
+    try:
+        reject_sensitive_material(value)
+    except HarnessContractError as error:
+        raise ControllerError(
+            "public manifest contains private or sensitive material"
+        ) from error
+    except (AttributeError, TypeError, ValueError, UnicodeError, RecursionError) as error:
+        raise ControllerError("public manifest safety scan failed") from error
+
+
+def _validate_global_context(label: str, value: object) -> str:
+    if type(value) is not str or not value.strip():
+        raise ControllerError(f"{label} must be a nonempty string")
+    try:
+        if len(value.encode("utf-8")) > 4096:
+            raise ControllerError(f"{label} is too large")
+    except UnicodeError as error:
+        raise ControllerError(f"{label} contains invalid Unicode") from error
+    _reject_public_secrets(value)
+    return value
 
 
 def _validate_provisional_tree(output: Path, *, completed: bool) -> None:
@@ -4569,7 +4590,9 @@ def _validate_provisional_tree(output: Path, *, completed: bool) -> None:
 def _validate_source_attestations(
     source_attestations: Sequence[Mapping[str, object]], *, completed: bool
 ) -> None:
-    if not source_attestations and not completed:
+    if type(source_attestations) not in (list, tuple):
+        raise ControllerError("source attestations must be a closed sequence")
+    if len(source_attestations) == 0 and not completed:
         return
     fields = {
         "track", "container_ids", "image_ids", "config_sha256",
@@ -4577,11 +4600,13 @@ def _validate_source_attestations(
         "raw_envoy_count", "raw_targets_sha256", "raw_target_count",
     }
     roles = {"authz", "target", "envoy"}
-    if [item.get("track") for item in source_attestations] != [
-        track.value for track in _TRACKS
-    ]:
-        raise ControllerError("source attestations are not in fixed track order")
+    if len(source_attestations) != len(_TRACKS) or any(
+        type(item) is not dict for item in source_attestations
+    ):
+        raise ControllerError("source attestations are not three closed objects")
+    container_ids_seen: set[str] = set()
     for index, item in enumerate(source_attestations):
+        assert isinstance(item, dict)
         if type(item) is not dict or set(item) != fields:
             raise ControllerError("source attestation fields are not closed")
         for name in ("container_ids", "image_ids", "config_sha256"):
@@ -4593,6 +4618,15 @@ def _validate_source_attestations(
             for value in item["container_ids"].values()  # type: ignore[union-attr]
         ):
             raise ControllerError("source attestation container IDs are invalid")
+        track_container_ids = set(item["container_ids"].values())  # type: ignore[union-attr]
+        if (
+            len(track_container_ids) != len(roles)
+            or container_ids_seen.intersection(track_container_ids)
+        ):
+            raise ControllerError(
+                "source attestation container IDs are not distinct"
+            )
+        container_ids_seen.update(track_container_ids)
         if any(
             type(value) is not str or _IMAGE_ID.fullmatch(value) is None
             for value in item["image_ids"].values()  # type: ignore[union-attr]
@@ -4618,6 +4652,10 @@ def _validate_source_attestations(
             or (not completed and item["raw_target_count"] not in {0, 1})
         ):
             raise ControllerError("source attestation counts are invalid")
+    if [item["track"] for item in source_attestations] != [
+        track.value for track in _TRACKS
+    ] or len(container_ids_seen) != 9:
+        raise ControllerError("source attestations are not in fixed track order")
 
 
 def _validate_source_attestation_bindings(
@@ -4737,8 +4775,12 @@ def finalize_publication(
     _validate_manifest(recorded_private)
     if recorded_private != private_manifest:
         raise ControllerError("provisional manifest diverges from private lifecycle state")
-    if type(global_context_before) is not str or type(global_context_after) is not str:
-        raise ControllerError("global Docker context attestation is invalid")
+    global_context_before = _validate_global_context(
+        "global Docker context before", global_context_before
+    )
+    global_context_after = _validate_global_context(
+        "global Docker context after", global_context_after
+    )
     if global_context_before != global_context_after:
         raise ControllerError("global Docker context changed during controller lifecycle")
     if type(source_attestations) not in (list, tuple):
