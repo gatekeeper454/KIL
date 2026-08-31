@@ -4002,7 +4002,10 @@ def _public_bundle_snapshot(
 
 
 def _validate_public_manifest(
-    value: Mapping[str, object], payloads: Mapping[str, bytes]
+    value: Mapping[str, object],
+    payloads: Mapping[str, bytes],
+    *,
+    completed: bool = True,
 ) -> None:
     _reject_public_secrets(value)
     expected = {
@@ -4024,9 +4027,14 @@ def _validate_public_manifest(
         or re.fullmatch(r"v3b1-[a-f0-9]{64}", value["run_id"]) is None
         or value["request_id"] != REQUEST_ID
         or value["evidence_scope"] != EVIDENCE_SCOPE
-        or value["bundle_class"] != "intermediate_provisional_local_boundary"
+        or value["bundle_class"]
+        != (
+            "intermediate_provisional_local_boundary"
+            if completed
+            else "intermediate_provisional_failure_local_boundary"
+        )
         or value["promotion_status"] != "not_promoted"
-        or value["run_complete"] is not True
+        or value["run_complete"] is not completed
         or value["platform"] != PLATFORM
         or type(value["source_commit"]) is not str
         or re.fullmatch(r"[a-f0-9]{40}", value["source_commit"]) is None
@@ -4137,7 +4145,9 @@ def _validate_public_manifest(
     sources = value["source_attestations"]
     if type(sources) is not list:
         raise ControllerError("public source attestations are invalid")
-    _validate_source_attestations(sources, completed=True)
+    _validate_source_attestations(sources, completed=completed)
+    if not completed and sources:
+        raise ControllerError("failure public source attestations must be empty")
     if value["artifact_hash_rule"] != "sha256_excludes_manifest_summary_and_SHA256SUMS":
         raise ControllerError("public artifact hash rule is invalid")
     hashes = value["artifact_sha256"]
@@ -4374,6 +4384,127 @@ def _validate_presenter_records(
     return decisions, joins
 
 
+def _validate_failure_presenter_records(
+    payloads: Mapping[str, bytes], manifest: Mapping[str, object]
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """Validate all preserved incomplete records without promoting a join."""
+    requests = _parse_jsonl_bytes(
+        payloads["requests.jsonl"],
+        "failure presenter requests",
+        _request_closed,
+        allow_empty=True,
+    )
+    decisions = _parse_jsonl_bytes(
+        payloads["decisions.jsonl"],
+        "failure presenter decisions",
+        _normalized_presenter_decision_closed,
+        allow_empty=True,
+    )
+    envoy = _parse_jsonl_bytes(
+        payloads["envoy.jsonl"],
+        "failure presenter Envoy records",
+        _envoy_closed,
+        allow_empty=True,
+    )
+    targets = _parse_jsonl_bytes(
+        payloads["targets.jsonl"],
+        "failure presenter target records",
+        _target_closed,
+        allow_empty=True,
+    )
+    joins = _parse_jsonl_bytes(
+        payloads["joins.jsonl"],
+        "failure presenter joins",
+        _presenter_join_closed,
+        allow_empty=True,
+    )
+    if joins or payloads["joins.jsonl"] != b"":
+        raise ControllerError("failure presenter joins must be empty")
+    track_order = {track.value: index for index, track in enumerate(_TRACKS)}
+    for label, records in (
+        ("requests", requests),
+        ("decisions", decisions),
+        ("Envoy records", envoy),
+        ("target records", targets),
+    ):
+        observed_tracks = [item.get("track") for item in records]
+        if (
+            any(track not in track_order for track in observed_tracks)
+            or len(observed_tracks) != len(set(observed_tracks))
+            or observed_tracks
+            != sorted(observed_tracks, key=lambda track: track_order[track])
+        ):
+            raise ControllerError(f"failure presenter {label} order is invalid")
+        for record in records:
+            if record.get("request_id") != manifest["request_id"]:
+                raise ControllerError(
+                    f"failure presenter {label} request identity is invalid"
+                )
+            if "run_id" in record and record["run_id"] != manifest["run_id"]:
+                raise ControllerError(
+                    f"failure presenter {label} run identity is invalid"
+                )
+    raw_decisions: list[dict[str, object]] = []
+    for track in _TRACKS:
+        relative = f"raw/decisions/{track.value}.jsonl"
+        records = _parse_jsonl_bytes(
+            payloads[relative],
+            f"failure presenter raw decisions {track.value}",
+            _decision_closed,
+            allow_empty=True,
+        )
+        if len(records) > 1 or any(
+            item.get("track") != track.value
+            or item.get("request_id") != manifest["request_id"]
+            for item in records
+        ):
+            raise ControllerError(
+                "failure presenter raw decision cardinality is invalid"
+            )
+        raw_decisions.extend(records)
+    normalized = _normalized_decision_records(manifest, raw_decisions)
+    if decisions != normalized or payloads["decisions.jsonl"] != _jsonl_payload(
+        normalized
+    ):
+        raise ControllerError(
+            "failure presenter decisions do not normalize preserved sources"
+        )
+    return decisions, joins
+
+
+def _validate_presenter_snapshot(
+    payloads: dict[str, bytes], *, completed: bool
+) -> dict[str, object]:
+    try:
+        manifest = _load_json_bytes(
+            payloads["manifest.json"], "public manifest"
+        )
+        _validate_public_manifest(manifest, payloads, completed=completed)
+        if payloads["summary.md"] != _public_summary(manifest).encode("utf-8"):
+            raise ControllerError("public summary does not match accepted evidence")
+        decisions, joins = (
+            _validate_presenter_records(payloads, manifest)
+            if completed
+            else _validate_failure_presenter_records(payloads, manifest)
+        )
+        expected = _render_live_html(
+            _presenter_model(manifest, decisions, joins)
+        )
+        if payloads["live.html"] != expected:
+            raise ControllerError("public presenter does not match accepted evidence")
+        return manifest
+    except ControllerError:
+        raise
+    except (
+        AttributeError,
+        TypeError,
+        ValueError,
+        UnicodeError,
+        RecursionError,
+    ) as error:
+        raise ControllerError("public evidence semantic validation failed") from error
+
+
 def verify_presenter_bundle(output: Path) -> Path:
     """Verify one accepted immutable bundle and return its offline presenter."""
     candidate = Path(os.path.abspath(output))
@@ -4386,42 +4517,34 @@ def verify_presenter_bundle(output: Path) -> Path:
             "public evidence directory is missing or unsafe"
         ) from error
     def validate_snapshot(payloads: dict[str, bytes]) -> Path:
-        try:
-            manifest = _load_json_bytes(
-                payloads["manifest.json"], "public manifest"
-            )
-            _validate_public_manifest(manifest, payloads)
-            if payloads["summary.md"] != _public_summary(manifest).encode(
-                "utf-8"
-            ):
-                raise ControllerError(
-                    "public summary does not match accepted evidence"
-                )
-            decisions, joins = _validate_presenter_records(payloads, manifest)
-            expected = _render_live_html(
-                _presenter_model(manifest, decisions, joins)
-            )
-            if payloads["live.html"] != expected:
-                raise ControllerError(
-                    "public presenter does not match accepted evidence"
-                )
-            return bundle / "live.html"
-        except ControllerError:
-            raise
-        except (
-            AttributeError,
-            TypeError,
-            ValueError,
-            UnicodeError,
-            RecursionError,
-        ) as error:
-            raise ControllerError(
-                "public evidence semantic validation failed"
-            ) from error
+        _validate_presenter_snapshot(payloads, completed=True)
+        return bundle / "live.html"
 
     result = _public_bundle_snapshot(bundle, validator=validate_snapshot)
     if not isinstance(result, Path):
         raise ControllerError("public evidence validation result is invalid")
+    return result
+
+
+def _verify_failure_presenter_bundle(output: Path) -> Path:
+    """Verify one immutable, explicitly nonpresentable failure bundle."""
+    candidate = Path(os.path.abspath(output))
+    if candidate.is_symlink():
+        raise ControllerError("public failure evidence directory is unsafe")
+    try:
+        bundle = candidate.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ControllerError(
+            "public failure evidence directory is missing or unsafe"
+        ) from error
+
+    def validate_snapshot(payloads: dict[str, bytes]) -> Path:
+        _validate_presenter_snapshot(payloads, completed=False)
+        return bundle / "live.html"
+
+    result = _public_bundle_snapshot(bundle, validator=validate_snapshot)
+    if not isinstance(result, Path):
+        raise ControllerError("public failure evidence validation result is invalid")
     return result
 
 
@@ -4545,6 +4668,186 @@ def _journal_authoritative_attestation(
                 )
             return _validate_authoritative_attestation(attestation)
     raise ControllerError("durable authoritative bundle attestation is missing")
+
+
+def _publication_recovery_contract(
+    events: Sequence[Mapping[str, object]],
+    private_manifest: Mapping[str, object],
+) -> tuple[bool, list[dict[str, object]], dict[str, object]]:
+    """Reconstruct publication class, provenance, and byte authority durably."""
+    run_id = private_manifest["run_id"]
+    failure_transition = _post_teardown_failure_transition(events, str(run_id))
+    if failure_transition is not None:
+        _, prepared = failure_transition
+        if prepared is None:
+            raise ControllerError(
+                "published failure bundle lacks durable prepared authority"
+            )
+        completed = False
+        source_attestations: list[dict[str, object]] = []
+        details = prepared["details"]
+        assert isinstance(details, Mapping)
+        authority_value = details["authoritative_attestation"]
+        if type(authority_value) is not dict:
+            raise ControllerError("published failure authority is malformed")
+        authority = _validate_authoritative_attestation(authority_value)
+    else:
+        completions = [
+            event
+            for event in events
+            if event.get("event") == "evidence_collect_complete"
+        ]
+        if not completions:
+            raise ControllerError("publication lacks durable evidence completion")
+        completion_details = completions[-1].get("details")
+        if (
+            type(completion_details) is not dict
+            or set(completion_details)
+            != {"completed", "bundle_sha256", "authoritative_attestation"}
+            or type(completion_details.get("completed")) is not bool
+            or type(completion_details.get("authoritative_attestation")) is not dict
+        ):
+            raise ControllerError("durable evidence completion is malformed")
+        completed = completion_details["completed"]
+        authority = _validate_authoritative_attestation(
+            completion_details["authoritative_attestation"]
+        )
+        _require_sha256(
+            "durable evidence bundle sha256",
+            completion_details["bundle_sha256"],
+        )
+        authority_hashes = authority["file_sha256"]
+        assert isinstance(authority_hashes, dict)
+        if (
+            completion_details["bundle_sha256"]
+            != authority_hashes["SHA256SUMS"]
+        ):
+            raise ControllerError(
+                "durable evidence completion does not bind its authority"
+            )
+        source_events = [
+            event
+            for event in events
+            if event.get("event") == "source_attestations_persisted"
+        ]
+        if not source_events:
+            raise ControllerError("publication lacks durable source provenance")
+        source_details = source_events[-1].get("details")
+        if (
+            type(source_details) is not dict
+            or set(source_details) != {"source_attestations"}
+            or type(source_details["source_attestations"]) is not list
+        ):
+            raise ControllerError("durable source provenance is malformed")
+        source_attestations = []
+        for item in source_details["source_attestations"]:
+            if type(item) is not dict:
+                raise ControllerError("durable source provenance is malformed")
+            source_attestations.append(dict(item))
+        _validate_source_attestations(
+            source_attestations, completed=completed
+        )
+        if not completed and source_attestations:
+            raise ControllerError(
+                "incomplete publication source provenance must be empty"
+            )
+    intents = [
+        event for event in events if event.get("event") == "publication_intent"
+    ]
+    if not intents:
+        raise ControllerError("published evidence lacks its durable publication intent")
+    intent = intents[-1].get("details")
+    if (
+        type(intent) is not dict
+        or set(intent) != {"run_id", "completed"}
+        or intent["run_id"] != run_id
+        or type(intent["completed"]) is not bool
+        or intent["completed"] is not completed
+    ):
+        raise ControllerError("durable publication intent identity/class is invalid")
+    return completed, source_attestations, authority
+
+
+def _verify_recovered_publication(
+    output: Path,
+    private_manifest: Mapping[str, object],
+    *,
+    completed: bool,
+    source_attestations: Sequence[Mapping[str, object]],
+    authoritative_attestation: Mapping[str, object],
+    tool_identities: Mapping[str, object],
+    engine_provenance: Mapping[str, object],
+    global_context: str,
+) -> None:
+    """Hold one public snapshot while reattesting semantics and private authority."""
+    authority = _validate_authoritative_attestation(authoritative_attestation)
+    authority_hashes = authority["file_sha256"]
+    assert isinstance(authority_hashes, dict)
+    invariant_names = _authoritative_file_names() - {
+        "manifest.json",
+        "summary.md",
+        "SHA256SUMS",
+    }
+
+    def validate_snapshot(payloads: dict[str, bytes]) -> None:
+        public_manifest = _validate_presenter_snapshot(
+            payloads, completed=completed
+        )
+        expected_private_projection = {
+            "run_id": private_manifest["run_id"],
+            "request_id": private_manifest["request_id"],
+            "source_commit": private_manifest["source_commit"],
+            "content_identity_sha256": private_manifest[
+                "content_identity_sha256"
+            ],
+            "content_identity": private_manifest["content_identity"],
+            "immutable_images": {
+                "python": private_manifest["python_image_digest"],
+                "envoy_digest": private_manifest["envoy_image_digest"],
+                "envoy_image_id": private_manifest["envoy_image_id"],
+                "kil_image_id": private_manifest["kil_image_id"],
+                "kil_archive_sha256": private_manifest["kil_archive_sha256"],
+            },
+        }
+        for name, expected in expected_private_projection.items():
+            if public_manifest.get(name) != expected:
+                raise ControllerError(
+                    "public publication identity diverges from private authority"
+                )
+        if public_manifest.get("source_attestations") != [
+            dict(item) for item in source_attestations
+        ]:
+            raise ControllerError(
+                "public publication source provenance diverges from journal"
+            )
+        if (
+            public_manifest.get("verified_tool_identities")
+            != dict(tool_identities)
+            or public_manifest.get("docker_engine_provenance")
+            != dict(engine_provenance)
+            or public_manifest.get("global_context_attestation")
+            != {
+                "before": global_context,
+                "after": global_context,
+                "unchanged": True,
+            }
+        ):
+            raise ControllerError(
+                "public publication provenance diverges from lifecycle journal"
+            )
+        if authority_hashes["manifest.json"] != _digest_bytes(
+            _canonical_bytes(private_manifest)
+        ):
+            raise ControllerError(
+                "durable publication authority does not bind the private manifest"
+            )
+        for relative in sorted(invariant_names):
+            if authority_hashes[relative] != _digest_bytes(payloads[relative]):
+                raise ControllerError(
+                    "public publication artifact diverges from durable authority"
+                )
+
+    _public_bundle_snapshot(output, validator=validate_snapshot)
 
 
 def _post_teardown_failure_transition(
@@ -5196,7 +5499,7 @@ def finalize_publication(
         if completed:
             verify_presenter_bundle(destination)
         else:
-            verify_public_checksums(destination)
+            _verify_failure_presenter_bundle(destination)
         _require_directory_identity(
             publication_fd,
             publication_root,
@@ -8767,6 +9070,21 @@ class LocalEnvoyController:
                 if not provisional.is_dir():
                     raise ControllerError("post-delete provisional evidence is unavailable")
                 global_after = self._capture_global_context()
+                if not any(
+                    event["event"] == "publication_intent"
+                    for event in events
+                ):
+                    updated = journal_event(
+                        self.journal_path,
+                        "publication_intent",
+                        {
+                            "run_id": manifest["run_id"],
+                            "completed": completed,
+                        },
+                    )
+                    updated_events = updated["events"]
+                    assert isinstance(updated_events, list)
+                    events = updated_events
                 published = finalize_publication(
                     provisional,
                     self.evidence_root,
@@ -8781,7 +9099,74 @@ class LocalEnvoyController:
                     repository_root=self.root,
                     publication_staging_root=self._private_publication_root(),
                 )
-            verify_public_checksums(published)
+            recovered_journal = load_lifecycle_journal(self.journal_path)
+            recovered_events = recovered_journal["events"]
+            assert isinstance(recovered_events, list)
+            completed, source_attestations, authoritative = (
+                _publication_recovery_contract(recovered_events, manifest)
+            )
+            tool_identities = next(
+                (
+                    event["details"].get("tool_identities", {})
+                    for event in recovered_events
+                    if event["event"] == "preflight_complete"
+                ),
+                {},
+            )
+            engine_provenance = next(
+                (
+                    event["details"]
+                    for event in recovered_events
+                    if event["event"] == "engine_provenance_observed"
+                ),
+                {},
+            )
+            if (
+                type(tool_identities) is not dict
+                or type(engine_provenance) is not dict
+            ):
+                raise ControllerError(
+                    "durable publication provenance is malformed"
+                )
+            _validate_public_provenance(tool_identities, engine_provenance)
+            global_after = self._capture_global_context()
+            if global_after != recovered_journal["global_context_before"]:
+                raise ControllerError(
+                    "global Docker context changed during lifecycle"
+                )
+            _verify_recovered_publication(
+                published,
+                manifest,
+                completed=completed,
+                source_attestations=source_attestations,
+                authoritative_attestation=authoritative,
+                tool_identities=tool_identities,
+                engine_provenance=engine_provenance,
+                global_context=str(recovered_journal["global_context_before"]),
+            )
+            public_manifest_sha256 = _digest_file(published / "manifest.json")
+            publication_completions = [
+                event
+                for event in recovered_events
+                if event["event"] == "publication_complete"
+            ]
+            expected_publication_completion = {
+                "run_id": manifest["run_id"],
+                "public_manifest_sha256": public_manifest_sha256,
+            }
+            if publication_completions:
+                if publication_completions[-1]["details"] != (
+                    expected_publication_completion
+                ):
+                    raise ControllerError(
+                        "durable publication completion does not bind public evidence"
+                    )
+            else:
+                journal_event(
+                    self.journal_path,
+                    "publication_complete",
+                    expected_publication_completion,
+                )
             if self.state_path.exists():
                 self.state_path.unlink()
             archive_root = self._private_completed_root()

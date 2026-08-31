@@ -4597,3 +4597,66 @@ identity. A central request remains prohibited until the smoke bundle and exact
 teardown pass review.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-092 — 2026-08-30 — Reattest publication before recovery archive
+
+**Input:** Close the final whole-branch V3B-1 blocker in post-delete recovery:
+an already-present public destination must not become archiveable merely because
+its rewritten `SHA256SUMS` is internally consistent. Correct the associated
+design text so it names only provenance the current harness actually records.
+
+**Interpretation:** After the owned Colima profile is absent, the private
+lifecycle journal, bound manifest, source-provenance event, publication intent,
+and authoritative/prepared bundle attestation remain the recovery authority.
+Checksums establish only self-consistency. Recovery must hold one no-follow
+snapshot while it rederives the public bundle's semantics and compares every
+publication-invariant artifact to those durable private bindings, and it must
+retain journal, active state, readiness poison, and archive authority whenever
+that comparison fails.
+
+**Decision status:** Confirmed harness-only implementation complete, pending
+independent re-review and the final live gate. Recovery now reconstructs the
+complete/failure class and source attestations from durable lifecycle events,
+requires the exact run-bound publication intent, and cross-checks the public
+run/content/source/image projection against the bound private manifest. Complete
+bundles run the full accepted-presenter derivation. Failure bundles run a closed
+held-descriptor verifier that requires the failure class, empty source
+attestations and joins, canonical bounded partial records, normalized preserved
+decisions, and the deterministic nonpresentable page. Both classes compare all
+JSONL, raw-decision, and `live.html` digests to the journaled authoritative
+attestation and compare tool, engine, and global-context provenance to the
+journal before recording publication completion or discarding recovery state.
+
+Repaired-checksum mutations of complete and incomplete presenters, public
+class/run rewrites, and clean crash-after-rename recovery are covered
+test-first. Rejected recovery retains the journal, exact active state, readiness
+poison, and absence of a completed archive. The design specification now states
+that preflight records profile/port/tool identities; engine and global-context
+provenance are captured later; the Python image digest is resolved during later
+immutable-image preparation; and the current harness does not record an exact
+host OS build or an explicit cryptography/library identity.
+
+**Rationale:** A checksum an attacker can rewrite alongside altered evidence is
+not an independent recovery authority. Reusing the descriptor-held presenter
+semantics and binding unchanged public bytes back to the durable private
+attestation prevents a post-rename crash from laundering altered evidence into
+a completed archive while preserving deterministic recovery of an unchanged
+publication.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker, Colima, browser, KIL, authorization,
+Envoy, target, or central-request operation was performed. Publisher
+authenticity remains external to the internally bound public bundle, and no
+V3B-1 live result is accepted by this change.
+
+**Next gate:** Independent review of the recovery reattestation, then the
+committed zero-request smoke. Only after that smoke and exact teardown pass may
+one central proof run be attempted and considered for exact-file publication.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

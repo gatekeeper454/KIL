@@ -7461,7 +7461,261 @@ def rewrite_public_bundle_hashes(bundle, *, repair_commitment=True):
     local_envoy_module._write_sums(bundle)
 
 
+class PublishedRecoveryController(LocalEnvoyController):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.commands = []
+
+    def _execute(self, argv, *, timeout_s, docker=False):
+        self.commands.append(list(argv))
+        if list(argv[:3]) == ["colima", "list", "--json"]:
+            return CommandResult(0, "[]\n", "")
+        if "context" in argv and "show" in argv:
+            return CommandResult(0, "personal\n", "")
+        raise AssertionError(f"unexpected recovery command: {argv}")
+
+
+def interrupted_published_recovery(root, *, completed):
+    repository = root / "repo"
+    profile_path = repository / "deploy/kind/v3b-profile.json"
+    profile_path.parent.mkdir(parents=True)
+    profile_path.write_bytes(
+        (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+    )
+    controller = PublishedRecoveryController(
+        repository,
+        FakeRunner(),
+        home=root / "home",
+        port_probe=lambda port: False,
+        tool_verifier=lambda: TOOL_IDENTITIES,
+    )
+    controller._prepare_private_roots()
+    value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+    private_manifest = controller.manifest_root / "run.json"
+    private_manifest.write_text(canonical_json(value) + "\n")
+    create_lifecycle_journal(
+        controller.journal_path,
+        private_root=controller.private_root,
+        repository_root=repository,
+        docker_host=controller.docker_host,
+        source_commit="d" * 40,
+        execution_nonce=HEX_A,
+        global_context="personal",
+    )
+    journal_event(
+        controller.journal_path,
+        "preflight_complete",
+        {"tool_identities": TOOL_IDENTITIES},
+    )
+    journal_event(
+        controller.journal_path,
+        "colima_attestation_complete",
+        {"profile": "kil-v3-lab", "attestation": {}},
+    )
+    journal_event(
+        controller.journal_path,
+        "engine_provenance_observed",
+        ENGINE_PROVENANCE,
+    )
+    _bind_journal_manifest(controller.journal_path, private_manifest, value)
+    persist_active_state(controller.state_path, private_manifest, value)
+    if completed:
+        provisional = write_evidence_bundle(
+            controller.provisional_root,
+            value,
+            requests=requests,
+            decisions=decisions,
+            envoy=envoy,
+            targets=targets,
+            joins=join_evidence(value, requests, decisions, envoy, targets),
+        )
+        source_attestations = presenter_source_attestations(
+            provisional, envoy, targets
+        )
+    else:
+        provisional = _prepare_failure_provisional(
+            controller.provisional_root, value, reset=True
+        )
+        source_attestations = []
+    authority = authoritative_bundle_attestation(provisional)
+    journal_event(
+        controller.journal_path,
+        "evidence_collect_complete",
+        {
+            "completed": completed,
+            "bundle_sha256": sha256(
+                (provisional / "SHA256SUMS").read_bytes()
+            ).hexdigest(),
+            "authoritative_attestation": authority,
+        },
+    )
+    journal_event(
+        controller.journal_path,
+        "source_attestations_persisted",
+        {"source_attestations": source_attestations},
+    )
+    journal_event(
+        controller.journal_path,
+        "readiness_session_started",
+        {"readiness_nonce": HEX_B},
+    )
+    unsigned_poison = {
+        "schema_version": "kil.v3b1-readiness-poison.v1",
+        "execution_nonce": HEX_A,
+        "readiness_nonce": HEX_B,
+        "reason_category": "connection_close_ambiguous",
+    }
+    poison = {
+        **unsigned_poison,
+        "binding_sha256": sha256(
+            canonical_json(unsigned_poison).encode("utf-8")
+        ).hexdigest(),
+    }
+    controller.readiness_poison_path.write_text(
+        canonical_json(poison) + "\n"
+    )
+    controller.readiness_poison_path.chmod(0o600)
+    journal_event(
+        controller.journal_path,
+        "colima_delete_intent",
+        {"profile": "kil-v3-lab"},
+    )
+    journal_event(
+        controller.journal_path,
+        "colima_delete_complete",
+        {"profile": "kil-v3-lab", "verified_absent": True},
+    )
+    journal_event(
+        controller.journal_path,
+        "publication_intent",
+        {"run_id": value["run_id"], "completed": completed},
+    )
+    published = finalize_publication(
+        provisional,
+        controller.evidence_root,
+        value,
+        source_attestations=source_attestations,
+        tool_identities=TOOL_IDENTITIES,
+        engine_provenance=ENGINE_PROVENANCE,
+        global_context_before="personal",
+        global_context_after="personal",
+        completed=completed,
+        authoritative_attestation=authority,
+        repository_root=repository,
+        publication_staging_root=controller.publication_staging_root,
+    )
+    return controller, published, value
+
+
 class EvidenceBundleTest(unittest.TestCase):
+    def assert_recovery_authority_retained(self, controller, value):
+        self.assertTrue(controller.journal_path.is_file())
+        self.assertTrue(controller.state_path.is_file())
+        self.assertTrue(controller.readiness_poison_path.is_file())
+        self.assertFalse(
+            (controller.completed_root / f"{value['run_id']}.journal.json").exists()
+        )
+
+    def test_post_delete_recovery_reattests_complete_publication_before_archive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, published, value = interrupted_published_recovery(
+                Path(directory), completed=True
+            )
+            live = published / "live.html"
+            live.chmod(0o600)
+            live.write_bytes(b"<!doctype html><title>repaired hash attacker</title>\n")
+            live.chmod(0o444)
+            rewrite_public_bundle_hashes(published)
+
+            with self.assertRaisesRegex(
+                ControllerError, "authoritative|publication|presenter|evidence"
+            ):
+                controller.down()
+
+            self.assert_recovery_authority_retained(controller, value)
+
+    def test_post_delete_recovery_reattests_failure_publication_before_archive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, published, value = interrupted_published_recovery(
+                Path(directory), completed=False
+            )
+            live = published / "live.html"
+            live.chmod(0o600)
+            live.write_bytes(b"<!doctype html><title>repaired failure</title>\n")
+            live.chmod(0o444)
+            rewrite_public_bundle_hashes(published)
+
+            with self.assertRaisesRegex(
+                ControllerError, "authoritative|publication|presenter|evidence"
+            ):
+                controller.down()
+
+            self.assert_recovery_authority_retained(controller, value)
+
+    def test_post_delete_recovery_rejects_rewritten_public_class_and_run(self):
+        for mutation in ("class", "run"):
+            with (
+                self.subTest(mutation=mutation),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                controller, published, value = interrupted_published_recovery(
+                    Path(directory), completed=False
+                )
+                manifest_path = published / "manifest.json"
+                public = json.loads(manifest_path.read_text())
+                if mutation == "class":
+                    public["bundle_class"] = (
+                        "intermediate_provisional_local_boundary"
+                    )
+                    public["run_complete"] = True
+                else:
+                    identity = dict(public["content_identity"])
+                    identity["source_commit"] = "e" * 40
+                    identity_digest = sha256(
+                        canonical_json(identity).encode("utf-8")
+                    ).hexdigest()
+                    public["source_commit"] = "e" * 40
+                    public["content_identity"] = identity
+                    public["content_identity_sha256"] = identity_digest
+                    public["run_id"] = f"v3b1-{identity_digest}"
+                manifest_path.chmod(0o600)
+                manifest_path.write_text(
+                    canonical_json(public) + "\n", encoding="utf-8"
+                )
+                manifest_path.chmod(0o444)
+                rewrite_public_bundle_hashes(published)
+
+                with self.assertRaisesRegex(
+                    ControllerError,
+                    "class|identity|run|publication|source|summary|presenter",
+                ):
+                    controller.down()
+
+                self.assert_recovery_authority_retained(controller, value)
+
+    def test_post_delete_recovery_accepts_semantically_reattested_crash_after_rename(self):
+        for completed in (True, False):
+            with (
+                self.subTest(completed=completed),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                controller, published, value = interrupted_published_recovery(
+                    Path(directory), completed=completed
+                )
+
+                recovered = controller.down()
+
+                self.assertEqual(recovered, published)
+                self.assertFalse(controller.journal_path.exists())
+                self.assertFalse(controller.state_path.exists())
+                self.assertFalse(controller.readiness_poison_path.exists())
+                self.assertTrue(
+                    (
+                        controller.completed_root
+                        / f"{value['run_id']}.journal.json"
+                    ).is_file()
+                )
+
     def test_publication_quarantines_postrename_mutation_and_allows_retry(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

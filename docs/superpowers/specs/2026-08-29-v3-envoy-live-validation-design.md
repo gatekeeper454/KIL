@@ -300,7 +300,7 @@ The mutually supported V3B profile resolved and pinned on 2026-08-30 is:
 
 | Component | Resolved V3B identity |
 |---|---|
-| Host | macOS (Darwin), arm64; exact OS build recorded per run |
+| Host | macOS (Darwin), arm64 development host; exact OS build is not recorded by the current harness |
 | Host runtime | Colima 0.10.3 on Lima 2.2.0, profile `kil-v3-lab` |
 | Docker client | Docker CLI 29.7.2 |
 | Cluster tool | Kind 0.32.0 |
@@ -311,9 +311,13 @@ The mutually supported V3B profile resolved and pinned on 2026-08-30 is:
 | Application runtime | Python 3.12.13 |
 | Ed25519 library | `cryptography` 50.0.0 |
 
-The tracked component pins are in `deploy/kind/v3b-profile.json`. Exact host OS
-build, engine provenance, Python identity, and library identity are recorded by
-preflight in each run manifest. Kind 0.33.0 and the Kubernetes 1.37.0 node image
+The tracked component pins are in `deploy/kind/v3b-profile.json`. Preflight
+records the observed profiles, reserved gateway ports, and verified tool
+identities. Later controller stages record Docker engine provenance and the
+unchanged global Docker context, then resolve the Python image tag to its
+registry digest during immutable-image preparation. The current harness does
+not record an exact host OS build or an explicit cryptography/library identity.
+Kind 0.33.0 and the Kubernetes 1.37.0 node image
 were not available as the resolved stable profile. The initial V3B profile
 therefore selected the available Envoy 1.39.0 image; that component was
 corrected to 1.39.1 on 2026-08-30 after the August 27 security release became
@@ -323,9 +327,10 @@ tracks, or evidence boundary. V3B-1 first proves the pinned local Envoy
 boundary; V3B-2 then reuses the same artifacts in the approved Kind/Calico
 topology.
 
-Before cluster creation, preflight records the executable hashes and version
-outputs, resolves every mutable image tag to a digest, and writes the lock into
-the run configuration. A run with an unrecorded component or mutable-only image
+Before runtime mutation, preflight records the executable hashes and version
+outputs, profile inventory, and reserved ports. Subsequent controller stages
+capture engine/global-context provenance and resolve mutable runtime image tags
+to digests before use. A run with an unrecorded component or mutable-only image
 identity cannot be promoted to validated.
 
 ## 11. Isolation, safety, and teardown
