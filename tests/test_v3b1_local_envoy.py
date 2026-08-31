@@ -21,6 +21,7 @@ from kil.live_authz import LiveTrack
 from kil.v3b_preflight import V3BProfile
 from tools.v3b1_harness_contract import (
     ContractError,
+    DRIVER_TOPOLOGY_SCHEMA_VERSION,
     DockerInventory,
     IntegrationContractFixture,
     RequestFailureProvenance,
@@ -116,6 +117,84 @@ class HarnessIntegrationContractTest(unittest.TestCase):
         ROOT / "tests/fixtures/v3b1-driver-topology-integration-contract.json"
     )
     DRIVER_SCHEMA = "kil.v3b1-integration-contract.v2"
+
+    def test_driver_topology_inventory_is_bounded_to_fifteen_containers_and_six_networks(self):
+        tracks = (
+            "credential-policy-baseline",
+            "signed-state-only",
+            "signed-plus-local-reduce",
+        )
+        container_names = [
+            f"kil-v3b1-{role}-{track}-{index:012x}"
+            for index, (track, role) in enumerate(
+                (
+                    (track, role)
+                    for track in tracks
+                    for role in ("authz", "target", "envoy", "driver", "validate")
+                ),
+                start=1,
+            )
+        ]
+        network_names = [
+            f"kil-v3b1-{segment}-{track}-{index:012x}"
+            for index, (track, segment) in enumerate(
+                (
+                    (track, segment)
+                    for track in tracks
+                    for segment in ("backend", "frontend")
+                ),
+                start=1,
+            )
+        ]
+
+        def rows(names):
+            return "".join(
+                canonical_json({"id": f"{index:064x}", "name": name}) + "\n"
+                for index, name in enumerate(names, start=1)
+            )
+
+        self.assertEqual(
+            len(
+                parse_inventory_rows(
+                    rows(container_names),
+                    "container",
+                    schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
+                ).entries
+            ),
+            15,
+        )
+        self.assertEqual(
+            len(
+                parse_inventory_rows(
+                    rows(network_names),
+                    "network",
+                    schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
+                ).entries
+            ),
+            6,
+        )
+        with self.assertRaisesRegex(ContractError, "cardinality|maximum|bounded"):
+            parse_inventory_rows(
+                rows(
+                    [
+                        *container_names,
+                        "kil-v3b1-driver-signed-state-only-ffffffffffff",
+                    ]
+                ),
+                "container",
+                schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
+        with self.assertRaisesRegex(ContractError, "cardinality|maximum|bounded"):
+            parse_inventory_rows(
+                rows(
+                    [
+                        *network_names,
+                        "kil-v3b1-frontend-signed-state-only-ffffffffffff",
+                    ]
+                ),
+                "network",
+                schema_version=DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
 
     def test_fixture_is_canonical_closed_frozen_and_explicitly_provenanced(self):
         fixture = load_integration_contract(self.FIXTURE)
@@ -992,6 +1071,104 @@ def target_record(run_manifest, track, digest):
 
 
 class ControllerContractTest(unittest.TestCase):
+    def test_network_connect_transition_is_closed_full_id_and_intent_precedes_complete(self):
+        details = {
+            "container_id": HEX_A,
+            "container_name": "kil-v3b1-envoy-signed-state-only-aaaaaaaaaaaa",
+            "network_id": HEX_B,
+            "network_name": "kil-v3b1-frontend-signed-state-only-aaaaaaaaaaaa",
+            "alias": "envoy",
+        }
+        local_envoy_module._validate_lifecycle_event_details(
+            "network_connect_intent", details
+        )
+        with self.assertRaisesRegex(ControllerError, "connect|fields|identity"):
+            local_envoy_module._validate_lifecycle_event_details(
+                "network_connect_intent",
+                {**details, "container_id": "a" * 12},
+            )
+        requests = {
+            track.value: {"status": "not_attempted", "intent_id": None}
+            for track in LiveTrack
+        }
+        creation_events = [
+            {
+                "sequence": 1,
+                "event": "container_create_intent",
+                "details": {"name": details["container_name"]},
+            },
+            {
+                "sequence": 2,
+                "event": "container_create_complete",
+                "details": {
+                    "name": details["container_name"],
+                    "id": details["container_id"],
+                },
+            },
+            {
+                "sequence": 3,
+                "event": "network_create_intent",
+                "details": {"name": details["network_name"]},
+            },
+            {
+                "sequence": 4,
+                "event": "network_create_complete",
+                "details": {
+                    "name": details["network_name"],
+                    "id": details["network_id"],
+                },
+            },
+        ]
+        with self.assertRaisesRegex(ControllerError, "connect|intent"):
+            local_envoy_module._validate_lifecycle_history(
+                [
+                    *creation_events,
+                    {
+                        "sequence": 5,
+                        "event": "network_connect_complete",
+                        "details": details,
+                    },
+                ],
+                requests,
+            )
+        local_envoy_module._validate_lifecycle_history(
+            [
+                *creation_events,
+                {
+                    "sequence": 5,
+                    "event": "network_connect_intent",
+                    "details": details,
+                },
+                {
+                    "sequence": 6,
+                    "event": "network_connect_complete",
+                    "details": details,
+                },
+            ],
+            requests,
+        )
+
+        command = local_envoy_module._network_connect_command(
+            ["/locked/docker", "--host", "unix:///private.sock"],
+            details,
+        )
+        self.assertEqual(
+            command,
+            [
+                "/locked/docker",
+                "--host",
+                "unix:///private.sock",
+                "network",
+                "connect",
+                "--alias",
+                "envoy",
+                HEX_B,
+                HEX_A,
+            ],
+        )
+        self.assertNotIn(details["network_name"], command)
+        self.assertNotIn(details["container_name"], command)
+
     def _make_inventory_controller(self, directory, runner):
         root = Path(directory)
         profile_path = root / "deploy/kind/v3b-profile.json"
@@ -1416,7 +1593,7 @@ class ControllerContractTest(unittest.TestCase):
 
                 recovered, _, recovered_journal = controller._load_for_down()
 
-            self.assertEqual(len(recovered["objects"]), 8)
+            self.assertEqual(len(recovered["objects"]), 11)
             self.assertNotIn(identity["id"], {item["id"] for item in recovered["objects"]})
             self.assertEqual(
                 [
@@ -2321,7 +2498,7 @@ class ControllerContractTest(unittest.TestCase):
                 self.assertIsNone(planned["q_state"])
             self.assertTrue(all(item == comparable[0] for item in comparable))
 
-    def test_runtime_is_three_internal_networks_nine_labeled_containers_and_localhost_gateways(self):
+    def test_runtime_is_six_internal_segments_with_nine_services_and_three_stopped_drivers(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             value = manifest(docker_host="unix:///tmp/kil.sock")
@@ -2336,9 +2513,18 @@ class ControllerContractTest(unittest.TestCase):
                 for command in commands
                 if "network" in command and "create" in command
             ]
-            self.assertEqual(len(network_commands), 3)
+            self.assertEqual(len(network_commands), 6)
             self.assertTrue(all("--internal" in command for command in network_commands))
             self.assertTrue(all("bridge" in command for command in network_commands))
+            self.assertEqual(
+                [command[-1] for command in network_commands],
+                [
+                    item["name"]
+                    for segment in ("backend", "frontend")
+                    for item in value["networks"]
+                    if item["segment"] == segment
+                ],
+            )
             run_commands = [command for command in commands if "run" in command]
             detached = [command for command in run_commands if "-d" in command]
             validators = [
@@ -2403,17 +2589,7 @@ class ControllerContractTest(unittest.TestCase):
                 for command in detached
                 if "kil.v3b1.role=envoy" in command
             ]
-            self.assertEqual(
-                sorted(
-                    command[command.index("--publish") + 1]
-                    for command in gateways
-                ),
-                [
-                    "127.0.0.1:18080:8080/tcp",
-                    "127.0.0.1:18081:8080/tcp",
-                    "127.0.0.1:18082:8080/tcp",
-                ],
-            )
+            self.assertEqual(len(gateways), 3)
             self.assertTrue(all(ENVOY_DIGEST in command for command in gateways))
             self.assertTrue(all("65532:65532" in command for command in gateways))
             self.assertTrue(all("--disable-hot-restart" in command for command in gateways))
@@ -2440,6 +2616,52 @@ class ControllerContractTest(unittest.TestCase):
                     {track["backend_network"]},
                 )
 
+            drivers = [command for command in commands if "create" in command]
+            drivers = [
+                command
+                for command in drivers
+                if "kil.v3b1.role=driver" in command
+            ]
+            self.assertEqual(len(drivers), 3)
+            for command in drivers:
+                name = command[command.index("--name") + 1]
+                track = next(
+                    item for item in value["tracks"]
+                    if item["driver_container"] == name
+                )
+                self.assertIn("--interactive", command)
+                self.assertNotIn("--tty", command)
+                self.assertIn("--no-healthcheck", command)
+                self.assertNotIn("--mount", command)
+                self.assertNotIn("--publish", command)
+                self.assertNotIn("-p", command)
+                self.assertEqual(
+                    command[command.index("--network") + 1],
+                    track["frontend_network"],
+                )
+                self.assertNotIn(track["backend_network"], command)
+                self.assertEqual(
+                    command[-8:],
+                    [
+                        KIL_IMAGE_ID,
+                        "python",
+                        "-m",
+                        "kil.v3b1_request_driver",
+                        "--track",
+                        track["track"],
+                        "--endpoint",
+                        "envoy:8080",
+                    ],
+                )
+
+            forbidden_parts = {"--publish", "-p", "18080", "18081", "18082"}
+            for command in commands:
+                self.assertTrue(forbidden_parts.isdisjoint(command))
+                self.assertFalse(
+                    any("127.0.0.1:18" in part for part in command),
+                    command,
+                )
+
             copies = collection_commands(
                 root, value, docker_binary=Path("/locked/docker")
             )
@@ -2462,6 +2684,9 @@ class ControllerContractTest(unittest.TestCase):
 
             loaded = load_bound_active_state(state)
             self.assertEqual(loaded["run_id"], value["run_id"])
+            self.assertEqual(
+                loaded["schema_version"], "kil.v3b1-active-state.v2"
+            )
 
             output.write_text("{}\n", encoding="utf-8")
             with self.assertRaisesRegex(ControllerError, "manifest"):
@@ -2492,7 +2717,7 @@ class ControllerContractTest(unittest.TestCase):
             removed = [command[-1] for command in commands if "rm" in command and "network" not in command]
             expected_order = [
                 item["id"]
-                for role in ("envoy", "authz", "target")
+                for role in ("envoy", "authz", "target", "driver")
                 for item in state["objects"]
                 if item["role"] == role
             ]
@@ -2509,7 +2734,7 @@ class ControllerContractTest(unittest.TestCase):
             ]
             self.assertLess(max(stop_indexes), min(remove_indexes))
             network_removes = [command for command in commands if "network" in command and "rm" in command]
-            self.assertEqual(len(network_removes), 3)
+            self.assertEqual(len(network_removes), 6)
             self.assertEqual(
                 {command[-1] for command in network_removes},
                 {item["id"] for item in state["network_objects"]},
@@ -5724,9 +5949,13 @@ class TeardownContinuationTest(unittest.TestCase):
         persist_active_state(controller.state_path, private_manifest, value)
         controller.bound_state = load_bound_active_state(controller.state_path)
         controller.running = {
+            item["id"]
+            for item in controller.bound_state["objects"]
+            if item["role"] != "driver"
+        }
+        controller.alive = {
             item["id"] for item in controller.bound_state["objects"]
         }
-        controller.alive = set(controller.running)
         return controller, controller.bound_state, value
 
     def test_freeze_persists_nonce_bound_epoch_and_all_nine_terminal_legs(self):
@@ -7164,6 +7393,7 @@ class TeardownContinuationTest(unittest.TestCase):
                         manifest_value,
                         track,
                         *,
+                        segment="backend",
                         require_complete_membership=True,
                         require_empty_membership=False,
                     ):
@@ -7258,7 +7488,7 @@ class TeardownContinuationTest(unittest.TestCase):
                             if len(command) > 5 and command[5] == "ps"
                         ]
                     ),
-                    14,
+                    20,
                 )
                 self.assertEqual(
                     len(
@@ -7269,7 +7499,7 @@ class TeardownContinuationTest(unittest.TestCase):
                             and command[5:7] == ["network", "ls"]
                         ]
                     ),
-                    14,
+                    20,
                 )
                 public_manifest = json.loads(
                     (published / "manifest.json").read_text()
@@ -7429,6 +7659,43 @@ class TeardownContinuationTest(unittest.TestCase):
 
 
 class RuntimeAttestationTest(unittest.TestCase):
+    def test_controlled_stop_comparison_allows_only_service_state_transition(self):
+        value = manifest()
+        service = local_envoy_module._synthetic_state_object(
+            value,
+            next(item for item in value["containers"] if item["role"] == "envoy"),
+        )
+        stopped = json.loads(json.dumps(service))
+        stopped["runtime_attestation"]["state"] = "exited"
+        self.assertTrue(
+            local_envoy_module._container_attestation_matches(
+                service, stopped, allow_stopped=True
+            )
+        )
+        self.assertFalse(
+            local_envoy_module._container_attestation_matches(
+                service, stopped, allow_stopped=False
+            )
+        )
+        tampered = json.loads(json.dumps(stopped))
+        tampered["runtime_attestation"]["networks"] = []
+        self.assertFalse(
+            local_envoy_module._container_attestation_matches(
+                service, tampered, allow_stopped=True
+            )
+        )
+        driver = local_envoy_module._synthetic_state_object(
+            value,
+            next(item for item in value["containers"] if item["role"] == "driver"),
+        )
+        started_driver = json.loads(json.dumps(driver))
+        started_driver["runtime_attestation"]["state"] = "running"
+        self.assertFalse(
+            local_envoy_module._container_attestation_matches(
+                driver, started_driver, allow_stopped=True
+            )
+        )
+
     def test_minimal_staged_build_context_is_exact_and_hashed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "repo"
@@ -7475,10 +7742,15 @@ class RuntimeAttestationTest(unittest.TestCase):
             "role": "authz",
             "track": LiveTrack.SIGNED_STATE_ONLY.value,
             "image_id": KIL_IMAGE_ID,
-            "network": "kil-v3b1-network-track",
+            "networks": ["kil-v3b1-network-track"],
             "config_path": "/private/authz.json",
             "config_sha256": HEX_A,
             "gateway_port": None,
+            "required_aliases": {
+                "kil-v3b1-network-track": ["kil-v3b1-authz-track"]
+            },
+            "driver_definition": None,
+            "required_state": "running",
         }
         actual = {
             "id": "9" * 64,
@@ -7507,8 +7779,12 @@ class RuntimeAttestationTest(unittest.TestCase):
                     "rw": False,
                 }
             ],
-            "networks": [expected["network"]],
+            "networks": expected["networks"],
+            "network_aliases": {
+                expected["networks"][0]: [expected["name"], "9" * 12]
+            },
             "port_bindings": {},
+            "published_ports": None,
             "platform": "linux/arm64",
             "entrypoint": [],
             "command": [
@@ -7525,6 +7801,10 @@ class RuntimeAttestationTest(unittest.TestCase):
                 "/config/authz.json",
             ],
             "environment": ["PATH=/usr/local/bin"],
+            "state": "running",
+            "stdin_open": False,
+            "tty": False,
+            "healthcheck": None,
         }
         validated = validate_container_attestation(actual, expected)
         self.assertEqual(validated["id"], "9" * 64)
@@ -7538,7 +7818,7 @@ class RuntimeAttestationTest(unittest.TestCase):
             with self.assertRaisesRegex(ControllerError, message):
                 validate_container_attestation(broken, expected)
 
-    def test_stopped_envoy_accepts_only_exact_image_and_runtime_label_merge(self):
+    def test_running_envoy_is_dual_homed_with_fixed_frontend_alias_and_no_publication(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "repo"
             profile_path = root / "deploy/kind/v3b-profile.json"
@@ -7614,18 +7894,26 @@ class RuntimeAttestationTest(unittest.TestCase):
                         "Tmpfs": {
                             "/tmp": "rw,noexec,nosuid,nodev,size=16777216,uid=65532,gid=65532,mode=448"
                         },
-                        "PortBindings": {
-                            "8080/tcp": [
-                                {
-                                    "HostIp": "127.0.0.1",
-                                    "HostPort": "18080",
-                                }
-                            ]
-                        },
+                        "PortBindings": {},
                     },
-                    "State": {"Running": False},
+                    "State": {"Running": True, "Status": "running"},
                     "NetworkSettings": {
-                        "Networks": {track_value["backend_network"]: {}}
+                        "Networks": {
+                            track_value["backend_network"]: {
+                                "Aliases": [
+                                    track_value["envoy_container"],
+                                    "9" * 12,
+                                ]
+                            },
+                            track_value["frontend_network"]: {
+                                "Aliases": [
+                                    "envoy",
+                                    track_value["envoy_container"],
+                                    "9" * 12,
+                                ]
+                            },
+                        },
+                        "Ports": None,
                     },
                     "Mounts": [
                         {
@@ -7654,9 +7942,29 @@ class RuntimeAttestationTest(unittest.TestCase):
                 value,
                 "envoy",
                 track.value,
-                require_running=False,
             )
             self.assertEqual(inspected["labels"], runtime_labels)
+            self.assertEqual(
+                inspected["runtime_attestation"]["networks"],
+                sorted(
+                    [
+                        track_value["backend_network"],
+                        track_value["frontend_network"],
+                    ]
+                ),
+            )
+            self.assertIn(
+                "envoy",
+                inspected["runtime_attestation"]["network_aliases"][
+                    track_value["frontend_network"]
+                ],
+            )
+            self.assertEqual(
+                inspected["runtime_attestation"]["port_bindings"], {}
+            )
+            self.assertIsNone(
+                inspected["runtime_attestation"]["published_ports"]
+            )
 
             conflict_labels = {
                 **immutable_labels,
@@ -7669,7 +7977,6 @@ class RuntimeAttestationTest(unittest.TestCase):
                     value,
                     "envoy",
                     track.value,
-                    require_running=False,
                 )
 
             for reserved_labels in (
@@ -7694,7 +8001,6 @@ class RuntimeAttestationTest(unittest.TestCase):
                             value,
                             "envoy",
                             track.value,
-                            require_running=False,
                         )
 
             controller.runner = FakeRunner(
@@ -7712,8 +8018,160 @@ class RuntimeAttestationTest(unittest.TestCase):
                     value,
                     "envoy",
                     track.value,
-                    require_running=False,
                 )
+
+            published = inspections()[0]
+            raw = json.loads(published.stdout)
+            raw["NetworkSettings"]["Ports"] = {
+                "8080/tcp": [
+                    {"HostIp": "127.0.0.1", "HostPort": "18080"}
+                ]
+            }
+            controller.runner = FakeRunner(
+                [
+                    CommandResult(0, canonical_json(raw) + "\n", ""),
+                    inspections()[1],
+                ]
+            )
+            with self.assertRaisesRegex(ControllerError, "public|port"):
+                controller._inspect_container(
+                    "9" * 64, value, "envoy", track.value
+                )
+
+    def test_stopped_driver_attests_created_state_exact_command_and_frontend_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            profile_path = root / "deploy/kind/v3b-profile.json"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_bytes(
+                (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+            )
+            value = manifest()
+            track = LiveTrack.SIGNED_STATE_ONLY
+            track_value = next(
+                item for item in value["tracks"] if item["track"] == track.value
+            )
+            name = track_value["driver_container"]
+            runtime_labels = {
+                "kil.v3b1.managed": "true",
+                "kil.v3b1.run-id": value["run_id"],
+                "kil.v3b1.role": "driver",
+                "kil.v3b1.track": track.value,
+            }
+            immutable_labels = {"org.opencontainers.image.version": "3.12"}
+            raw = {
+                "Id": "7" * 64,
+                "Name": f"/{name}",
+                "Image": value["kil_image_id"],
+                "Config": {
+                    "Image": value["kil_image_id"],
+                    "Labels": {**immutable_labels, **runtime_labels},
+                    "User": "65532:65532",
+                    "StopTimeout": 10,
+                    "Entrypoint": [],
+                    "Cmd": [
+                        "python",
+                        "-m",
+                        "kil.v3b1_request_driver",
+                        "--track",
+                        track.value,
+                        "--endpoint",
+                        "envoy:8080",
+                    ],
+                    "Env": ["PATH=/usr/local/bin"],
+                    "OpenStdin": True,
+                    "Tty": False,
+                    "Healthcheck": {"Test": ["NONE"]},
+                },
+                "HostConfig": {
+                    "ReadonlyRootfs": True,
+                    "CapDrop": ["ALL"],
+                    "SecurityOpt": ["no-new-privileges"],
+                    "NanoCpus": 500_000_000,
+                    "Memory": 268_435_456,
+                    "MemorySwap": 268_435_456,
+                    "PidsLimit": 128,
+                    "RestartPolicy": {"Name": "no"},
+                    "LogConfig": {
+                        "Type": "json-file",
+                        "Config": {"max-file": "1", "max-size": "1m"},
+                    },
+                    "Tmpfs": {
+                        "/tmp": "rw,noexec,nosuid,nodev,size=16777216,uid=65532,gid=65532,mode=448"
+                    },
+                    "PortBindings": {},
+                },
+                "State": {"Running": False, "Status": "created"},
+                "NetworkSettings": {
+                    "Networks": {
+                        track_value["frontend_network"]: {
+                            "Aliases": [name, "7" * 12]
+                        }
+                    },
+                    "Ports": {},
+                },
+                "Mounts": [],
+            }
+            image = {
+                "Os": "linux",
+                "Architecture": "arm64",
+                "Config": {
+                    "Env": ["PATH=/usr/local/bin"],
+                    "Labels": immutable_labels,
+                },
+            }
+            controller = LocalEnvoyController(
+                root,
+                FakeRunner(
+                    [
+                        CommandResult(0, canonical_json(raw) + "\n", ""),
+                        CommandResult(0, canonical_json(image) + "\n", ""),
+                    ]
+                ),
+                home=Path(directory) / "home",
+                port_probe=lambda port: False,
+                tool_verifier=lambda: TOOL_IDENTITIES,
+            )
+            controller._prepare_private_roots()
+
+            inspected = controller._inspect_container(
+                "7" * 64,
+                value,
+                "driver",
+                track.value,
+                require_running=False,
+            )
+
+            runtime = inspected["runtime_attestation"]
+            self.assertEqual(runtime["state"], "created")
+            self.assertTrue(runtime["stdin_open"])
+            self.assertFalse(runtime["tty"])
+            self.assertEqual(runtime["healthcheck"], "disabled")
+            self.assertEqual(runtime["mounts"], [])
+            self.assertEqual(runtime["networks"], [track_value["frontend_network"]])
+            self.assertNotIn(track_value["backend_network"], runtime["networks"])
+
+            for mutation, message in (
+                (("OpenStdin", False), "stdin|driver"),
+                (("Tty", True), "TTY|tty|driver"),
+                (("Healthcheck", None), "health|driver"),
+            ):
+                broken = json.loads(json.dumps(raw))
+                broken["Config"][mutation[0]] = mutation[1]
+                controller.runner = FakeRunner(
+                    [
+                        CommandResult(0, canonical_json(broken) + "\n", ""),
+                        CommandResult(0, canonical_json(image) + "\n", ""),
+                    ]
+                )
+                with self.assertRaisesRegex(ControllerError, message):
+                    controller._inspect_container(
+                        "7" * 64,
+                        value,
+                        "driver",
+                        track.value,
+                        require_running=False,
+                    )
 
     def test_stopped_transient_validator_uses_exact_immutable_label_merge(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -7791,7 +8249,7 @@ class RuntimeAttestationTest(unittest.TestCase):
             self.assertEqual(inspected["labels"], runtime_labels)
             self.assertFalse(raw["State"]["Running"])
 
-    def test_network_inspection_uses_one_closed_json_snapshot(self):
+    def test_network_inspection_closes_backend_and_frontend_membership(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "repo"
             profile_path = root / "deploy/kind/v3b-profile.json"
@@ -7867,10 +8325,11 @@ class RuntimeAttestationTest(unittest.TestCase):
             controller._prepare_private_roots()
 
             inspected = controller._inspect_network(
-                "a" * 64, value, track.value
+                "a" * 64, value, track.value, segment="backend"
             )
 
             self.assertEqual(inspected["name"], track_value["backend_network"])
+            self.assertEqual(inspected["segment"], "backend")
             self.assertEqual(len(runner.calls), 1)
             self.assertIn("{{json .}}", runner.calls[0][0])
 
@@ -7882,6 +8341,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                 "a" * 64,
                 value,
                 track.value,
+                segment="backend",
                 require_complete_membership=False,
             )
             controller.runner = NetworkRunner(partial)
@@ -7890,6 +8350,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                     "a" * 64,
                     value,
                     track.value,
+                    segment="backend",
                     require_complete_membership=False,
                     require_empty_membership=True,
                 )
@@ -7898,9 +8359,42 @@ class RuntimeAttestationTest(unittest.TestCase):
                 "a" * 64,
                 value,
                 track.value,
+                segment="backend",
                 require_complete_membership=False,
                 require_empty_membership=True,
             )
+
+            frontend_members = [
+                track_value["driver_container"],
+                track_value["envoy_container"],
+            ]
+            frontend = {
+                **network,
+                "Id": "b" * 64,
+                "Name": track_value["frontend_network"],
+                "Containers": {
+                    f"{index + 4}" * 64: member(name)
+                    for index, name in enumerate(frontend_members)
+                },
+            }
+            controller.runner = NetworkRunner(frontend)
+            inspected_frontend = controller._inspect_network(
+                "b" * 64, value, track.value, segment="frontend"
+            )
+            self.assertEqual(inspected_frontend["segment"], "frontend")
+
+            bypass = {
+                **frontend,
+                "Containers": {
+                    **frontend["Containers"],
+                    "f" * 64: member(track_value["target_container"]),
+                },
+            }
+            controller.runner = NetworkRunner(bypass)
+            with self.assertRaisesRegex(ControllerError, "membership|frontend"):
+                controller._inspect_network(
+                    "b" * 64, value, track.value, segment="frontend"
+                )
 
             malformed = {**network, "Internal": "true"}
             duplicate = {
@@ -7933,6 +8427,7 @@ class RuntimeAttestationTest(unittest.TestCase):
                             "a" * 64,
                             value,
                             track.value,
+                            segment="backend",
                             require_complete_membership=False,
                         )
 

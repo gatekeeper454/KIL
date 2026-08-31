@@ -572,6 +572,12 @@ class DockerInventory:
             raise ContractError("Docker inventory entries are invalid")
         ids = [item.object_id for item in self.entries]
         names = [item.name for item in self.entries]
+        maximum = {
+            SCHEMA_VERSION: {"container": 12, "network": 3},
+            DRIVER_TOPOLOGY_SCHEMA_VERSION: {"container": 15, "network": 6},
+        }[self.schema_version][self.kind]
+        if len(self.entries) > maximum:
+            raise ContractError("Docker inventory cardinality exceeds its closed maximum")
         if len(ids) != len(set(ids)):
             raise ContractError("Docker inventory contains a duplicate ID")
         if len(names) != len(set(names)):

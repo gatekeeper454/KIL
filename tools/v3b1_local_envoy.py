@@ -29,7 +29,11 @@ from kil.canonical import canonical_json
 from kil.live_authz import LiveTrack
 from kil.q_state import QStateClaims, issue_q_state, key_id
 from kil.v3b_envoy import render_envoy_json
-from kil.v3b1_driver_protocol import canonical_record, driver_definition
+from kil.v3b1_driver_protocol import (
+    DRIVER_RUNTIME_POLICY,
+    canonical_record,
+    driver_definition,
+)
 from kil.v3b_preflight import EVIDENCE_SCOPE, LAB_IDENTITY, V3BProfile
 
 try:
@@ -72,7 +76,7 @@ SUBJECT = "spiffe://kil.local/workload/demo"
 PLATFORM = "linux/arm64"
 LEGACY_MANIFEST_SCHEMA = "kil.v3b1-manifest.v1"
 MANIFEST_SCHEMA = "kil.v3b1-manifest.v2"
-STATE_SCHEMA = "kil.v3b1-active-state.v1"
+STATE_SCHEMA = "kil.v3b1-active-state.v2"
 JOURNAL_SCHEMA = "kil.v3b1-lifecycle-journal.v1"
 READINESS_POISON_SCHEMA = "kil.v3b1-readiness-poison.v1"
 JOIN_SCHEMA = "kil.v3b1-join.v1"
@@ -456,9 +460,9 @@ def _validate_lifecycle_event_details(
             or details["up_complete_observed"] is not False
             or details["promotable"] is not False
             or type(details["container_count"]) is not int
-            or not 0 <= details["container_count"] <= 12
+            or not 0 <= details["container_count"] <= 15
             or type(details["network_count"]) is not int
-            or not 0 <= details["network_count"] <= 3
+            or not 0 <= details["network_count"] <= 6
         ):
             raise ControllerError("partial-up rejection provenance is invalid")
         _require_sha256(
@@ -493,6 +497,48 @@ def _validate_lifecycle_event_details(
             )
         except HarnessContractError as error:
             raise ControllerError("Docker creation identity is invalid") from error
+        return
+    if event_name in {"network_connect_intent", "network_connect_complete"}:
+        expected = {
+            "container_id",
+            "container_name",
+            "network_id",
+            "network_name",
+            "alias",
+        }
+        if set(details) != expected or details.get("alias") != "envoy":
+            raise ControllerError("network connect fields are not closed")
+        try:
+            DockerInventoryEntry(
+                "container",
+                details["container_id"],  # type: ignore[arg-type]
+                details["container_name"],  # type: ignore[arg-type]
+                DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
+            DockerInventoryEntry(
+                "network",
+                details["network_id"],  # type: ignore[arg-type]
+                details["network_name"],  # type: ignore[arg-type]
+                DRIVER_TOPOLOGY_SCHEMA_VERSION,
+            )
+        except HarnessContractError as error:
+            raise ControllerError("network connect identity is invalid") from error
+        container_match = re.fullmatch(
+            r"kil-v3b1-envoy-(?P<track>credential-policy-baseline|"
+            r"signed-state-only|signed-plus-local-reduce)-(?P<suffix>[a-f0-9]{12})",
+            str(details["container_name"]),
+        )
+        network_match = re.fullmatch(
+            r"kil-v3b1-frontend-(?P<track>credential-policy-baseline|"
+            r"signed-state-only|signed-plus-local-reduce)-(?P<suffix>[a-f0-9]{12})",
+            str(details["network_name"]),
+        )
+        if (
+            container_match is None
+            or network_match is None
+            or container_match.groupdict() != network_match.groupdict()
+        ):
+            raise ControllerError("network connect roles do not match")
         return
     if event_name in {"config_validate_intent", "config_validate_complete"}:
         try:
@@ -789,6 +835,7 @@ def _validate_lifecycle_history(
     creations: dict[tuple[str, str], str] = {}
     creation_ids: dict[tuple[str, str], str] = {}
     validations: dict[tuple[str, str], str] = {}
+    network_connections: dict[tuple[str, str], tuple[str, Mapping[str, object]]] = {}
     for event in events:
         event_name = event["event"]
         details = event["details"]
@@ -842,6 +889,33 @@ def _validate_lifecycle_history(
                         "validator execution completion lacks its exact intent"
                     )
                 validations[key] = "complete"
+            continue
+        if event_name in {"network_connect_intent", "network_connect_complete"}:
+            key = (str(details["container_id"]), str(details["network_id"]))
+            if event_name.endswith("_intent"):
+                container_key = ("container", str(details["container_name"]))
+                network_key = ("network", str(details["network_name"]))
+                if (
+                    creations.get(container_key) != "complete"
+                    or creation_ids.get(container_key) != details["container_id"]
+                    or creations.get(network_key) != "complete"
+                    or creation_ids.get(network_key) != details["network_id"]
+                ):
+                    raise ControllerError(
+                        "network connect intent lacks exact created identities"
+                    )
+                if key in network_connections:
+                    raise ControllerError("network connect intent is duplicated")
+                network_connections[key] = ("pending", details)
+            else:
+                transition = network_connections.get(key)
+                if transition is None or transition[0] != "pending":
+                    raise ControllerError(
+                        "network connect completion lacks its exact intent"
+                    )
+                if dict(transition[1]) != dict(details):
+                    raise ControllerError("network connect completion identity changed")
+                network_connections[key] = ("complete", details)
             continue
         if event_name in {
             "container_remove_intent",
@@ -1620,12 +1694,14 @@ def validate_container_attestation(
         "id", "name", "image_id", "user", "readonly_rootfs", "cap_drop",
         "security_opt", "nano_cpus", "memory", "memory_swap", "pids_limit",
         "restart_policy", "stop_timeout", "log_driver", "log_options", "tmpfs",
-        "mounts", "networks", "port_bindings", "platform",
-        "entrypoint", "command", "environment",
+        "mounts", "networks", "network_aliases", "port_bindings",
+        "published_ports", "platform", "entrypoint", "command", "environment",
+        "state", "stdin_open", "tty", "healthcheck",
     }
     expected_fields = {
-        "name", "role", "track", "image_id", "network", "config_path",
-        "config_sha256", "gateway_port",
+        "name", "role", "track", "image_id", "networks", "config_path",
+        "config_sha256", "gateway_port", "required_aliases",
+        "driver_definition", "required_state",
     }
     if type(actual) is not dict or set(actual) != actual_fields:
         raise ControllerError("container attestation fields are not closed")
@@ -1650,30 +1726,57 @@ def validate_container_attestation(
         raise ControllerError("container restart/stop policy attestation failed")
     if actual["log_driver"] != "json-file" or actual["log_options"] != {"max-file": "1", "max-size": "1m"}:
         raise ControllerError("container bounded log attestation failed")
+    role = expected["role"]
+    if role not in {"authz", "target", "envoy", "driver"}:
+        raise ControllerError("container role attestation is invalid")
     expected_tmpfs = {
         "/tmp": "rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700"
     }
-    if expected["role"] in {"authz", "target"}:
+    if role in {"authz", "target"}:
         expected_tmpfs["/evidence"] = "rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700"
     if actual["tmpfs"] != expected_tmpfs:
         raise ControllerError("container tmpfs attestation failed")
     mounts = actual["mounts"]
-    expected_destination = (
-        "/etc/envoy/envoy.json"
-        if expected["role"] == "envoy"
-        else f"/config/{expected['role']}.json"
-    )
-    if (
-        type(mounts) is not list
-        or len(mounts) != 1
-        or type(mounts[0]) is not dict
-        or mounts[0].get("source") != expected["config_path"]
-        or mounts[0].get("destination") != expected_destination
-        or mounts[0].get("rw") is not False
-    ):
-        raise ControllerError("container read-only config mount attestation failed")
-    if actual["networks"] != [expected["network"]]:
+    if role == "driver":
+        if mounts != [] or expected["config_path"] is not None or expected["config_sha256"] is not None:
+            raise ControllerError("driver must not have a config mount")
+    else:
+        expected_destination = (
+            "/etc/envoy/envoy.json"
+            if role == "envoy"
+            else f"/config/{role}.json"
+        )
+        if (
+            type(mounts) is not list
+            or len(mounts) != 1
+            or type(mounts[0]) is not dict
+            or mounts[0].get("source") != expected["config_path"]
+            or mounts[0].get("destination") != expected_destination
+            or mounts[0].get("rw") is not False
+        ):
+            raise ControllerError("container read-only config mount attestation failed")
+    if actual["networks"] != sorted(expected["networks"]):  # type: ignore[arg-type]
         raise ControllerError("container per-track network attestation failed")
+    aliases = actual["network_aliases"]
+    required_aliases = expected["required_aliases"]
+    if (
+        type(aliases) is not dict
+        or set(aliases) != set(actual["networks"])  # type: ignore[arg-type]
+        or type(required_aliases) is not dict
+        or set(required_aliases) != set(actual["networks"])  # type: ignore[arg-type]
+    ):
+        raise ControllerError("container network aliases are not closed")
+    for network, values in aliases.items():
+        required = required_aliases[network]
+        if (
+            type(values) is not list
+            or any(type(value) is not str or not value for value in values)
+            or len(values) != len(set(values))
+            or type(required) is not list
+            or any(type(value) is not str or not value for value in required)
+            or not set(required).issubset(values)
+        ):
+            raise ControllerError("container network aliases are invalid")
     if actual["platform"] != PLATFORM:
         raise ControllerError("container architecture attestation failed")
     environment = actual["environment"]
@@ -1684,33 +1787,111 @@ def validate_container_attestation(
         or len({item.split("=", 1)[0] for item in environment}) != len(environment)
     ):
         raise ControllerError("container environment attestation is invalid")
-    if expected["role"] == "authz":
+    if role == "authz":
         expected_entrypoint = []
         expected_command = [
             "python", "-c", _AUTHZ_BOOTSTRAP, "--config", "/config/authz.json",
         ]
-    elif expected["role"] == "target":
+    elif role == "target":
         expected_entrypoint = []
         expected_command = [
             "python", "-c", _TARGET_BOOTSTRAP, "--config", "/config/target.json",
         ]
-    else:
+    elif role == "envoy":
         expected_entrypoint = ["/usr/local/bin/envoy"]
         expected_command = [
             "--config-path", "/etc/envoy/envoy.json", "--disable-hot-restart",
             "--concurrency", "1",
         ]
+    else:
+        expected_entrypoint = []
+        expected_command = [
+            "python", "-m", "kil.v3b1_request_driver", "--track",
+            str(expected["track"]), "--endpoint", "envoy:8080",
+        ]
     if actual["entrypoint"] != expected_entrypoint or actual["command"] != expected_command:
         raise ControllerError("container executed process attestation failed")
-    gateway = expected["gateway_port"]
-    if gateway is None:
-        if actual["port_bindings"] != {}:
-            raise ControllerError("non-gateway container exposes a port")
-    elif actual["port_bindings"] != {
-        "8080/tcp": [{"HostIp": "127.0.0.1", "HostPort": str(gateway)}]
-    }:
-        raise ControllerError("gateway port binding is not localhost-only")
+    published_ports = actual["published_ports"]
+    live_ports_empty = published_ports is None or (
+        type(published_ports) is dict
+        and all(
+            type(port) is str and bindings in (None, [])
+            for port, bindings in published_ports.items()
+        )
+    )
+    if (
+        expected["gateway_port"] is not None
+        or actual["port_bindings"] != {}
+        or not live_ports_empty
+    ):
+        raise ControllerError("container host publication is forbidden")
+    required_state = expected["required_state"]
+    if required_state is not None and actual["state"] != required_state:
+        raise ControllerError("container lifecycle state attestation failed")
+    if actual["tty"] is not False:
+        raise ControllerError("container TTY attestation failed")
+    if role == "driver":
+        definition = expected["driver_definition"]
+        if (
+            type(definition) is not dict
+            or definition.get("track") != expected["track"]
+            or definition.get("image_id") != expected["image_id"]
+            or definition.get("endpoint") != {"host": "envoy", "port": 8080}
+            or definition.get("runtime_policy") != DRIVER_RUNTIME_POLICY
+            or actual["state"] != "created"
+            or actual["stdin_open"] is not True
+            or actual["healthcheck"] != "disabled"
+        ):
+            raise ControllerError("driver runtime definition attestation failed")
+    elif (
+        expected["driver_definition"] is not None
+        or actual["stdin_open"] is not False
+        or actual["healthcheck"] not in {None, "disabled", "configured"}
+    ):
+        raise ControllerError("service runtime definition attestation failed")
     return dict(actual)
+
+
+def _container_attestation_matches(
+    recorded: object,
+    current: object,
+    *,
+    allow_stopped: bool,
+) -> bool:
+    """Compare an owned container while totalizing a controlled service stop."""
+    if current == recorded:
+        return True
+    if (
+        not allow_stopped
+        or type(recorded) is not dict
+        or type(current) is not dict
+        or set(recorded) != set(current)
+        or recorded.get("role") == "driver"
+    ):
+        return False
+    recorded_runtime = recorded.get("runtime_attestation")
+    current_runtime = current.get("runtime_attestation")
+    if (
+        type(recorded_runtime) is not dict
+        or type(current_runtime) is not dict
+        or set(recorded_runtime) != set(current_runtime)
+        or recorded_runtime.get("state") != "running"
+        or current_runtime.get("state") not in {"exited", "dead"}
+    ):
+        return False
+    recorded_without_runtime = {
+        key: value for key, value in recorded.items() if key != "runtime_attestation"
+    }
+    current_without_runtime = {
+        key: value for key, value in current.items() if key != "runtime_attestation"
+    }
+    if recorded_without_runtime != current_without_runtime:
+        return False
+    return {
+        key: value for key, value in recorded_runtime.items() if key != "state"
+    } == {
+        key: value for key, value in current_runtime.items() if key != "state"
+    }
 
 
 def _normalize_inspected_tmpfs(value: object) -> dict[str, str]:
@@ -2698,26 +2879,21 @@ def _track_manifest(manifest: Mapping[str, object], track: LiveTrack) -> dict[st
     raise ControllerError(f"manifest omits track {track.value}")
 
 
-def _task3_service_containers(
+def _runtime_networks(
     manifest: Mapping[str, object],
 ) -> list[dict[str, object]]:
-    """Return only the pre-Task-4 running service projection."""
-    return [
-        item
-        for item in manifest["containers"]  # type: ignore[union-attr]
-        if item["role"] in {"authz", "target", "envoy"}
-    ]
+    """Return the schema-bound network projection without hybrid inference."""
+    networks = manifest["networks"]  # type: ignore[assignment]
+    assert isinstance(networks, list)
+    return [dict(item) for item in networks]
 
 
-def _task3_backend_networks(
-    manifest: Mapping[str, object],
-) -> list[dict[str, object]]:
-    """Return only the pre-Task-4 network creation projection."""
-    return [
-        item
-        for item in manifest["networks"]  # type: ignore[union-attr]
-        if item["segment"] == "backend"
-    ]
+def _network_segment(item: Mapping[str, object]) -> str:
+    """Map legacy single networks to backend while preserving v2 segments."""
+    segment = item.get("segment", "backend")
+    if segment not in {"frontend", "backend"}:
+        raise ControllerError("runtime network segment is invalid")
+    return str(segment)
 
 
 def materialize_run_inputs(root: Path, manifest: dict[str, object]) -> MaterializedInputs:
@@ -2866,7 +3042,7 @@ def build_runtime_commands(
     *,
     docker_binary: Path,
 ) -> list[list[str]]:
-    """Construct exact validator, network, and nine-service commands."""
+    """Construct validators, six internal segments, services, and drivers."""
     _validate_manifest(manifest)
     runtime_root = _runtime_root(root, manifest)
     prefix = _docker_prefix(
@@ -2911,24 +3087,27 @@ def build_runtime_commands(
                 "1",
             ]
         )
-    for network in _task3_backend_networks(manifest):
-        commands.append(
-            [
-                *prefix,
-                "network",
-                "create",
-                "--driver",
-                "bridge",
-                "--internal",
-                "--label",
-                f"kil.v3b1.run-id={manifest['run_id']}",
-                "--label",
-                "kil.v3b1.managed=true",
-                "--label",
-                f"kil.v3b1.track={network['track']}",
-                str(network["name"]),
-            ]
-        )
+    for segment in ("backend", "frontend"):
+        for network in _runtime_networks(manifest):
+            if _network_segment(network) != segment:
+                continue
+            commands.append(
+                [
+                    *prefix,
+                    "network",
+                    "create",
+                    "--driver",
+                    "bridge",
+                    "--internal",
+                    "--label",
+                    f"kil.v3b1.run-id={manifest['run_id']}",
+                    "--label",
+                    "kil.v3b1.managed=true",
+                    "--label",
+                    f"kil.v3b1.track={network['track']}",
+                    str(network["name"]),
+                ]
+            )
     for track in _TRACKS:
         track_root = runtime_root / track.value
         item = _track_manifest(manifest, track)
@@ -3020,8 +3199,6 @@ def build_runtime_commands(
                 "max-file=1",
                 "--tmpfs",
                 "/tmp:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700",
-                "--publish",
-                f"127.0.0.1:{_TRACK_PORTS[track]}:8080/tcp",
                 "--mount",
                 f"type=bind,src={track_root / 'envoy.json'},dst=/etc/envoy/envoy.json,readonly",
                 "--entrypoint",
@@ -3034,7 +3211,76 @@ def build_runtime_commands(
                 "1",
             ]
         )
+        driver_name = str(item["driver_container"])
+        commands.append(
+            [
+                *prefix,
+                "create",
+                "--interactive",
+                "--no-healthcheck",
+                "--name",
+                driver_name,
+                "--network-alias",
+                driver_name,
+                "--network",
+                str(item["frontend_network"]),
+                *_labels(manifest, "driver", track),
+                "--platform",
+                PLATFORM,
+                "--pull=never",
+                "--read-only",
+                "--user",
+                "65532:65532",
+                "--security-opt",
+                "no-new-privileges",
+                "--cap-drop",
+                "ALL",
+                "--cpus",
+                "0.50",
+                "--memory",
+                "256m",
+                "--memory-swap",
+                "256m",
+                "--pids-limit",
+                "128",
+                "--restart=no",
+                "--stop-timeout",
+                "10",
+                "--log-driver",
+                "json-file",
+                "--log-opt",
+                "max-size=1m",
+                "--log-opt",
+                "max-file=1",
+                "--tmpfs",
+                "/tmp:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700",
+                str(manifest["kil_image_id"]),
+                "python",
+                "-m",
+                "kil.v3b1_request_driver",
+                "--track",
+                track.value,
+                "--endpoint",
+                "envoy:8080",
+            ]
+        )
     return commands
+
+
+def _network_connect_command(
+    docker_prefix: Sequence[str], details: Mapping[str, object]
+) -> list[str]:
+    """Build the closed full-ID Envoy-to-frontend network attachment command."""
+    _validate_lifecycle_event_details("network_connect_intent", details)
+    return [
+        *docker_prefix,
+        "network",
+        "connect",
+        "--alias",
+        "envoy",
+        str(details["network_id"]),
+        str(details["container_id"]),
+    ]
 
 
 def collection_commands(
@@ -3097,7 +3343,9 @@ def _synthetic_state_object(
     image_id = (
         manifest["envoy_image_id"] if role == "envoy" else manifest["kil_image_id"]
     )
-    config_path = f"/unavailable/{track}/{role}.json"
+    config_path = (
+        None if role == "driver" else f"/unavailable/{track}/{role}.json"
+    )
     track_record = next(
         record
         for record in manifest["tracks"]  # type: ignore[union-attr]
@@ -3106,9 +3354,33 @@ def _synthetic_state_object(
     tmpfs = {
         "/tmp": "rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700"
     }
-    if role != "envoy":
+    if role in {"authz", "target"}:
         tmpfs["/evidence"] = "rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700"
-    destination = "/etc/envoy/envoy.json" if role == "envoy" else f"/config/{role}.json"
+    destination = (
+        "/etc/envoy/envoy.json"
+        if role == "envoy"
+        else f"/config/{role}.json"
+    )
+    if role == "envoy":
+        networks = [
+            track_record["backend_network"],
+            track_record["frontend_network"],
+        ]
+    elif role == "driver":
+        networks = [track_record["frontend_network"]]
+    else:
+        networks = [
+            track_record.get("backend_network", track_record.get("network"))
+        ]
+    aliases = {
+        str(network): [
+            "envoy"
+            if role == "envoy" and network == track_record.get("frontend_network")
+            else name,
+            object_id[:12],
+        ]
+        for network in networks
+    }
     runtime = {
         "id": object_id,
         "name": name,
@@ -3126,22 +3398,15 @@ def _synthetic_state_object(
         "log_driver": "json-file",
         "log_options": {"max-file": "1", "max-size": "1m"},
         "tmpfs": tmpfs,
-        "mounts": [{"source": config_path, "destination": destination, "rw": False}],
-        "networks": [track_record["backend_network"]],
-        "port_bindings": (
-            {
-                "8080/tcp": [
-                    {
-                        "HostIp": "127.0.0.1",
-                        "HostPort": str(
-                            _TRACK_PORTS[LiveTrack(str(track_record["track"]))]
-                        ),
-                    }
-                ]
-            }
-            if role == "envoy"
-            else {}
+        "mounts": (
+            []
+            if role == "driver"
+            else [{"source": config_path, "destination": destination, "rw": False}]
         ),
+        "networks": sorted(str(network) for network in networks),
+        "network_aliases": aliases,
+        "port_bindings": {},
+        "published_ports": None,
         "platform": PLATFORM,
         "entrypoint": ["/usr/local/bin/envoy"] if role == "envoy" else [],
         "command": (
@@ -3151,12 +3416,21 @@ def _synthetic_state_object(
             ]
             if role == "envoy"
             else [
+                "python", "-m", "kil.v3b1_request_driver", "--track", track,
+                "--endpoint", "envoy:8080",
+            ]
+            if role == "driver"
+            else [
                 "python", "-c",
                 _AUTHZ_BOOTSTRAP if role == "authz" else _TARGET_BOOTSTRAP,
                 "--config", f"/config/{role}.json",
             ]
         ),
         "environment": ["PATH=/usr/local/bin"],
+        "state": "created" if role == "driver" else "running",
+        "stdin_open": role == "driver",
+        "tty": False,
+        "healthcheck": "disabled" if role == "driver" else None,
     }
     return {
         "name": name,
@@ -3167,7 +3441,7 @@ def _synthetic_state_object(
         "image_id": image_id,
         "image_reference": item["image"],
         "config_path": config_path,
-        "config_sha256": "0" * 64,
+        "config_sha256": None if role == "driver" else "0" * 64,
         "runtime_attestation": runtime,
     }
 
@@ -3192,7 +3466,7 @@ def persist_active_state(
     if objects is None:
         objects = [
             _synthetic_state_object(manifest, item)
-            for item in _task3_service_containers(manifest)
+            for item in manifest["containers"]  # type: ignore[union-attr]
         ]
     if network_objects is None:
         network_objects = [
@@ -3200,9 +3474,10 @@ def persist_active_state(
                 "name": item["name"],
                 "id": _digest_bytes(str(item["name"]).encode("utf-8")),
                 "track": item["track"],
+                "segment": _network_segment(item),
                 "labels": _object_labels(run_id, None, str(item["track"])),
             }
-            for item in _task3_backend_networks(manifest)
+            for item in _runtime_networks(manifest)
         ]
     base: dict[str, object] = {
         "schema_version": STATE_SCHEMA,
@@ -3225,11 +3500,11 @@ def _validate_state_objects(
     state: Mapping[str, object], manifest: Mapping[str, object]
 ) -> None:
     objects = state.get("objects")
-    if type(objects) is not list or len(objects) != 9:
+    if type(objects) is not list or len(objects) != 12:
         raise ControllerError("active state Docker objects are invalid")
     expected = {
         item["name"]: item
-        for item in _task3_service_containers(manifest)
+        for item in manifest["containers"]  # type: ignore[union-attr]
     }
     seen = set()
     for item in objects:
@@ -3266,7 +3541,10 @@ def _validate_state_objects(
         )
         if item["image_id"] != expected_image_id or item["image_reference"] != source["image"]:
             raise ControllerError("active state Docker image identity is invalid")
-        if (
+        if item["role"] == "driver":
+            if item["config_path"] is not None or item["config_sha256"] is not None:
+                raise ControllerError("active driver config attestation is invalid")
+        elif (
             type(item["config_path"]) is not str
             or not Path(item["config_path"]).is_absolute()
             or type(item["config_sha256"]) is not str
@@ -3278,19 +3556,45 @@ def _validate_state_objects(
             for record in manifest["tracks"]  # type: ignore[union-attr]
             if record["track"] == item["track"]
         )
+        if item["role"] == "envoy":
+            expected_networks = [
+                track_record["backend_network"],
+                track_record["frontend_network"],
+            ]
+        elif item["role"] == "driver":
+            expected_networks = [track_record["frontend_network"]]
+        else:
+            expected_networks = [
+                track_record.get("backend_network", track_record.get("network"))
+            ]
+        required_aliases = {
+            str(network): [
+                "envoy"
+                if item["role"] == "envoy"
+                and network == track_record.get("frontend_network")
+                else str(item["name"])
+            ]
+            for network in expected_networks
+        }
+        driver_definition_value = None
+        if item["role"] == "driver":
+            driver_definition_value = next(
+                definition
+                for definition in manifest["driver_definitions"]  # type: ignore[union-attr]
+                if definition["track"] == item["track"]
+            )
         expected_runtime = {
             "name": item["name"],
             "role": item["role"],
             "track": item["track"],
             "image_id": item["image_id"],
-            "network": track_record["backend_network"],
+            "networks": sorted(str(network) for network in expected_networks),
             "config_path": item["config_path"],
             "config_sha256": item["config_sha256"],
-            "gateway_port": (
-                _TRACK_PORTS[LiveTrack(str(track_record["track"]))]
-                if item["role"] == "envoy"
-                else None
-            ),
+            "gateway_port": None,
+            "required_aliases": required_aliases,
+            "driver_definition": driver_definition_value,
+            "required_state": "created" if item["role"] == "driver" else "running",
         }
         runtime = validate_container_attestation(
             item["runtime_attestation"], expected_runtime
@@ -3300,24 +3604,34 @@ def _validate_state_objects(
     networks = state.get("network_objects")
     expected_networks = {
         item["name"]: item
-        for item in _task3_backend_networks(manifest)
+        for item in _runtime_networks(manifest)
     }
-    if type(networks) is not list or len(networks) != 3:
+    if type(networks) is not list or len(networks) != 6:
         raise ControllerError("active state network objects are invalid")
+    seen_networks: set[object] = set()
     for network in networks:
-        if type(network) is not dict or set(network) != {"name", "id", "track", "labels"}:
+        if type(network) is not dict or set(network) != {
+            "name", "id", "track", "segment", "labels"
+        }:
             raise ControllerError("active state network object is invalid")
         if (
             network["name"] not in expected_networks
             or expected_networks[network["name"]]["track"] != network["track"]
+            or _network_segment(expected_networks[network["name"]])
+            != network["segment"]
             or type(network["id"]) is not str
             or _HEX.fullmatch(network["id"]) is None
         ):
             raise ControllerError("active state network identity is invalid")
+        if network["name"] in seen_networks:
+            raise ControllerError("active state network identity is duplicated")
+        seen_networks.add(network["name"])
         if network["labels"] != _object_labels(
             str(state["run_id"]), None, str(network["track"])
         ):
             raise ControllerError("active state network labels are invalid")
+    if seen_networks != set(expected_networks):
+        raise ControllerError("active state networks do not match manifest")
 
 
 def load_bound_active_state(state_path: Path) -> dict[str, object]:
@@ -3382,20 +3696,25 @@ def teardown_commands(
         str(state["docker_host"]),
     ]
     objects = state.get("objects")
-    if type(objects) is not list or len(objects) != 9:
+    if type(objects) is not list or len(objects) != 12:
         raise ControllerError("exact teardown objects are unavailable")
-    ordered = [
+    running = [
         item for role in ("envoy", "authz", "target")
+        for item in objects
+        if isinstance(item, dict) and item.get("role") == role
+    ]
+    ordered = [
+        item for role in ("envoy", "authz", "target", "driver")
         for item in objects
         if isinstance(item, dict) and item.get("role") == role
     ]
     commands = [
         [*prefix, "stop", "--timeout", "10", str(item["id"])]
-        for item in ordered
+        for item in running
     ]
     commands.extend([*prefix, "rm", str(item["id"])] for item in ordered)
     networks = state.get("network_objects")
-    if type(networks) is not list or len(networks) != 3:
+    if type(networks) is not list or len(networks) != 6:
         raise ControllerError("exact teardown networks are unavailable")
     commands.extend(
         [*prefix, "network", "rm", str(network["id"])]
@@ -7003,6 +7322,8 @@ class LocalEnvoyController:
         *,
         require_running: bool = True,
     ) -> dict[str, object]:
+        if role not in {"authz", "target", "envoy", "driver"}:
+            raise ControllerError("container role inspection is invalid")
         output = self._execute(
             self.docker_command(
                 "inspect",
@@ -7044,12 +7365,17 @@ class LocalEnvoyController:
         health = (
             health_value.get("Status") if isinstance(health_value, dict) else "none"
         )
+        running = state_value.get("Running") is True
+        state_status = state_value.get("Status")
+        if type(state_status) is not str:
+            state_status = "running" if running else "exited"
         if (
             type(object_id) is not str
             or _HEX.fullmatch(object_id) is None
             or name != f"/{expected_name}"
-            or (require_running and state_value.get("Running") is not True)
-            or (require_running and role != "envoy" and health != "healthy")
+            or (require_running and role != "driver" and not running)
+            or (role == "driver" and (running or state_status != "created"))
+            or (require_running and role not in {"envoy", "driver"} and health != "healthy")
             or (require_running and role == "envoy" and health not in {"healthy", "none"})
         ):
             raise ControllerError("container ID/name/label/running attestation failed")
@@ -7086,19 +7412,34 @@ class LocalEnvoyController:
         _validate_container_labels(
             labels, image_config.get("Labels"), expected_labels
         )
-        config = self._config_path(manifest, role, track)
-        if (
-            config.is_symlink()
-            or not config.is_file()
-            or config.stat().st_mode & 0o222
-        ):
-            raise ControllerError("container config is not fixed read-only input")
+        config: Path | None = None
+        if role != "driver":
+            config = self._config_path(manifest, role, track)
+            if (
+                config.is_symlink()
+                or not config.is_file()
+                or config.stat().st_mode & 0o222
+            ):
+                raise ControllerError("container config is not fixed read-only input")
         security = host.get("SecurityOpt") or []
         if security == ["no-new-privileges:true"]:
             security = ["no-new-privileges"]
         raw_networks = network_settings.get("Networks")
         if type(raw_networks) is not dict:
             raise ControllerError("container network inspection is invalid")
+        network_aliases: dict[str, list[str]] = {}
+        for network_name, endpoint in raw_networks.items():
+            if type(network_name) is not str or type(endpoint) is not dict:
+                raise ControllerError("container network inspection is invalid")
+            aliases = endpoint.get("Aliases")
+            if aliases is None:
+                aliases = []
+            if (
+                type(aliases) is not list
+                or any(type(alias) is not str or not alias for alias in aliases)
+            ):
+                raise ControllerError("container network aliases are invalid")
+            network_aliases[network_name] = list(aliases)
         raw_log = host.get("LogConfig")
         if type(raw_log) is not dict:
             raise ControllerError("container log inspection is invalid")
@@ -7131,24 +7472,73 @@ class LocalEnvoyController:
                 if isinstance(item, dict)
             ],
             "networks": sorted(raw_networks),
-            "port_bindings": host.get("PortBindings") or {},
+            "network_aliases": {
+                name: network_aliases[name] for name in sorted(network_aliases)
+            },
+            "port_bindings": host.get("PortBindings"),
+            "published_ports": network_settings.get("Ports"),
             "platform": PLATFORM,
             "entrypoint": config_value.get("Entrypoint") or [],
             "command": config_value.get("Cmd") or [],
             "environment": config_value.get("Env") or [],
+            "state": state_status,
+            "stdin_open": config_value.get("OpenStdin", False),
+            "tty": config_value.get("Tty", False),
+            "healthcheck": (
+                "disabled"
+                if config_value.get("Healthcheck") == {"Test": ["NONE"]}
+                else None
+                if config_value.get("Healthcheck") is None
+                else "configured"
+            ),
         }
+        if role == "envoy":
+            expected_networks = [
+                str(track_manifest["backend_network"]),
+                str(track_manifest["frontend_network"]),
+            ]
+        elif role == "driver":
+            expected_networks = [str(track_manifest["frontend_network"])]
+        else:
+            expected_networks = [
+                str(track_manifest.get("backend_network", track_manifest.get("network")))
+            ]
+        required_aliases = {
+            network: [
+                "envoy"
+                if role == "envoy" and network == track_manifest.get("frontend_network")
+                else expected_name
+            ]
+            for network in expected_networks
+        }
+        driver_definition_value: dict[str, object] | None = None
+        if role == "driver":
+            definitions = manifest.get("driver_definitions")
+            if type(definitions) is not list:
+                raise ControllerError("driver definition is unavailable")
+            driver_definition_value = next(
+                (
+                    dict(item)
+                    for item in definitions
+                    if type(item) is dict and item.get("track") == track
+                ),
+                None,
+            )
+            if driver_definition_value is None:
+                raise ControllerError("driver definition is unavailable")
         expected = {
             "name": expected_name,
             "role": role,
             "track": track,
             "image_id": expected_image_id,
-            "network": track_manifest["backend_network"],
-            "config_path": str(config),
-            "config_sha256": _digest_file(config),
-            "gateway_port": (
-                _TRACK_PORTS[track]
-                if role == "envoy"
-                else None
+            "networks": sorted(expected_networks),
+            "config_path": None if config is None else str(config),
+            "config_sha256": None if config is None else _digest_file(config),
+            "gateway_port": None,
+            "required_aliases": required_aliases,
+            "driver_definition": driver_definition_value,
+            "required_state": (
+                "created" if role == "driver" else "running" if require_running else None
             ),
         }
         validate_container_attestation(actual, expected)
@@ -7160,8 +7550,10 @@ class LocalEnvoyController:
             "labels": expected_labels,
             "image_id": image_id,
             "image_reference": image_reference,
-            "config_path": str(config),
-            "config_sha256": _digest_bytes(config.read_bytes()),
+            "config_path": None if config is None else str(config),
+            "config_sha256": (
+                None if config is None else _digest_bytes(config.read_bytes())
+            ),
             "runtime_attestation": actual,
         }
 
@@ -7171,9 +7563,12 @@ class LocalEnvoyController:
         manifest: Mapping[str, object],
         track: str,
         *,
+        segment: str = "backend",
         require_complete_membership: bool = True,
         require_empty_membership: bool = False,
     ) -> dict[str, object]:
+        if segment not in {"backend", "frontend"}:
+            raise ControllerError("network segment inspection is invalid")
         raw_output = self._execute(
             self.docker_command(
                 "network",
@@ -7198,8 +7593,13 @@ class LocalEnvoyController:
         internal = raw["Internal"]
         labels = raw["Labels"]
         containers = raw["Containers"]
+        track_value = _track_manifest(manifest, LiveTrack(track))
         expected_name = str(
-            _track_manifest(manifest, LiveTrack(track))["backend_network"]
+            track_value[
+                f"{segment}_network"
+                if f"{segment}_network" in track_value
+                else "network"
+            ]
         )
         expected_labels = _object_labels(str(manifest["run_id"]), None, track)
         if (
@@ -7240,10 +7640,15 @@ class LocalEnvoyController:
             ):
                 raise ControllerError("network membership shape is invalid")
             members.append(endpoint["Name"])
+        expected_roles = (
+            {"envoy", "authz", "target"}
+            if segment == "backend"
+            else {"envoy", "driver"}
+        )
         expected_members = {
             str(item["name"])
-            for item in _task3_service_containers(manifest)
-            if item["track"] == track
+            for item in manifest["containers"]  # type: ignore[union-attr]
+            if item["track"] == track and item["role"] in expected_roles
         }
         if (
             not set(members).issubset(expected_members)
@@ -7251,8 +7656,16 @@ class LocalEnvoyController:
             or (require_complete_membership and set(members) != expected_members)
             or (require_empty_membership and members)
         ):
-            raise ControllerError("cross-track or incomplete network membership")
-        return {"name": name, "id": object_id, "track": track, "labels": labels}
+            raise ControllerError(
+                f"cross-track or incomplete {segment} network membership"
+            )
+        return {
+            "name": name,
+            "id": object_id,
+            "track": track,
+            "segment": segment,
+            "labels": labels,
+        }
 
     def _inspect_validation_container(
         self, identifier: str, manifest: Mapping[str, object], track: LiveTrack
@@ -7344,13 +7757,14 @@ class LocalEnvoyController:
         while True:
             try:
                 objects = []
-                for item in _task3_service_containers(manifest):
+                for item in manifest["containers"]:
                     objects.append(
                         self._inspect_container(
                             str(item["name"]),
                             manifest,
                             str(item["role"]),
                             str(item["track"]),
+                            require_running=item["role"] != "driver",
                         )
                     )
                 break
@@ -7359,8 +7773,13 @@ class LocalEnvoyController:
                     raise
                 time.sleep(0.25)
         networks = [
-            self._inspect_network(str(item["name"]), manifest, str(item["track"]))
-            for item in _task3_backend_networks(manifest)
+            self._inspect_network(
+                str(item["name"]),
+                manifest,
+                str(item["track"]),
+                segment=_network_segment(item),
+            )
+            for item in _runtime_networks(manifest)
         ]
         return objects, networks
 
@@ -7545,8 +7964,8 @@ class LocalEnvoyController:
             candidate_objects = bound["objects"]
             candidate_networks = bound["network_objects"]
         elif manifest is not None:
-            candidate_objects = _task3_service_containers(manifest)
-            candidate_networks = _task3_backend_networks(manifest)
+            candidate_objects = manifest["containers"]
+            candidate_networks = _runtime_networks(manifest)
         else:
             candidate_objects = []
             candidate_networks = []
@@ -7650,7 +8069,9 @@ class LocalEnvoyController:
                     str(item["track"]),
                     require_running=False,
                 )
-                if "id" in item and current != item:
+                if "id" in item and not _container_attestation_matches(
+                    item, current, allow_stopped=True
+                ):
                     raise ControllerError("recorded container attestation changed during recovery")
                 objects.append(current)
         networks: list[dict[str, object]] = []
@@ -7669,6 +8090,7 @@ class LocalEnvoyController:
                     identifier,
                     manifest,
                     str(item["track"]),
+                    segment=str(item.get("segment", "backend")),
                     require_complete_membership=False,
                 )
                 if "id" in item and current != item:
@@ -7921,6 +8343,10 @@ class LocalEnvoyController:
                 event = "container_create"
                 name = command[command.index("--name") + 1]
                 details = {"name": name}
+            elif "create" in command and "kil.v3b1.role=driver" in command:
+                event = "container_create"
+                name = command[command.index("--name") + 1]
+                details = {"name": name}
             else:
                 raise ControllerError("runtime creation command is unclassified")
             journal_event(self.journal_path, f"{event}_intent", details)
@@ -7934,6 +8360,37 @@ class LocalEnvoyController:
                 created_ids[str(details["name"])] = object_id
             journal_event(
                 self.journal_path, f"{event}_complete", completed_details
+            )
+        for track in _TRACKS:
+            track_value = _track_manifest(manifest, track)
+            envoy_name = str(track_value["envoy_container"])
+            network_name = str(track_value["frontend_network"])
+            try:
+                connect_details = {
+                    "container_id": created_ids[envoy_name],
+                    "container_name": envoy_name,
+                    "network_id": created_ids[network_name],
+                    "network_name": network_name,
+                    "alias": "envoy",
+                }
+            except KeyError as error:
+                raise ControllerError(
+                    "network connect lacks an exact created identity"
+                ) from error
+            journal_event(
+                self.journal_path,
+                "network_connect_intent",
+                connect_details,
+            )
+            self._execute(
+                _network_connect_command(self.docker_command(), connect_details),
+                timeout_s=60,
+                docker=True,
+            )
+            journal_event(
+                self.journal_path,
+                "network_connect_complete",
+                connect_details,
             )
         objects, networks = self._attest_runtime(manifest)
         attested_ids = {
@@ -7977,12 +8434,16 @@ class LocalEnvoyController:
                 manifest,
                 str(record["role"]),
                 str(record["track"]),
+                require_running=record["role"] != "driver",
             )
             if current != record:
                 raise ControllerError("recorded container attestation changed")
         for record in state["network_objects"]:  # type: ignore[union-attr]
             current = self._inspect_network(
-                str(record["id"]), manifest, str(record["track"])
+                str(record["id"]),
+                manifest,
+                str(record["track"]),
+                segment=str(record.get("segment", "backend")),
             )
             if current != record:
                 raise ControllerError("recorded network attestation changed")
@@ -8290,7 +8751,11 @@ class LocalEnvoyController:
                 track.value,
                 require_running=source != "envoy_access",
             )
-            if current != item:
+            if not _container_attestation_matches(
+                item,
+                current,
+                allow_stopped=source == "envoy_access",
+            ):
                 raise ControllerError("source container identity changed before freeze")
         except (ControllerError, OSError, UnicodeError):
             return SourceCollectionStatus(
@@ -8715,7 +9180,13 @@ class LocalEnvoyController:
                 str(item["track"]),
                 require_running=False,
             )
-        if current != item:
+        if item["role"] == "validator":
+            current_matches = current == item
+        else:
+            current_matches = _container_attestation_matches(
+                item, current, allow_stopped=True
+            )
+        if not current_matches:
             raise ControllerError("container changed before exact stop")
         running = self._execute(
             self.docker_command(
@@ -8765,7 +9236,13 @@ class LocalEnvoyController:
                     str(item["track"]),
                     require_running=False,
                 )
-            if after != item:
+            if item["role"] == "validator":
+                after_matches = after == item
+            else:
+                after_matches = _container_attestation_matches(
+                    item, after, allow_stopped=True
+                )
+            if not after_matches:
                 raise ControllerError("container changed after exact stop")
             journal_event(
                 self.journal_path,
@@ -9615,13 +10092,16 @@ class LocalEnvoyController:
             source_attestations: list[dict[str, object]] = []
             if completed:
                 by_track_role = {
-                    (item["track"], item["role"]): item for item in objects
+                    (item["track"], item["role"]): item
+                    for item in objects
+                    if item["role"] in {"authz", "target", "envoy"}
                 }
                 if len(by_track_role) != 9:
                     bound_state = load_bound_active_state(self.state_path)
                     by_track_role = {
                         (item["track"], item["role"]): item
                         for item in bound_state["objects"]
+                        if item["role"] in {"authz", "target", "envoy"}
                     }
                 for track in _TRACKS:
                     target_records = [
@@ -10028,11 +10508,14 @@ class LocalEnvoyController:
         assert isinstance(objects, list)
         transient_objects = state.get("transient_objects", [])
         assert isinstance(transient_objects, list)
-        ordered = list(transient_objects) + [
+        running_ordered = list(transient_objects) + [
             item
             for role in ("envoy", "authz", "target")
             for item in objects
             if item["role"] == role
+        ]
+        ordered = running_ordered + [
+            item for item in objects if item["role"] == "driver"
         ]
         lifecycle_events = journal["events"]
         assert isinstance(lifecycle_events, list)
@@ -10111,7 +10594,7 @@ class LocalEnvoyController:
                         "partial-up failure replacement provenance changed"
                     )
                 failure_intent_sequence = int(failure_intent["sequence"])
-            for item in ordered:
+            for item in running_ordered:
                 self._stop_and_attest_container(item, manifest)
         else:
             requests_state = journal["requests"]
@@ -10147,7 +10630,13 @@ class LocalEnvoyController:
                     require_running=False,
                 )
             )
-            if current != item:
+            if item["role"] == "validator":
+                current_matches = current == item
+            else:
+                current_matches = _container_attestation_matches(
+                    item, current, allow_stopped=True
+                )
+            if not current_matches:
                 raise ControllerError("container changed before exact removal")
             identity = {"id": item["id"], "name": item["name"]}
             transition = _removal_transition(
@@ -10198,6 +10687,7 @@ class LocalEnvoyController:
                 str(item["id"]),
                 manifest,
                 str(item["track"]),
+                segment=str(item.get("segment", "backend")),
                 require_complete_membership=False,
                 require_empty_membership=True,
             )
