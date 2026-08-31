@@ -3831,6 +3831,9 @@ def _public_bundle_snapshot(
     output: Path,
     *,
     validator: Callable[[dict[str, bytes]], object] | None = None,
+    before_completion: Callable[[], None] | None = None,
+    complete: Callable[[dict[str, bytes]], None] | None = None,
+    after_completion: Callable[[], None] | None = None,
 ) -> object:
     if output.is_symlink() or not output.is_dir():
         raise ControllerError("public evidence directory is missing or unsafe")
@@ -3952,44 +3955,56 @@ def _public_bundle_snapshot(
                 ) from error
             if identity != _snapshot_identity(current):
                 raise ControllerError("public evidence changed after snapshot")
-        result = payloads if validator is None else validator(payloads)
-        if (
-            root_identity != _snapshot_identity(os.fstat(root_fd))
-            or raw_identity != _snapshot_identity(os.fstat(raw_fd))
-            or decisions_identity != _snapshot_identity(os.fstat(decisions_fd))
-            or set(os.listdir(root_fd)) != root_names
-            or set(os.listdir(raw_fd)) != {"decisions"}
-            or set(os.listdir(decisions_fd)) != raw_decision_names
-        ):
-            raise ControllerError(
-                "public evidence inventory changed after validation"
-            )
-        try:
-            if root_identity != _snapshot_identity(
-                os.stat(output, follow_symlinks=False)
+        def recheck_snapshot(stage: str) -> None:
+            if (
+                root_identity != _snapshot_identity(os.fstat(root_fd))
+                or raw_identity != _snapshot_identity(os.fstat(raw_fd))
+                or decisions_identity
+                != _snapshot_identity(os.fstat(decisions_fd))
+                or set(os.listdir(root_fd)) != root_names
+                or set(os.listdir(raw_fd)) != {"decisions"}
+                or set(os.listdir(decisions_fd)) != raw_decision_names
             ):
                 raise ControllerError(
-                    "public evidence directory changed after validation"
+                    f"public evidence inventory changed {stage}"
                 )
-            if raw_identity != _snapshot_identity(
-                os.stat("raw", dir_fd=root_fd, follow_symlinks=False)
-            ) or decisions_identity != _snapshot_identity(
-                os.stat("decisions", dir_fd=raw_fd, follow_symlinks=False)
-            ):
-                raise ControllerError(
-                    "public evidence directory identity changed after validation"
-                )
-            for directory_fd, name, identity in identities.values():
-                if identity != _snapshot_identity(
-                    os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+            try:
+                if root_identity != _snapshot_identity(
+                    os.stat(output, follow_symlinks=False)
                 ):
                     raise ControllerError(
-                        "public evidence file identity changed after validation"
+                        f"public evidence directory changed {stage}"
                     )
-        except OSError as error:
-            raise ControllerError(
-                "public evidence changed after validation"
-            ) from error
+                if raw_identity != _snapshot_identity(
+                    os.stat("raw", dir_fd=root_fd, follow_symlinks=False)
+                ) or decisions_identity != _snapshot_identity(
+                    os.stat("decisions", dir_fd=raw_fd, follow_symlinks=False)
+                ):
+                    raise ControllerError(
+                        f"public evidence directory identity changed {stage}"
+                    )
+                for directory_fd, name, identity in identities.values():
+                    if identity != _snapshot_identity(
+                        os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                    ):
+                        raise ControllerError(
+                            f"public evidence file identity changed {stage}"
+                        )
+            except OSError as error:
+                raise ControllerError(
+                    f"public evidence changed {stage}"
+                ) from error
+
+        result = payloads if validator is None else validator(payloads)
+        if before_completion is not None:
+            before_completion()
+        recheck_snapshot("after validation")
+        if complete is not None:
+            complete(payloads)
+        recheck_snapshot("during completion")
+        if after_completion is not None:
+            after_completion()
+        recheck_snapshot("after completion cleanup")
         return result
     except OSError as error:
         raise ControllerError(
@@ -4505,7 +4520,13 @@ def _validate_presenter_snapshot(
         raise ControllerError("public evidence semantic validation failed") from error
 
 
-def verify_presenter_bundle(output: Path) -> Path:
+def verify_presenter_bundle(
+    output: Path,
+    *,
+    before_completion: Callable[[], None] | None = None,
+    complete: Callable[[dict[str, bytes]], None] | None = None,
+    after_completion: Callable[[], None] | None = None,
+) -> Path:
     """Verify one accepted immutable bundle and return its offline presenter."""
     candidate = Path(os.path.abspath(output))
     if candidate.is_symlink():
@@ -4520,13 +4541,25 @@ def verify_presenter_bundle(output: Path) -> Path:
         _validate_presenter_snapshot(payloads, completed=True)
         return bundle / "live.html"
 
-    result = _public_bundle_snapshot(bundle, validator=validate_snapshot)
+    result = _public_bundle_snapshot(
+        bundle,
+        validator=validate_snapshot,
+        before_completion=before_completion,
+        complete=complete,
+        after_completion=after_completion,
+    )
     if not isinstance(result, Path):
         raise ControllerError("public evidence validation result is invalid")
     return result
 
 
-def _verify_failure_presenter_bundle(output: Path) -> Path:
+def _verify_failure_presenter_bundle(
+    output: Path,
+    *,
+    before_completion: Callable[[], None] | None = None,
+    complete: Callable[[dict[str, bytes]], None] | None = None,
+    after_completion: Callable[[], None] | None = None,
+) -> Path:
     """Verify one immutable, explicitly nonpresentable failure bundle."""
     candidate = Path(os.path.abspath(output))
     if candidate.is_symlink():
@@ -4542,7 +4575,13 @@ def _verify_failure_presenter_bundle(output: Path) -> Path:
         _validate_presenter_snapshot(payloads, completed=False)
         return bundle / "live.html"
 
-    result = _public_bundle_snapshot(bundle, validator=validate_snapshot)
+    result = _public_bundle_snapshot(
+        bundle,
+        validator=validate_snapshot,
+        before_completion=before_completion,
+        complete=complete,
+        after_completion=after_completion,
+    )
     if not isinstance(result, Path):
         raise ControllerError("public failure evidence validation result is invalid")
     return result
@@ -4778,6 +4817,9 @@ def _verify_recovered_publication(
     tool_identities: Mapping[str, object],
     engine_provenance: Mapping[str, object],
     global_context: str,
+    before_completion: Callable[[], None] | None = None,
+    publication_complete: Callable[[str], None] | None = None,
+    publication_cleanup: Callable[[], None] | None = None,
 ) -> None:
     """Hold one public snapshot while reattesting semantics and private authority."""
     authority = _validate_authoritative_attestation(authoritative_attestation)
@@ -4847,7 +4889,17 @@ def _verify_recovered_publication(
                     "public publication artifact diverges from durable authority"
                 )
 
-    _public_bundle_snapshot(output, validator=validate_snapshot)
+    def complete_snapshot(payloads: dict[str, bytes]) -> None:
+        if publication_complete is not None:
+            publication_complete(_digest_bytes(payloads["manifest.json"]))
+
+    _public_bundle_snapshot(
+        output,
+        validator=validate_snapshot,
+        before_completion=before_completion,
+        complete=complete_snapshot,
+        after_completion=publication_cleanup,
+    )
 
 
 def _post_teardown_failure_transition(
@@ -5221,6 +5273,8 @@ def finalize_publication(
     completed: bool,
     authoritative_attestation: Mapping[str, object],
     publication_fault: Callable[[str, Path], None] | None = None,
+    publication_complete: Callable[[str], None] | None = None,
+    publication_cleanup: Callable[[], None] | None = None,
     repository_root: Path | None = None,
     publication_staging_root: Path | None = None,
 ) -> Path:
@@ -5496,10 +5550,25 @@ def finalize_publication(
             raise ControllerError(
                 "public evidence destination identity changed after rename"
             )
-        if completed:
-            verify_presenter_bundle(destination)
-        else:
-            _verify_failure_presenter_bundle(destination)
+        def before_completion() -> None:
+            if publication_fault is not None:
+                publication_fault("after_postrename_validation", destination)
+
+        def complete_snapshot(payloads: dict[str, bytes]) -> None:
+            if publication_complete is not None:
+                publication_complete(_digest_bytes(payloads["manifest.json"]))
+
+        verifier = (
+            verify_presenter_bundle
+            if completed
+            else _verify_failure_presenter_bundle
+        )
+        verifier(
+            destination,
+            before_completion=before_completion,
+            complete=complete_snapshot,
+            after_completion=publication_cleanup,
+        )
         _require_directory_identity(
             publication_fd,
             publication_root,
@@ -5765,6 +5834,7 @@ class LocalEnvoyController:
         connection_factory: Callable[..., object] | None = None,
         monotonic_ns: Callable[[], int] | None = None,
         sleeper: Callable[[float], None] | None = None,
+        publication_fault: Callable[[str, Path], None] | None = None,
     ) -> None:
         self.root = root.resolve()
         self.runner = runner or SubprocessCommandRunner()
@@ -5796,6 +5866,7 @@ class LocalEnvoyController:
         )
         self.monotonic_ns = time.monotonic_ns if monotonic_ns is None else monotonic_ns
         self.sleeper = time.sleep if sleeper is None else sleeper
+        self.publication_fault = publication_fault
         self.command_env = {
             "HOME": str(self.home),
             "LANG": "C",
@@ -8993,6 +9064,54 @@ class LocalEnvoyController:
             )
             _validate_manifest(manifest)
             published = self.evidence_root / str(manifest["run_id"])
+
+            def complete_publication(public_manifest_sha256: str) -> None:
+                _require_sha256(
+                    "public manifest completion sha256",
+                    public_manifest_sha256,
+                )
+                completion = {
+                    "run_id": manifest["run_id"],
+                    "public_manifest_sha256": public_manifest_sha256,
+                }
+                current = load_lifecycle_journal(self.journal_path)
+                current_events = current["events"]
+                assert isinstance(current_events, list)
+                recorded = [
+                    event
+                    for event in current_events
+                    if event["event"] == "publication_complete"
+                ]
+                if recorded:
+                    if recorded[-1]["details"] != completion:
+                        raise ControllerError(
+                            "durable publication completion does not bind public evidence"
+                        )
+                    return
+                journal_event(
+                    self.journal_path,
+                    "publication_complete",
+                    completion,
+                )
+
+            def before_publication_completion() -> None:
+                if self.publication_fault is not None:
+                    self.publication_fault(
+                        "after_postrename_validation", published
+                    )
+
+            def cleanup_completed_publication() -> None:
+                archive_root = self._private_completed_root()
+                archived = archive_root / f"{manifest['run_id']}.journal.json"
+                if archived.exists():
+                    raise ControllerError(
+                        "completed lifecycle journal archive would clobber"
+                    )
+                if self.state_path.exists():
+                    self.state_path.unlink()
+                self._clear_readiness_poison(str(journal["execution_nonce"]))
+                os.rename(self.journal_path, archived)
+
             if not published.exists():
                 failure_transition = _post_teardown_failure_transition(
                     events, str(manifest["run_id"])
@@ -9096,6 +9215,8 @@ class LocalEnvoyController:
                     global_context_after=global_after,
                     completed=completed,
                     authoritative_attestation=authoritative,
+                    publication_fault=self.publication_fault,
+                    publication_complete=complete_publication,
                     repository_root=self.root,
                     publication_staging_root=self._private_publication_root(),
                 )
@@ -9143,38 +9264,10 @@ class LocalEnvoyController:
                 tool_identities=tool_identities,
                 engine_provenance=engine_provenance,
                 global_context=str(recovered_journal["global_context_before"]),
+                before_completion=before_publication_completion,
+                publication_complete=complete_publication,
+                publication_cleanup=cleanup_completed_publication,
             )
-            public_manifest_sha256 = _digest_file(published / "manifest.json")
-            publication_completions = [
-                event
-                for event in recovered_events
-                if event["event"] == "publication_complete"
-            ]
-            expected_publication_completion = {
-                "run_id": manifest["run_id"],
-                "public_manifest_sha256": public_manifest_sha256,
-            }
-            if publication_completions:
-                if publication_completions[-1]["details"] != (
-                    expected_publication_completion
-                ):
-                    raise ControllerError(
-                        "durable publication completion does not bind public evidence"
-                    )
-            else:
-                journal_event(
-                    self.journal_path,
-                    "publication_complete",
-                    expected_publication_completion,
-                )
-            if self.state_path.exists():
-                self.state_path.unlink()
-            archive_root = self._private_completed_root()
-            archived = archive_root / f"{manifest['run_id']}.journal.json"
-            if archived.exists():
-                raise ControllerError("completed lifecycle journal archive would clobber")
-            self._clear_readiness_poison(str(journal["execution_nonce"]))
-            os.rename(self.journal_path, archived)
             return published
         if dedicated["status"].lower() != "running":
             journal_event(
@@ -9556,6 +9649,35 @@ class LocalEnvoyController:
             "publication_intent",
             {"run_id": manifest["run_id"], "completed": completed},
         )
+
+        def complete_publication(public_manifest_sha256: str) -> None:
+            _require_sha256(
+                "public manifest completion sha256",
+                public_manifest_sha256,
+            )
+            journal_event(
+                self.journal_path,
+                "publication_complete",
+                {
+                    "run_id": manifest["run_id"],
+                    "public_manifest_sha256": public_manifest_sha256,
+                },
+            )
+
+        def cleanup_completed_publication() -> None:
+            archive_root = self._private_completed_root()
+            archived_journal = (
+                archive_root / f"{manifest['run_id']}.journal.json"
+            )
+            if archived_journal.exists():
+                raise ControllerError(
+                    "completed lifecycle journal would clobber an archive"
+                )
+            if self.state_path.exists():
+                self.state_path.unlink()
+            self._clear_readiness_poison(str(journal["execution_nonce"]))
+            os.rename(self.journal_path, archived_journal)
+
         published = finalize_publication(
             output,
             self.evidence_root,
@@ -9567,22 +9689,12 @@ class LocalEnvoyController:
             global_context_after=global_after,
             completed=completed,
             authoritative_attestation=authoritative,
+            publication_fault=self.publication_fault,
+            publication_complete=complete_publication,
+            publication_cleanup=cleanup_completed_publication,
             repository_root=self.root,
             publication_staging_root=self._private_publication_root(),
         )
-        journal_event(
-            self.journal_path,
-            "publication_complete",
-            {"run_id": manifest["run_id"], "public_manifest_sha256": _digest_file(published / "manifest.json")},
-        )
-        if self.state_path.exists():
-            self.state_path.unlink()
-        archive_root = self._private_completed_root()
-        archived_journal = archive_root / f"{manifest['run_id']}.journal.json"
-        if archived_journal.exists():
-            raise ControllerError("completed lifecycle journal would clobber an archive")
-        self._clear_readiness_poison(str(journal["execution_nonce"]))
-        os.rename(self.journal_path, archived_journal)
         return published
 
 

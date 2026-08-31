@@ -7404,6 +7404,7 @@ def published_presenter_bundle(
     completed=True,
     global_context="personal",
     publication_fault=None,
+    publication_complete=None,
 ):
     value, requests, decisions, envoy, targets = JoinContractTest().all_records()
     if completed:
@@ -7438,6 +7439,7 @@ def published_presenter_bundle(
         completed=completed,
         authoritative_attestation=authority,
         publication_fault=publication_fault,
+        publication_complete=publication_complete,
     )
     return published
 
@@ -7608,6 +7610,89 @@ def interrupted_published_recovery(root, *, completed):
 
 
 class EvidenceBundleTest(unittest.TestCase):
+    def assert_postvalidation_publication_mutation_is_rejected(
+        self, *, completed
+    ):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            completion_digests = []
+
+            def mutate_after_validation(stage, path):
+                if stage != "after_postrename_validation":
+                    return
+                live = path / "live.html"
+                live.chmod(0o600)
+                live.write_bytes(
+                    b"<!doctype html><title>coherent late rewrite</title>\n"
+                )
+                live.chmod(0o444)
+                rewrite_public_bundle_hashes(path)
+
+            with self.assertRaisesRegex(
+                ControllerError, "changed|identity|publication|presenter"
+            ):
+                published_presenter_bundle(
+                    root,
+                    completed=completed,
+                    publication_fault=mutate_after_validation,
+                    publication_complete=completion_digests.append,
+                )
+            value, _, _, _, _ = JoinContractTest().all_records()
+            self.assertEqual(completion_digests, [])
+            self.assertFalse((root / "public" / value["run_id"]).exists())
+            self.assertEqual(
+                len(
+                    list(
+                        (root / "private/.publication-staging").glob(
+                            ".failed-publication-*"
+                        )
+                    )
+                ),
+                1,
+            )
+
+    def test_complete_publication_rejects_postvalidation_coherent_rewrite(self):
+        self.assert_postvalidation_publication_mutation_is_rejected(
+            completed=True
+        )
+
+    def test_failure_publication_rejects_postvalidation_coherent_rewrite(self):
+        self.assert_postvalidation_publication_mutation_is_rejected(
+            completed=False
+        )
+
+    def assert_recovery_postvalidation_mutation_is_rejected(self, *, completed):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, published, value = interrupted_published_recovery(
+                Path(directory), completed=completed
+            )
+
+            def mutate_after_validation(stage, path):
+                if stage != "after_postrename_validation":
+                    return
+                live = path / "live.html"
+                live.chmod(0o600)
+                live.write_bytes(
+                    b"<!doctype html><title>coherent recovery rewrite</title>\n"
+                )
+                live.chmod(0o444)
+                rewrite_public_bundle_hashes(path)
+
+            controller.publication_fault = mutate_after_validation
+            with self.assertRaisesRegex(
+                ControllerError, "changed|identity|publication|presenter"
+            ):
+                controller.down()
+
+            self.assertTrue(published.is_dir())
+            self.assert_recovery_authority_retained(controller, value)
+
+    def test_complete_recovery_rejects_postvalidation_coherent_rewrite(self):
+        self.assert_recovery_postvalidation_mutation_is_rejected(completed=True)
+
+    def test_failure_recovery_rejects_postvalidation_coherent_rewrite(self):
+        self.assert_recovery_postvalidation_mutation_is_rejected(completed=False)
+
     def assert_recovery_authority_retained(self, controller, value):
         self.assertTrue(controller.journal_path.is_file())
         self.assertTrue(controller.state_path.is_file())

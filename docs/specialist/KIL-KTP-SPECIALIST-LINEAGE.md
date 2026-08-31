@@ -4660,3 +4660,64 @@ committed zero-request smoke. Only after that smoke and exact teardown pass may
 one central proof run be attempted and considered for exact-file publication.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-093 — 2026-08-30 — Close the publication-completion race
+
+**Input:** Close the remaining TOCTOU window in both normal publication and
+post-delete recovery: a public tree coherently rewritten after initial semantic
+verification but before `publication_complete` must never be accepted, and its
+manifest completion digest must never come from a later path-based reread.
+
+**Interpretation:** Public checksum and semantic verification, durable
+completion, and lifecycle cleanup form one transaction boundary. The public
+tree descriptors and original file identities must remain held while the
+controller injects the completion-boundary fault gate, rechecks the exact tree,
+derives the manifest digest from the verified snapshot bytes, persists or
+validates `publication_complete`, performs cleanup/archive, and rechecks the
+public identities once more. A mutation before completion must occur before any
+authority is discarded; a mutation during completion must leave the durable
+journal authority available either active or archived.
+
+**Decision status:** Confirmed harness-only implementation complete, pending
+independent re-review and the live gate. `_public_bundle_snapshot` now exposes
+closed pre-completion, durable-completion, and post-completion cleanup callbacks
+inside its descriptor lifetime. It performs exact directory inventory and
+file/device/inode/size/time reattestation after semantic validation, after the
+completion callback, and after cleanup. Normal complete/failure publication and
+complete/failure recovery derive `public_manifest_sha256` only from the held
+`manifest.json` bytes. Controller cleanup and journal archival execute while
+those public descriptors remain held. The prior separate path digest reads were
+removed.
+
+Four test-first regressions coherently rewrite `live.html`, the public manifest
+commitment and artifact hashes, and `SHA256SUMS` at the exact post-validation
+hook. Complete and failure normal publication both reject and quarantine the
+invalid final leaf without recording completion. Complete and failure recovery
+both reject without clearing the journal, active state, readiness poison, or
+authoritative archive opportunity. Fresh static verification passes 174
+controller tests and 389 repository tests.
+
+**Rationale:** A self-consistent second path read does not prove it is the file
+that passed semantic validation. Passing snapshotted bytes directly to the
+durable completion callback and retaining the descriptor identity set across
+completion makes the recorded digest describe the exact verified object. The
+ordered rechecks prevent a coherent checksum rewrite at the completion boundary
+from being mistaken for a successful publication.
+
+**Affected artifacts:**
+
+- `tools/v3b1_local_envoy.py`
+- `tests/test_v3b1_local_envoy.py`
+- `docs/lab/V3-PROGRESS.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No live Docker, Colima, browser, KIL, authorization,
+Envoy, target, or central-request operation was performed. This transaction
+binds local publication completion; publisher authenticity and distribution
+signing remain external gates.
+
+**Next gate:** Independent code-quality re-review, then exactly one committed
+zero-request smoke. A central request remains prohibited until that smoke and
+its exact teardown/failure-bundle evidence pass review.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

@@ -49,9 +49,11 @@ Through implementation commit
 `14ed92dfb1431fb2e4c3f588ff19ad07122f11fe`, V3B-1 implements the pinned local
 Envoy `ext_authz` boundary, the transcript-driven readiness, provenance,
 evidence-freeze, exact-inventory teardown and partial-up recovery contracts,
-and a deterministic authoritative offline presenter. Fresh static verification
-at that checkpoint passed 166 controller tests and 381 repository tests, plus
-Python compilation and diff hygiene.
+and a deterministic authoritative offline presenter. Subsequent publication-
+recovery hardening closes repaired-checksum and post-validation completion
+races without changing the live boundary. Fresh static verification at the
+current branch checkpoint passed 174 controller tests and 389 repository tests,
+plus Python compilation and diff hygiene.
 
 Three exploratory local cycles were rejected and remain private. No V3B-1 run
 has been accepted, promoted, or labeled validated. The presenter and its
