@@ -5353,3 +5353,61 @@ review. Only after approval of the written specification may the implementation
 plan be created.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-105 — 2026-08-31 — Written driver specification approved; implementation plan authorized
+
+**Input:** Approve the written request-driver specification, move immediately to
+the next phase, use as many agents as useful, and prioritize a visible live lab
+today.
+
+**Interpretation:** The user approval closes the written-spec gate and
+authorizes planning and test-first implementation of the selected driver
+boundary. Parallel agents may map independent runtime, evidence/recovery, and
+documentation/live-gate domains, but implementation remains ordered where
+files and state machines overlap. A live consequential request remains gated by
+the merged implementation and a passing request-free readiness lifecycle.
+
+**Decision status:** Confirmed specification approved. PR #10 passed both CI
+bootstrap jobs and is merged. Local and public main were synchronized cleanly at
+`ea27be02d347f2fc089cac1edd8b506138e4a9c5` before creating branch
+`codex/v3b1-in-network-request-driver`.
+
+Three parallel read-only planning agents mapped: container/runtime topology and
+interactive driver control; content identity, public evidence, offline
+verification, recovery, and teardown; and the visible readiness gate,
+architecture diagram, paper/demo, publication, backup, and notification
+boundaries. Their results were reconciled into the test-first plan
+`docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`.
+
+The plan creates separate shared-protocol, container-executable, and host-
+transport modules; preserves legacy bundle verification by schema dispatch;
+implements six internal segments, twelve track containers, and three stopped
+one-shot drivers; adds concurrent zero-byte readiness and deterministic EOF
+cancellation; routes exactly one post-intent request through each retained
+driver connection; publishes exact canonical driver results; and makes recovery
+and teardown phase-aware. It then requires independent review, an implementation
+PR and merge, a request-free live gate, and only then one no-retry central proof.
+
+**Rationale:** Decomposing protocol, container, and host transport responsibilities
+keeps the existing controller from absorbing another unrelated state machine.
+The ordered gates provide the fastest defensible route to a visible lab while
+preserving isolation, public evidence verifiability, and the no-retry boundary.
+
+**Affected artifacts:**
+
+- `docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- GitHub PR #10 and merged public main `ea27be02d347f2fc089cac1edd8b506138e4a9c5`
+
+**Unresolved questions:** Implementation and both live gates remain unexecuted.
+The offline backup still requires an explicit destination and a choice about
+including ignored private failed-run evidence. No external email connector is
+currently available in this execution context, so completion must not be
+claimed as emailed unless that capability becomes available.
+
+**Next gate:** Commit the implementation plan, establish an isolated worktree,
+and execute Tasks 1-9 through fresh implementer plus spec and quality review
+agents. After merge and synchronization, run the request-free live readiness
+gate visibly; authorize the central request only if that gate passes exactly.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
