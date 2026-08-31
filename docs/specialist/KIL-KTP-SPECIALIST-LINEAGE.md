@@ -7120,3 +7120,46 @@ then write, self-review, and commit the design specification before any page
 implementation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-133 — 2026-08-31 — Branching counterfactual visual language selected
+
+**Input:** A founder-supplied reference graphic showed the actual incident as
+a branching red timeline, a blue KIL counterfactual terminating at Phase 1,
+and downstream phases faded under an `Unreachable` label. The founder stated
+that graphics of this kind help tell the story.
+
+**Interpretation:** Use this branching topological-timeline grammar as the
+primary incident visual inside synchronized Presenter/Audience mode. Retain a
+persistent system-topology map and a separate incident-to-lab mapping, but make
+the actual-versus-counterfactual branch graphic the principal explanation of
+why one early transport intervention changes downstream reachability.
+
+**Decision status:** Confirmed visual direction; implementation still awaits
+approval of the consolidated design. The scenario's `d_t = 0.95` value may be
+shown only with an explicit `modeled` label. Replace unconditional phrases such
+as `absolute denial` and `prevented` with conditional model language such as
+`modeled deny at the mediated boundary` and `downstream actions conditionally
+unreachable`. Correct the reference subtitle duplication before publication.
+
+**Rationale:** The supplied graphic communicates causality and leverage more
+clearly than a linear component diagram, but its evidence language must remain
+consistent with the canonical scenario: the incident sequence is observed from
+the disclosure, the divergence value and KIL result are modeled, and only local
+laboratory reproduction can be labeled validated.
+
+**Affected artifacts:**
+
+- founder-supplied branching-timeline visual reference
+- proposed Presenter/Audience design specification
+- proposed walkthrough visualization source and generated export
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Consolidated founder approval remains required for
+the incident-centered storyboard, principal Phase 1 transport cutoff, and this
+two-lane actual-versus-KIL visual treatment. The v3 snapshot specification also
+remains at its separate founder-review gate.
+
+**Next gate:** Approve the consolidated visual design; then write, self-review,
+and commit the design specification before implementation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
