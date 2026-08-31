@@ -6997,3 +6997,38 @@ test-first implementation plan, and keep the central `run` prohibited until a
 fresh merged request-free v3 publication gate passes.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-130 — 2026-08-31 — Stage-linked presenter talk track requested
+
+**Input:** Determine whether each walkthrough click has an associated talk
+track and create one if absent.
+
+**Interpretation:** The current page provides a changing diagram and one-line
+technical explanation, but it does not provide a rehearsable spoken narrative.
+The requested extension should bind one claim-safe script to each of the seven
+existing stages without changing laboratory behavior or evidence status.
+
+**Decision status:** Confirmed gap; design pending. No walkthrough source or
+standalone export has been modified. The first design choice is speaking depth:
+executive-short, balanced presenter, or technical-deep.
+
+**Rationale:** Speaking length determines both content density and page layout.
+The talk track must preserve the distinction between observed request-free
+behavior, modeled V3A outcomes, and the pending V3B-1 enforcement proof.
+
+**Affected artifacts:**
+
+- proposed update to `kil-live-demo-walkthrough.html`
+- proposed regenerated export
+  `artifacts/generated/kil-live-demo-walkthrough.html`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Select approximately 15 seconds, 30–45 seconds, or
+60–90 seconds of narration per stage. The recommended default is 30–45 seconds
+for a mixed executive and technical audience.
+
+**Next gate:** Confirm speaking depth; compare visible embedded notes, a
+separate speaker guide, and dual presenter/audience modes; approve the narrow
+design before any page modification.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
