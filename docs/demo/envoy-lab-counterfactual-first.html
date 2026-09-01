@@ -4,18 +4,439 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KIL — Counterfactual-First Envoy Laboratory</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --kil-bg: light-dark(#f4f7fa, #0d141c);
+      --kil-panel: light-dark(#ffffff, #151f2a);
+      --kil-text: light-dark(#17212b, #edf4fa);
+      --kil-muted: light-dark(#536579, #a9b8c7);
+      --kil-line: light-dark(#c8d3df, #354454);
+      --kil-observed: light-dark(#a33a34, #ff8d84);
+      --kil-model: light-dark(#176b8d, #73c8ec);
+      --kil-pending: light-dark(#8a6718, #e5c66e);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--kil-text);
+      background: var(--kil-bg);
+      line-height: 1.55;
+    }
+
+    header,
+    main,
+    footer {
+      width: min(1180px, 100%);
+      margin-inline: auto;
+      padding: 24px;
+    }
+
+    header {
+      padding-top: clamp(48px, 9vw, 104px);
+    }
+
+    .kil-narrative {
+      display: grid;
+      max-width: 78ch;
+      gap: 18px;
+    }
+
+    .kil-narrative > * {
+      margin: 0;
+    }
+
+    .kil-eyebrow,
+    .kil-band-number,
+    .kil-evidence-label {
+      color: var(--kil-model);
+      font-size: 0.76rem;
+      font-weight: 750;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 18ch;
+      font-size: clamp(2.4rem, 7vw, 5.7rem);
+      line-height: 0.98;
+      letter-spacing: -0.05em;
+    }
+
+    .kil-boundary {
+      padding: 16px 18px;
+      border-left: 4px solid var(--kil-pending);
+      background: color-mix(in srgb, var(--kil-pending) 9%, var(--kil-panel));
+    }
+
+    #diagram {
+      display: grid;
+      gap: 22px;
+    }
+
+    .kil-band {
+      display: grid;
+      gap: 20px;
+      padding: clamp(20px, 4vw, 38px);
+      overflow: hidden;
+      border: 1px solid var(--kil-line);
+      border-radius: 18px;
+      background: var(--kil-panel);
+      box-shadow: 0 18px 44px color-mix(in srgb, var(--kil-text) 7%, transparent);
+    }
+
+    .kil-band h2,
+    .kil-band p {
+      margin: 0;
+    }
+
+    .kil-band h2 {
+      font-size: clamp(1.45rem, 3vw, 2.25rem);
+      line-height: 1.15;
+    }
+
+    [data-band=observed] .kil-band-number {
+      color: var(--kil-observed);
+    }
+
+    [data-band=result] .kil-band-number {
+      color: var(--kil-pending);
+    }
+
+    .kil-rail {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+      margin: 4px 0;
+    }
+
+    .kil-node {
+      position: relative;
+      display: grid;
+      min-height: 64px;
+      place-items: center;
+      padding: 10px;
+      border: 1px solid var(--kil-line);
+      border-radius: 10px;
+      color: var(--kil-text);
+      background: color-mix(in srgb, var(--kil-panel) 84%, var(--kil-bg));
+      font-size: 0.84rem;
+      font-weight: 650;
+      line-height: 1.25;
+      text-align: center;
+    }
+
+    .kil-rail .kil-node:not(:last-child)::after {
+      position: absolute;
+      z-index: 2;
+      right: -9px;
+      content: "→";
+      color: var(--kil-observed);
+      font-weight: 900;
+    }
+
+    .kil-note,
+    .kil-contract {
+      padding: 13px 16px;
+      border-radius: 10px;
+      color: var(--kil-muted);
+      background: color-mix(in srgb, var(--kil-model) 8%, var(--kil-panel));
+      font-size: 0.92rem;
+    }
+
+    .kil-tracks {
+      display: grid;
+      gap: 10px;
+    }
+
+    .kil-track {
+      display: grid;
+      grid-template-columns: 150px repeat(4, 1fr) 80px;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--kil-line);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--kil-model) 4%, var(--kil-panel));
+    }
+
+    .kil-track-title,
+    .kil-outcome {
+      border-color: color-mix(in srgb, var(--kil-model) 58%, var(--kil-line));
+      color: var(--kil-model);
+    }
+
+    .kil-outcome {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .kil-result-svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--kil-line);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--kil-bg) 45%, var(--kil-panel));
+    }
+
+    .kil-result-svg text {
+      fill: var(--kil-text);
+      font-family: inherit;
+    }
+
+    .kil-result-svg .kil-svg-muted {
+      fill: var(--kil-muted);
+    }
+
+    .kil-result-svg .kil-svg-node {
+      fill: var(--kil-panel);
+      stroke: var(--kil-line);
+      stroke-width: 2;
+    }
+
+    .kil-result-svg .kil-svg-line {
+      fill: none;
+      stroke: var(--kil-model);
+      stroke-width: 4;
+    }
+
+    .kil-result-svg .kil-svg-barrier {
+      fill: var(--kil-observed);
+    }
+
+    .kil-result-svg .kil-svg-cutoff {
+      fill: var(--kil-observed);
+      font-weight: 750;
+    }
+
+    .kil-result-svg .kil-svg-unreachable {
+      opacity: 0.56;
+      fill: none;
+      stroke: var(--kil-line);
+      stroke-width: 2;
+      stroke-dasharray: 8 7;
+    }
+
+    .kil-mobile-result {
+      display: none;
+      padding: 18px;
+      border: 1px solid var(--kil-line);
+      border-left: 5px solid var(--kil-observed);
+      border-radius: 10px;
+    }
+
+    .kil-mobile-result p + p {
+      margin-bottom: 0;
+      color: var(--kil-muted);
+    }
+
+    .kil-evidence {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .kil-evidence-item {
+      min-height: 112px;
+      padding: 16px;
+      border: 1px solid var(--kil-line);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--kil-bg) 36%, var(--kil-panel));
+    }
+
+    .kil-evidence-item p {
+      margin-top: 6px;
+      color: var(--kil-muted);
+    }
+
+    .kil-evidence-item:last-child .kil-evidence-label {
+      color: var(--kil-pending);
+    }
+
+    footer {
+      padding-block: 30px 48px;
+      color: var(--kil-muted);
+      font-size: 0.9rem;
+    }
+
+    footer h2 {
+      color: var(--kil-text);
+      font-size: 1rem;
+    }
+
+    footer ul {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 22px;
+      padding: 0;
+      list-style: none;
+    }
+
+    footer a {
+      color: var(--kil-model);
+      text-underline-offset: 0.18em;
+    }
+
+    @media (max-width: 640px) {
+      header,
+      main,
+      footer {
+        padding-inline: 16px;
+      }
+
+      .kil-rail,
+      .kil-track,
+      .kil-evidence {
+        grid-template-columns: 1fr;
+      }
+
+      .kil-rail .kil-node:not(:last-child)::after {
+        right: auto;
+        bottom: -17px;
+        content: "↓";
+      }
+
+      .kil-result-svg {
+        display: none;
+      }
+
+      .kil-mobile-result {
+        display: block;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
 </head>
 <body>
   <header>
-    <h1>Envoy Lab: Counterfactual-First Diagram</h1>
-    <p>A source-cited shell for the counterfactual-first Envoy lab diagram.</p>
+    <div class="kil-narrative">
+      <p class="kil-eyebrow">Kinetic Infrastructure Layer · Executive counterfactual</p>
+      <h1>Why ambient breach requires ambient enforcement</h1>
+      <p>Cybersecurity is currently at an inflection point where reliance on static or AI-Assisted SOC (Security Operations Centers) and traditional AI-augmented controls is no longer sufficient to counter modern, adversarial AI.</p>
+      <p>To remain effective, the practice must transcend the legacy detect-and-prevent paradigm and evolve into a state of ambient enforcement. We are transitioning from a landscape of ‘ambient risk’ and ‘ambient threat’ into an era of pervasive, continuous ‘ambient breach’, necessitating a shift toward autonomous, real-time mitigation that functions at speed and scale independent of human intervention.</p>
+      <p>Ambient enforcement represents this critical evolution by decoupling defenses from static, procedural constraints and utilizing kinetic infrastructure to match the velocity of AI adversaries in real time. By leveraging the same transport mechanisms as the threat itself and instantiating immutable controls that enforce security through physics, we move toward a future where cybersecurity functions not as a reactive overlay, but as an autonomous, omnipresent force capable of neutralizing AI-driven threats with the same speed and adaptability as the intelligence it seeks to contain.</p>
+      <p class="kil-boundary"><strong>Interpretive boundary:</strong> pervasive, continuous ambient breach names the operating condition in which service and attack cannot reliably be distinguished before consequence; it does not mean every system is continuously compromised.</p>
+    </div>
   </header>
-  <main>
-    <section aria-labelledby="diagram-title">
-      <h2 id="diagram-title">Diagram</h2>
-      <p>The counterfactual diagram will be expanded here.</p>
+
+  <main id="kil-envoy-counterfactual">
+    <section id="diagram" aria-label="Counterfactual-first Envoy laboratory composition">
+      <section class="kil-band" data-band="observed" aria-labelledby="observed-title">
+        <div>
+          <span class="kil-band-number">Observed</span>
+          <h2 id="observed-title">01 · Observed incident</h2>
+          <p>Authenticated, service-like activity carried attack through ordinary interfaces before consequence.</p>
+        </div>
+        <div class="kil-rail" aria-label="Published incident sequence">
+          <div class="kil-node">Worker foothold</div>
+          <div class="kil-node">Cluster API request</div>
+          <div class="kil-node">Cloud and node privilege</div>
+          <div class="kil-node">136-key secret read</div>
+          <div class="kil-node">Cross-cluster access</div>
+          <div class="kil-node">Mesh enrollment</div>
+          <div class="kil-node">Token and CI pivot</div>
+        </div>
+        <p class="kil-note">First mediated action normalized into a harmless request.</p>
+      </section>
+
+      <section class="kil-band" data-band="lab" aria-labelledby="lab-title">
+        <div>
+          <span class="kil-band-number">Modeled</span>
+          <h2 id="lab-title">02 · Envoy lab model</h2>
+          <p>KTP supplies supervision plus tighten-only constraints; the Envoy adapter derives the transport effect.</p>
+        </div>
+        <div class="kil-tracks" aria-label="Three isolated laboratory tracks">
+          <div class="kil-track">
+            <div class="kil-node kil-track-title">A · Credential policy</div>
+            <div class="kil-node">Driver</div>
+            <div class="kil-node">Envoy</div>
+            <div class="kil-node">Policy authz</div>
+            <div class="kil-node">Target marker 1</div>
+            <div class="kil-node kil-outcome">HTTP 200</div>
+          </div>
+          <div class="kil-track">
+            <div class="kil-node kil-track-title">B · Signed composite KTP state</div>
+            <div class="kil-node">Driver</div>
+            <div class="kil-node">Envoy</div>
+            <div class="kil-node">Signature + freshness</div>
+            <div class="kil-node">Target marker 1</div>
+            <div class="kil-node kil-outcome">HTTP 200</div>
+          </div>
+          <div class="kil-track">
+            <div class="kil-node kil-track-title">C · State + local reduction</div>
+            <div class="kil-node">Driver</div>
+            <div class="kil-node">Envoy</div>
+            <div class="kil-node">0.95 modeled divergence</div>
+            <div class="kil-node">Target marker 0</div>
+            <div class="kil-node kil-outcome">derived HTTP 403</div>
+          </div>
+        </div>
+        <p class="kil-contract">Modeled process contract: 200 / 200 / 403 · target markers 1 / 1 / 0.</p>
+      </section>
+
+      <section class="kil-band" data-band="result" aria-labelledby="result-title">
+        <div>
+          <span class="kil-band-number">Counterfactual</span>
+          <h2 id="result-title">03 · KIL counterfactual result</h2>
+        </div>
+        <svg class="kil-result-svg" viewBox="0 0 1000 250" role="img" aria-labelledby="kil-result-title kil-result-desc">
+          <title id="kil-result-title">Modeled KIL cutoff at the Envoy boundary</title>
+          <desc id="kil-result-desc">Signed composite KTP state plus modeled local reduction reaches the Envoy boundary, where an HTTP 403 is derived and dependent downstream phases become conditionally unreachable.</desc>
+          <path class="kil-svg-line" d="M210 92 H335 M505 92 H580" />
+          <rect class="kil-svg-node" x="25" y="45" width="185" height="94" rx="12" />
+          <text x="117" y="78" text-anchor="middle" font-size="15" font-weight="700">Signed state +</text>
+          <text x="117" y="102" text-anchor="middle" font-size="15" font-weight="700">local reduction</text>
+          <text class="kil-svg-muted" x="117" y="124" text-anchor="middle" font-size="12">modeled input</text>
+          <rect class="kil-svg-node" x="335" y="45" width="170" height="94" rx="12" />
+          <text x="420" y="80" text-anchor="middle" font-size="15" font-weight="700">Action-scale</text>
+          <text x="420" y="103" text-anchor="middle" font-size="15" font-weight="700">authority check</text>
+          <rect class="kil-svg-barrier" x="576" y="24" width="12" height="166" rx="6" />
+          <text class="kil-svg-cutoff" x="582" y="214" text-anchor="middle" font-size="16">derived HTTP 403</text>
+          <text class="kil-svg-muted" x="582" y="235" text-anchor="middle" font-size="12">Envoy boundary</text>
+          <rect class="kil-svg-unreachable" x="630" y="28" width="340" height="162" rx="14" />
+          <text x="800" y="58" text-anchor="middle" font-size="16" font-weight="700">Conditionally unreachable</text>
+          <text class="kil-svg-muted" x="800" y="91" text-anchor="middle" font-size="13">Cloud privilege · secrets</text>
+          <text class="kil-svg-muted" x="800" y="119" text-anchor="middle" font-size="13">Cross-cluster access · mesh enrollment</text>
+          <text class="kil-svg-muted" x="800" y="147" text-anchor="middle" font-size="13">Token and CI pivot</text>
+        </svg>
+        <div class="kil-mobile-result">
+          <p><strong>Signed state + modeled local reduction → derived HTTP 403</strong></p>
+          <p>Conditionally unreachable: cloud privilege, secrets, cross-cluster access, mesh enrollment, and CI pivot.</p>
+        </div>
+        <div class="kil-evidence" aria-label="Evidence status">
+          <div class="kil-evidence-item">
+            <span class="kil-evidence-label">Observed</span>
+            <p>Published incident sequence</p>
+          </div>
+          <div class="kil-evidence-item">
+            <span class="kil-evidence-label">Modeled</span>
+            <p>0.95 reduction and derived transport outcomes</p>
+          </div>
+          <div class="kil-evidence-item">
+            <span class="kil-evidence-label">Pending validation</span>
+            <p>Accepted V3B-1 live enforcement result</p>
+          </div>
+        </div>
+      </section>
     </section>
   </main>
+
   <footer>
     <h2>Sources</h2>
     <ul>
