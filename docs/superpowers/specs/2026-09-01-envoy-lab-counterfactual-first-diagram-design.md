@@ -1,8 +1,8 @@
 # Envoy Laboratory Counterfactual-First Diagram Design
 
 **Date:** 2026-09-01  
-**Status:** Founder-approved composition; written specification pending founder
-review  
+**Status:** Founder-approved composition and narrative; revised written
+specification pending founder review
 **Delivery targets:** Standalone presentation-quality diagram and synchronized
 Presenter/Audience demonstration scene  
 **Implementation authority:** Not granted by this specification
@@ -29,7 +29,50 @@ not change the canonical scenario, trust-decay mathematics, KTP or KIL decision
 semantics, application behavior, test environment, evidence bundles,
 containers, Envoy configuration, laboratory configuration, or live services.
 
-## 2. Controlling sources and alignment
+## 2. Narrative introduction — why this is being demonstrated
+
+The executive-facing explanation must establish the urgency before introducing
+the incident topology or laboratory mechanics. The following founder-supplied
+narrative is the controlling introduction:
+
+> Cybersecurity is currently at an inflection point where reliance on static or
+> AI-Assisted SOC (Security Operations Centers) and traditional AI-augmented
+> controls is no longer sufficient to counter modern, adversarial AI.
+>
+> To remain effective, the practice must transcend the legacy
+> detect-and-prevent paradigm and evolve into a state of ambient enforcement.
+> We are transitioning from a landscape of 'ambient risk' and 'ambient threat'
+> into an era of pervasive, continuous 'ambient breach', necessitating a shift
+> toward autonomous, real-time mitigation that functions at speed and scale
+> independent of human intervention.
+>
+> 'Ambient enforcement' represents this critical evolution by decoupling
+> defenses from static, procedural constraints and utilizing kinetic
+> infrastructure to match the velocity of AI adversaries in real time. By
+> leveraging the same transport mechanisms as the threat itself and
+> instantiating immutable controls that enforce security through physics, we
+> move toward a future where cybersecurity functions not as a reactive overlay,
+> but as an autonomous, omnipresent force capable of neutralizing AI-driven
+> threats with the same speed and adaptability as the intelligence it seeks to
+> contain.
+
+The standalone executive presentation places this narrative immediately before
+the three-band diagram. The synchronized Presenter/Audience scene may reveal it
+in concise visual beats, but must preserve all three transitions:
+
+```text
+legacy detection is insufficient at adversarial-AI speed
+  -> ambient breach creates the operating urgency
+  -> ambient enforcement moves mitigation into kinetic infrastructure
+```
+
+The phrase `pervasive, continuous ambient breach` names the persistent systemic
+condition in which authenticated service and attack cannot reliably be
+distinguished before consequence. It does not claim that every system is
+continuously compromised. Action without verified current authority remains a
+concrete manifestation of that broader condition, not its complete definition.
+
+## 3. Controlling sources and alignment
 
 The diagram must align with:
 
@@ -52,7 +95,7 @@ set. `Permit`, `constrain`, `deny`, and `indeterminate` may appear only as
 human-facing derived readings. HTTP `200` and `403` are Envoy adapter transport
 effects, not KTP wire-enumeration values.
 
-## 3. Communication objective
+## 4. Communication objective
 
 The diagram must let a mixed executive and technical audience answer five
 questions in approximately 30–45 seconds:
@@ -67,17 +110,17 @@ The visual must not require the audience to understand KTP notation before
 following the story. Technical labels remain available for specialists without
 competing with the narrative hierarchy.
 
-## 4. Evidence contract
+## 5. Evidence contract
 
 The three evidence categories remain visually and verbally distinct.
 
-### 4.1 Observed
+### 5.1 Observed
 
 The incident band summarizes the public Hugging Face sequence. It does not
 claim access to raw telemetry beyond the disclosure and does not imply that the
 current lab reproduces the original application foothold.
 
-### 4.2 Modeled
+### 5.2 Modeled
 
 The following are modeled inputs or process-contract results:
 
@@ -92,16 +135,16 @@ The diagram must not call those results historically observed, empirically
 validated, or proof that the disclosed incident would certainly have been
 prevented.
 
-### 4.3 Pending validation
+### 5.3 Pending validation
 
 The V3B-1 Envoy topology is implemented and has request-free lifecycle
 evidence, but its accepted live enforcement result remains pending. V3B-2
 Kind/Calico remains future work. No lab behavior becomes `validated` merely
 because it is shown in the diagram.
 
-## 5. Three-band composition
+## 6. Three-band composition
 
-### 5.1 Band 1 — observed incident
+### 6.1 Band 1 — observed incident
 
 The first band is the dominant narrative. It uses a solid incident rail with
 these source-cited dependency stages:
@@ -131,7 +174,7 @@ the approved KIL thesis that defenders cannot safely presume authenticated
 service appearance is distinguishable from attack before machine-speed
 consequence.
 
-### 5.2 Band 2 — Envoy lab model
+### 6.2 Band 2 — Envoy lab model
 
 The lab band shows one normalized harmless request crossing three isolated
 tracks. Each track renders the same four functional components:
@@ -174,7 +217,7 @@ The permanent lab-band qualifier is:
 > KTP supplies supervision plus tighten-only constraints; the Envoy adapter
 > derives the transport effect.
 
-### 5.3 Band 3 — KIL counterfactual result
+### 6.3 Band 3 — KIL counterfactual result
 
 The closing band shows the signed composite state and modeled local reduction
 reaching a visible infrastructure boundary. A solid boundary marks the point
@@ -196,7 +239,7 @@ the requested control-plane action lacks verified current authority under the
 declared trajectory evidence. It must not replace or narrow the systemic
 ambient-breach definition in Band 1.
 
-## 6. Incident-to-lab topology mapping
+## 7. Incident-to-lab topology mapping
 
 The visual must make the mapping explicit without claiming the current Envoy
 rail mediated the historical foothold.
@@ -214,7 +257,7 @@ The application foothold remains outside the current Envoy mediation claim.
 The diagram therefore connects the observed cluster API request—not the local
 file read or renderer exploit—to the laboratory tracks.
 
-## 7. Presenter/Audience behavior
+## 8. Presenter/Audience behavior
 
 The production deliverable has two synchronized uses:
 
@@ -236,7 +279,7 @@ No animation may imply that a pending V3B-1 result has already occurred. If an
 animated path is used, it must stop at the evidence boundary and leave pending
 elements visibly identified.
 
-## 8. Visual grammar and accessibility
+## 9. Visual grammar and accessibility
 
 - Incident behavior uses one stable series color, solid line, and explicit
   `Observed incident` label.
@@ -253,7 +296,7 @@ elements visibly identified.
   conventions.
 - Light and dark themes must preserve contrast and state distinctions.
 
-## 9. Failure handling
+## 10. Failure handling
 
 If implementation cannot preserve the evidence labels at a supported viewport,
 the layout must reflow or simplify; it must not omit the labels. If existing
@@ -262,7 +305,7 @@ at a new founder gate rather than changing tests. If the visual would require a
 live-service, laboratory, scenario, or evidence-bundle modification, that work
 is out of scope and requires separate validation and approval.
 
-## 10. Verification design
+## 11. Verification design
 
 The later implementation plan must use test-first verification for presentation
 behavior while preserving the current laboratory. At minimum it will specify:
@@ -280,7 +323,7 @@ behavior while preserving the current laboratory. At minimum it will specify:
 
 This design does not authorize changing a failing test or starting a live lab.
 
-## 11. Acceptance criteria
+## 12. Acceptance criteria
 
 The implementation is acceptable only when:
 
@@ -298,7 +341,7 @@ The implementation is acceptable only when:
 - no test or live/laboratory artifact changes without separate founder
   validation.
 
-## 12. Approved preview provenance
+## 13. Approved preview provenance
 
 The founder approved the reconciled composition displayed on 2026-09-01. Its
 conversation-scoped source had SHA-256:

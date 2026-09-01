@@ -7799,3 +7799,45 @@ diagram specification. Then begin a separate visual-design iteration before
 changing the Presenter/Audience implementation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-148 — 2026-09-01 — Executive narrative added to the counterfactual specification
+
+**Input:** The founder approved the written counterfactual-first specification
+and supplied a controlling narrative introduction explaining why the Envoy
+breach comparison is being demonstrated.
+
+**Interpretation:** Place the full founder-supplied narrative before the
+technical composition and make its three transitions explicit for the
+standalone and synchronized forms: detection is insufficient at adversarial-AI
+speed; ambient breach establishes the operating urgency; and ambient
+enforcement moves mitigation into kinetic infrastructure. Preserve the phrase
+`pervasive, continuous ambient breach` while binding it to the already approved
+systemic definition rather than an assertion of universal continuous
+compromise.
+
+**Decision status:** Narrative content confirmed and incorporated into the
+written design. The diagram composition, evidence contract, KTP semantics, and
+no-lab-change boundary remain unchanged. Implementation planning remains gated
+on founder review of the revised written specification.
+
+**Rationale:** An executive audience needs the changed cybersecurity condition
+before it can understand why a transport-layer counterfactual matters. The
+introduction supplies that urgency while the adjacent interpretive boundary
+prevents the phrase `continuous ambient breach` from being misconstrued as an
+unsupported claim that every system is always compromised.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-09-01-envoy-lab-counterfactual-first-diagram-design.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no demo, test, paper, evidence, laboratory, or live-runtime artifact
+
+**Unresolved questions:** Founder review of the revised written specification
+before implementation planning and the subsequent separate design iteration
+for the vivid Presenter/Audience graphic overhaul.
+
+**Next gate:** Commit and verify the revised specification. After founder
+approval, create the implementation plan; do not modify the Presenter/Audience
+demo or laboratory directly.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
