@@ -85,6 +85,23 @@ Modeled output must never be presented as an observed fact. A local experiment
 must never be presented as proof that a counterfactual would have changed the
 historical incident.
 
+## Presenter/Audience showcase
+
+Start the self-contained, two-act demonstration from the repository root:
+
+```sh
+make kil-showcase
+```
+
+Open the presenter at
+`http://127.0.0.1:8767/kil-presenter-audience-demo.html?mode=presenter&session=showcase`.
+Use **Open audience view** to launch the synchronized, controls-free audience
+window. Advancing either act or scene in the presenter updates every audience
+window using the same session. The presenter contains the 30–45-second talk
+track and evidence label for each scene; the audience sees only the story and
+graphics. Brave Chromium is the preferred showcase browser and the automated
+browser verifier uses Brave when it is installed.
+
 ## Project boundaries
 
 KIL is an enforcer and experiment harness. ShadowClaw remains a separate,

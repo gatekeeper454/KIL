@@ -6,6 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO_PATH = ROOT / "docs" / "demo" / "kil-presenter-audience-demo.html"
+README_PATH = ROOT / "README.md"
+MAKEFILE_PATH = ROOT / "Makefile"
 
 EXPECTED_IDS = [
     "primer-ambient-breach",
@@ -173,6 +175,14 @@ class PresenterAudienceDemoContractTest(unittest.TestCase):
         ):
             with self.subTest(required_copy=required_copy):
                 self.assertIn(required_copy, html)
+
+    def test_showcase_launch_is_documented(self):
+        makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
+        readme = README_PATH.read_text(encoding="utf-8")
+        self.assertIn("kil-showcase:", makefile)
+        self.assertIn("make kil-showcase", readme)
+        self.assertIn("?mode=presenter&session=showcase", readme)
+        self.assertIn("Open audience view", readme)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 
@@ -40,6 +40,24 @@ async function assertVisible(page, selector) {
 
 async function assertHidden(page, selector) {
   assert(await page.locator(selector).isHidden(), `${selector} expected hidden`);
+}
+
+async function assertNoHorizontalOverflow(page, label) {
+  const dimensions = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  assert(
+    dimensions.scrollWidth <= dimensions.clientWidth,
+    `${label} overflowed horizontally: ${dimensions.scrollWidth} > ${dimensions.clientWidth}`,
+  );
+}
+
+async function assertAccessibleSvg(page, label) {
+  const svg = page.locator('[data-visual] svg');
+  assert(await svg.count() === 1, `${label} expected exactly one SVG`);
+  assert((await svg.locator('title').textContent())?.trim(), `${label} SVG title is empty`);
+  assert((await svg.locator('desc').textContent())?.trim(), `${label} SVG description is empty`);
 }
 
 const server = createServer((request, response) => {
@@ -84,7 +102,7 @@ const runtimeErrors = [];
 for (const page of [presenter, audience, wrongAudience]) {
   page.on('pageerror', error => runtimeErrors.push(`pageerror: ${error.message}`));
   page.on('console', message => {
-    if (message.type() === 'error') runtimeErrors.push(`console: ${message.text()}`);
+    if (['error', 'warning'].includes(message.type())) runtimeErrors.push(`console: ${message.text()}`);
   });
 }
 
@@ -115,6 +133,42 @@ try {
   await presenter.click('[data-act="case-study"]');
   await presenter.click('[data-scene-id="case-evidence"]');
   await expectText(audience, '[data-title]', 'What is evidence today?');
+
+  for (const act of ['primer', 'case-study']) {
+    await presenter.click(`[data-act="${act}"]`);
+    const sceneIds = await presenter.locator('[data-scene-id]').evaluateAll(buttons => buttons.map(button => button.dataset.sceneId));
+    for (const sceneId of sceneIds) {
+      await presenter.click(`[data-scene-id="${sceneId}"]`);
+      await assertAccessibleSvg(presenter, sceneId);
+    }
+  }
+
+  for (const width of [1024, 736, 360]) {
+    await presenter.setViewportSize({ width, height: 900 });
+    await audience.setViewportSize({ width, height: 900 });
+    await assertNoHorizontalOverflow(presenter, `presenter ${width}px`);
+    await assertNoHorizontalOverflow(audience, `audience ${width}px`);
+  }
+
+  await presenter.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await assertAccessibleSvg(presenter, 'dark reduced-motion view');
+  await presenter.emulateMedia({ colorScheme: 'light', reducedMotion: 'no-preference' });
+  const buttonTags = await presenter.locator('button').evaluateAll(buttons => buttons.map(button => button.tagName));
+  assert(buttonTags.length > 0 && buttonTags.every(tag => tag === 'BUTTON'), 'controls must use native buttons');
+
+  if (process.env.KIL_DEMO_SCREENSHOTS === '1') {
+    const screenshotDirectory = resolve('artifacts/generated/kil-demo-preview');
+    await mkdir(screenshotDirectory, { recursive: true });
+    await presenter.setViewportSize({ width: 1440, height: 1000 });
+    await presenter.click('[data-act="primer"]');
+    await presenter.click('[data-scene-id="primer-ktp-extension"]');
+    await presenter.screenshot({ path: resolve(screenshotDirectory, 'primer-ktp-extension.png'), fullPage: true });
+    await presenter.click('[data-act="case-study"]');
+    await presenter.click('[data-scene-id="case-first-divergence"]');
+    await presenter.screenshot({ path: resolve(screenshotDirectory, 'case-first-divergence.png'), fullPage: true });
+    await presenter.click('[data-scene-id="case-three-tracks"]');
+    await presenter.screenshot({ path: resolve(screenshotDirectory, 'case-three-tracks.png'), fullPage: true });
+  }
 
   assert(runtimeErrors.length === 0, runtimeErrors.join('\n'));
   console.log(`presenter-audience browser verifier (${browserName}): PASS`);

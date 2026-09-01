@@ -7265,3 +7265,63 @@ design; then create the test-first implementation plan and implement the
 tracked presenter/audience page without altering laboratory evidence status.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-136 — 2026-08-31 — Synchronized two-act KIL showcase implemented
+
+**Input:** The founder approved immediate implementation of the revised
+primer-plus-case-study demonstration, requested that it be moved to a
+showcase-ready state, and identified Brave as the Chromium browser used for the
+presentation.
+
+**Interpretation:** Implement the approved twelve-state narrative as one
+tracked, self-contained browser application. Preserve presenter-only talk
+tracks, controls-free audience views, presenter-authoritative synchronization,
+the KTP/KIL extension boundary, the modeled Hugging Face counterfactual, and
+the current laboratory evidence limits. Prefer the installed Brave executable
+for automated browser verification, with Playwright Chromium only as a
+fallback.
+
+**Decision status:** Confirmed and implemented. Four KIL primer scenes and eight
+incident scenes now render responsive, accessible SVG diagrams from the same
+closed narrative contract. Same-session audience views follow the presenter;
+wrong sessions are isolated; stale state is rejected; and audience views
+recover after a presenter reload through a new presenter epoch. The complete
+493-test repository suite passes. A Brave-based browser verifier passes all
+twelve graphics, synchronization, 1024-, 736-, and 360-pixel layouts, light and
+dark color schemes, reduced-motion mode, native controls, SVG titles and
+descriptions, and runtime-console checks. The canonical and generated showcase
+HTML files have identical SHA-256 digest
+`5947d5cd0de40ff0e7aba32ad922fc049f56127c69c564ba6b83fdaa1bf88a6c`.
+
+**Rationale:** A single contract-driven application keeps public graphics,
+spoken narration, evidence labels, and synchronization state from drifting.
+The diagrams use observed red paths, proposed or modeled blue KIL paths, faded
+conditional descendants, and explicit status copy instead of importing
+reference imagery containing unsupported measurements. The launch target is a
+loopback HTTP origin so BroadcastChannel synchronization works consistently in
+Brave without a hosted service.
+
+**Affected artifacts:**
+
+- `docs/demo/kil-presenter-audience-demo.html`
+- `tests/test_presenter_audience_demo.py`
+- `tools/verify_presenter_audience_demo.mjs`
+- `README.md`
+- `Makefile`
+- ignored showcase export
+  `artifacts/generated/kil-presenter-audience-demo.html`
+- ignored Brave-rendered visual-QA captures under
+  `artifacts/generated/kil-demo-preview/`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** No unresolved issue remains for presenting the
+modeled two-act showcase. The V3B-1 live enforcement result remains pending,
+V3B-2 Kind/Calico remains future work, and neither status is promoted by this
+demonstration. The separate foreign-resource snapshot and central live-request
+gates remain governed by their existing approvals.
+
+**Next gate:** Founder performs the live Presenter/Audience walkthrough in
+Brave. After acceptance, publish the feature branch through the normal review
+and merge workflow without changing the laboratory evidence labels.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
