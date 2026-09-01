@@ -6,6 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DIAGRAM_PATH = ROOT / "docs" / "demo" / "envoy-lab-counterfactual-first.html"
+DEMO_PATH = ROOT / "docs" / "demo" / "kil-presenter-audience-demo.html"
+README_PATH = ROOT / "README.md"
 
 REQUIRED_SOURCES = (
     "https://github.com/nmcitra/ktp-rfc/tree/v2.0.0",
@@ -216,6 +218,23 @@ class EnvoyCounterfactualDiagramContractTest(unittest.TestCase):
         lower_html = html.lower()
         self.assertNotIn("microsecond enforcement", lower_html)
         self.assertNotIn("validated live", lower_html)
+
+    def test_presenter_integrates_counterfactual_lab_mapping(self):
+        html = DEMO_PATH.read_text(encoding="utf-8")
+        for marker in (
+            '"visual": "lab-mapping"',
+            "function renderLabMapping(",
+            "KTP result: supervision + tighten-only constraints",
+            "Envoy-derived effect: HTTP 403",
+            "Observed · modeled · pending validation",
+            "not a KTP wire decision",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, html)
+
+    def test_readme_links_standalone_counterfactual_diagram(self):
+        readme = README_PATH.read_text(encoding="utf-8")
+        self.assertIn("docs/demo/envoy-lab-counterfactual-first.html", readme)
 
 
 if __name__ == "__main__":

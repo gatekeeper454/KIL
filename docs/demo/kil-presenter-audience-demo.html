@@ -106,8 +106,8 @@
     "order": 1,
     "title": "Ambient breach requires ambient enforcement",
     "status": "Proposed KIL thesis",
-    "takeaway": "Credential validity does not establish behavioral legitimacy at agent speed.",
-    "script": "Cybersecurity now faces more than occasional ambient threat. Autonomous systems can discover capabilities, reuse authentic credentials, and execute novel sequences faster than a human-led control loop can correlate them. A credential checkpoint can correctly verify identity and policy while remaining blind to the behavior that follows. KIL begins from that structural gap: enforcement must remain present where digital action becomes consequence, continuously and at infrastructure speed. This is the KIL thesis.",
+    "takeaway": "When service and attack become indistinguishable before consequence, enforcement must operate continuously at the consequential boundary.",
+    "script": "Cybersecurity is at an inflection point. Frontier systems can discover, chain, and execute attacks at machine speed while using authentic credentials and ordinary service interfaces. That moved us from ambient risk through ambient threat into ambient breach: the operating condition in which service and attack cannot reliably be distinguished before consequence. It does not mean every system is continuously compromised. It means retrospective detection and human response can no longer remain the primary control. Ambient enforcement is the required evolution.",
     "source": "KIL paper, Introduction and checkpoint problem; proposed architectural thesis.",
     "visual": "ambient-breach"
   },
@@ -203,11 +203,11 @@
     "id": "case-lab-mapping",
     "act": "case-study",
     "order": 10,
-    "title": "The incident boundary becomes a lab boundary",
+    "title": "Observed breach, controlled lab, bounded result",
     "status": "Modeled lab mapping",
-    "takeaway": "Harmless components preserve the authorization question without recreating the breach.",
-    "script": "The laboratory does not recreate the intrusion. It preserves the authorization question at a harmless boundary. The compromised worker maps to a one-shot request driver. Envoy represents the mediated outbound path. The authorization service consumes signed state and optional local reduction. A harmless target marker records whether forwarding occurred, and canonical records preserve provenance. This lets us compare enforcement behavior without running exploit code, touching a production cluster, or claiming the complete historical environment was reproduced. This is a modeled lab mapping.",
-    "source": "KIL V3A process contract and V3B-1 local Envoy architecture.",
+    "takeaway": "The lab isolates one mediated action and shows where reducing-only KIL evidence changes the derived transport effect.",
+    "script": "Start with the observed incident rail: a worker foothold expanded into control-plane access and dependent escalation. The lab maps only the first mediated cluster API request into three harmless, isolated Envoy tracks. KTP supplies supervision plus tighten-only constraints; HTTP status is an Envoy-derived effect, not a KTP wire decision. Tracks A and B reach their targets. Track C applies the modeled local reduction, derives HTTP four hundred three, and leaves dependent phases conditionally unreachable. Live V3B-1 enforcement remains pending.",
+    "source": "Hugging Face technical timeline; KTP v2.0.0; KIL V3A process contract and V3B-1 gate status.",
     "visual": "lab-mapping"
   },
   {
@@ -499,18 +499,25 @@
 
       function renderLabMapping() {
         return svgShell(
-          'Harmless mapping from incident boundary to validation lab',
-          'A one-shot driver, Envoy, authorization service, harmless target marker, and evidence bundle reproduce the enforcement question without reproducing exploit behavior.',
-          `<text x="45" y="45" class="diagram-label">V3B-1 local Envoy rail · harmless components</text>
-           <rect x="45" y="150" width="160" height="125" rx="12" class="diagram-panel"/><text x="125" y="196" text-anchor="middle" class="diagram-text">Request driver</text><text x="125" y="228" text-anchor="middle" class="diagram-small">one normalized action</text>
-           <path d="M205 212 H300" class="diagram-blue" marker-end="url(#arrow-blue)"/>
-           <rect x="305" y="150" width="160" height="125" rx="12" class="diagram-panel"/><text x="385" y="196" text-anchor="middle" class="diagram-text">Envoy</text><text x="385" y="228" text-anchor="middle" class="diagram-small">mediated transport</text>
-           <path d="M465 212 H560" class="diagram-blue" marker-end="url(#arrow-blue)"/>
-           <rect x="565" y="115" width="180" height="195" rx="12" class="diagram-panel"/><text x="655" y="160" text-anchor="middle" class="diagram-text">KIL authz</text><text x="655" y="194" text-anchor="middle" class="diagram-small">signed state</text><text x="655" y="222" text-anchor="middle" class="diagram-small">+ local reduction</text><text x="655" y="270" text-anchor="middle" class="diagram-label">permit / deny</text>
-           <path d="M745 212 H820" class="diagram-blue" marker-end="url(#arrow-blue)"/>
-           <rect x="825" y="150" width="130" height="125" rx="12" class="diagram-panel"/><text x="890" y="196" text-anchor="middle" class="diagram-text">Target</text><text x="890" y="228" text-anchor="middle" class="diagram-small">harmless marker</text>
-           <path d="M655 310 V390 H890 V275" class="diagram-line" stroke-dasharray="8 7"/>
-           <text x="770" y="420" text-anchor="middle" class="diagram-small">canonical evidence records what was forwarded</text>`
+          'Observed incident, controlled Envoy lab, and bounded KIL counterfactual',
+          'The source-cited incident maps one mediated cluster API request into three isolated harmless Envoy tracks. The modeled local-reduction track derives HTTP 403 and makes dependent descendants conditionally unreachable; live V3B-1 enforcement remains pending.',
+          `<text x="45" y="38" class="diagram-label">01 · OBSERVED INCIDENT</text>
+           <text x="45" y="70" class="diagram-small">worker foothold → cluster API → cloud and node privilege → 136-key secret read → cross-cluster, mesh, token and CI pivot</text>
+           <path d="M45 94H955" class="diagram-red" marker-end="url(#arrow-red)"/>
+           <text x="45" y="140" class="diagram-label">02 · ENVOY LAB MODEL</text>
+           <text x="45" y="168" class="diagram-small">Same harmless normalized request · KTP result: supervision + tighten-only constraints</text>
+           <rect x="45" y="190" width="910" height="62" rx="9" class="diagram-panel"/>
+           <text x="65" y="228" class="diagram-text">A · credential policy</text><text x="735" y="228" class="diagram-small">HTTP 200 · target 1</text>
+           <rect x="45" y="266" width="910" height="62" rx="9" class="diagram-panel"/>
+           <text x="65" y="304" class="diagram-text">B · signed composite KTP state</text><text x="735" y="304" class="diagram-small">HTTP 200 · target 1</text>
+           <rect x="45" y="342" width="910" height="62" rx="9" class="diagram-panel"/>
+           <text x="65" y="380" class="diagram-text">C · state + 0.95 modeled local reduction</text><text x="680" y="380" class="diagram-small">Envoy-derived effect: HTTP 403 · target 0</text>
+           <text x="45" y="450" class="diagram-label">03 · KIL COUNTERFACTUAL RESULT</text>
+           <path d="M45 482H360" class="diagram-blue" marker-end="url(#arrow-blue)"/>
+           <rect x="370" y="455" width="24" height="64" class="diagram-blue-fill"/>
+           <path d="M394 482H955" class="diagram-line" stroke-dasharray="10 8"/>
+           <text x="670" y="475" text-anchor="middle" class="diagram-small">Conditionally unreachable · not separately detected</text>
+           <text x="670" y="508" text-anchor="middle" class="diagram-small">Observed · modeled · pending validation · not a KTP wire decision</text>`
         );
       }
 

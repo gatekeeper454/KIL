@@ -102,6 +102,12 @@ track and evidence label for each scene; the audience sees only the story and
 graphics. Brave Chromium is the preferred showcase browser and the automated
 browser verifier uses Brave when it is installed.
 
+The approved counterfactual-first Envoy laboratory diagram is also available as
+a standalone executive presentation at
+[`docs/demo/envoy-lab-counterfactual-first.html`](docs/demo/envoy-lab-counterfactual-first.html).
+It separates the observed incident, modeled process-contract result, and pending
+V3B-1 live validation.
+
 ## Project boundaries
 
 KIL is an enforcer and experiment harness. ShadowClaw remains a separate,
