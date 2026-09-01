@@ -7676,3 +7676,126 @@ the written file, and wait. On approval, invoke the planning workflow; do not
 begin implementation directly.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-145 — 2026-09-01 — Counterfactual-first Envoy composition resumed under authoritative KTP semantics
+
+**Input:** The founder resumed from the 2026-08-31 shutdown checkpoint at the
+final approval gate for the refined counterfactual-first Envoy laboratory
+composition.
+
+**Interpretation:** Preserve the approved three-band narrative—observed
+incident, controlled Envoy model, bounded KIL counterfactual—but reconcile its
+labels with the subsequently confirmed KTP-alignment contract before requesting
+final composition approval. In particular, the preview must preserve ambient
+breach as both the systemic inability to distinguish service from attack before
+consequence and an action-level unsupported-authority manifestation; describe
+the KTP result as supervision plus tighten-only constraints; identify HTTP 403
+as a derived Envoy transport effect rather than a KTP wire decision; and retain
+the evidence boundary between observed, modeled, and pending validation.
+
+**Decision status:** Refined composition prepared for founder review; final
+composition approval remains pending. The preview is an untracked,
+conversation-scoped design artifact with SHA-256
+`9cf1bb01b4febc11b164f52b32eef4b2e4c3a1426fcd3ea9e6f44d9cb2d0b8e6`.
+No canonical paper, Presenter/Audience page, test, laboratory configuration, or
+live service was changed.
+
+**Rationale:** The macro composition was already selected, but the checkpoint
+predated the authoritative KTP corrections. Reconciliation at the design gate
+prevents the eventual diagram from reintroducing superseded decision semantics
+or narrowing the ambient-breach thesis while preserving the founder's explicit
+restriction against changing the current demo or laboratory before approval.
+
+**Affected artifacts:**
+
+- conversation-scoped preview
+  `kil-counterfactual-first-envoy-composition.html`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no canonical diagram, demo, paper, test, evidence, laboratory, or live-runtime
+  artifact
+
+**Unresolved questions:** Founder approval or revision of the reconciled
+three-band composition, including its KTP-result language and evidence labels.
+
+**Next gate:** On founder approval, write and commit the formal Envoy-lab
+diagram design specification, self-review it, and request founder review before
+creating an implementation plan.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-146 — 2026-09-01 — Reconciled counterfactual-first composition approved and specified
+
+**Input:** The founder approved the displayed counterfactual-first Envoy
+laboratory composition reconciled with the authoritative KTP-alignment design.
+
+**Interpretation:** Convert the approved visual review into a durable design
+specification before implementation. The specification controls both the
+standalone diagram and synchronized Presenter/Audience scene, preserves the
+observed/modeled/pending evidence boundary, treats HTTP results as derived
+Envoy effects, keeps KTP supervision and tighten-only constraints normative,
+and retains the two-scale ambient-breach thesis.
+
+**Decision status:** Composition confirmed and written specification complete.
+Implementation remains unapproved pending founder review of the committed
+written specification. No Presenter/Audience source, canonical paper, test,
+laboratory configuration, evidence bundle, or live service changed.
+
+**Rationale:** The visual approval resolves the final composition gate from the
+shutdown checkpoint. A written specification now makes the exact narrative,
+topology mapping, evidence language, KTP semantics, accessibility requirements,
+and protected-path constraints independently reviewable before an
+implementation plan exists.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-09-01-envoy-lab-counterfactual-first-diagram-design.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no canonical diagram, demo, paper, test, evidence, laboratory, or live-runtime
+  artifact
+
+**Unresolved questions:** Founder review of the written specification and any
+requested corrections before implementation planning.
+
+**Next gate:** Commit the specification and lineage. After founder approval of
+the written file, create the implementation plan; do not implement directly.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-147 — 2026-09-01 — Presenter/Audience graphic overhaul queued after current diagram gate
+
+**Input:** The founder stated that the current Presenter/Audience graphics need
+to be redone in a more vivid, graphic-intensive format and directed that the
+visual redesign be iterated after the current counterfactual-first diagram step
+completes.
+
+**Interpretation:** Preserve the visual-overhaul requirement as the next
+separate design phase. Do not expand the current diagram-specification commit
+into a production demo rewrite, and do not modify the currently served demo,
+tests, or laboratory while closing the present written-specification gate.
+
+**Decision status:** Future design objective confirmed; visual direction and
+scene-by-scene implementation remain unselected. The current step remains
+limited to the approved Envoy diagram specification and specialist lineage.
+
+**Rationale:** Separating the work prevents an unreviewed aesthetic overhaul
+from obscuring the already approved evidence and KTP-semantic contract. The
+next visual phase can pursue a substantially more vivid style while treating
+the current specification's claim boundaries as non-negotiable content
+constraints.
+
+**Affected artifacts:**
+
+- future design scope: `docs/demo/kil-presenter-audience-demo.html` and its
+  standalone or synchronized visual derivatives
+- current turn: `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` only
+- no current demo, test, evidence, laboratory, or live-runtime artifact
+
+**Unresolved questions:** The graphic-intensive visual language, degree of
+animation, scene composition, asset strategy, and approval sequence for the
+Presenter/Audience overhaul.
+
+**Next gate:** Finish and obtain founder review of the counterfactual-first
+diagram specification. Then begin a separate visual-design iteration before
+changing the Presenter/Audience implementation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
