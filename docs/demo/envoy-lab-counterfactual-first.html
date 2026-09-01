@@ -142,6 +142,21 @@
       font-weight: 900;
     }
 
+    .kil-mapped-action {
+      border-color: var(--kil-model);
+      background: color-mix(in srgb, var(--kil-model) 14%, var(--kil-panel));
+      box-shadow: inset 0 -3px 0 var(--kil-model);
+    }
+
+    .kil-node-detail {
+      display: block;
+      color: var(--kil-model);
+      font-size: 0.68rem;
+      font-weight: 750;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
     .kil-note,
     .kil-contract {
       padding: 13px 16px;
@@ -158,7 +173,7 @@
 
     .kil-track {
       display: grid;
-      grid-template-columns: 150px repeat(4, 1fr) 80px;
+      grid-template-columns: 150px minmax(0, 1fr);
       gap: 8px;
       padding: 10px;
       border: 1px solid var(--kil-line);
@@ -166,10 +181,42 @@
       background: color-mix(in srgb, var(--kil-model) 4%, var(--kil-panel));
     }
 
-    .kil-track-title,
+    .kil-track-input,
     .kil-outcome {
       border-color: color-mix(in srgb, var(--kil-model) 58%, var(--kil-line));
       color: var(--kil-model);
+    }
+
+    .kil-track-input {
+      display: grid;
+      align-content: center;
+      min-height: 64px;
+      margin: 0;
+      padding: 10px;
+      border: 1px solid color-mix(in srgb, var(--kil-model) 58%, var(--kil-line));
+      border-radius: 10px;
+      font-size: 0.76rem;
+      line-height: 1.3;
+    }
+
+    .kil-track-input strong,
+    .kil-track-input span {
+      display: block;
+    }
+
+    .kil-track-input span {
+      margin-top: 5px;
+      color: var(--kil-muted);
+      font-size: 0.68rem;
+    }
+
+    .kil-track-flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr) 80px;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
     }
 
     .kil-outcome {
@@ -283,6 +330,16 @@
       text-underline-offset: 0.18em;
     }
 
+    @media (max-width: 760px) {
+      .kil-result-svg {
+        display: none;
+      }
+
+      .kil-mobile-result {
+        display: block;
+      }
+    }
+
     @media (max-width: 640px) {
       header,
       main,
@@ -292,6 +349,7 @@
 
       .kil-rail,
       .kil-track,
+      .kil-track-flow,
       .kil-evidence {
         grid-template-columns: 1fr;
       }
@@ -300,14 +358,6 @@
         right: auto;
         bottom: -17px;
         content: "↓";
-      }
-
-      .kil-result-svg {
-        display: none;
-      }
-
-      .kil-mobile-result {
-        display: block;
       }
     }
 
@@ -345,14 +395,17 @@
         </div>
         <div class="kil-rail" aria-label="Published incident sequence">
           <div class="kil-node">Worker foothold</div>
-          <div class="kil-node">Cluster API request</div>
+          <div class="kil-node kil-mapped-action" aria-label="Cluster API request: first mediated action mapped into the controlled lab">
+            Cluster API request
+            <span class="kil-node-detail">Mapped into controlled lab</span>
+          </div>
           <div class="kil-node">Cloud and node privilege</div>
           <div class="kil-node">136-key secret read</div>
           <div class="kil-node">Cross-cluster access</div>
           <div class="kil-node">Mesh enrollment</div>
           <div class="kil-node">Token and CI pivot</div>
         </div>
-        <p class="kil-note">First mediated action normalized into a harmless request.</p>
+        <p class="kil-note">First mediated action normalized into a harmless request. Cluster API request mapped into the controlled lab.</p>
       </section>
 
       <section class="kil-band" data-band="lab" aria-labelledby="lab-title">
@@ -362,29 +415,35 @@
           <p>KTP supplies supervision plus tighten-only constraints; the Envoy adapter derives the transport effect.</p>
         </div>
         <div class="kil-tracks" aria-label="Three isolated laboratory tracks">
-          <div class="kil-track">
-            <div class="kil-node kil-track-title">A · Credential policy</div>
-            <div class="kil-node">Driver</div>
-            <div class="kil-node">Envoy</div>
-            <div class="kil-node">Policy authz</div>
-            <div class="kil-node">Target marker 1</div>
-            <div class="kil-node kil-outcome">HTTP 200</div>
+          <div class="kil-track" role="group" aria-label="Track A: credential policy input through the shared Envoy laboratory topology">
+            <p class="kil-track-input"><strong>A · Credential policy</strong><span>Input: credential policy</span></p>
+            <ol class="kil-track-flow" aria-label="Driver to harmless target topology">
+              <li class="kil-node">Driver</li>
+              <li class="kil-node">Envoy frontend</li>
+              <li class="kil-node">Policy authorization service</li>
+              <li class="kil-node">Harmless target marker 1</li>
+              <li class="kil-node kil-outcome">HTTP 200</li>
+            </ol>
           </div>
-          <div class="kil-track">
-            <div class="kil-node kil-track-title">B · Signed composite KTP state</div>
-            <div class="kil-node">Driver</div>
-            <div class="kil-node">Envoy</div>
-            <div class="kil-node">Signature + freshness</div>
-            <div class="kil-node">Target marker 1</div>
-            <div class="kil-node kil-outcome">HTTP 200</div>
+          <div class="kil-track" role="group" aria-label="Track B: signed composite KTP state input through the shared Envoy laboratory topology">
+            <p class="kil-track-input"><strong>B · Signed composite KTP state</strong><span>Input: signature + freshness</span></p>
+            <ol class="kil-track-flow" aria-label="Driver to harmless target topology">
+              <li class="kil-node">Driver</li>
+              <li class="kil-node">Envoy frontend</li>
+              <li class="kil-node">KTP state authorization service</li>
+              <li class="kil-node">Harmless target marker 1</li>
+              <li class="kil-node kil-outcome">HTTP 200</li>
+            </ol>
           </div>
-          <div class="kil-track">
-            <div class="kil-node kil-track-title">C · State + local reduction</div>
-            <div class="kil-node">Driver</div>
-            <div class="kil-node">Envoy</div>
-            <div class="kil-node">0.95 modeled divergence</div>
-            <div class="kil-node">Target marker 0</div>
-            <div class="kil-node kil-outcome">derived HTTP 403</div>
+          <div class="kil-track" role="group" aria-label="Track C: KTP state and local reduction input through the shared Envoy laboratory topology">
+            <p class="kil-track-input"><strong>C · State + local reduction</strong><span>Input: d_t = 0.95 modeled divergence and reducing-only local contribution</span></p>
+            <ol class="kil-track-flow" aria-label="Driver to harmless target topology">
+              <li class="kil-node">Driver</li>
+              <li class="kil-node">Envoy frontend</li>
+              <li class="kil-node">KTP state + local reduction authorization service</li>
+              <li class="kil-node">Harmless target marker 0</li>
+              <li class="kil-node kil-outcome">derived HTTP 403</li>
+            </ol>
           </div>
         </div>
         <p class="kil-contract">Modeled process contract: 200 / 200 / 403 · target markers 1 / 1 / 0.</p>
@@ -397,7 +456,7 @@
         </div>
         <svg class="kil-result-svg" viewBox="0 0 1000 250" role="img" aria-labelledby="kil-result-title kil-result-desc">
           <title id="kil-result-title">Modeled KIL cutoff at the Envoy boundary</title>
-          <desc id="kil-result-desc">Signed composite KTP state plus modeled local reduction reaches the Envoy boundary, where an HTTP 403 is derived and dependent downstream phases become conditionally unreachable.</desc>
+          <desc id="kil-result-desc">Signed composite KTP state plus modeled local reduction reaches the Envoy boundary, where an HTTP 403 is derived and dependent downstream phases become conditionally unreachable under the declared model.</desc>
           <path class="kil-svg-line" d="M210 92 H335 M505 92 H580" />
           <rect class="kil-svg-node" x="25" y="45" width="185" height="94" rx="12" />
           <text x="117" y="78" text-anchor="middle" font-size="15" font-weight="700">Signed state +</text>
@@ -410,14 +469,14 @@
           <text class="kil-svg-cutoff" x="582" y="214" text-anchor="middle" font-size="16">derived HTTP 403</text>
           <text class="kil-svg-muted" x="582" y="235" text-anchor="middle" font-size="12">Envoy boundary</text>
           <rect class="kil-svg-unreachable" x="630" y="28" width="340" height="162" rx="14" />
-          <text x="800" y="58" text-anchor="middle" font-size="16" font-weight="700">Conditionally unreachable</text>
+          <text x="800" y="58" text-anchor="middle" font-size="13" font-weight="700">Conditionally unreachable under the declared model</text>
           <text class="kil-svg-muted" x="800" y="91" text-anchor="middle" font-size="13">Cloud privilege · secrets</text>
           <text class="kil-svg-muted" x="800" y="119" text-anchor="middle" font-size="13">Cross-cluster access · mesh enrollment</text>
           <text class="kil-svg-muted" x="800" y="147" text-anchor="middle" font-size="13">Token and CI pivot</text>
         </svg>
         <div class="kil-mobile-result">
           <p><strong>Signed state + modeled local reduction → derived HTTP 403</strong></p>
-          <p>Conditionally unreachable: cloud privilege, secrets, cross-cluster access, mesh enrollment, and CI pivot.</p>
+          <p>Conditionally unreachable under the declared model: cloud privilege, secrets, cross-cluster access, mesh enrollment, and CI pivot.</p>
         </div>
         <div class="kil-evidence" aria-label="Evidence status">
           <div class="kil-evidence-item">
@@ -426,7 +485,7 @@
           </div>
           <div class="kil-evidence-item">
             <span class="kil-evidence-label">Modeled</span>
-            <p>0.95 reduction and derived transport outcomes</p>
+            <p>d_t = 0.95 modeled divergence input; reducing-only local contribution; derived transport outcomes.</p>
           </div>
           <div class="kil-evidence-item">
             <span class="kil-evidence-label">Pending validation</span>
