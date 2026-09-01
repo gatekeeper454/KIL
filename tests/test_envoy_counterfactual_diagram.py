@@ -211,6 +211,7 @@ class EnvoyCounterfactualDiagramContractTest(unittest.TestCase):
         self.assertRegex(
             html,
             r"@media \(max-width: 760px\) \{ "
+            r"\.kil-track, \.kil-track-flow \{ grid-template-columns: 1fr; \} "
             r"\.kil-result-svg \{ display: none; \} "
             r"\.kil-mobile-result \{ display: block; \} \}",
         )
