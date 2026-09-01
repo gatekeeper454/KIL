@@ -7841,3 +7841,42 @@ approval, create the implementation plan; do not modify the Presenter/Audience
 demo or laboratory directly.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-149 — 2026-09-01 — Counterfactual-first diagram implementation plan written
+
+**Input:** The founder confirmed the revised counterfactual-first specification,
+including its executive narrative introduction, and authorized progression to
+implementation planning.
+
+**Interpretation:** Convert the confirmed design into a test-first,
+protected-path implementation plan without changing the current demo, any
+existing test, or the laboratory. Keep the graphic-intensive Presenter/Audience
+overhaul outside this plan; first implement the approved semantic baseline as a
+standalone executive diagram and one synchronized lab-mapping scene.
+
+**Decision status:** Implementation plan written and self-reviewed; execution
+approach remains pending founder selection. The plan creates a new isolated
+documentation contract only after explicit execution approval, preserves all
+existing tests, uses read-only Brave/Playwright verification, and prohibits any
+V3B-1 start or central run.
+
+**Rationale:** Bite-sized tasks and frequent commits make the evidence and KTP
+boundaries reviewable independently of the later aesthetic redesign. A strict
+path allowlist prevents a presentation change from mutating scenarios,
+adapters, laboratory controls, evidence, or live services.
+
+**Affected artifacts:**
+
+- `docs/superpowers/plans/2026-09-01-envoy-lab-counterfactual-first-diagram.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no demo, test, paper, evidence, laboratory, or live-runtime artifact
+
+**Unresolved questions:** Founder selection of subagent-driven or inline plan
+execution and explicit authorization to create the new isolated documentation
+contract test during Task 1.
+
+**Next gate:** Commit the plan and lineage, then obtain the founder's execution
+choice. Execution must stop before any existing test or protected laboratory
+path would change.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
