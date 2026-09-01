@@ -1,0 +1,80 @@
+<h2>Selected direction: observed incident first</h2>
+<p class="subtitle">The breach remains the dominant story. The Envoy lab appears as the controlled model that isolates where KIL changes the result.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Proposed final composition</div>
+  <div class="mockup-body">
+    <svg viewBox="0 0 1100 700" role="img" aria-label="Observed incident, Envoy lab model, and KIL counterfactual result">
+      <defs>
+        <marker id="redArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="#b63a2d"/></marker>
+        <marker id="blueArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="#2868b2"/></marker>
+      </defs>
+
+      <text x="30" y="35" font-size="18" font-weight="800" fill="currentColor">1 · OBSERVED INCIDENT</text>
+      <text x="30" y="62" font-size="13" fill="currentColor">Source-cited sequence from the Hugging Face disclosure</text>
+      <path d="M65 120H1030" stroke="#b63a2d" stroke-width="6" marker-end="url(#redArrow)"/>
+      <g fill="none" stroke="#b63a2d" stroke-width="3" font-size="11" text-anchor="middle">
+        <rect x="25" y="84" width="120" height="74" rx="7"/><rect x="165" y="84" width="120" height="74" rx="7"/><rect x="305" y="84" width="120" height="74" rx="7"/><rect x="445" y="84" width="120" height="74" rx="7"/><rect x="585" y="84" width="120" height="74" rx="7"/><rect x="725" y="84" width="120" height="74" rx="7"/><rect x="865" y="84" width="120" height="74" rx="7"/>
+      </g>
+      <g fill="currentColor" font-size="11" text-anchor="middle">
+        <text x="85" y="112">Worker</text><text x="85" y="130">foothold</text>
+        <text x="225" y="112">Cluster API</text><text x="225" y="130">request</text>
+        <text x="365" y="112">Cloud +</text><text x="365" y="130">node privilege</text>
+        <text x="505" y="112">136-key</text><text x="505" y="130">secret read</text>
+        <text x="645" y="112">Cross-cluster</text><text x="645" y="130">access</text>
+        <text x="785" y="112">Mesh</text><text x="785" y="130">enrollment</text>
+        <text x="925" y="112">Token +</text><text x="925" y="130">CI pivot</text>
+      </g>
+
+      <path d="M225 158V218" stroke="#7b8793" stroke-width="2" stroke-dasharray="6 5"/>
+      <text x="245" y="190" font-size="12" fill="currentColor">first mediated action mapped into lab</text>
+
+      <rect x="25" y="220" width="1050" height="326" rx="12" fill="none" stroke="#a7b4c1" stroke-width="2"/>
+      <text x="48" y="250" font-size="18" font-weight="800" fill="currentColor">2 · ENVOY LAB MODEL</text>
+      <text x="48" y="274" font-size="12" fill="currentColor">Same normalized, harmless request · three isolated tracks · six internal network segments</text>
+
+      <g font-size="12" fill="currentColor">
+        <text x="55" y="327" font-weight="700">A · Credential policy</text><text x="55" y="415" font-weight="700">B · Signed state only</text><text x="55" y="503" font-weight="700">C · Signed state + local reduction</text>
+      </g>
+
+      <g fill="none" stroke="#a7b4c1" stroke-width="2">
+        <rect x="245" y="292" width="235" height="64" rx="7"/><rect x="500" y="292" width="375" height="64" rx="7"/>
+        <rect x="245" y="380" width="235" height="64" rx="7"/><rect x="500" y="380" width="375" height="64" rx="7"/>
+        <rect x="245" y="468" width="235" height="64" rx="7"/><rect x="500" y="468" width="375" height="64" rx="7"/>
+      </g>
+      <g font-size="10" fill="#697684" text-anchor="middle">
+        <text x="362" y="308">INTERNAL FRONTEND</text><text x="687" y="308">INTERNAL BACKEND</text>
+        <text x="362" y="396">INTERNAL FRONTEND</text><text x="687" y="396">INTERNAL BACKEND</text>
+        <text x="362" y="484">INTERNAL FRONTEND</text><text x="687" y="484">INTERNAL BACKEND</text>
+      </g>
+
+      <g font-size="11" fill="currentColor" text-anchor="middle">
+        <text x="290" y="337">Driver</text><text x="430" y="337">Envoy</text><text x="580" y="337">Authz</text><text x="790" y="337">Target marker 1</text>
+        <text x="290" y="425">Driver</text><text x="430" y="425">Envoy</text><text x="580" y="425">Authz</text><text x="790" y="425">Target marker 1</text>
+        <text x="290" y="513">Driver</text><text x="430" y="513">Envoy</text><text x="580" y="513">Authz + 0.95 modeled</text><text x="790" y="513">Target not reached</text>
+      </g>
+      <g fill="none" stroke="#2868b2" stroke-width="3" marker-end="url(#blueArrow)">
+        <path d="M315 332H392M462 332H542M620 332H735"/><path d="M315 420H392M462 420H542M620 420H735"/><path d="M315 508H392M462 508H542"/>
+      </g>
+      <path d="M620 508H735" stroke="#b63a2d" stroke-width="3" stroke-dasharray="7 6"/>
+      <line x1="668" y1="492" x2="692" y2="524" stroke="#b63a2d" stroke-width="4"/><line x1="692" y1="492" x2="668" y2="524" stroke="#b63a2d" stroke-width="4"/>
+      <g font-size="12" font-weight="800" text-anchor="middle"><text x="960" y="332" fill="#23734a">200</text><text x="960" y="420" fill="#23734a">200</text><text x="960" y="508" fill="#b63a2d">403</text></g>
+
+      <text x="30" y="590" font-size="18" font-weight="800" fill="currentColor">3 · KIL COUNTERFACTUAL RESULT</text>
+      <path d="M48 638H340" stroke="#2868b2" stroke-width="6" marker-end="url(#blueArrow)"/>
+      <rect x="350" y="604" width="28" height="70" rx="5" fill="#2868b2"/>
+      <path d="M378 638H1030" stroke="#a7b4c1" stroke-width="3" stroke-dasharray="10 8"/>
+      <text x="48" y="622" font-size="12" fill="currentColor">Modeled KIL path</text>
+      <text x="350" y="692" text-anchor="middle" font-size="11" fill="currentColor">Envoy boundary</text>
+      <text x="690" y="622" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor">Downstream phases conditionally unreachable</text>
+      <text x="690" y="658" text-anchor="middle" font-size="11" fill="currentColor">V3A result modeled · V3B-1 topology implemented, live enforcement result pending</text>
+    </svg>
+  </div>
+</div>
+
+<div class="section">
+  <div class="pros-cons">
+    <div class="pros"><h4>What this makes clear</h4><ul><li>The disclosed incident remains observed.</li><li>The lab models one mediated action safely.</li><li>Only local reduction changes Track C.</li><li>The KIL result remains explicitly modeled.</li></ul></div>
+    <div class="cons"><h4>Deliberate boundaries</h4><ul><li>No claim that the original application foothold was mediated.</li><li>No validated V3B-1 enforcement claim.</li><li>Descendants are conditional, not separately detected.</li></ul></div>
+  </div>
+</div>

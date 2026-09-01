@@ -7325,3 +7325,45 @@ Brave. After acceptance, publish the feature branch through the normal review
 and merge workflow without changing the laboratory evidence labels.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-137 — 2026-08-31 — Envoy lab diagram paused at counterfactual-first design gate
+
+**Input:** Create a graphical diagram showing how the Envoy laboratory was set
+up to model the disclosed breach activity and the KIL results. Make the visual
+available both inside the live demonstration and as a standalone asset. Before
+shutdown, synchronize and preserve all work locally and on GitHub.
+
+**Interpretation:** Use the observed incident as the dominant narrative, map
+the first mediated worker-to-control-plane action into the harmless three-track
+Envoy lab, and show the modeled KIL cutoff as the counterfactual result. Keep
+the application foothold outside the current Envoy mediation claim and retain
+the observed/modeled/pending evidence boundaries.
+
+**Decision status:** The founder selected the counterfactual-first macro
+direction. A refined three-band concept was created and preserved as an
+unapproved design draft. Final composition approval, the formal specification,
+and implementation remain pending. No production demo or laboratory behavior
+changed in this turn.
+
+**Rationale:** Leading with the observed incident makes the public relevance
+immediately legible. Showing the Envoy topology as the controlled model beneath
+that sequence explains how the lab isolates the contribution of fresh,
+reducing-only local evidence without presenting the modeled comparison as a
+reproduction of the historical environment.
+
+**Affected artifacts:**
+
+- `docs/design-drafts/envoy-lab-counterfactual-first-concept.fragment.html`
+- `docs/checkpoints/2026-08-31-envoy-lab-diagram-pause.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Final approval of the refined three-band composition
+is still required. The diagram's exact placement in the twelve-state demo must
+be resolved in the written specification. V3B-1 live enforcement remains
+pending and V3B-2 remains future work.
+
+**Next gate:** Resume at founder review of the refined counterfactual-first
+composition, then write and approve the formal design specification before
+implementation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
