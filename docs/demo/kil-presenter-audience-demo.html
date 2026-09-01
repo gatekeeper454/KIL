@@ -45,6 +45,7 @@
     .lab-mapping-desktop { max-width: 100%; overflow: hidden; }
     .lab-mapping-mobile { display: none; }
     .lab-mapping-mobile { gap: 10px; max-width: 100%; min-width: 0; }
+    .lab-mapping-mobile > h2 { margin: 0; font-size: 1.1rem; }
     .lab-mapping-band { min-width: 0; padding: 12px; overflow-wrap: anywhere; background: var(--kil-bg); border: 1px solid var(--kil-line); border-radius: 10px; }
     .lab-mapping-band h3 { margin: 0 0 8px; color: var(--kil-blue); font-size: .82rem; letter-spacing: .06em; text-transform: uppercase; }
     .lab-mapping-band p { margin: 0; color: var(--kil-muted); line-height: 1.45; }
@@ -532,7 +533,8 @@
            <text x="670" y="444" text-anchor="middle" class="diagram-small">Conditionally unreachable · not separately detected</text>
            <text x="670" y="476" text-anchor="middle" class="diagram-small">Observed · modeled · pending validation · not a KTP wire decision</text>`
         )}</div>
-        <div class="lab-mapping-mobile" role="img" aria-label="Observed incident, controlled Envoy lab, and bounded KIL counterfactual">
+        <section class="lab-mapping-mobile" aria-labelledby="lab-mapping-mobile-title">
+          <h2 id="lab-mapping-mobile-title">Observed incident, controlled Envoy lab, and bounded KIL counterfactual</h2>
           <section class="lab-mapping-band">
             <h3>01 · Observed incident</h3>
             <p>Worker foothold → cluster API → cloud and node privilege → 136-key secret read → cross-cluster, mesh, token and CI pivot.</p>
@@ -551,7 +553,7 @@
             <p>Conditionally unreachable · not separately detected.</p>
             <p>Observed · modeled · pending validation · not a KTP wire decision</p>
           </section>
-        </div>`;
+        </section>`;
       }
 
       function renderThreeTracks() {

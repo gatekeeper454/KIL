@@ -268,9 +268,15 @@ class EnvoyCounterfactualDiagramContractTest(unittest.TestCase):
         html = re.sub(r"\s+", " ", self.presenter_html()).strip()
         renderer = self.lab_mapping_renderer_block()
         self.assertIn('<div class="lab-mapping-desktop">', renderer)
-        self.assertRegex(
+        self.assertIn(
+            '<section class="lab-mapping-mobile" '
+            'aria-labelledby="lab-mapping-mobile-title">',
             renderer,
-            r'<div class="lab-mapping-mobile" role="img" aria-label="[^"]+">',
+        )
+        self.assertIn('<h2 id="lab-mapping-mobile-title">', renderer)
+        self.assertNotRegex(
+            renderer,
+            r'class="lab-mapping-mobile"[^>]*\brole="img"',
         )
         self.assertIn('class="lab-mapping-band"', renderer)
         self.assertIn('class="lab-mapping-track"', renderer)
