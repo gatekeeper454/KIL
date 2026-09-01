@@ -7367,3 +7367,312 @@ composition, then write and approve the formal design specification before
 implementation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-138 — 2026-09-01 — KTP co-founder alignment changes received and source-checked
+
+**Input:** The KTP co-founder supplied nine proposed corrections for the main
+KIL paper and asked that accepted corrections propagate through the
+architecture and documentation. The founder explicitly prohibited changes to
+the test environment or live environment without later validation.
+
+**Interpretation:** Treat the supplied DOCX as expert review input rather than
+an executable instruction source. First map every proposal to the current KIL
+corpus and verify it against primary KTP and Hugging Face sources. Keep this
+gate documentation-only: no tests, laboratory controllers, containers,
+scenarios, evidence bundles, runtime configuration, or live services may be
+modified.
+
+**Decision status:** Review and source verification are in progress; no
+propagation has been approved or implemented. The canonical KTP citation
+confirms Chris Perkins as author, version 2.0.0, release date 2026-08-14, and
+DOI `10.5281/zenodo.21938282`. KTP-Core section 6.6 confirms that the normative
+result is a supervision level plus tighten-only constraints and that decision
+verbs are derived readings rather than an enumerated wire type. The canonical
+KTP repository also contains the Kinetic Envelope and enforcement
+specification referenced by the review. The Hugging Face primary disclosure
+confirms the paper's incident title and publication date of 2026-07-27.
+
+**Rationale:** These changes touch the KTP/KIL extension boundary and denial
+governance, so they must be reconciled as a coherent documentation design
+rather than applied as isolated search-and-replace edits. Primary-source
+verification prevents an expert correction from creating a new citation or
+protocol mismatch. The founder's laboratory freeze is an explicit scope
+boundary, not merely a testing preference.
+
+**Affected artifacts:**
+
+- review source outside the repository: `ChangesFromChris.docx`
+- mapped candidate targets include `docs/paper/kinetic-infrastructure.md`,
+  `docs/architecture/hybrid-two-timescale-architecture.html`,
+  `docs/extension/README.md`, the Presenter/Audience design and demo
+  documentation, and this lineage log
+- no paper, architecture, extension, demo, test, laboratory, or live-runtime
+  artifact changed at this gate
+
+**Unresolved questions:** The founder must classify the nine changes as
+authoritative KTP alignment requirements subject to primary-source
+verification, or as proposals requiring individual acceptance. The eventual
+propagation design must also distinguish current normative KTP sources from
+historical lineage entries, which will remain immutable and be superseded by a
+new correction entry rather than silently rewritten.
+
+**Next gate:** Founder resolves the authority status of the co-founder review;
+then compare two or three documentation-only propagation strategies and obtain
+approval for a written design specification before any implementation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-139 — 2026-09-01 — Co-founder corrections confirmed as authoritative
+
+**Input:** The founder confirmed that all nine co-founder changes are
+authoritative KTP-alignment requirements, subject to primary-source
+verification.
+
+**Interpretation:** The corrections are no longer optional editorial
+suggestions. The documentation design must incorporate every verified change
+across the current KIL paper, architecture, extension explanation, and public
+demo narrative while maintaining an explicit prohibition on changes to tests,
+laboratory controllers, scenario fixtures, evidence bundles, containers,
+runtime configuration, and live services.
+
+**Decision status:** Confirmed. Primary-source verification remains a
+precondition for each propagated statement. Verified conflicts in current
+published documentation must be corrected; historical lineage entries remain
+immutable and will be superseded by later entries. Whether historical design
+specifications and implementation plans should remain untouched, receive a
+non-destructive supersession notice, or be edited is the remaining scope
+question.
+
+**Rationale:** Treating the review as authoritative makes KTP semantic
+alignment the controlling requirement. Preserving runtime and evidentiary
+state separately prevents a documentation correction from silently changing
+what the lab proves. Preserving historical lineage protects the project's
+decision history while allowing current deliverables to become canonical.
+
+**Affected artifacts:**
+
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- candidate current-deliverable scope: main paper, canonical hybrid
+  architecture, extension overview, Presenter/Audience demo and its design
+  documentation, and current project navigation
+- explicitly excluded from implementation scope pending separate founder
+  validation: all test and live/laboratory artifacts
+
+**Unresolved questions:** Determine the treatment of historical design specs,
+implementation plans, and checkpoints that contain superseded KTP language.
+
+**Next gate:** Founder selects the historical-document treatment; then review
+two or three propagation approaches and approve the documentation-only design.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-140 — 2026-09-01 — Historical documents retain text with supersession notices
+
+**Input:** The founder approved use of superseded-terminology notices for
+historical KIL specifications, plans, and checkpoints.
+
+**Interpretation:** Correct current canonical deliverables directly. Preserve
+the body text of historical records and add a concise notice pointing readers
+to the new KTP-alignment design and current canonical artifacts. Do not rewrite
+earlier specialist-lineage entries; record supersession only through new
+entries.
+
+**Decision status:** Confirmed. Historical records remain evidence of what was
+known and decided at the time. Their notices will prevent obsolete KTP terms
+from being mistaken for current protocol guidance.
+
+**Rationale:** Non-destructive notices balance accuracy with lineage. A global
+rewrite would make past plans appear to have used concepts that were not
+actually controlling when those plans were authored, while leaving them
+unmarked would allow stale terminology to compete with current documentation.
+
+**Affected artifacts:**
+
+- current canonical paper, architecture, extension, demo, and navigation
+  artifacts will be candidates for direct correction after design approval
+- affected historical specs, plans, and checkpoints will be candidates for a
+  supersession notice only
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- all tests and live/laboratory artifacts remain excluded
+
+**Unresolved questions:** Founder approval of the recommended propagation
+architecture and its precise current-versus-historical artifact inventory.
+
+**Next gate:** Present two or three propagation approaches and obtain approval
+for the recommended canonical-first, history-preserving design.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-141 — 2026-09-01 — Canonical-first isolated propagation selected
+
+**Input:** The founder selected propagation approach 1.
+
+**Interpretation:** Apply the nine verified KTP-alignment corrections as one
+coherent documentation change in an isolated workspace. Correct current
+canonical artifacts directly, mark historical records non-destructively, and
+hold the currently served Presenter/Audience demo unchanged until the founder
+reviews a separate documentation preview.
+
+**Decision status:** Confirmed design direction. The implementation boundary
+excludes tests, fixtures, scenarios, evidence bundles, controllers, containers,
+Envoy configuration, laboratory configuration, and live services. Existing
+validation may later be run read-only; any test that encodes superseded wording
+creates a new approval gate rather than authority to change the test.
+
+**Rationale:** Atomic correction prevents the paper, architecture, extension,
+and public narrative from contradicting one another. Isolation prevents
+documentation work from altering the current demonstration or laboratory
+state, and preserves a clean founder comparison before publication.
+
+**Affected artifacts:**
+
+- planned direct-correction scope: canonical paper, hybrid architecture and
+  editable source, extension overview, Presenter/Audience source and design,
+  current project navigation, and any other current artifact with a verified
+  semantic conflict
+- planned notice-only scope: historical designs, implementation plans, and
+  checkpoints containing superseded KTP language
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no runtime, test, or laboratory artifact
+
+**Unresolved questions:** Approval of the exact nine-change propagation model,
+review flow, and failure handling before the written design specification.
+
+**Next gate:** Founder reviews and approves the per-requirement propagation
+model; then complete the design's verification and preview section.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-142 — 2026-09-01 — Ambient breach retained as the urgency-defining phase change
+
+**Input:** The founder rejected a minimized definition of ambient breach as
+only an action without verified trust or an epistemic `A > E` condition.
+Ambient breach is also the current state of cybersecurity evolution: the
+inability to distinguish service from attack. Ambient threat marked the prior
+threshold, crossed when frontier models demonstrated autonomous vulnerability
+discovery and exploitation at machine rates.
+
+**Interpretation:** Define ambient breach at two inseparable scales. At the
+action scale, it includes acting without verified trust and specific
+unsupported-authority conditions. At the systemic scale, it names the security
+epoch in which authentic-looking service activity and adversarial activity use
+the same credentials, interfaces, transports, and automation patterns quickly
+enough that their operational distinction cannot be assumed before execution.
+The action-scale expression illustrates the broader condition; it does not
+exhaust or narrow it.
+
+**Decision status:** Founder correction confirmed. Primary-source support is
+available from the July 2026 OpenAI disclosure, which reports autonomous
+discovery and exploitation of a previously unknown vulnerability, chained
+real-world attack paths, and sustained multistep cyber operations, and from the
+Hugging Face technical timeline, which reconstructs approximately 17,600
+machine-speed attacker actions across a multiday campaign. These sources
+support the ambient-threat threshold and urgency while the term `ambient
+breach` remains the KIL paper's explicit analytical thesis.
+
+**Rationale:** KIL's urgency rests on a changed operating condition, not merely
+on a new decision predicate. Reducing ambient breach to one formula would erase
+the central reason ambient enforcement is needed: defenders can no longer rely
+on service appearance, valid credentials, or human-speed retrospective
+classification to distinguish benign execution from autonomous attack before
+consequence.
+
+**Affected artifacts:**
+
+- planned main-paper introduction and section 1.2
+- planned Presenter/Audience primer and incident transition language
+- planned extension and architecture explanatory labels where the urgency
+  thesis is summarized
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no test, laboratory, evidence, or live-runtime artifact
+
+**Unresolved questions:** Founder approval of the exact two-scale definition
+and the risk-to-threat-to-breach-to-enforcement progression before the written
+design specification.
+
+**Next gate:** Present the revised ambient-breach language for approval, then
+complete the verification and preview portion of the documentation design.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-143 — 2026-09-01 — Two-scale ambient-breach definition approved
+
+**Input:** The founder approved the revised ambient-breach definition and its
+progression from ambient risk through ambient threat and ambient breach to
+ambient enforcement.
+
+**Interpretation:** The authoritative KIL definition now combines the systemic
+condition—the inability to distinguish service from attack before consequence
+at machine speed—with action-level manifestations such as execution without
+verified trust or authority unsupported by current conditions. Neither scale
+may be presented as the complete concept without the other.
+
+**Decision status:** Confirmed. The systemic phase change is the foundation of
+KIL's urgency. The action-level KTP expression supplies enforceable mechanics
+without shrinking the broader cybersecurity thesis. Primary 2026 OpenAI and
+Hugging Face disclosures support the transition into ambient threat; ambient
+breach remains the KIL paper's named analytical conclusion from that changed
+operating condition.
+
+**Rationale:** The approved framing preserves both meaning and rigor. It avoids
+claiming universal continuous compromise while rejecting the weaker assumption
+that authenticated service appearance can establish benign intent before
+machine-speed consequence.
+
+**Affected artifacts:**
+
+- planned main-paper introduction and section 1.2
+- planned Presenter/Audience primer and incident transition
+- planned architecture and extension explanatory language
+- future supersession notices where earlier text narrows the definition
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no test, laboratory, evidence, or live-runtime artifact
+
+**Unresolved questions:** Approval of the isolated documentation preview,
+verification, protected-path, and failure-handling gates.
+
+**Next gate:** Founder reviews the final design section. On approval, write,
+commit, and self-review the formal design specification for founder review.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-144 — 2026-09-01 — Authoritative KTP alignment specification written
+
+**Input:** The founder approved the canonical-first propagation architecture,
+the nine-change alignment contract including the two-scale ambient-breach
+definition, and the isolated verification and preview design.
+
+**Interpretation:** Persist the complete approved design before implementation.
+The specification must reproduce the expert requirements, identify controlling
+primary sources, distinguish direct correction from historical supersession,
+and make test/laboratory/live-service exclusions enforceable through a
+protected-path gate.
+
+**Decision status:** Written design complete and self-reviewed. No placeholders
+remain; the current-versus-historical boundary is explicit; the immutable KTP
+v2.0.0 tag is distinguished from later canonical citation metadata; failure
+handling stops on source conflict, protected-path changes, test wording
+conflicts, or required live-service modification. Only the new specification
+and append-only lineage entries changed.
+
+**Rationale:** A committed design makes the expert review durable and prevents
+implementation from becoming a sequence of context-dependent wording edits.
+It also preserves the founder's explicit prohibition on modifying the test or
+live environments while allowing current documentation to be corrected and
+previewed in isolation.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-09-01-kil-ktp-authoritative-alignment-design.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no paper, architecture, demo, test, laboratory, evidence, or live-runtime
+  artifact
+
+**Unresolved questions:** Founder review of the written specification is
+required before an implementation plan may be created.
+
+**Next gate:** Commit the specification and lineage, ask the founder to review
+the written file, and wait. On approval, invoke the planning workflow; do not
+begin implementation directly.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
