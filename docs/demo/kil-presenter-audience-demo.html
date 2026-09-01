@@ -42,6 +42,16 @@
     [data-presenter-notes] { margin-top: 20px; padding: 20px; background: var(--kil-panel); border-left: 4px solid var(--kil-blue); }
     .kil-placeholder { display: grid; min-height: 318px; place-content: center; text-align: center; color: var(--kil-muted); }
     .kil-placeholder strong { color: var(--kil-text); }
+    .lab-mapping-desktop { max-width: 100%; overflow: hidden; }
+    .lab-mapping-mobile { display: none; }
+    .lab-mapping-mobile { gap: 10px; max-width: 100%; min-width: 0; }
+    .lab-mapping-band { min-width: 0; padding: 12px; overflow-wrap: anywhere; background: var(--kil-bg); border: 1px solid var(--kil-line); border-radius: 10px; }
+    .lab-mapping-band h3 { margin: 0 0 8px; color: var(--kil-blue); font-size: .82rem; letter-spacing: .06em; text-transform: uppercase; }
+    .lab-mapping-band p { margin: 0; color: var(--kil-muted); line-height: 1.45; }
+    .lab-mapping-tracks { display: grid; gap: 7px; margin-top: 10px; }
+    .lab-mapping-track { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; min-width: 0; padding: 8px; background: var(--kil-panel); border-left: 4px solid var(--kil-blue); }
+    .lab-mapping-track span { min-width: 0; overflow-wrap: anywhere; }
+    .lab-mapping-track span:last-child { color: var(--kil-muted); text-align: right; }
     [data-source], footer { color: var(--kil-muted); }
     footer { margin-top: 28px; font-size: .9rem; }
     footer a { color: inherit; }
@@ -51,6 +61,8 @@
       [data-visual] { min-height: 260px; padding: 8px; }
       .diagram-text { font-size: 23px; }
       .diagram-small { font-size: 19px; }
+      .lab-mapping-desktop { display: none; }
+      .lab-mapping-mobile { display: grid; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
@@ -498,27 +510,48 @@
       }
 
       function renderLabMapping() {
-        return svgShell(
+        return `<div class="lab-mapping-desktop">${svgShell(
           'Observed incident, controlled Envoy lab, and bounded KIL counterfactual',
           'The source-cited incident maps one mediated cluster API request into three isolated harmless Envoy tracks. The modeled local-reduction track derives HTTP 403 and makes dependent descendants conditionally unreachable; live V3B-1 enforcement remains pending.',
-          `<text x="45" y="38" class="diagram-label">01 · OBSERVED INCIDENT</text>
-           <text x="45" y="70" class="diagram-small">worker foothold → cluster API → cloud and node privilege → 136-key secret read → cross-cluster, mesh, token and CI pivot</text>
-           <path d="M45 94H955" class="diagram-red" marker-end="url(#arrow-red)"/>
-           <text x="45" y="140" class="diagram-label">02 · ENVOY LAB MODEL</text>
-           <text x="45" y="168" class="diagram-small">Same harmless normalized request · KTP result: supervision + tighten-only constraints</text>
-           <rect x="45" y="190" width="910" height="62" rx="9" class="diagram-panel"/>
-           <text x="65" y="228" class="diagram-text">A · credential policy</text><text x="735" y="228" class="diagram-small">HTTP 200 · target 1</text>
-           <rect x="45" y="266" width="910" height="62" rx="9" class="diagram-panel"/>
-           <text x="65" y="304" class="diagram-text">B · signed composite KTP state</text><text x="735" y="304" class="diagram-small">HTTP 200 · target 1</text>
-           <rect x="45" y="342" width="910" height="62" rx="9" class="diagram-panel"/>
-           <text x="65" y="380" class="diagram-text">C · state + 0.95 modeled local reduction</text><text x="680" y="380" class="diagram-small">Envoy-derived effect: HTTP 403 · target 0</text>
-           <text x="45" y="450" class="diagram-label">03 · KIL COUNTERFACTUAL RESULT</text>
-           <path d="M45 482H360" class="diagram-blue" marker-end="url(#arrow-blue)"/>
-           <rect x="370" y="455" width="24" height="64" class="diagram-blue-fill"/>
-           <path d="M394 482H955" class="diagram-line" stroke-dasharray="10 8"/>
-           <text x="670" y="475" text-anchor="middle" class="diagram-small">Conditionally unreachable · not separately detected</text>
-           <text x="670" y="508" text-anchor="middle" class="diagram-small">Observed · modeled · pending validation · not a KTP wire decision</text>`
-        );
+          `<text x="45" y="32" class="diagram-label">01 · OBSERVED INCIDENT</text>
+           <text x="500" y="60" text-anchor="middle" class="diagram-small">worker foothold → cluster API → cloud and node privilege</text>
+           <text x="500" y="82" text-anchor="middle" class="diagram-small">136-key secret read → cross-cluster, mesh, token and CI pivot</text>
+           <path d="M45 104H955" class="diagram-red" marker-end="url(#arrow-red)"/>
+           <text x="45" y="132" class="diagram-label">02 · ENVOY LAB MODEL</text>
+           <text x="45" y="156" class="diagram-small">Same harmless normalized request · KTP result: supervision + tighten-only constraints</text>
+           <rect x="45" y="174" width="910" height="50" rx="9" class="diagram-panel"/>
+           <text x="65" y="205" class="diagram-text">A · credential policy</text><text x="735" y="205" class="diagram-small">HTTP 200 · target 1</text>
+           <rect x="45" y="232" width="910" height="50" rx="9" class="diagram-panel"/>
+           <text x="65" y="263" class="diagram-text">B · signed composite KTP state</text><text x="735" y="263" class="diagram-small">HTTP 200 · target 1</text>
+           <rect x="45" y="290" width="910" height="50" rx="9" class="diagram-panel"/>
+           <text x="65" y="321" class="diagram-text">C · state + 0.95 modeled local reduction</text><text x="680" y="321" class="diagram-small">Envoy-derived effect: HTTP 403 · target 0</text>
+           <text x="45" y="382" class="diagram-label">03 · KIL COUNTERFACTUAL RESULT</text>
+           <path d="M45 414H360" class="diagram-blue" marker-end="url(#arrow-blue)"/>
+           <rect x="370" y="398" width="24" height="32" class="diagram-blue-fill"/>
+           <path d="M394 414H955" class="diagram-line" stroke-dasharray="10 8"/>
+           <text x="670" y="444" text-anchor="middle" class="diagram-small">Conditionally unreachable · not separately detected</text>
+           <text x="670" y="476" text-anchor="middle" class="diagram-small">Observed · modeled · pending validation · not a KTP wire decision</text>`
+        )}</div>
+        <div class="lab-mapping-mobile" role="img" aria-label="Observed incident, controlled Envoy lab, and bounded KIL counterfactual">
+          <section class="lab-mapping-band">
+            <h3>01 · Observed incident</h3>
+            <p>Worker foothold → cluster API → cloud and node privilege → 136-key secret read → cross-cluster, mesh, token and CI pivot.</p>
+          </section>
+          <section class="lab-mapping-band">
+            <h3>02 · Envoy lab model</h3>
+            <p>Same harmless normalized request · KTP result: supervision + tighten-only constraints</p>
+            <div class="lab-mapping-tracks">
+              <div class="lab-mapping-track"><span>A · credential policy</span><span>HTTP 200 · target 1</span></div>
+              <div class="lab-mapping-track"><span>B · signed composite KTP state</span><span>HTTP 200 · target 1</span></div>
+              <div class="lab-mapping-track"><span>C · state + 0.95 modeled local reduction</span><span>Envoy-derived effect: HTTP 403 · target 0</span></div>
+            </div>
+          </section>
+          <section class="lab-mapping-band">
+            <h3>03 · KIL counterfactual result</h3>
+            <p>Conditionally unreachable · not separately detected.</p>
+            <p>Observed · modeled · pending validation · not a KTP wire decision</p>
+          </section>
+        </div>`;
       }
 
       function renderThreeTracks() {

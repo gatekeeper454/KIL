@@ -91,6 +91,28 @@ class EnvoyCounterfactualDiagramContractTest(unittest.TestCase):
     def normalized_html(self):
         return re.sub(r"\s+", " ", self.read_html()).strip()
 
+    def presenter_html(self):
+        return DEMO_PATH.read_text(encoding="utf-8")
+
+    def lab_mapping_scene_block(self):
+        match = re.search(
+            r'(?P<block>\{\s*"id": "case-lab-mapping".*?\n  \}),\n  \{',
+            self.presenter_html(),
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "case-lab-mapping scene block is missing")
+        return match.group("block")
+
+    def lab_mapping_renderer_block(self):
+        match = re.search(
+            r"(?P<block>function renderLabMapping\(\) \{.*?)"
+            r"(?=\n      function renderThreeTracks\(\))",
+            self.presenter_html(),
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "renderLabMapping function block is missing")
+        return match.group("block")
+
     def test_standalone_diagram_exists_and_cites_required_sources(self):
         self.assertTrue(DIAGRAM_PATH.is_file(), f"missing standalone diagram: {DIAGRAM_PATH}")
         html = self.read_html()
@@ -220,17 +242,60 @@ class EnvoyCounterfactualDiagramContractTest(unittest.TestCase):
         self.assertNotIn("validated live", lower_html)
 
     def test_presenter_integrates_counterfactual_lab_mapping(self):
-        html = DEMO_PATH.read_text(encoding="utf-8")
+        scene = self.lab_mapping_scene_block()
         for marker in (
+            '"title": "Observed breach, controlled lab, bounded result"',
+            '"status": "Modeled lab mapping"',
+            '"takeaway": "The lab isolates one mediated action and shows where reducing-only KIL evidence changes the derived transport effect."',
+            '"script": "Start with the observed incident rail: a worker foothold expanded into control-plane access and dependent escalation. The lab maps only the first mediated cluster API request into three harmless, isolated Envoy tracks. KTP supplies supervision plus tighten-only constraints; HTTP status is an Envoy-derived effect, not a KTP wire decision. Tracks A and B reach their targets. Track C applies the modeled local reduction, derives HTTP four hundred three, and leaves dependent phases conditionally unreachable. Live V3B-1 enforcement remains pending."',
+            '"source": "Hugging Face technical timeline; KTP v2.0.0; KIL V3A process contract and V3B-1 gate status."',
             '"visual": "lab-mapping"',
-            "function renderLabMapping(",
+        ):
+            with self.subTest(scene_marker=marker):
+                self.assertIn(marker, scene)
+
+        renderer = self.lab_mapping_renderer_block()
+        for marker in (
             "KTP result: supervision + tighten-only constraints",
             "Envoy-derived effect: HTTP 403",
             "Observed · modeled · pending validation",
             "not a KTP wire decision",
         ):
-            with self.subTest(marker=marker):
-                self.assertIn(marker, html)
+            with self.subTest(renderer_marker=marker):
+                self.assertIn(marker, renderer)
+
+    def test_presenter_lab_mapping_has_dedicated_mobile_alternative(self):
+        html = re.sub(r"\s+", " ", self.presenter_html()).strip()
+        renderer = self.lab_mapping_renderer_block()
+        self.assertIn('<div class="lab-mapping-desktop">', renderer)
+        self.assertRegex(
+            renderer,
+            r'<div class="lab-mapping-mobile" role="img" aria-label="[^"]+">',
+        )
+        self.assertIn('class="lab-mapping-band"', renderer)
+        self.assertIn('class="lab-mapping-track"', renderer)
+        self.assertIn(".lab-mapping-mobile { display: none; }", html)
+        self.assertRegex(
+            html,
+            r"@media \(max-width: 640px\) \{ .*?"
+            r"\.lab-mapping-desktop \{ display: none; \} .*?"
+            r"\.lab-mapping-mobile \{ display: grid; .*?\} .*?\}",
+        )
+
+    def test_presenter_lab_mapping_stays_within_default_svg_canvas(self):
+        html = self.presenter_html()
+        renderer = self.lab_mapping_renderer_block()
+        self.assertIn(
+            "function svgShell(title, description, content, viewBox = '0 0 1000 500')",
+            html,
+        )
+        self.assertEqual(1, renderer.count("svgShell("))
+        y_coordinates = [
+            float(value) for value in re.findall(r'\by="([0-9]+(?:\.[0-9]+)?)"', renderer)
+        ]
+        self.assertTrue(y_coordinates, "renderer has no y coordinates to check")
+        self.assertLessEqual(max(y_coordinates), 480)
+        self.assertNotIn('y="508"', renderer)
 
     def test_readme_links_standalone_counterfactual_diagram(self):
         readme = README_PATH.read_text(encoding="utf-8")
