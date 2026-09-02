@@ -8508,3 +8508,35 @@ executive and technical routes, and identifies any slide-level visual or
 timing refinements before release tagging or presentation publication.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-163 — 2026-09-02 — PowerPoint founder byline corrected to Mike Storm
+
+**Input:** The founder identified the incorrect cover name `Storm Swendsboe`
+and supplied the correct name: `Mike Storm`.
+
+**Interpretation:** Replace the incorrect PowerPoint cover byline with the
+confirmed founder name `Mike Storm`. Retain the approved `AUTHOR & FOUNDER`
+role label. Do not change any architecture, evidence language, speaker script,
+lab configuration, runtime, or validation state.
+
+**Decision status:** Confirmed and implemented. The native PowerPoint was
+regenerated with `Mike Storm` on the cover, the corrected cover was rendered
+and visually inspected, and the presentation overflow test passed.
+
+**Rationale:** Author identity is publication metadata and must use the
+founder's explicitly confirmed name. This is a presentation-only correction.
+
+**Affected artifacts:**
+
+- `docs/presentation/KIL-Ambient-Enforcement-Demo.pptx`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no protocol, model, scenario, lab, evidence, or test behavior
+
+**Unresolved questions:** None for the founder name. PowerPoint-native timing,
+hidden-slide selection, and any later visual refinements remain subject to
+founder review.
+
+**Next gate:** Founder reviews the corrected deck in Microsoft PowerPoint and
+confirms the executive and full technical routes.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
