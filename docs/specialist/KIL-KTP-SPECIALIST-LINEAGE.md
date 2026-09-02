@@ -8408,3 +8408,53 @@ the two target runtimes; exact build assignments; and initial optional timings.
 select one for section-by-section design approval.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-161 — 2026-09-02 — Full scene-by-scene technical drill architecture approved
+
+**Input:** The founder directed that the deck implement both the selective
+executive path and a complete technical drill path. Every one of the eight core
+incident scenes must be followed by one or two detailed technical slides. The
+founder will use PowerPoint expertise to hide or select drill-ins by audience,
+and required that removing every drill-in leave a meaningful, congruent
+executive story. The founder also enabled presentation and visualization tools
+to support the effort.
+
+**Interpretation:** Build one 30-slide native PowerPoint: a 14-slide independent
+executive spine and 16 optional technical drill-ins. The drill-ins are placed
+immediately after their parent scene, inherit its focal visual, answer one
+technical question, and return cleanly to the next core scene. No next core
+scene may depend on a fact introduced only in a drill-in. Two foundation
+drill-ins supplement the KTP/KIL extension boundary and trust-decay mechanics;
+the eight incident scenes receive fourteen drill-ins in total.
+
+**Decision status:** Confirmed presentation architecture. A written design
+specification now defines the full slide map, visual semantics, motion,
+speaker-note contract, evidence controls, implementation boundary, and
+acceptance tests. A compact route-map preview was prepared for design review.
+PowerPoint authoring has not begun, and no current HTML demo, laboratory
+environment, model, canonical scenario, evidence, or test behavior changed.
+
+**Rationale:** A complete technical sequence preserves the project's rigorous
+lineage and gives the founder maximum control in PowerPoint, while the explicit
+narrative-independence rule prevents technical completeness from damaging the
+executive story. One ordered deck avoids semantic drift between audience
+variants and keeps every deep explanation adjacent to the claim it supports.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-09-02-kil-native-powerpoint-design.md`
+- conversation-scoped interactive route-map preview
+- future native PowerPoint deliverable and implementation plan
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no current demo, test, laboratory, model, evidence, or public showcase
+  behavior
+
+**Unresolved questions:** Founder review of the written specification; detailed
+implementation plan; final per-slide copy and speaker notes; visual-asset
+generation; PowerPoint-native build assignments; and optional timing values.
+
+**Next gate:** Founder reviews and approves the written PowerPoint design
+specification. After approval, create the implementation plan and begin native
+PowerPoint authoring.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
