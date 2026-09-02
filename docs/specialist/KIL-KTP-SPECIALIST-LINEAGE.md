@@ -7880,3 +7880,106 @@ choice. Execution must stop before any existing test or protected laboratory
 path would change.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-150 — 2026-09-01 — Counterfactual-first Envoy semantic baseline implemented and verified
+
+**Input:** The founder selected option 1 for execution of the approved
+counterfactual-first Envoy plan. That selection was explicit execution
+approval to create the new isolated documentation contract test while
+preserving the prohibition on modifying any existing test, laboratory,
+evidence, source, adapter, controller, container, scenario, schema, or live
+service. The final gate also clarified that the authoritative-alignment and
+counterfactual-design specifications in commits `aa9961c`, `1f3b9da`, and
+`fc14c03` are approved pre-implementation design history; implementation-only
+path protection therefore begins at plan commit `081ea32`.
+
+**Interpretation:** Implement the confirmed semantic baseline in two forms: a
+passive standalone executive presentation and the synchronized
+Presenter/Audience lab-mapping scene. Both deliverables separate the published
+incident sequence as **observed**, the isolated Envoy process contract and
+`0.95` local reduction as **modeled**, and an accepted V3B-1 live enforcement
+result as **pending validation**. The KTP result is supervision plus
+tighten-only constraints. The `200 / 200 / 403` HTTP outcomes are derived by
+the Envoy adapter and are not a KTP wire decision.
+
+**Decision status:** Implementation and repository verification are complete;
+founder acceptance of the semantic baseline remains pending. The standalone
+and synchronized deliverables are present, responsive, passive, accessible,
+and protected by the new isolated source contract and read-only browser
+verification. No live/current laboratory or V3B-1 service was started,
+modified, or exercised, and no central `run` command was invoked. This entry
+does not claim that the historical breach was prevented or that pending V3B-1
+validation has occurred.
+
+**Rationale:** The implementation preserves the approved claim boundary while
+making the same counterfactual legible in standalone and synchronized modes.
+The first responsive review found the Envoy tracks did not stack correctly at
+the `641px` tablet boundary; commit `6d4631a` corrected that layout. Mobile
+review also found that the inline mapping lost essential semantic and evidence
+content; commits `dea594f` and `b22a99b` added and contract-protected the
+dedicated mobile mapping. Review-only screenshots were generated at:
+
+- `artifacts/generated/kil-counterfactual-preview/standalone-1440.png`;
+- `artifacts/generated/kil-counterfactual-preview/standalone-736.png`;
+- `artifacts/generated/kil-counterfactual-preview/standalone-360.png`;
+- `artifacts/generated/kil-demo-preview/case-first-divergence.png`;
+- `artifacts/generated/kil-demo-preview/case-three-tracks.png`;
+- `artifacts/generated/kil-demo-preview/case-lab-mapping.png`; and
+- `artifacts/generated/kil-demo-preview/case-lab-mapping-mobile.png`.
+
+The review disposition after those fixes was acceptable for the semantic
+baseline: the three evidence classes remained visible, the mapped action and
+derived cutoff remained unambiguous, and pending validation did not appear
+validated. The screenshots remain ignored, untracked review artifacts.
+
+Fresh verification from the final gate was:
+
+- focused contracts:
+  `PYTHONPATH=src "/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python" -m unittest tests.test_envoy_counterfactual_diagram tests.test_presenter_audience_demo -v`
+  returned `Ran 19 tests in 0.010s` and `OK`;
+- complete repository suite:
+  `PYTHONPATH=src "/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python" -m unittest discover -s tests -v`
+  returned `Ran 504 tests in 27.868s` and `OK`;
+- standalone browser verification:
+  `env NODE_PATH=/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules /Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node tools/verify_envoy_counterfactual_diagram.mjs`
+  returned `envoy counterfactual verifier (Brave): PASS`;
+- synchronized browser verification:
+  `env NODE_PATH=/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules /Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node tools/verify_presenter_audience_demo.mjs`
+  returned `presenter-audience browser verifier (Brave): PASS`; and
+- `git diff --check` returned no errors. The full branch audit
+  `git diff --name-only b49fe10..HEAD` contained the seven implementation
+  allowlist paths plus the two approved pre-plan specification artifacts
+  `docs/superpowers/specs/2026-09-01-envoy-lab-counterfactual-first-diagram-design.md`
+  and
+  `docs/superpowers/specs/2026-09-01-kil-ktp-authoritative-alignment-design.md`.
+  The protected implementation-only audit from `081ea32` contained exactly the
+  seven allowed paths: `README.md`,
+  `docs/demo/envoy-lab-counterfactual-first.html`,
+  `docs/demo/kil-presenter-audience-demo.html`,
+  `tests/test_envoy_counterfactual_diagram.py`,
+  `tools/verify_envoy_counterfactual_diagram.mjs`, this lineage, and the
+  implementation plan.
+
+**Affected artifacts:**
+
+- `README.md`
+- `docs/demo/envoy-lab-counterfactual-first.html`
+- `docs/demo/kil-presenter-audience-demo.html`
+- `tests/test_envoy_counterfactual_diagram.py`
+- `tools/verify_envoy_counterfactual_diagram.mjs`
+- `docs/superpowers/plans/2026-09-01-envoy-lab-counterfactual-first-diagram.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- ignored review screenshots under `artifacts/generated/`
+
+**Unresolved questions:** Founder acceptance or revision of the implemented
+semantic baseline. The requested vivid, graphic-intensive redesign of the
+broader Presenter/Audience experience remains unresolved and outside this
+implementation scope; its visual language, animation, scene composition, and
+asset strategy have not been selected.
+
+**Next gate:** Present the standalone diagram and synchronized scene for founder
+acceptance. Do not push, merge, start V3B-1, replace the public showcase, or
+begin the vivid Presenter/Audience redesign until the founder accepts the
+semantic baseline and chooses the next action.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

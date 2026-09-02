@@ -63,14 +63,14 @@ preserve.
 - Create: `tests/test_envoy_counterfactual_diagram.py`
 - Create: `docs/demo/envoy-lab-counterfactual-first.html`
 
-- [ ] **Step 1: Record explicit execution approval for the new isolated test**
+- [x] **Step 1: Record explicit execution approval for the new isolated test**
 
 Before editing `tests/`, confirm that the founder's selection of this plan for
 execution authorizes creation of
 `tests/test_envoy_counterfactual_diagram.py`. This approval does not authorize
 modification of any existing test or laboratory artifact.
 
-- [ ] **Step 2: Write the failing standalone existence and source test**
+- [x] **Step 2: Write the failing standalone existence and source test**
 
 Create `tests/test_envoy_counterfactual_diagram.py` with:
 
@@ -108,7 +108,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 3: Run the test and verify the missing-file failure**
+- [x] **Step 3: Run the test and verify the missing-file failure**
 
 Run:
 
@@ -119,7 +119,7 @@ PYTHONPATH=src "/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Laye
 Expected: `FAIL` identifying the missing
 `docs/demo/envoy-lab-counterfactual-first.html`.
 
-- [ ] **Step 4: Create the minimal passive standalone document**
+- [x] **Step 4: Create the minimal passive standalone document**
 
 Create `docs/demo/envoy-lab-counterfactual-first.html` with this complete
 document shell:
@@ -146,13 +146,13 @@ document shell:
 </html>
 ```
 
-- [ ] **Step 5: Run the focused test and verify it passes**
+- [x] **Step 5: Run the focused test and verify it passes**
 
 Run the command from Step 3.
 
 Expected: `Ran 1 test` and `OK`.
 
-- [ ] **Step 6: Commit the protected test scaffold**
+- [x] **Step 6: Commit the protected test scaffold**
 
 ```bash
 git add tests/test_envoy_counterfactual_diagram.py docs/demo/envoy-lab-counterfactual-first.html
@@ -166,7 +166,7 @@ git commit -m "test: establish Envoy counterfactual diagram contract"
 - Modify: `tests/test_envoy_counterfactual_diagram.py`
 - Modify: `docs/demo/envoy-lab-counterfactual-first.html`
 
-- [ ] **Step 1: Add failing semantic, accessibility, and passivity tests**
+- [x] **Step 1: Add failing semantic, accessibility, and passivity tests**
 
 Add this parser above `CounterfactualDiagramTest`:
 
@@ -240,7 +240,7 @@ Add these methods to `CounterfactualDiagramTest`:
         self.assertNotIn("validated live", html.lower())
 ```
 
-- [ ] **Step 2: Run the tests and verify the semantic failures**
+- [x] **Step 2: Run the tests and verify the semantic failures**
 
 Run:
 
@@ -251,7 +251,7 @@ PYTHONPATH=src "/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Laye
 Expected: three new tests fail because the narrative, bands, accessibility
 metadata, and responsive rules are absent.
 
-- [ ] **Step 3: Replace the standalone shell with the approved document**
+- [x] **Step 3: Replace the standalone shell with the approved document**
 
 Keep the source URLs from Task 1. Add theme-aware CSS with these exact layout
 contracts:
@@ -365,13 +365,13 @@ Use this exact semantic body order and copy:
 
 Retain the Task 1 footer after `</main>`.
 
-- [ ] **Step 4: Run the focused contract and verify all tests pass**
+- [x] **Step 4: Run the focused contract and verify all tests pass**
 
 Run the command from Step 2.
 
 Expected: four tests run and `OK`.
 
-- [ ] **Step 5: Commit the standalone diagram**
+- [x] **Step 5: Commit the standalone diagram**
 
 ```bash
 git add docs/demo/envoy-lab-counterfactual-first.html tests/test_envoy_counterfactual_diagram.py
@@ -386,7 +386,7 @@ git commit -m "feat: add counterfactual-first Envoy diagram"
 - Modify: `docs/demo/kil-presenter-audience-demo.html:104-220`
 - Modify: `docs/demo/kil-presenter-audience-demo.html:500-558`
 
-- [ ] **Step 1: Add the failing integration contract**
+- [x] **Step 1: Add the failing integration contract**
 
 Add to `CounterfactualDiagramTest`:
 
@@ -409,7 +409,7 @@ Add to `CounterfactualDiagramTest`:
         self.assertIn("docs/demo/envoy-lab-counterfactual-first.html", readme)
 ```
 
-- [ ] **Step 2: Run the focused test and verify both integration tests fail**
+- [x] **Step 2: Run the focused test and verify both integration tests fail**
 
 Run:
 
@@ -419,7 +419,7 @@ PYTHONPATH=src "/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Laye
 
 Expected: the new renderer/copy test and README link test fail.
 
-- [ ] **Step 3: Update the ambient-breach primer copy**
+- [x] **Step 3: Update the ambient-breach primer copy**
 
 Keep the scene ID, order, evidence status, and visual ID unchanged. Replace the
 `primer-ambient-breach` takeaway and script with:
@@ -431,7 +431,7 @@ Keep the scene ID, order, evidence status, and visual ID unchanged. Replace the
 
 The script is 75 words and remains inside the existing 70–90-word contract.
 
-- [ ] **Step 4: Update only the lab-mapping scene record**
+- [x] **Step 4: Update only the lab-mapping scene record**
 
 Keep its scene ID and order. Replace its title, takeaway, script, source, and
 visual with:
@@ -446,7 +446,7 @@ visual with:
 
 The script is 79 words.
 
-- [ ] **Step 5: Replace the lab-mapping renderer with the approved inline SVG**
+- [x] **Step 5: Replace the lab-mapping renderer with the approved inline SVG**
 
 Replace only the body of `renderLabMapping()`. Keep its function name and the
 existing `lab-mapping` renderer-map key so the current closed scene contract
@@ -486,7 +486,7 @@ Leave the existing renderer map entry unchanged:
 'lab-mapping': renderLabMapping,
 ```
 
-- [ ] **Step 6: Add the standalone link to README**
+- [x] **Step 6: Add the standalone link to README**
 
 After the Presenter/Audience opening instructions, add:
 
@@ -498,7 +498,7 @@ It separates the observed incident, modeled process-contract result, and pending
 V3B-1 live validation.
 ```
 
-- [ ] **Step 7: Run focused and existing demo contracts**
+- [x] **Step 7: Run focused and existing demo contracts**
 
 Run:
 
@@ -510,7 +510,7 @@ Expected: all tests pass. If the existing demo contract fails solely because
 it requires superseded KTP outcome language, stop and present the exact failure
 without editing that test.
 
-- [ ] **Step 8: Commit the synchronized integration**
+- [x] **Step 8: Commit the synchronized integration**
 
 ```bash
 git add docs/demo/kil-presenter-audience-demo.html README.md tests/test_envoy_counterfactual_diagram.py
@@ -523,7 +523,7 @@ git commit -m "feat: integrate Envoy counterfactual diagram"
 
 - Create: `tools/verify_envoy_counterfactual_diagram.mjs`
 
-- [ ] **Step 1: Create the read-only visual verifier**
+- [x] **Step 1: Create the read-only visual verifier**
 
 Create `tools/verify_envoy_counterfactual_diagram.mjs`:
 
@@ -614,7 +614,7 @@ try {
 }
 ```
 
-- [ ] **Step 2: Run the standalone verifier in Brave**
+- [x] **Step 2: Run the standalone verifier in Brave**
 
 Run:
 
@@ -625,7 +625,7 @@ node tools/verify_envoy_counterfactual_diagram.mjs
 Expected: `envoy counterfactual verifier (Brave): PASS` when Brave is
 installed, otherwise the Playwright Chromium pass message.
 
-- [ ] **Step 3: Run the existing Presenter/Audience verifier**
+- [x] **Step 3: Run the existing Presenter/Audience verifier**
 
 Run:
 
@@ -636,7 +636,7 @@ node tools/verify_presenter_audience_demo.mjs
 Expected: `presenter-audience browser verifier (Brave): PASS` and no console,
 runtime, accessibility, or overflow errors.
 
-- [ ] **Step 4: Generate review-only screenshots**
+- [x] **Step 4: Generate review-only screenshots**
 
 Run:
 
@@ -655,7 +655,7 @@ Screenshots are review outputs and must remain untracked. Confirm that the
 three bands are legible, the mapped action is unambiguous, evidence labels are
 visible, and no pending result looks validated.
 
-- [ ] **Step 5: Commit the verifier**
+- [x] **Step 5: Commit the verifier**
 
 ```bash
 git add tools/verify_envoy_counterfactual_diagram.mjs
@@ -669,7 +669,7 @@ git commit -m "test: verify Envoy counterfactual presentation"
 - Modify: `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
 - Modify: `docs/superpowers/plans/2026-09-01-envoy-lab-counterfactual-first-diagram.md`
 
-- [ ] **Step 1: Append the implementation lineage entry**
+- [x] **Step 1: Append the implementation lineage entry**
 
 Append a dated entry recording:
 
@@ -689,12 +689,12 @@ End the entry with:
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 ```
 
-- [ ] **Step 2: Mark completed plan steps**
+- [x] **Step 2: Mark completed plan steps**
 
 Change only completed checkbox markers in this plan from `[ ]` to `[x]`. Do
 not rewrite planned commands or expected results.
 
-- [ ] **Step 3: Run the complete repository test gate**
+- [x] **Step 3: Run the complete repository test gate**
 
 Run:
 
@@ -705,7 +705,7 @@ PYTHONPATH=src "/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Laye
 Expected: all tests pass. Record the exact test count in lineage. Do not claim
 the historical breach was prevented and do not promote V3B-1 from pending.
 
-- [ ] **Step 4: Run both browser verifiers again**
+- [x] **Step 4: Run both browser verifiers again**
 
 ```bash
 node tools/verify_envoy_counterfactual_diagram.mjs
@@ -714,7 +714,7 @@ node tools/verify_presenter_audience_demo.mjs
 
 Expected: both pass in Brave when installed.
 
-- [ ] **Step 5: Enforce the protected-path diff**
+- [x] **Step 5: Enforce the protected-path diff**
 
 Run from the feature worktree:
 
@@ -730,14 +730,14 @@ the newly created isolated contract, or any fixture, scenario, schema, source,
 adapter, deployment, controller, evidence, artifact, container, or laboratory
 path.
 
-- [ ] **Step 6: Commit the lineage and completed plan**
+- [x] **Step 6: Commit the lineage and completed plan**
 
 ```bash
 git add docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md docs/superpowers/plans/2026-09-01-envoy-lab-counterfactual-first-diagram.md
 git commit -m "docs: record Envoy counterfactual implementation"
 ```
 
-- [ ] **Step 7: Verify the final commit state**
+- [x] **Step 7: Verify the final commit state**
 
 Run:
 
