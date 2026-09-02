@@ -8028,3 +8028,52 @@ contracts as fixed inputs. Do not start the laboratory or merge into `main`
 without a separate founder direction.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-152 — 2026-09-02 — Shutdown checkpoint resumed at semantic-baseline acceptance gate
+
+**Input:** The founder directed the project to continue from the synchronized
+shutdown checkpoint. The preserved next-session gate required review of the
+standalone counterfactual presentation and the synchronized Presenter/Audience
+`case-lab-mapping` scene before beginning the vivid visual redesign.
+
+**Interpretation:** Re-establish repository provenance, inspect the current
+desktop and mobile review renders, and separate semantic acceptance from
+aesthetic acceptance. The current graphics remain an intentionally bounded
+semantic baseline; the founder's earlier dissatisfaction with their visual
+intensity remains the controlling reason for a subsequent redesign phase.
+
+**Decision status:** The local `main` checkout is clean and the preserved
+feature worktree remains at synchronized commit `81cc059`. Review of the
+generated standalone, desktop Presenter, and mobile Presenter renders confirms
+that the three-band order, cluster-API incident-to-lab mapping, three isolated
+Envoy outcomes, conditional-reachability qualification, and
+observed/modelled/pending evidence boundary remain visible. Founder acceptance
+of those semantics as fixed redesign inputs is pending. No source, test,
+laboratory, evidence, or live service changed during the review.
+
+**Rationale:** Treating the semantic and aesthetic gates separately allows the
+graphic-intensive redesign to be ambitious without reopening already verified
+KTP-versus-Envoy responsibility or overstating modeled results as live
+validation.
+
+**Affected artifacts:**
+
+- reviewed `docs/demo/envoy-lab-counterfactual-first.html`
+- reviewed `docs/demo/kil-presenter-audience-demo.html`
+- reviewed ignored screenshots under
+  `artifacts/generated/kil-counterfactual-preview/` and
+  `artifacts/generated/kil-demo-preview/`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no laboratory, runtime, evidence bundle, or public showcase artifact
+
+**Unresolved questions:** Whether the founder accepts the current semantic
+baseline—independent of its visual style—as the fixed content contract for the
+next Presenter/Audience redesign phase.
+
+**Next gate:** Obtain explicit semantic-baseline acceptance or targeted
+semantic corrections. After acceptance, brainstorm and compare two or three
+vivid visual-language approaches before writing a separate redesign
+specification. Do not implement the redesign or start the laboratory at this
+gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
