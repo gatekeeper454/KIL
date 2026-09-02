@@ -8122,3 +8122,40 @@ the separate redesign specification. Do not implement before that written
 design is reviewed and approved.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-154 — 2026-09-02 — Mixed executive-first redesign audience selected
+
+**Input:** For the vivid Presenter/Audience redesign, the founder selected the
+mixed-audience option: executive story first with technical drill-down layers.
+
+**Interpretation:** Design the default presentation path for immediate
+executive comprehension while preserving optional, progressively disclosed
+technical depth for security practitioners and KTP specialists. The principal
+visual story must stand on its own without protocol expertise; technical layers
+may expose signed composite state, reducing-only local evidence, Envoy-derived
+effects, evidence classifications, and laboratory mechanics.
+
+**Decision status:** Confirmed audience architecture. Presentation duration,
+visual language, motion model, and scene composition remain in discovery. No
+demo implementation or laboratory behavior changed.
+
+**Rationale:** An executive-first surface makes the urgency and intervention
+legible to decision-makers, while optional technical depth prevents the same
+artifact from becoming superficial or unusable for protocol and security
+review.
+
+**Affected artifacts:**
+
+- future Presenter/Audience redesign specification
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no current demo, test, laboratory, evidence, or public showcase artifact
+
+**Unresolved questions:** Primary presentation duration and pacing, visual
+language, motion intensity, interaction model, and the boundary between default
+story content and technical drill-down content.
+
+**Next gate:** Select the primary presentation duration and pacing target, then
+continue one-question-at-a-time discovery before comparing visual-language
+approaches.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
