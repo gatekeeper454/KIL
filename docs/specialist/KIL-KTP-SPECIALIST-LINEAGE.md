@@ -7983,3 +7983,48 @@ begin the vivid Presenter/Audience redesign until the founder accepts the
 semantic baseline and chooses the next action.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-151 — 2026-09-01 — Semantic baseline cleared for synchronized shutdown handoff
+
+**Input:** After Tasks 1–5 and the final independent review completed, the
+founder directed that all remaining work be committed, the local feature branch
+be synchronized with GitHub, the repository be prepared for shutdown, and the
+best next-session starting point be identified.
+
+**Interpretation:** Preserve the completed semantic baseline on its named
+feature branch and push that branch for durable backup without merging it into
+`main`, replacing the public showcase, or exercising the laboratory. Write a
+shutdown checkpoint that makes the founder-review gate and the subsequent
+graphic-intensive redesign boundary explicit.
+
+**Decision status:** Final independent review returned `READY FOR FOUNDER
+REVIEW` with no blocking findings. The founder's new synchronization direction
+supersedes T-150's temporary no-push gate only for publishing the named feature
+branch as a backup. Founder acceptance of the semantic baseline, merge, public
+showcase replacement, V3B-1 execution, and the visual redesign remain pending.
+
+**Rationale:** A remotely synchronized feature branch and a self-contained
+checkpoint make shutdown recoverable without weakening the evidence boundary
+or implying that modeled results have become live validation. Keeping the
+worktree and branch intact preserves a reviewable surface for founder feedback.
+
+**Affected artifacts:**
+
+- `docs/checkpoints/2026-09-01-counterfactual-semantic-baseline-shutdown.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- feature branch `codex/v3b1-foreign-snapshot-contract`
+- no laboratory, evidence bundle, source module, adapter, deployment, or live
+  service
+
+**Unresolved questions:** Founder acceptance or revision of the standalone and
+synchronized semantic baseline. After acceptance, the visual language,
+animation policy, scene composition, and asset strategy for the vivid
+Presenter/Audience redesign remain to be designed.
+
+**Next gate:** Resume with founder review of the standalone three-band artifact
+and the synchronized `case-lab-mapping` scene. If accepted, begin a separate
+visual-design specification that treats the current semantic and evidentiary
+contracts as fixed inputs. Do not start the laboratory or merge into `main`
+without a separate founder direction.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
