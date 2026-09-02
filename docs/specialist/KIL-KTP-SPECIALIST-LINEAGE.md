@@ -8366,3 +8366,45 @@ profile for the executive path.
 slide-architecture approaches before implementation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-160 — 2026-09-02 — Presenter-triggered semantic motion confirmed
+
+**Input:** The founder approved purposeful, presenter-triggered motion for the
+native PowerPoint presentation.
+
+**Interpretation:** Animation must carry meaning rather than supply atmosphere.
+Permitted motion includes trajectory travel, state derivation, authority decay
+or collapse, transport cutoff, reachability changes, topology propagation, and
+evidence-layer reveals. Slides begin in a useful static state, advance only on
+presenter action by default, and remain understandable when printed or viewed
+without animation. Continuous ambient loops and decorative animation are out
+of scope.
+
+**Decision status:** Confirmed. Manual, semantic builds are the deck-wide motion
+contract. Optional PowerPoint-native timings may later be attached to the short
+executive path, but the founder retains control over them. Exact transition and
+build assignments remain part of the forthcoming written design. No
+PowerPoint, HTML demo, laboratory environment, model, evidence, or test
+behavior changed.
+
+**Rationale:** Meaning-bearing motion can demonstrate agent speed, kinetic
+cutoff, and causal reachability more clearly than static pages while preserving
+presenter control and offline reliability. Requiring a coherent static state
+protects accessibility, printability, and compatibility when PowerPoint effects
+are reduced or unavailable.
+
+**Affected artifacts:**
+
+- future native PowerPoint redesign specification and deliverable
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no current presentation, demo, test, laboratory, evidence, or public
+  showcase artifact
+
+**Unresolved questions:** Which complete slide architecture best balances the
+eight-scene breach story, scene-adjacent technical details, front matter, and
+the two target runtimes; exact build assignments; and initial optional timings.
+
+**Next gate:** Compare two or three complete slide-architecture approaches and
+select one for section-by-section design approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
