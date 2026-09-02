@@ -8236,3 +8236,47 @@ and the initial PowerPoint timing profile.
 technical-drill-down structure before comparing complete deck approaches.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-157 — 2026-09-02 — Three PowerPoint visual-language studies presented
+
+**Input:** The founder asked to see a sample of each proposed visual language
+before selecting the master style for the native PowerPoint presentation.
+
+**Interpretation:** Produce a fair, presentation-scale comparison using the
+same semantic moment in all three studies: a compromised workload presents a
+valid credential, machine-speed crimson traffic approaches a cluster API, and
+the cobalt KIL transport boundary collapses authority before modeled
+downstream systems can be reached. Vary only the visual language: cinematic
+dark, precision blueprint, and cinematic-to-blueprint hybrid.
+
+**Decision status:** Three original 16:9, text-free image-generation studies
+were presented in the working conversation. They are preview-only and have not
+been incorporated into the repository or any presentation. No master visual
+language has been selected. No current HTML demo, laboratory environment,
+model, evidence, or test artifact changed.
+
+**Rationale:** Holding the content constant exposes the actual design tradeoff.
+The cinematic treatment maximizes urgency and immediate comprehension; the
+blueprint treatment maximizes architectural precision and correspondence with
+the founder-supplied references; the hybrid treatment moves from adversarial
+pressure to governed infrastructure and is the current working recommendation
+for the confirmed mixed executive and technical audience.
+
+**Affected artifacts:**
+
+- conversation-scoped cinematic-dark visual study
+- conversation-scoped precision-blueprint visual study
+- conversation-scoped cinematic-to-blueprint hybrid visual study
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no current presentation, demo, test, laboratory, evidence, or public
+  showcase artifact
+
+**Unresolved questions:** Which visual language becomes the deck-wide master
+system, and whether selected elements from another study should be incorporated
+without weakening visual consistency.
+
+**Next gate:** Founder selects cinematic dark, precision blueprint, hybrid, or
+a narrowly defined combination. Continue one-question-at-a-time discovery on
+technical reveal structure after that selection.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
