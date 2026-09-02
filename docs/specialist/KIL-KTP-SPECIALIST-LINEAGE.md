@@ -8280,3 +8280,47 @@ a narrowly defined combination. Continue one-question-at-a-time discovery on
 technical reveal structure after that selection.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-158 — 2026-09-02 — Hybrid walkthrough system selected; cinematic cover retained
+
+**Input:** The founder selected the hybrid cinematic-to-blueprint style for the
+demo and walkthrough, while explicitly retaining the cinematic-dark study for
+the cover slide and possible later high-impact use.
+
+**Interpretation:** The native PowerPoint should use a controlled dual-register
+visual system rather than one uniform treatment. Cinematic dark establishes
+urgency at the opening and may punctuate major narrative transitions. The
+hybrid system governs the explanatory walkthrough: adversarial pressure is
+rendered cinematically, while KTP/KIL mechanics, evidence boundaries, and
+protected infrastructure resolve into precise blueprint language.
+
+**Decision status:** Confirmed. Hybrid is the master walkthrough language;
+cinematic dark is an approved cover treatment and reserved accent language.
+The standalone precision-blueprint study remains a useful reference but is not
+the selected master system. The two selected preview studies are now preserved
+in the repository as design references. No current PowerPoint, HTML demo,
+laboratory environment, model, evidence, or test behavior changed.
+
+**Rationale:** This combination gives an executive audience an immediate sense
+of urgency while preserving the architectural precision required for technical
+credibility. Limiting cinematic dark to deliberate narrative moments prevents
+the deck from becoming visually monotonous or theatrical, and lets the hybrid
+transition itself communicate KIL's central promise: converting ambient breach
+pressure into governed transport behavior.
+
+**Affected artifacts:**
+
+- `docs/design-drafts/assets/presentation-style-studies/kil-cinematic-dark-cover-study.png`
+- `docs/design-drafts/assets/presentation-style-studies/kil-hybrid-walkthrough-study.png`
+- future native PowerPoint redesign specification and deliverable
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no current demo, test, laboratory, evidence, or public showcase behavior
+
+**Unresolved questions:** How the longer guided runtime exposes technical depth
+without disrupting the shorter executive runtime; exact slide architecture;
+animation vocabulary; and the first editable PowerPoint timing profile.
+
+**Next gate:** Select the technical reveal structure for the shared deck, then
+compare complete slide-architecture approaches before implementation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
