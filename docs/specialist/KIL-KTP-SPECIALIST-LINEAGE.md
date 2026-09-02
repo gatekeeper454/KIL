@@ -8077,3 +8077,48 @@ specification. Do not implement the redesign or start the laboratory at this
 gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-153 — 2026-09-02 — Counterfactual semantic baseline approved as redesign contract
+
+**Input:** After reviewing the standalone counterfactual presentation and the
+synchronized Presenter/Audience `case-lab-mapping` scene, the founder explicitly
+approved the semantic baseline.
+
+**Interpretation:** Freeze the approved content semantics as controlling inputs
+for the separate vivid, graphic-intensive Presenter/Audience redesign. The
+redesign may change composition, illustration, typography, pacing, animation,
+and interaction, but it must retain the three evidence classes, the first
+mediated cluster-API mapping, the KTP-versus-Envoy responsibility boundary, and
+the conditional nature of the counterfactual result.
+
+**Decision status:** Confirmed. The semantic-baseline acceptance gate is
+closed. The visual redesign remains in discovery and design only; no redesign
+implementation, laboratory execution, V3B-1 promotion, public-showcase
+replacement, or merge is authorized by this approval.
+
+**Rationale:** Separating semantic approval from visual approval allows the
+next experience to become substantially more vivid without reopening verified
+protocol or evidence claims. It also provides a stable acceptance contract for
+future design review and testing.
+
+**Affected artifacts:**
+
+- approved semantic contract in
+  `docs/superpowers/specs/2026-09-01-envoy-lab-counterfactual-first-diagram-design.md`
+- approved standalone baseline in
+  `docs/demo/envoy-lab-counterfactual-first.html`
+- approved synchronized baseline in
+  `docs/demo/kil-presenter-audience-demo.html`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no laboratory, runtime, evidence bundle, or public showcase artifact
+
+**Unresolved questions:** Target presentation context, primary audience,
+visual-language direction, animation intensity, scene architecture, and asset
+strategy for the vivid Presenter/Audience redesign.
+
+**Next gate:** Conduct one-question-at-a-time visual discovery, compare two or
+three visual-language approaches, and obtain founder selection before writing
+the separate redesign specification. Do not implement before that written
+design is reviewed and approved.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
