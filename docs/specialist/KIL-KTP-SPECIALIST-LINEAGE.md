@@ -8159,3 +8159,39 @@ continue one-question-at-a-time discovery before comparing visual-language
 approaches.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-155 — 2026-09-02 — Dual executive and guided presentation runtimes selected
+
+**Input:** The founder selected both the five-to-seven-minute executive demo
+and the twelve-to-fifteen-minute guided narrative as required presentation
+runtimes.
+
+**Interpretation:** Build one shared scene system with two pacing profiles
+rather than two independent demonstrations. Executive mode compresses each
+scene to one decisive visual idea and a short talk track. Guided mode retains
+the same narrative spine while revealing technical layers, evidence context,
+and fuller presenter guidance.
+
+**Decision status:** Confirmed. Both runtimes are required; the scene graph and
+semantic contract must remain shared. Interaction style, visual language,
+motion model, and exact scene/reveal counts remain in discovery. No current
+demo or laboratory artifact changed.
+
+**Rationale:** A shared narrative system avoids content drift between an
+executive showcase and a technical presentation while allowing the same
+artifact to serve short meetings, live demonstrations, and deeper reviews.
+
+**Affected artifacts:**
+
+- future Presenter/Audience redesign specification
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no current demo, test, laboratory, evidence, or public showcase artifact
+
+**Unresolved questions:** Presenter interaction model, optional autoplay,
+technical-reveal controls, visual-language direction, motion intensity, and
+scene pacing for each runtime.
+
+**Next gate:** Select the interaction model that can support both runtimes from
+the shared scene system, then continue visual discovery.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
