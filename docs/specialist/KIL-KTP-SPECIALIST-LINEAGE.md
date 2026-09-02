@@ -8195,3 +8195,44 @@ scene pacing for each runtime.
 the shared scene system, then continue visual discovery.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-156 — 2026-09-02 — Native PowerPoint deliverable and speaker-note contract confirmed
+
+**Input:** The founder specified that the redesigned presentation must be a
+PowerPoint `.pptx`, confirmed the hybrid interaction option, stated that slide
+timings can be adjusted in PowerPoint, and required the script in speaker
+notes.
+
+**Interpretation:** Produce one native widescreen PowerPoint deck with manual
+advance as the default and PowerPoint-native timing support for the compressed
+executive runtime. Preserve the shared narrative spine for the longer guided
+runtime, use editable PowerPoint content where appropriate, and place the full
+presenter script plus per-slide sources in speaker notes rather than on the
+audience-facing canvas.
+
+**Decision status:** Confirmed artifact and narration contract. The deliverable
+format is `.pptx`; the current HTML demonstration remains a semantic reference,
+not the final presentation medium. Visual-language selection, technical
+drill-down structure, detailed slide sequence, and timing values remain in
+design discovery. No PowerPoint file or demo implementation has been created.
+
+**Rationale:** A native PowerPoint artifact gives the founder direct control
+over pacing and live delivery while a single deck prevents semantic drift
+between the short executive and longer guided experiences. Speaker notes keep
+the visual field clean while preserving a repeatable talk track and source
+provenance.
+
+**Affected artifacts:**
+
+- future native PowerPoint redesign deliverable and specification
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no current HTML demo, test, laboratory, evidence, or public showcase artifact
+
+**Unresolved questions:** Visual-language direction, how technical drill-downs
+are exposed inside one deck, exact slide architecture, animation vocabulary,
+and the initial PowerPoint timing profile.
+
+**Next gate:** Select the visual-language direction, then resolve the
+technical-drill-down structure before comparing complete deck approaches.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
