@@ -207,8 +207,11 @@ validated cluster result. See the
 - [Hugging Face July 2026 technical timeline](https://huggingface.co/blog/agent-intrusion-technical-timeline)
 - [Hugging Face July 2026 incident disclosure](https://huggingface.co/blog/security-incident-july-2026)
 
-Licensing for this new repository remains an explicit project decision. KTP
-source material retains its Apache-2.0 license and attribution requirements.
+## License
+
+Original KIL material is licensed under the Apache License 2.0. See
+[`LICENSE`](LICENSE). KTP source material retains its Apache-2.0 license and
+attribution requirements.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 

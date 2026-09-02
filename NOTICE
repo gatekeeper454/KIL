@@ -10,6 +10,8 @@ The historical case study is based on Hugging Face's public July 2026 incident
 disclosure and technical timeline. Sensitive values in those sources were
 redacted or genericized by the publisher.
 
-No license for original KIL material has been selected yet. Until one is
-adopted explicitly, no license is granted for that original material.
+Unless otherwise noted, original KIL material is licensed under the Apache License 2.0.
+See LICENSE.
 
+The two historical source drafts under docs/drafts/ remain byte-preserved.
+Their checksums and provenance are recorded under research/source-material/.

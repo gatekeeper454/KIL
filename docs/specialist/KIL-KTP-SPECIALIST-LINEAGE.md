@@ -6803,3 +6803,45 @@ permitted after request intent. The prospective outcome remains `permit / permit
 teardown, foreign-state restoration, and offline presenter acceptance.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-125 — 2026-09-02 — Apache-2.0 selected for original KIL material
+
+**Input:** The maintainer directed implementation of GitHub issue #18's
+recommendation to select and apply a license for KIL original material. The
+issue recommends Apache License 2.0 and requires a root license file, updated
+notice, package metadata, README declaration, and a green validation gate.
+
+**Interpretation:** Apply Apache-2.0 to original KIL material while preserving
+the separate KTP attribution and the repository's byte-preserved treatment of
+the two historical drafts. This is a repository licensing and publication
+change; it does not alter KTP protocol semantics, implementation behavior,
+scenario evidence, or laboratory state.
+
+**Decision status:** Confirmed implementation. Apache License 2.0 is the
+selected license for original KIL material. Package metadata points to the
+root license text, and public repository documentation states the same choice.
+
+**Rationale:** Apache-2.0 matches the KTP repository's license, provides an
+express patent grant, and removes the prior no-license condition that blocked
+reuse and prospective upstream contribution. Retaining explicit KTP citation
+and historical-draft provenance keeps licensing distinct from authorship and
+source lineage.
+
+**Affected artifacts:**
+
+- `LICENSE`
+- `NOTICE`
+- `pyproject.toml`
+- `README.md`
+- `tests/test_repository_license.py`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Publication to GitHub, public CI verification, and
+closure of issue #18 remain separate maintainer actions. This entry records the
+local implementation and does not claim those external steps have occurred.
+
+**Next gate:** Run the focused repository-license contract and complete
+`make validate`; review the exact diff before any commit, push, pull request,
+or issue-state change.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
