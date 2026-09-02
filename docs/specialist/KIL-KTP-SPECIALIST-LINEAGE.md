@@ -8458,3 +8458,53 @@ specification. After approval, create the implementation plan and begin native
 PowerPoint authoring.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-162 — 2026-09-02 — Native 30-slide KIL PowerPoint authored and verified
+
+**Input:** The founder approved the native PowerPoint design and directed that
+the `.pptx` be created. The approved contract called for a 14-slide executive
+spine, 16 optional scene-adjacent technical drill-ins, editable PowerPoint
+objects where practical, cinematic bridge artwork, and a complete script with
+sources in speaker notes.
+
+**Interpretation:** Produce one self-contained 16:9 PowerPoint that supports a
+coherent executive route and a complete 30-slide technical route. Preserve the
+confirmed KTP/KIL boundary, reducing-only authority semantics, observed versus
+modeled versus pending evidence language, the current Envoy lab boundary, and
+the reserved meaning of `validated`. Do not execute or modify the live lab.
+
+**Decision status:** Implemented as a presentation asset. The deck contains 30
+slides, 30 speaker-note sections, and 30 `[Sources]` blocks. PowerPoint export
+rendering completed, the full-deck montage was visually reviewed, selected
+slides were inspected at full size, and the presentation overflow test passed.
+This creates no new protocol, model, incident, or validation claim. V3B-1
+remains pending.
+
+**Rationale:** The shared-deck architecture gives the founder one authoritative
+asset that can be shortened by hiding drill-ins without semantic drift. Native
+objects preserve editability; embedded original artwork provides the approved
+graphic intensity and offline reliability. Evidence labels and source blocks
+keep the counterfactual bounded and auditable.
+
+**Affected artifacts:**
+
+- `docs/presentation/KIL-Ambient-Enforcement-Demo.pptx`
+- `docs/presentation/README.md`
+- `docs/presentation/assets/kil-incident-cascade.png`
+- `docs/presentation/assets/kil-envoy-lab-topology.png`
+- `docs/presentation/assets/kil-evidence-ladder.png`
+- `docs/superpowers/plans/2026-09-02-kil-native-powerpoint.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no live laboratory, canonical scenario, authorization implementation, test
+  behavior, or evidence state
+
+**Unresolved questions:** Founder review in Microsoft PowerPoint; any preferred
+PowerPoint-native transitions, builds, hidden-slide selections, and timing;
+and whether the visual refinements should next be propagated into the separate
+Presenter/Audience HTML experience.
+
+**Next gate:** Founder reviews the native deck in PowerPoint, confirms the
+executive and technical routes, and identifies any slide-level visual or
+timing refinements before release tagging or presentation publication.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
