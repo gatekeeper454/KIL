@@ -8324,3 +8324,45 @@ animation vocabulary; and the first editable PowerPoint timing profile.
 compare complete slide-architecture approaches before implementation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-159 — 2026-09-02 — Scene-adjacent technical detail slides confirmed
+
+**Input:** The founder confirmed that the longer PowerPoint presentation should
+place optional technical-detail slides immediately after the story scene each
+detail explains.
+
+**Interpretation:** Build one ordered deck with paired narrative modules. Each
+core story scene is followed, where warranted, by a clearly marked technical
+detail slide. The five-to-seven-minute executive path advances through the
+core scenes and skips the optional details. The twelve-to-fifteen-minute guided
+path includes selected detail slides in place, so evidence, KTP/KIL boundaries,
+trust-decay mechanics, the hybrid two-timescale architecture, and Envoy lab
+behavior appear at the moment the audience needs them rather than in a detached
+appendix.
+
+**Decision status:** Confirmed. Scene-adjacent optional details are the shared
+deck's technical-reveal structure. Exact scene/detail pairings, navigation
+cues, animation vocabulary, and slide count remain in design. No PowerPoint,
+HTML demo, laboratory environment, model, evidence, or test behavior changed.
+
+**Rationale:** Immediate adjacency preserves narrative context and allows the
+same `.pptx` to support both confirmed runtimes without maintaining divergent
+content. It also makes manual delivery straightforward: the presenter may skip
+or include the next slide based on audience depth while all scripts and source
+provenance remain attached to the relevant slides in speaker notes.
+
+**Affected artifacts:**
+
+- future native PowerPoint redesign specification and deliverable
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no current presentation, demo, test, laboratory, evidence, or public
+  showcase artifact
+
+**Unresolved questions:** Animation and transition vocabulary; exact core-scene
+and detail-slide map; visible navigation cues; and the initial PowerPoint timing
+profile for the executive path.
+
+**Next gate:** Select the deck's motion vocabulary, then compare complete
+slide-architecture approaches before implementation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
