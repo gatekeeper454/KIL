@@ -8704,3 +8704,78 @@ preferences or native transitions that do not alter the source scenes.
 the feature branch, then conduct founder review of the technical backup deck.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-168 — 2026-09-03 — Editable Presenter/Audience reconstruction requested
+
+**Input:** The founder approved the raster-fidelity technical PowerPoint and
+requested that every slide be recreated with editable PowerPoint objects,
+shapes, lines, and text while preserving the color scheme, narrative flow,
+visible wording, and speaker notes.
+
+**Interpretation:** Preserve the existing 12-slide sequence and the HTML-derived
+visual composition as the authority, but replace each full-slide raster with a
+native PowerPoint reconstruction. Text, geometry, connectors, fills, borders,
+and charts or topology elements must remain independently editable. The current
+raster deck remains an unchanged reference artifact; the editable edition will
+be a separate output.
+
+**Decision status:** Design gate pending. Source inspection confirms that the
+current deck contains exactly one raster image on each of 12 slides and no
+editable text or diagram objects, so reconstruction is required rather than a
+simple object conversion.
+
+**Rationale:** A native reconstruction supports founder-led editing, selective
+technical tailoring, and later animation while retaining the already approved
+story and visual system. Preserving the source deck separately protects the
+pixel-fidelity baseline for comparison.
+
+**Affected artifacts:**
+
+- `docs/presentation/KIL-Presenter-Audience-Technical-Deep-Dive.pptx`
+  (reference only; unchanged)
+- proposed separate editable PowerPoint in `docs/presentation/`
+- `docs/demo/kil-presenter-audience-demo.html` (semantic and visual authority;
+  unchanged)
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Founder approval of the recommended pixel-traced
+native reconstruction approach before authoring begins.
+
+**Next gate:** Approve the reconstruction design, then write and commit the
+design specification and implementation plan before building the editable
+deck.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-169 — 2026-09-03 — Editable reconstruction design approved
+
+**Input:** The founder selected Option A, auto-approved the reconstruction
+specification, and instructed the team to build the editable PowerPoint.
+
+**Interpretation:** Proceed with a separate 12-slide native reconstruction that
+preserves the authoritative HTML wording, scene order, notes, evidence status,
+and approved dark visual system. The source HTML and raster-fidelity deck remain
+unchanged references.
+
+**Decision status:** Confirmed. The governing specification is
+`docs/superpowers/specs/2026-09-03-kil-presenter-audience-editable-pptx-design.md`.
+The design requires native editable objects throughout and prohibits full-slide
+screenshots or flattened diagram images.
+
+**Rationale:** Native PowerPoint objects give the founder direct control over
+layout, wording, animation, and later audience-specific tailoring without
+sacrificing the approved story or evidence boundaries.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-09-03-kil-presenter-audience-editable-pptx-design.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- planned `docs/presentation/KIL-Presenter-Audience-Technical-Deep-Dive-Editable.pptx`
+
+**Unresolved questions:** None at the design gate. Visual deviations required
+by native PowerPoint rendering must be logged and verified during implementation.
+
+**Next gate:** Commit the approved specification, write the implementation
+plan, then author and verify all 12 editable slides.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
