@@ -8540,3 +8540,46 @@ founder review.
 confirms the executive and full technical routes.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-164 — 2026-09-02 — Cinematic 14-slide executive spine design approved
+
+**Input:** The founder supplied two sample PowerPoints as visual references and
+requested a separate 14-slide executive spine with stronger graphical elements
+and a continuous eight-scene narrative. After comparing three design
+directions, the founder selected Option B, cinematic causality, and approved the
+14-slide story arc.
+
+**Interpretation:** Create a new executive-only PowerPoint rather than altering
+or reducing the existing 30-slide technical deck. Use a cinematic near-black,
+crimson, cobalt, and controlled green/amber visual system. Carry persistent
+trajectory, kinetic-boundary, and evidence-path objects across slides so the
+foundation, eight-scene incident counterfactual, and conclusion read as one
+evolving story. Treat the supplied decks as stylistic samples, not factual or
+template authority.
+
+**Decision status:** Confirmed design; implementation not yet begun. The
+written design fixes the 14-slide sequence, graphical jobs, evidence semantics,
+KTP/KIL boundary, deliverable path, and acceptance criteria. No PowerPoint,
+lab, protocol, model, scenario, evidence, or validation behavior changed in
+this design step.
+
+**Rationale:** The cinematic direction provides the keynote-level visual impact
+the founder preferred while the recurring causal objects protect narrative
+continuity and technical honesty. A separate executive asset avoids weakening
+the full technical deck.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-09-02-kil-executive-cinematic-spine-design.md`
+- future `docs/presentation/KIL-Ambient-Enforcement-Executive-Spine.pptx`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no existing PowerPoint, live lab, model, scenario, evidence, or test behavior
+
+**Unresolved questions:** Founder review of the written specification; final
+artwork generation and per-slide composition; and later PowerPoint-native
+transition or timing choices controlled by the founder.
+
+**Next gate:** Founder confirms the written design specification, after which
+an implementation plan and native PowerPoint build may begin.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
