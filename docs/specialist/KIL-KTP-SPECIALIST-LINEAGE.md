@@ -7107,3 +7107,38 @@ of the written specification, then create the implementation plan before any
 production code or sibling generation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-133 — 2026-09-03 — HTML reader specification approved and implementation planned
+
+**Input:** The maintainer approved the written self-contained HTML reader
+specification and authorized progression to implementation planning.
+
+**Interpretation:** Translate the approved design into five test-first,
+commit-sized tasks covering documentation dependency pins, pure safe rendering,
+Git-backed generation and check modes, Make/CI/documentation integration and
+the complete sibling corpus, then independent review, visual inspection,
+lineage closure, validation, and exact Git synchronization.
+
+**Decision status:** Confirmed specification and complete implementation plan.
+No production renderer code or repository `.htm` sibling has been created. The
+execution mode remains the next explicit workflow choice.
+
+**Rationale:** Separating pure rendering from repository discovery and file
+lifecycle behavior makes link, escaping, determinism, and offline properties
+testable without bulk writes. Staging the complete corpus only after the tool
+passes focused tests preserves the one-to-one publication boundary.
+
+**Affected artifacts:**
+
+- `docs/superpowers/plans/2026-09-03-self-contained-html-readers.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Implementation execution mode is not yet selected.
+All code, dependencies, generated readers, visual checks, independent review,
+full validation, final commits, and GitHub synchronization remain pending.
+
+**Next gate:** Select subagent-driven or inline plan execution, then implement
+each task with observed red/green tests and defer the remote push until every
+gate is complete.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
