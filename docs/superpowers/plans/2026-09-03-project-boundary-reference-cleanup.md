@@ -4,60 +4,22 @@
 
 **Goal:** Remove an unrelated project name from every current KIL-owned file while preserving KIL/KTP meaning and the maintainer's uncommitted OTCS work.
 
-**Architecture:** Markdown remains authoritative, and the repository renderer refreshes every sibling `.htm` reader after source edits. A small tracked-file boundary test prevents the removed name from returning without storing it contiguously in the test itself.
+**Architecture:** Markdown remains authoritative, and the repository renderer refreshes every sibling `.htm` reader after source edits. A case-insensitive current-file search verifies the strict project boundary without retaining or reconstructing the removed name in KIL source.
 
 **Tech Stack:** Python `unittest`, Git, Markdown, and `tools/render_markdown.py`.
 
 ---
 
-### Task 1: Add the project-boundary regression test
+### Task 1: Inventory the current references
 
 **Files:**
-- Create: `tests/test_project_boundaries.py`
+- Inspect all current project-owned files.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Run a case-insensitive current-file search**
 
-```python
-from pathlib import Path
-import subprocess
-import unittest
+Use the maintainer-supplied name as the literal search term while excluding Git metadata, virtual environments, tool caches, and dependency caches.
 
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-class ProjectBoundaryTests(unittest.TestCase):
-    def test_unrelated_project_name_is_absent_from_tracked_files(self) -> None:
-        tracked = subprocess.run(
-            ["git", "ls-files", "-z"],
-            cwd=ROOT,
-            check=True,
-            stdout=subprocess.PIPE,
-        ).stdout.split(b"\0")
-        needle = ("shadow" + "claw").casefold()
-        offenders: list[str] = []
-        for encoded_path in tracked:
-            if not encoded_path:
-                continue
-            relative = encoded_path.decode("utf-8")
-            try:
-                contents = (ROOT / relative).read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                continue
-            if needle in contents.casefold():
-                offenders.append(relative)
-        self.assertEqual([], offenders)
-
-
-if __name__ == "__main__":
-    unittest.main()
-```
-
-- [ ] **Step 2: Verify the test fails for the existing tracked sources and readers**
-
-Run: `python -m unittest tests.test_project_boundaries -v`
-
-Expected: FAIL listing `PROJECT.md`, `PROJECT.htm`, `README.md`, `README.htm`, and the specialist-consultation Markdown/HTML pair.
+Expected: six matches across `PROJECT.md`, `PROJECT.htm`, `README.md`, `README.htm`, and the specialist-consultation Markdown/HTML pair, plus the maintainer's uncommitted OTCS lineage pair after it is restored.
 
 ### Task 2: Rewrite the three authoritative Markdown sources
 
@@ -97,19 +59,13 @@ Run: `python tools/render_markdown.py`
 
 Expected: `generated 49 Markdown readers`.
 
-- [ ] **Step 3: Verify the regression test passes**
-
-Run: `python -m unittest tests.test_project_boundaries -v`
-
-Expected: PASS.
-
-- [ ] **Step 4: Verify generated-reader integrity**
+- [ ] **Step 3: Verify generated-reader integrity**
 
 Run: `python tools/render_markdown.py --check`
 
 Expected: `verified 49 Markdown readers`.
 
-- [ ] **Step 5: Verify the entire repository**
+- [ ] **Step 4: Verify the entire repository**
 
 Run: `make validate` with the repository virtual environment on `PATH`.
 
@@ -118,7 +74,7 @@ Expected: all tests pass, all 49 readers verify, and `git diff --check` exits ze
 ### Task 4: Commit and publish the isolated cleanup
 
 **Files:**
-- Stage only the plan, regression test, three Markdown rewrites, lineage entry, and generated readers.
+- Stage only the plan, three Markdown rewrites, lineage entry, and generated readers.
 
 - [ ] **Step 1: Confirm no current tracked file contains the removed name**
 

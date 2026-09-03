@@ -7766,3 +7766,39 @@ OTCS work around a fast-forward of `main`, remove its remaining current-file
 occurrence, regenerate its reader, and verify local/remote synchronization.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-150 — 2026-09-03 — Strict no-reference boundary correction
+
+**Input:** Before final handoff, re-evaluate whether the committed regression
+guard itself complied with the maintainer's instruction that the unrelated
+project have no references anywhere in current KIL files.
+
+**Interpretation:** A guard that reconstructs the removed name from string
+fragments remains a project reference even when literal searches report no
+match. Remove that test and revise the execution plan so verification uses the
+maintainer-supplied search term externally without storing or reconstructing it
+in KIL source.
+
+**Decision status:** Confirmed correction. This entry supersedes only the
+regression-guard portion of T-148 and T-149; the KIL-only document rewrites,
+reader regeneration, validation evidence, and current-files-only scope remain
+unchanged.
+
+**Rationale:** The requested boundary is semantic, not merely a way to satisfy
+a literal search. Retaining an encoded name in a test would contradict the
+maintainer's explicit statement that the projects share no components, data,
+or concepts.
+
+**Affected artifacts:** `tests/test_project_boundaries.py` is removed;
+`docs/superpowers/plans/2026-09-03-project-boundary-reference-cleanup.md`, this
+lineage, and their `.htm` partners are refreshed.
+
+**Unresolved questions:** None. The verification term remains external to
+current project files; Git history and safety stashes remain outside the
+maintainer-confirmed current-file scope.
+
+**Next gate:** Regenerate all readers, verify zero current-file references,
+repeat the full repository validation, commit and push the correction, then
+fast-forward `main` while preserving the uncommitted OTCS work.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

@@ -6,7 +6,7 @@
 <title>Project-Boundary Reference Cleanup Implementation Plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-03-project-boundary-reference-cleanup.md">
-<meta name="source-sha256" content="b8e83392f25c9fa594b2d681de1fbb3ac0efa3cf5da3284cf4bc266b04f93172">
+<meta name="source-sha256" content="d856c6eb2e834fc87187e3aac26a4af100e5907dd2529af5cfc90ae330349160">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,72 +55,35 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-03-project-boundary-reference-cleanup.md</code> (<code>b8e83392f25c9fa594b2d681de1fbb3ac0efa3cf5da3284cf4bc266b04f93172</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-03-project-boundary-reference-cleanup.md</code> (<code>d856c6eb2e834fc87187e3aac26a4af100e5907dd2529af5cfc90ae330349160</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Project-Boundary Reference Cleanup Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-03-project-boundary-reference-cleanup.md</code> (<code>b8e83392f25c9fa594b2d681de1fbb3ac0efa3cf5da3284cf4bc266b04f93172</code>); edit the Markdown source, not this reader.</p></div>
-<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#project-boundary-reference-cleanup-implementation-plan">Project-Boundary Reference Cleanup Implementation Plan</a></li><li class="level-3"><a href="#task-1-add-the-project-boundary-regression-test">Task 1: Add the project-boundary regression test</a></li><li class="level-3"><a href="#task-2-rewrite-the-three-authoritative-markdown-sources">Task 2: Rewrite the three authoritative Markdown sources</a></li><li class="level-3"><a href="#task-3-regenerate-and-verify-self-contained-readers">Task 3: Regenerate and verify self-contained readers</a></li><li class="level-3"><a href="#task-4-commit-and-publish-the-isolated-cleanup">Task 4: Commit and publish the isolated cleanup</a></li><li class="level-3"><a href="#task-5-integrate-without-committing-otcs-work">Task 5: Integrate without committing OTCS work</a></li></ol></nav></details><div class="reader-layout">
-<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="project-boundary-reference-cleanup-implementation-plan" href="#project-boundary-reference-cleanup-implementation-plan">Project-Boundary Reference Cleanup Implementation Plan</a></li><li class="level-3"><a data-section-id="task-1-add-the-project-boundary-regression-test" href="#task-1-add-the-project-boundary-regression-test">Task 1: Add the project-boundary regression test</a></li><li class="level-3"><a data-section-id="task-2-rewrite-the-three-authoritative-markdown-sources" href="#task-2-rewrite-the-three-authoritative-markdown-sources">Task 2: Rewrite the three authoritative Markdown sources</a></li><li class="level-3"><a data-section-id="task-3-regenerate-and-verify-self-contained-readers" href="#task-3-regenerate-and-verify-self-contained-readers">Task 3: Regenerate and verify self-contained readers</a></li><li class="level-3"><a data-section-id="task-4-commit-and-publish-the-isolated-cleanup" href="#task-4-commit-and-publish-the-isolated-cleanup">Task 4: Commit and publish the isolated cleanup</a></li><li class="level-3"><a data-section-id="task-5-integrate-without-committing-otcs-work" href="#task-5-integrate-without-committing-otcs-work">Task 5: Integrate without committing OTCS work</a></li></ol></nav>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-03-project-boundary-reference-cleanup.md</code> (<code>d856c6eb2e834fc87187e3aac26a4af100e5907dd2529af5cfc90ae330349160</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#project-boundary-reference-cleanup-implementation-plan">Project-Boundary Reference Cleanup Implementation Plan</a></li><li class="level-3"><a href="#task-1-inventory-the-current-references">Task 1: Inventory the current references</a></li><li class="level-3"><a href="#task-2-rewrite-the-three-authoritative-markdown-sources">Task 2: Rewrite the three authoritative Markdown sources</a></li><li class="level-3"><a href="#task-3-regenerate-and-verify-self-contained-readers">Task 3: Regenerate and verify self-contained readers</a></li><li class="level-3"><a href="#task-4-commit-and-publish-the-isolated-cleanup">Task 4: Commit and publish the isolated cleanup</a></li><li class="level-3"><a href="#task-5-integrate-without-committing-otcs-work">Task 5: Integrate without committing OTCS work</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="project-boundary-reference-cleanup-implementation-plan" href="#project-boundary-reference-cleanup-implementation-plan">Project-Boundary Reference Cleanup Implementation Plan</a></li><li class="level-3"><a data-section-id="task-1-inventory-the-current-references" href="#task-1-inventory-the-current-references">Task 1: Inventory the current references</a></li><li class="level-3"><a data-section-id="task-2-rewrite-the-three-authoritative-markdown-sources" href="#task-2-rewrite-the-three-authoritative-markdown-sources">Task 2: Rewrite the three authoritative Markdown sources</a></li><li class="level-3"><a data-section-id="task-3-regenerate-and-verify-self-contained-readers" href="#task-3-regenerate-and-verify-self-contained-readers">Task 3: Regenerate and verify self-contained readers</a></li><li class="level-3"><a data-section-id="task-4-commit-and-publish-the-isolated-cleanup" href="#task-4-commit-and-publish-the-isolated-cleanup">Task 4: Commit and publish the isolated cleanup</a></li><li class="level-3"><a data-section-id="task-5-integrate-without-committing-otcs-work" href="#task-5-integrate-without-committing-otcs-work">Task 5: Integrate without committing OTCS work</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
 <h1 id="project-boundary-reference-cleanup-implementation-plan">Project-Boundary Reference Cleanup Implementation Plan</h1>
 <blockquote>
 <p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
 </blockquote>
 <p><strong>Goal:</strong> Remove an unrelated project name from every current KIL-owned file while preserving KIL/KTP meaning and the maintainer's uncommitted OTCS work.</p>
-<p><strong>Architecture:</strong> Markdown remains authoritative, and the repository renderer refreshes every sibling <code>.htm</code> reader after source edits. A small tracked-file boundary test prevents the removed name from returning without storing it contiguously in the test itself.</p>
+<p><strong>Architecture:</strong> Markdown remains authoritative, and the repository renderer refreshes every sibling <code>.htm</code> reader after source edits. A case-insensitive current-file search verifies the strict project boundary without retaining or reconstructing the removed name in KIL source.</p>
 <p><strong>Tech Stack:</strong> Python <code>unittest</code>, Git, Markdown, and <code>tools/render_markdown.py</code>.</p>
 <hr />
-<h3 id="task-1-add-the-project-boundary-regression-test">Task 1: Add the project-boundary regression test</h3>
+<h3 id="task-1-inventory-the-current-references">Task 1: Inventory the current references</h3>
 <p><strong>Files:</strong></p>
 <ul>
 <li>
-<p>Create: <code>tests/test_project_boundaries.py</code></p>
+<p>Inspect all current project-owned files.</p>
 </li>
 <li>
-<p>[ ] <strong>Step 1: Write the failing test</strong></p>
+<p>[ ] <strong>Step 1: Run a case-insensitive current-file search</strong></p>
 </li>
 </ul>
-<pre><code class="language-python">from pathlib import Path
-import subprocess
-import unittest
-
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-class ProjectBoundaryTests(unittest.TestCase):
-    def test_unrelated_project_name_is_absent_from_tracked_files(self) -&gt; None:
-        tracked = subprocess.run(
-            [&quot;git&quot;, &quot;ls-files&quot;, &quot;-z&quot;],
-            cwd=ROOT,
-            check=True,
-            stdout=subprocess.PIPE,
-        ).stdout.split(b&quot;\0&quot;)
-        needle = (&quot;shadow&quot; + &quot;claw&quot;).casefold()
-        offenders: list[str] = []
-        for encoded_path in tracked:
-            if not encoded_path:
-                continue
-            relative = encoded_path.decode(&quot;utf-8&quot;)
-            try:
-                contents = (ROOT / relative).read_text(encoding=&quot;utf-8&quot;)
-            except UnicodeDecodeError:
-                continue
-            if needle in contents.casefold():
-                offenders.append(relative)
-        self.assertEqual([], offenders)
-
-
-if __name__ == &quot;__main__&quot;:
-    unittest.main()
-</code></pre>
-<ul>
-<li>[ ] <strong>Step 2: Verify the test fails for the existing tracked sources and readers</strong></li>
-</ul>
-<p>Run: <code>python -m unittest tests.test_project_boundaries -v</code></p>
-<p>Expected: FAIL listing <code>PROJECT.md</code>, <code>PROJECT.htm</code>, <code>README.md</code>, <code>README.htm</code>, and the specialist-consultation Markdown/HTML pair.</p>
+<p>Use the maintainer-supplied name as the literal search term while excluding Git metadata, virtual environments, tool caches, and dependency caches.</p>
+<p>Expected: six matches across <code>PROJECT.md</code>, <code>PROJECT.htm</code>, <code>README.md</code>, <code>README.htm</code>, and the specialist-consultation Markdown/HTML pair, plus the maintainer's uncommitted OTCS lineage pair after it is restored.</p>
 <h3 id="task-2-rewrite-the-three-authoritative-markdown-sources">Task 2: Rewrite the three authoritative Markdown sources</h3>
 <p><strong>Files:</strong></p>
 <ul>
@@ -175,17 +138,12 @@ if __name__ == &quot;__main__&quot;:
 <p>Run: <code>python tools/render_markdown.py</code></p>
 <p>Expected: <code>generated 49 Markdown readers</code>.</p>
 <ul>
-<li>[ ] <strong>Step 3: Verify the regression test passes</strong></li>
-</ul>
-<p>Run: <code>python -m unittest tests.test_project_boundaries -v</code></p>
-<p>Expected: PASS.</p>
-<ul>
-<li>[ ] <strong>Step 4: Verify generated-reader integrity</strong></li>
+<li>[ ] <strong>Step 3: Verify generated-reader integrity</strong></li>
 </ul>
 <p>Run: <code>python tools/render_markdown.py --check</code></p>
 <p>Expected: <code>verified 49 Markdown readers</code>.</p>
 <ul>
-<li>[ ] <strong>Step 5: Verify the entire repository</strong></li>
+<li>[ ] <strong>Step 4: Verify the entire repository</strong></li>
 </ul>
 <p>Run: <code>make validate</code> with the repository virtual environment on <code>PATH</code>.</p>
 <p>Expected: all tests pass, all 49 readers verify, and <code>git diff --check</code> exits zero.</p>
@@ -193,7 +151,7 @@ if __name__ == &quot;__main__&quot;:
 <p><strong>Files:</strong></p>
 <ul>
 <li>
-<p>Stage only the plan, regression test, three Markdown rewrites, lineage entry, and generated readers.</p>
+<p>Stage only the plan, three Markdown rewrites, lineage entry, and generated readers.</p>
 </li>
 <li>
 <p>[ ] <strong>Step 1: Confirm no current tracked file contains the removed name</strong></p>
