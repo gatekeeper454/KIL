@@ -6845,3 +6845,265 @@ local implementation and does not claim those external steps have occurred.
 or issue-state change.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-126 — 2026-09-03 — Sibling HTML reader design exploration
+
+**Input:** The maintainer requested a sibling `.htm` file for every Markdown
+file in the repository so readers do not need a Markdown converter, specified
+a single-page-application experience, and asked to see a sample based on
+`docs/paper/kinetic-infrastructure.md` before deciding the design.
+
+**Interpretation:** Treat the requested HTML files as deterministic,
+self-contained reading views derived from the Markdown sources and stored in
+the same directories. Before defining the generator or committing generated
+artifacts, present a non-repository visual mockup using representative content
+from the canonical white-paper manuscript. The mockup explores an outline,
+responsive paper layout, in-document search, theme toggle, print behavior, and
+offline-compatible styling without changing the manuscript.
+
+**Decision status:** Proposal under review. The mockup is a brainstorming
+artifact only; no converter, generated sibling `.htm` file, build target, or
+generated-file contract has been approved or implemented.
+
+**Rationale:** A repository-wide conversion affects dozens of documents and
+creates an ongoing synchronization obligation. Validating the reading
+experience first avoids encoding an unwanted layout into every generated
+artifact. Keeping the preview outside tracked publication files also preserves
+the distinction between a design sample and an authoritative rendering.
+
+**Affected artifacts:**
+
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- ignored visual-companion mockup
+  `.superpowers/brainstorm/41059-1788436733/content/kinetic-paper-reader-sample.html`
+
+**Unresolved questions:** The maintainer has not yet selected the visual
+direction or confirmed whether every tracked Markdown file—including
+`AGENTS.md`, historical drafts, test fixtures, and internal planning/spec
+documents—belongs in the publication set. The update and stale-output policy,
+link rewriting rules, source disclosure, and JavaScript fallback behavior also
+remain undecided.
+
+**Next gate:** Obtain feedback on the `kinetic-infrastructure.md` reader
+mockup, clarify publication scope one question at a time, compare implementation
+approaches, and secure approval of a written design before implementation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-127 — 2026-09-03 — Offline self-contained reader constraint approved
+
+**Input:** After reviewing the `kinetic-infrastructure.md` reader mockup, the
+maintainer approved its visual direction and asked whether the final files
+would be self-contained rather than hosted.
+
+**Interpretation:** Each generated sibling `.htm` file must be a standalone
+offline artifact. Its rendered document, outline navigation, search, theme
+control, responsive layout, and print styling must use only embedded HTML, CSS,
+and JavaScript. The file must not require a server, CDN, remote font, analytics
+endpoint, or runtime package installation. Explicit citations and source links
+may remain normal hyperlinks whose destinations naturally require connectivity
+when a reader chooses to follow them.
+
+**Decision status:** Confirmed design constraint. The visual direction and
+offline/self-contained delivery model are approved; publication-set scope and
+the generation/update contract remain proposals.
+
+**Rationale:** A sibling reader is useful to people without Markdown tooling
+only if double-clicking it works in an ordinary browser. Embedding presentation
+and behavior also prevents hosting availability or third-party resource changes
+from altering the local reading experience.
+
+**Affected artifacts:**
+
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- ignored visual-companion mockup
+  `.superpowers/brainstorm/41059-1788436733/content/kinetic-paper-reader-sample.html`
+
+**Unresolved questions:** Whether the publication set includes repository
+instructions, historical drafts, fixtures, and internal plans/specifications;
+whether generated siblings are committed or CI-produced; and how Markdown links
+to sibling documents are rewritten remain undecided.
+
+**Next gate:** Confirm the publication-set boundary, then compare generator and
+update approaches before presenting the complete design for approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-128 — 2026-09-03 — One-to-one sibling publication boundary confirmed
+
+**Input:** The maintainer asked whether every existing Markdown file would have
+a corresponding `.htm` file in the same folder on a one-to-one basis.
+
+**Interpretation:** The publication set is every tracked repository file whose
+name ends in `.md`. Each source maps deterministically to a sibling with the
+same relative directory and basename and a changed suffix: `path/name.md`
+becomes `path/name.htm`. This includes root documents, reader-facing material,
+internal plans and specifications, fixtures, repository instructions, and the
+historical-draft directory. Adding a sibling does not modify source Markdown
+bytes.
+
+**Decision status:** Confirmed design constraint. The source-to-output mapping
+is literal, exhaustive, and one-to-one.
+
+**Rationale:** A complete basename-preserving mapping is predictable for
+readers and mechanically verifiable. Keeping the HTML beside its Markdown
+source avoids a separate site hierarchy and makes each offline document easy
+to locate.
+
+**Affected artifacts:**
+
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** Link rewriting between generated siblings, the
+repeatable generator/update command, stale-output enforcement, and the exact
+progressive-enhancement behavior when JavaScript is disabled remain undecided.
+
+**Next gate:** Compare generator and synchronization approaches, then present
+the complete repository-wide reader design for approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-129 — 2026-09-03 — Sibling navigation and final synchronization approved
+
+**Input:** The maintainer approved rewriting Markdown-document links in the
+generated readers to their sibling `.htm` targets, directed continuation, and
+requested a final commit and synchronization with GitHub after completion.
+
+**Interpretation:** Generated readers will keep external URLs and non-Markdown
+relative targets unchanged while mapping relative `.md` destinations to `.htm`
+and preserving query and fragment components. Publication is authorized only
+after the complete design, implementation, exhaustive generated set, and
+validation gates pass. Partial design or generation work must not be pushed.
+
+**Decision status:** Confirmed design and delivery constraints. The exact
+converter implementation remains to be selected. The current inventory is 45
+tracked Markdown files; the final one-to-one count will also include any
+tracked Markdown design and implementation-plan artifacts added before
+generation.
+
+**Rationale:** Sibling rewrites let offline readers remain within the readable
+HTML corpus instead of returning users to raw Markdown. Deferring Git
+synchronization until all outputs are regenerated and verified prevents a
+partial publication set from appearing complete.
+
+**Affected artifacts:**
+
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The build-time Markdown engine, dependency strategy,
+raw-HTML policy, deterministic freshness marker, and progressive enhancement
+contract remain to be approved.
+
+**Next gate:** Select the generator approach, approve the complete design,
+write and review the design specification, then plan, implement, validate,
+commit, push, and verify exact local/remote commit equality.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-130 — 2026-09-03 — Python build-time reader generator selected
+
+**Input:** The maintainer selected option 1 and directed execution: a Python
+build-time generator producing self-contained sibling HTML readers.
+
+**Interpretation:** Use the repository's established Python 3.11+ toolchain and
+a pinned documentation-only Markdown parser. Rendering occurs during
+maintenance and publication; generated `.htm` files contain complete static
+HTML, embedded CSS, and bounded progressive-enhancement JavaScript but no
+runtime Markdown parser or package dependency.
+
+**Decision status:** Confirmed architectural selection. Detailed data flow,
+security policy, deterministic freshness contract, tests, and failure behavior
+still require explicit design approval before implementation.
+
+**Rationale:** A Python generator avoids adding a second project toolchain,
+supports deterministic file discovery and link rewriting, and keeps parser
+weight out of every generated reader. Pinning the parser as a documentation
+dependency makes maintainer regeneration reproducible without changing the
+runtime dependency set for KIL itself.
+
+**Affected artifacts:**
+
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- stopped and ignored visual-companion session
+  `.superpowers/brainstorm/41059-1788436733/`
+
+**Unresolved questions:** The detailed design and written specification are not
+yet approved. No generator, dependency, build target, regression test, or
+sibling `.htm` output has been created.
+
+**Next gate:** Present the generator architecture and data flow, then the
+reader safety/freshness and verification contracts, for maintainer approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-131 — 2026-09-03 — HTML generator architecture approved
+
+**Input:** The maintainer approved the proposed Python generator architecture
+and source-to-output data flow.
+
+**Interpretation:** The generator will discover tracked Markdown sources in a
+stable order, produce same-directory basename-preserving `.htm` siblings,
+render full static documents with the approved reader interface, rewrite only
+relative links that resolve to tracked Markdown sources, and embed source-path
+and source-SHA-256 metadata. A generation target will update outputs; validation
+will reject missing, extra, or stale generated siblings.
+
+**Decision status:** Confirmed architecture and data-flow design. Safety,
+progressive enhancement, failure atomicity, and the exact verification matrix
+remain at the final design gate.
+
+**Rationale:** Git-backed discovery defines an auditable publication set while
+stable ordering and embedded source identity make deterministic regeneration
+and drift detection testable. Resolving a link before rewriting avoids changing
+external URLs or unrelated `.md` text that is not a repository document.
+
+**Affected artifacts:**
+
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The raw-HTML policy, content-security boundary,
+JavaScript-disabled behavior, all-or-nothing write behavior, and complete
+validation cases await approval.
+
+**Next gate:** Present and approve the second design section covering safety,
+failure handling, generated-artifact policy, and tests.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-132 — 2026-09-03 — Self-contained HTML reader design approved and specified
+
+**Input:** The maintainer approved the final safety, failure-handling,
+progressive-enhancement, generated-artifact, and verification section of the
+sibling HTML reader design.
+
+**Interpretation:** The complete approved contract is now captured in a written
+design. Markdown remains canonical; generated `.htm` siblings are committed,
+fully static, readable without JavaScript, protected from raw-Markdown HTML
+execution, deterministic, and validated one-to-one. The reader uses embedded
+presentation and bounded interaction only. CI installs pinned documentation
+dependencies, and final publication requires exact local/remote equality.
+
+**Decision status:** Confirmed design. `markdown-it-py==4.2.0` and
+`mdurl==0.1.2` are selected as documentation-only pins based on their current
+authoritative package records. Implementation has not begun and remains gated
+on maintainer review of the written specification.
+
+**Rationale:** The approved constraints give readers a portable offline format
+without weakening the source-of-record boundary or allowing authored Markdown
+to inject executable HTML. Full deterministic regeneration makes source/output
+drift mechanically detectable rather than relying on metadata or timestamps.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-09-03-self-contained-html-readers-design.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** The written specification still requires maintainer
+review. The detailed implementation plan, test-first implementation, generated
+corpus, visual verification, commit, and remote synchronization remain pending.
+
+**Next gate:** Commit the reviewed design record, obtain maintainer acceptance
+of the written specification, then create the implementation plan before any
+production code or sibling generation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
