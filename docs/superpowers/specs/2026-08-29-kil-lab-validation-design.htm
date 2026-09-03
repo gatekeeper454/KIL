@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KIL Lab and Demo Validation Design</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/specs/2026-08-29-kil-lab-validation-design.md">
+<meta name="source-sha256" content="c894d1a5c1c2e1f221b844bf16bb0f1dcb87ca5b0003023261f42066faf6da24">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-08-29-kil-lab-validation-design.md</code> (<code>c894d1a5c1c2e1f221b844bf16bb0f1dcb87ca5b0003023261f42066faf6da24</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">KIL Lab and Demo Validation Design</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-08-29-kil-lab-validation-design.md</code> (<code>c894d1a5c1c2e1f221b844bf16bb0f1dcb87ca5b0003023261f42066faf6da24</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#kil-lab-and-demo-validation-design">KIL Lab and Demo Validation Design</a></li><li class="level-2"><a href="#1-purpose">1. Purpose</a></li><li class="level-2"><a href="#2-goals">2. Goals</a></li><li class="level-2"><a href="#3-non-goals">3. Non-goals</a></li><li class="level-2"><a href="#4-evidence-and-claim-contract">4. Evidence and claim contract</a></li><li class="level-2"><a href="#5-system-under-test">5. System under test</a></li><li class="level-3"><a href="#5-1-authoritative-slower-loop">5.1 Authoritative, slower loop</a></li><li class="level-3"><a href="#5-2-fast-enforcement-loop">5.2 Fast enforcement loop</a></li><li class="level-3"><a href="#5-3-experimental-enforcement-modes">5.3 Experimental enforcement modes</a></li><li class="level-2"><a href="#6-trust-decay-validation-profile">6. Trust-decay validation profile</a></li><li class="level-2"><a href="#7-control-and-comparisons">7. Control and comparisons</a></li><li class="level-2"><a href="#8-scenario-model">8. Scenario model</a></li><li class="level-2"><a href="#9-deterministic-replay-rail">9. Deterministic replay rail</a></li><li class="level-2"><a href="#10-live-local-cluster-rail">10. Live local-cluster rail</a></li><li class="level-2"><a href="#11-failure-and-safety-experiments">11. Failure and safety experiments</a></li><li class="level-2"><a href="#12-metrics">12. Metrics</a></li><li class="level-3"><a href="#security-behavior">Security behavior</a></li><li class="level-3"><a href="#operational-behavior">Operational behavior</a></li><li class="level-2"><a href="#13-run-bundle-and-publication-linkage">13. Run bundle and publication linkage</a></li><li class="level-2"><a href="#14-acceptance-gates">14. Acceptance gates</a></li><li class="level-3"><a href="#gate-v1-deterministic-kernel">Gate V1 — Deterministic kernel</a></li><li class="level-3"><a href="#gate-v2-historical-replay">Gate V2 — Historical replay</a></li><li class="level-3"><a href="#gate-v3-live-local-validation">Gate V3 — Live local validation</a></li><li class="level-3"><a href="#gate-v4-publication-promotion">Gate V4 — Publication promotion</a></li><li class="level-2"><a href="#15-implementation-sequencing">15. Implementation sequencing</a></li><li class="level-2"><a href="#16-authoritative-sources">16. Authoritative sources</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="kil-lab-and-demo-validation-design" href="#kil-lab-and-demo-validation-design">KIL Lab and Demo Validation Design</a></li><li class="level-2"><a data-section-id="1-purpose" href="#1-purpose">1. Purpose</a></li><li class="level-2"><a data-section-id="2-goals" href="#2-goals">2. Goals</a></li><li class="level-2"><a data-section-id="3-non-goals" href="#3-non-goals">3. Non-goals</a></li><li class="level-2"><a data-section-id="4-evidence-and-claim-contract" href="#4-evidence-and-claim-contract">4. Evidence and claim contract</a></li><li class="level-2"><a data-section-id="5-system-under-test" href="#5-system-under-test">5. System under test</a></li><li class="level-3"><a data-section-id="5-1-authoritative-slower-loop" href="#5-1-authoritative-slower-loop">5.1 Authoritative, slower loop</a></li><li class="level-3"><a data-section-id="5-2-fast-enforcement-loop" href="#5-2-fast-enforcement-loop">5.2 Fast enforcement loop</a></li><li class="level-3"><a data-section-id="5-3-experimental-enforcement-modes" href="#5-3-experimental-enforcement-modes">5.3 Experimental enforcement modes</a></li><li class="level-2"><a data-section-id="6-trust-decay-validation-profile" href="#6-trust-decay-validation-profile">6. Trust-decay validation profile</a></li><li class="level-2"><a data-section-id="7-control-and-comparisons" href="#7-control-and-comparisons">7. Control and comparisons</a></li><li class="level-2"><a data-section-id="8-scenario-model" href="#8-scenario-model">8. Scenario model</a></li><li class="level-2"><a data-section-id="9-deterministic-replay-rail" href="#9-deterministic-replay-rail">9. Deterministic replay rail</a></li><li class="level-2"><a data-section-id="10-live-local-cluster-rail" href="#10-live-local-cluster-rail">10. Live local-cluster rail</a></li><li class="level-2"><a data-section-id="11-failure-and-safety-experiments" href="#11-failure-and-safety-experiments">11. Failure and safety experiments</a></li><li class="level-2"><a data-section-id="12-metrics" href="#12-metrics">12. Metrics</a></li><li class="level-3"><a data-section-id="security-behavior" href="#security-behavior">Security behavior</a></li><li class="level-3"><a data-section-id="operational-behavior" href="#operational-behavior">Operational behavior</a></li><li class="level-2"><a data-section-id="13-run-bundle-and-publication-linkage" href="#13-run-bundle-and-publication-linkage">13. Run bundle and publication linkage</a></li><li class="level-2"><a data-section-id="14-acceptance-gates" href="#14-acceptance-gates">14. Acceptance gates</a></li><li class="level-3"><a data-section-id="gate-v1-deterministic-kernel" href="#gate-v1-deterministic-kernel">Gate V1 — Deterministic kernel</a></li><li class="level-3"><a data-section-id="gate-v2-historical-replay" href="#gate-v2-historical-replay">Gate V2 — Historical replay</a></li><li class="level-3"><a data-section-id="gate-v3-live-local-validation" href="#gate-v3-live-local-validation">Gate V3 — Live local validation</a></li><li class="level-3"><a data-section-id="gate-v4-publication-promotion" href="#gate-v4-publication-promotion">Gate V4 — Publication promotion</a></li><li class="level-2"><a data-section-id="15-implementation-sequencing" href="#15-implementation-sequencing">15. Implementation sequencing</a></li><li class="level-2"><a data-section-id="16-authoritative-sources" href="#16-authoritative-sources">16. Authoritative sources</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="kil-lab-and-demo-validation-design">KIL Lab and Demo Validation Design</h1>
+<p><strong>Status:</strong> Approved direction; design baseline for founder review<br />
+<strong>Date:</strong> 2026-08-29<br />
+<strong>Scope:</strong> Deterministic replay first, followed by live local-cluster validation</p>
+<h2 id="1-purpose">1. Purpose</h2>
+<p>The KIL lab is the evidence-producing counterpart to the official white paper.
+It must determine what the proposed Kinetic Infrastructure Layer actually does
+under controlled conditions, not merely illustrate what the architecture is
+intended to do.</p>
+<p>The lab has two ordered rails:</p>
+<ol>
+<li>a deterministic, offline replay that makes the model, provenance, decisions,
+and counterfactual assumptions reviewable; and</li>
+<li>a live local-cluster rail that exercises the same decision contract against
+real workload actions and measures enforcement behavior.</li>
+</ol>
+<p>The offline rail can validate implementation behavior and replay
+reproducibility. It cannot validate that KIL would have prevented the historical
+Hugging Face incident. The live rail can validate locally reproduced behavior;
+it likewise cannot convert a historical counterfactual into an observed fact.</p>
+<h2 id="2-goals">2. Goals</h2>
+<ul>
+<li>Implement one deterministic decision contract shared by replay and live
+enforcement.</li>
+<li>Test the proposed <code>Q_i,c</code> signed, short-lived composite KTP enforcement state
+without treating it as a competing trust system.</li>
+<li>Compare an explicitly defined credential-and-policy control with KIL under the
+same action sequence.</li>
+<li>Test both signed-state-only consumption and a bounded local reducing-only
+overlay without prematurely standardizing the overlay.</li>
+<li>Produce self-contained, integrity-verifiable run bundles from which the paper
+can generate tables, figures, and claims.</li>
+<li>Measure security behavior, safety behavior, reproducibility, and enforcement
+cost.</li>
+<li>Make negative, ambiguous, and falsifying results publishable rather than
+suppressing them.</li>
+</ul>
+<h2 id="3-non-goals">3. Non-goals</h2>
+<ul>
+<li>Reconstructing Hugging Face private telemetry or claiming knowledge beyond its
+public disclosure.</li>
+<li>Reproducing the original exploit payloads, compromising a real service, or
+connecting the lab to production systems.</li>
+<li>Treating anomaly detection alone as authorization.</li>
+<li>Allowing KIL to expand a KTP environmental envelope or override an immutable
+KTP veto.</li>
+<li>Selecting final production thresholds from one incident.</li>
+<li>Claiming eBPF, SmartNIC, SDN, or service-mesh enforcement until that substrate
+is actually implemented and measured.</li>
+</ul>
+<h2 id="4-evidence-and-claim-contract">4. Evidence and claim contract</h2>
+<p>Every input field, event, decision, metric, and paper claim has one evidence
+class:</p>
+<ul>
+<li><code>observed</code>: directly supported by an identified primary source;</li>
+<li><code>modeled</code>: synthetic context, a counterfactual assumption, an illustrative
+parameter, or output derived from those inputs; or</li>
+<li><code>validated</code>: reproduced locally by a named lab run whose bundle passes schema,
+integrity, and provenance checks.</li>
+</ul>
+<p>Evidence classes do not automatically propagate upward. A decision computed
+correctly from modeled input remains a modeled historical counterfactual even
+when the implementation that computed it is locally validated.</p>
+<p>The following language rules apply to the paper and demo:</p>
+<table>
+<thead>
+<tr>
+<th>Evidence</th>
+<th>Permitted formulation</th>
+<th>Prohibited formulation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Observed</td>
+<td>“Hugging Face reports…”</td>
+<td>“KIL observed…”</td>
+</tr>
+<tr>
+<td>Modeled</td>
+<td>“Under profile P, the replay predicts denial…”</td>
+<td>“KIL prevented the incident…”</td>
+</tr>
+<tr>
+<td>Validated</td>
+<td>“Run R reproduced denial in the local cluster…”</td>
+<td>“This proves the historical incident would have been prevented…”</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-system-under-test">5. System under test</h2>
+<h3 id="5-1-authoritative-slower-loop">5.1 Authoritative, slower loop</h3>
+<p>The authoritative loop consumes KTP-derived identity, trajectory, standing,
+environment, constraint, and freshness inputs. It emits a signed, short-lived,
+identity- and authority-class-bound composite state <code>Q_i,c</code> plus provenance:</p>
+<ul>
+<li>subject identity and workload class;</li>
+<li>authority class;</li>
+<li>composite charge and threshold profile identifier;</li>
+<li>KTP environmental-envelope reference;</li>
+<li>immutable constraint or veto references;</li>
+<li>evidence horizon and issuer time;</li>
+<li>not-before and expiry times;</li>
+<li>issuer, key identifier, signature profile, and state identifier;</li>
+<li>model, parameter, and schema versions.</li>
+</ul>
+<p>Only the authoritative loop may increase composite authority. A later extension
+profile will select a concrete signature encoding after confirming compatibility
+with KTP v2.0.0; the deterministic interface remains algorithm-neutral.</p>
+<h3 id="5-2-fast-enforcement-loop">5.2 Fast enforcement loop</h3>
+<p>For every action request, the fast loop evaluates:</p>
+<pre><code class="language-text">permit = veto_clear
+      ∧ action_within_environment
+      ∧ composite_state_authentic
+      ∧ composite_state_fresh
+      ∧ Q_effective(i,c) ≥ tau_c
+      ∧ history_count(i,c) ≥ h_c
+</code></pre>
+<p>The result is one of:</p>
+<ul>
+<li><code>permit</code>: short-lived, action-bound execution may proceed;</li>
+<li><code>constrain</code>: execution may proceed only inside a strictly smaller authority
+set already permitted by KTP;</li>
+<li><code>deny</code>: the requested action does not proceed; or</li>
+<li><code>indeterminate</code>: required evidence or verification is unavailable and the
+configured fail-safe profile determines the constrained outcome.</li>
+</ul>
+<p>Every result emits a deterministic decision record. A decision record contains
+the evaluated inputs, evidence labels, state and request identifiers, reason
+codes, effective authority, timestamps, implementation version, and integrity
+digest.</p>
+<h3 id="5-3-experimental-enforcement-modes">5.3 Experimental enforcement modes</h3>
+<p>The lab compares two KIL modes:</p>
+<ol>
+<li><code>signed_state_only</code>: the fast loop consumes the latest valid signed state and
+cannot derive a new trajectory penalty between refreshes.</li>
+<li><code>signed_plus_local_reduce</code>: fresh local evidence may immediately clamp
+<code>Q_effective</code> downward or withhold authority until the next signed refresh.</li>
+</ol>
+<p>The local overlay has four invariants:</p>
+<ul>
+<li>it cannot increase <code>Q_i,c</code>;</li>
+<li>it cannot clear a KTP veto;</li>
+<li>it cannot expand the environmental envelope; and</li>
+<li>it expires or reconciles against the next authentic signed state while its
+provenance remains auditable.</li>
+</ul>
+<p>Comparing these modes tests the value and safety cost of fast local reduction.
+It does not decide the overlay's final normative status in KTP 2.1 or 3.0.</p>
+<h2 id="6-trust-decay-validation-profile">6. Trust-decay validation profile</h2>
+<p>The first profile uses a weighted diagonal standardized distance. It is not
+described as a full Mahalanobis distance because it does not initially model
+feature covariance.</p>
+<p>For feature vector <code>x_t</code>, class baseline mean <code>mu_c</code>, scale <code>sigma_c</code>, and
+non-negative weights <code>w_c</code>:</p>
+<pre><code class="language-text">d_raw = sqrt(sum_j(w_c,j * ((x_t,j - mu_c,j) / sigma_c,j)^2))
+d_t   = 2 / (1 + exp(-k_c * d_raw)) - 1
+</code></pre>
+<p>The authoritative pre-action charge passively decays over elapsed time:</p>
+<pre><code class="language-text">Q_decay = Q_previous * exp(-lambda_c * delta_t)
+</code></pre>
+<p>An over-threshold event yields a superlinear reducing penalty:</p>
+<pre><code class="language-text">loss(d_t) = rho_loss,c * (d_t / theta_c)^p     when d_t &gt; theta_c
+</code></pre>
+<p>In <code>signed_plus_local_reduce</code> mode:</p>
+<pre><code class="language-text">Q_effective = clamp(Q_decay - loss(d_t) - coupled_loss, 0, Q_max)
+</code></pre>
+<p>A request cannot earn the authority needed to authorize itself. Positive
+replenishment is credited only by the authoritative loop after successful,
+low-divergence behavior is confirmed. Local observations can reduce authority;
+they cannot replenish it.</p>
+<p>The profile tests independent charge by authority class, minimum low-divergence
+history, higher-class passive decay, downstream coupling, cold-start class
+priors, and declared trajectory changes. All initial weights, thresholds,
+decay constants, coupling coefficients, and priors are versioned modeled inputs.</p>
+<h2 id="7-control-and-comparisons">7. Control and comparisons</h2>
+<p>The control is named <code>credential_policy_baseline</code>. It is not presented as every
+possible zero-trust architecture. For each action it evaluates only the
+credential validity and explicit policy facts encoded in the scenario:</p>
+<pre><code class="language-text">permit_baseline = credential_valid ∧ policy_allows_action
+</code></pre>
+<p>Each replay event is evaluated by the baseline, <code>signed_state_only</code>, and
+<code>signed_plus_local_reduce</code> modes. All modes receive the same observed action and
+credential facts. KIL-only context features are separately labeled modeled.</p>
+<p>The comparison reports:</p>
+<ul>
+<li>first denied or constrained event;</li>
+<li>downstream actions rendered unreachable by the scenario dependency graph;</li>
+<li>false denials on benign controls;</li>
+<li>decisions changed by the local overlay;</li>
+<li>stale-state and refresh-window exposure;</li>
+<li>reason-code and provenance completeness; and</li>
+<li>computational and live enforcement latency.</li>
+</ul>
+<h2 id="8-scenario-model">8. Scenario model</h2>
+<p>The historical scenario is a normalized, source-cited action graph rather than
+a prose transcript. Each event includes:</p>
+<ul>
+<li>stable event identifier and phase;</li>
+<li>logical and disclosed wall-clock time, when available;</li>
+<li>actor, credential, authority class, action, resource, and dependency IDs;</li>
+<li>observed source citation and location note;</li>
+<li>credential-validity and policy-control facts;</li>
+<li>modeled KTP context features with explicit rationale;</li>
+<li>expected control result and expected KIL result under a named profile; and</li>
+<li>confidence, ambiguity, and omission notes.</li>
+</ul>
+<p>The initial representative cut points are:</p>
+<ol>
+<li>worker identity addressing the Kubernetes API;</li>
+<li>credential use from a novel external origin;</li>
+<li>privileged workload admission;</li>
+<li>high-scope secret-object access;</li>
+<li>cross-cluster administrative use;</li>
+<li>repeated mesh-enrollment behavior;</li>
+<li>newly minted signed identity use; and</li>
+<li>source-control and CI-directed action.</li>
+</ol>
+<p>Only facts present in the Hugging Face technical timeline are observed. Paths,
+feature values, baselines, thresholds, and KTP signals absent from the disclosure
+are modeled and must not be silently reconstructed.</p>
+<h2 id="9-deterministic-replay-rail">9. Deterministic replay rail</h2>
+<p>The replay rail is a pure, offline pipeline:</p>
+<pre><code class="language-text">scenario manifest
+  -&gt; normalized events
+  -&gt; versioned state/profile inputs
+  -&gt; baseline and KIL decision engines
+  -&gt; JSONL decision records
+  -&gt; summary metrics and claim-evidence matrix
+  -&gt; integrity manifest
+</code></pre>
+<p>Determinism requires canonical event ordering, explicit clocks, decimal or
+rational handling where floating-point ambiguity affects thresholds, stable
+serialization, fixed profile versions, and no network or wall-clock dependency.
+Two executions of the same inputs and implementation commit must produce the
+same semantic output and integrity digest.</p>
+<h2 id="10-live-local-cluster-rail">10. Live local-cluster rail</h2>
+<p>The live rail reuses the same request, state, decision, reason-code, and record
+schemas. It contains:</p>
+<ul>
+<li>benign workload generators that establish permitted trajectories;</li>
+<li>adversarial workload generators that request representative escalation
+actions without using destructive payloads;</li>
+<li>an authoritative state issuer or deterministic issuer fixture;</li>
+<li>an enforcement adapter at the selected Kubernetes boundary;</li>
+<li>an append-only decision collector; and</li>
+<li>a run controller that captures environment and timing metadata.</li>
+</ul>
+<p>The founder selected an Envoy HTTP <code>ext_authz</code> gateway as the first live
+adapter. It optimizes for observability, reproducibility, and clear
+pre-execution denial rather than claiming the deepest possible transport
+placement. The three comparison modes run as separately configured tracks so a
+client cannot select or downgrade enforcement. Kubernetes admission, network,
+and eBPF enforcement remain later gates. The complete approved topology,
+evidence join, safe workload, signed-state fixture, measurement protocol, and
+graphical diagram are specified in
+<a href="2026-08-29-v3-envoy-live-validation-design.htm">the Gate V3 Envoy design</a>.</p>
+<h2 id="11-failure-and-safety-experiments">11. Failure and safety experiments</h2>
+<p>The lab must exercise, not merely describe:</p>
+<ul>
+<li>absent, malformed, expired, not-yet-valid, revoked, and incorrectly signed
+composite state;</li>
+<li>state replay and identity, class, action, or environment binding mismatch;</li>
+<li>evidence staleness and control-plane partition;</li>
+<li>cold start and insufficient history;</li>
+<li>slow drift and single high-divergence events;</li>
+<li>a legitimate rare action with and without a declared trajectory change;</li>
+<li>local overlay false reduction and recovery at signed refresh;</li>
+<li>an immutable veto and environmental-envelope violation;</li>
+<li>attempted local authority increase; and</li>
+<li>decision-record loss or integrity failure.</li>
+</ul>
+<p>Fail-safe behavior is defined by authority class. Administrative,
+privilege-escalation, token-minting, and secret-bulk-read classes fail closed.
+Lower-risk operational classes may fail constrained only inside a predeclared
+safe envelope. No failure mode fails into greater authority.</p>
+<h2 id="12-metrics">12. Metrics</h2>
+<h3 id="security-behavior">Security behavior</h3>
+<ul>
+<li>first cutoff event and phase;</li>
+<li>permitted, constrained, denied, and indeterminate counts;</li>
+<li>prevented dependency descendants;</li>
+<li>stale-state exposure window;</li>
+<li>overlay incremental cutoff value; and</li>
+<li>invariant violations, which must remain zero.</li>
+</ul>
+<h3 id="operational-behavior">Operational behavior</h3>
+<ul>
+<li>benign permit rate and false-denial rate;</li>
+<li>declared-change success and recovery time;</li>
+<li>decision latency at p50, p95, and p99;</li>
+<li>signed-state refresh latency and age at decision;</li>
+<li>decision throughput; and</li>
+<li>record completeness and integrity-verification rate.</li>
+</ul>
+<p>Latency is reported only for the measured hardware, runtime, adapter, profile,
+sample size, and run identifier. It is not generalized to SmartNIC, eBPF, SDN,
+or production-scale performance.</p>
+<h2 id="13-run-bundle-and-publication-linkage">13. Run bundle and publication linkage</h2>
+<p>Each run produces an immutable directory containing:</p>
+<ul>
+<li><code>manifest.json</code>: run ID, timestamps, commit, environment, profile, modes, and
+artifact hashes;</li>
+<li><code>scenario.json</code>: normalized action graph and provenance;</li>
+<li><code>state.jsonl</code>: issued composite states and refresh events;</li>
+<li><code>decisions.jsonl</code>: baseline and KIL decisions;</li>
+<li><code>metrics.json</code>: machine-readable measurements;</li>
+<li><code>summary.md</code>: human-readable findings and limitations; and</li>
+<li><code>SHA256SUMS</code>: integrity hashes for every published artifact.</li>
+</ul>
+<p>Every paper table, chart, and validated sentence cites a run ID and artifact
+path. Modeled historical figures cite both the source scenario version and model
+profile. Generated PDF content must never be the sole repository of a result.</p>
+<h2 id="14-acceptance-gates">14. Acceptance gates</h2>
+<h3 id="gate-v1-deterministic-kernel">Gate V1 — Deterministic kernel</h3>
+<ul>
+<li>arithmetic boundary, decay, monotonicity, class isolation, coupling, and
+reducing-only tests pass;</li>
+<li>the local overlay cannot increase authority under generated test inputs;</li>
+<li>invalid or stale signed states cannot produce greater authority; and</li>
+<li>repeated runs yield identical semantic output and hashes.</li>
+</ul>
+<h3 id="gate-v2-historical-replay">Gate V2 — Historical replay</h3>
+<ul>
+<li>every observed event has a primary-source citation;</li>
+<li>every synthetic feature and parameter is labeled modeled;</li>
+<li>baseline and KIL modes consume the same normalized action facts;</li>
+<li>the replay emits complete decision provenance; and</li>
+<li>paper-ready results retain the historical-counterfactual caveat.</li>
+</ul>
+<h3 id="gate-v3-live-local-validation">Gate V3 — Live local validation</h3>
+<ul>
+<li>benign and adversarial trajectories execute in an isolated local cluster;</li>
+<li>enforcement occurs before the representative consequential action completes;</li>
+<li>decision records correspond to observable workload outcomes;</li>
+<li>failure and safety cases are reproduced; and</li>
+<li>published results include environment, repetitions, distributions, and run
+identifiers.</li>
+</ul>
+<h3 id="gate-v4-publication-promotion">Gate V4 — Publication promotion</h3>
+<ul>
+<li>a claim-evidence review confirms every <code>validated</code> statement points to a
+passing run bundle;</li>
+<li>source and artifact integrity checks pass;</li>
+<li>negative and ambiguous outcomes are retained; and</li>
+<li>the white paper, demo, and repository use consistent terminology and figures.</li>
+</ul>
+<h2 id="15-implementation-sequencing">15. Implementation sequencing</h2>
+<p>The deterministic rail is one independently testable subsystem and is
+implemented first. The live-cluster rail is a second subsystem built only after
+the decision interface and replay schemas are stable. Test-first development is
+mandatory: each behavior begins with a focused failing test, is implemented
+minimally, and is verified against the full suite before the next behavior.</p>
+<h2 id="16-authoritative-sources">16. Authoritative sources</h2>
+<ul>
+<li><a href="https://github.com/nmcitra/ktp-rfc/tree/v2.0.0">KTP RFC series, version 2.0.0</a></li>
+<li><a href="https://kinetic-trust-protocol.net/enterprise/architecture">Enterprise KTP architecture</a></li>
+<li><a href="https://kinetic-trust-protocol.net/learn/constitution">The Constitution of Digital Physics</a></li>
+<li><a href="https://huggingface.co/blog/agent-intrusion-technical-timeline">Hugging Face technical incident timeline</a></li>
+</ul>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

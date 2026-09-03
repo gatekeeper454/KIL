@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Self-Contained HTML Readers Design</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/specs/2026-09-03-self-contained-html-readers-design.md">
+<meta name="source-sha256" content="f4f23e17b81791cb1099b1575ca1eaebe0ac26051b8a4bfb4d88a920e9d4faec">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-09-03-self-contained-html-readers-design.md</code> (<code>f4f23e17b81791cb1099b1575ca1eaebe0ac26051b8a4bfb4d88a920e9d4faec</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">Self-Contained HTML Readers Design</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-09-03-self-contained-html-readers-design.md</code> (<code>f4f23e17b81791cb1099b1575ca1eaebe0ac26051b8a4bfb4d88a920e9d4faec</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#self-contained-html-readers-design">Self-Contained HTML Readers Design</a></li><li class="level-2"><a href="#context">Context</a></li><li class="level-2"><a href="#goals">Goals</a></li><li class="level-2"><a href="#non-goals">Non-goals</a></li><li class="level-2"><a href="#publication-boundary-and-mapping">Publication boundary and mapping</a></li><li class="level-2"><a href="#toolchain-and-dependencies">Toolchain and dependencies</a></li><li class="level-2"><a href="#components">Components</a></li><li class="level-3"><a href="#tools-render-markdown-py">tools/render_markdown.py</a></li><li class="level-3"><a href="#tests-test-markdown-html-py">tests/test_markdown_html.py</a></li><li class="level-3"><a href="#make-and-ci-integration">Make and CI integration</a></li><li class="level-3"><a href="#repository-guidance">Repository guidance</a></li><li class="level-2"><a href="#rendering-data-flow">Rendering data flow</a></li><li class="level-2"><a href="#link-rewriting">Link rewriting</a></li><li class="level-2"><a href="#reader-application">Reader application</a></li><li class="level-2"><a href="#offline-and-content-security-boundary">Offline and content-security boundary</a></li><li class="level-2"><a href="#determinism-and-freshness">Determinism and freshness</a></li><li class="level-2"><a href="#test-strategy">Test strategy</a></li><li class="level-2"><a href="#delivery">Delivery</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="self-contained-html-readers-design" href="#self-contained-html-readers-design">Self-Contained HTML Readers Design</a></li><li class="level-2"><a data-section-id="context" href="#context">Context</a></li><li class="level-2"><a data-section-id="goals" href="#goals">Goals</a></li><li class="level-2"><a data-section-id="non-goals" href="#non-goals">Non-goals</a></li><li class="level-2"><a data-section-id="publication-boundary-and-mapping" href="#publication-boundary-and-mapping">Publication boundary and mapping</a></li><li class="level-2"><a data-section-id="toolchain-and-dependencies" href="#toolchain-and-dependencies">Toolchain and dependencies</a></li><li class="level-2"><a data-section-id="components" href="#components">Components</a></li><li class="level-3"><a data-section-id="tools-render-markdown-py" href="#tools-render-markdown-py">tools/render_markdown.py</a></li><li class="level-3"><a data-section-id="tests-test-markdown-html-py" href="#tests-test-markdown-html-py">tests/test_markdown_html.py</a></li><li class="level-3"><a data-section-id="make-and-ci-integration" href="#make-and-ci-integration">Make and CI integration</a></li><li class="level-3"><a data-section-id="repository-guidance" href="#repository-guidance">Repository guidance</a></li><li class="level-2"><a data-section-id="rendering-data-flow" href="#rendering-data-flow">Rendering data flow</a></li><li class="level-2"><a data-section-id="link-rewriting" href="#link-rewriting">Link rewriting</a></li><li class="level-2"><a data-section-id="reader-application" href="#reader-application">Reader application</a></li><li class="level-2"><a data-section-id="offline-and-content-security-boundary" href="#offline-and-content-security-boundary">Offline and content-security boundary</a></li><li class="level-2"><a data-section-id="determinism-and-freshness" href="#determinism-and-freshness">Determinism and freshness</a></li><li class="level-2"><a data-section-id="test-strategy" href="#test-strategy">Test strategy</a></li><li class="level-2"><a data-section-id="delivery" href="#delivery">Delivery</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="self-contained-html-readers-design">Self-Contained HTML Readers Design</h1>
+<p><strong>Status:</strong> Approved design</p>
+<p><strong>Date:</strong> 2026-09-03</p>
+<p><strong>Scope:</strong> Deterministic sibling <code>.htm</code> readers for every tracked Markdown
+document in KIL</p>
+<h2 id="context">Context</h2>
+<p>KIL currently stores its prose, plans, fixtures, repository instructions, and
+research records as Markdown. A reader without a Markdown renderer must either
+read the source syntax or install separate tooling. The maintainer requires an
+offline-readable <code>.htm</code> sibling beside every tracked <code>.md</code> file, with a strict
+one-to-one mapping and the single-page reader experience approved in the
+<code>kinetic-infrastructure.md</code> visual sample.</p>
+<p>Markdown remains canonical. HTML readers are deterministic derived artifacts.
+This feature changes presentation and publication mechanics only; it does not
+change KIL behavior, KTP semantics, evidence classifications, or laboratory
+claims.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+<h2 id="goals">Goals</h2>
+<ol>
+<li>Give every tracked Markdown document an immediately discoverable sibling
+reader: <code>path/name.md</code> maps to <code>path/name.htm</code>.</li>
+<li>Make every reader open directly from a local filesystem without a server,
+network dependency, package installation, or Markdown converter.</li>
+<li>Preserve complete rendered content when JavaScript is disabled.</li>
+<li>Provide bounded single-page enhancements: outline navigation, document
+search, theme switching, active-section indication, and print styling.</li>
+<li>Rewrite relative links between tracked Markdown documents so HTML readers
+continue through the sibling HTML corpus.</li>
+<li>Make generation reproducible and make missing, extra, or stale outputs fail
+repository validation.</li>
+<li>Preserve every source Markdown byte, including files under <code>docs/drafts/</code>.</li>
+</ol>
+<h2 id="non-goals">Non-goals</h2>
+<ul>
+<li>Hosting or deploying a website.</li>
+<li>Combining the corpus into one cross-document application or search index.</li>
+<li>Replacing Markdown as the source of record.</li>
+<li>Rendering Mermaid in the browser or adding syntax-highlighting libraries.</li>
+<li>Fetching remote fonts, styles, scripts, images, telemetry, or analytics.</li>
+<li>Editing KTP content or changing the meaning of KIL claims.</li>
+<li>Making an external citation available offline; external destinations remain
+ordinary links and require connectivity only when selected.</li>
+</ul>
+<h2 id="publication-boundary-and-mapping">Publication boundary and mapping</h2>
+<p>The generator obtains the publication set from Git rather than from a broad
+filesystem walk:</p>
+<pre><code class="language-text">git ls-files -z -- *.md
+</code></pre>
+<p>It decodes paths as UTF-8, converts them to repository-relative POSIX paths,
+sorts them by their encoded path value, and rejects duplicate or unsafe paths.
+No tracked Markdown file is excluded. The set therefore includes root files,
+repository instructions, reader-facing documentation, internal plans and
+specifications, historical drafts, research records, and test fixtures.</p>
+<p>For every source, the output changes only the final suffix:</p>
+<pre><code class="language-text">README.md                                    -&gt; README.htm
+docs/paper/kinetic-infrastructure.md         -&gt; docs/paper/kinetic-infrastructure.htm
+tests/fixtures/example/summary.md            -&gt; tests/fixtures/example/summary.htm
+</code></pre>
+<p>The <code>.htm</code> namespace is reserved for these generated readers. Local validation
+requires the non-ignored on-disk <code>.htm</code> set to equal the mapped tracked <code>.md</code>
+set exactly, allowing validation immediately after generation and before Git
+staging. Committed delivery separately requires every expected <code>.htm</code> to be
+tracked and no other <code>.htm</code> file to be tracked.
+The generator discovers the final count at execution time. The repository had
+45 tracked Markdown files before this design was added; the design and its
+implementation plan are themselves Markdown sources and therefore also receive
+sibling readers.</p>
+<h2 id="toolchain-and-dependencies">Toolchain and dependencies</h2>
+<p>The generator uses Python 3.11 or newer, matching KIL's existing runtime floor.
+Markdown parsing uses <code>markdown-it-py==4.2.0</code>, with its direct URL dependency
+explicitly fixed as <code>mdurl==0.1.2</code>. Both are documentation-build dependencies,
+not KIL runtime dependencies. <code>markdown-it-py</code> 4.2.0 is the current stable
+release and supports Python 3.10 and newer according to its
+<a href="https://pypi.org/project/markdown-it-py/4.2.0/">authoritative PyPI record</a>.</p>
+<p>The pins appear in both places used by this repository's dependency contract:</p>
+<ul>
+<li>a <code>docs</code> optional dependency group in <code>pyproject.toml</code>; and</li>
+<li><code>requirements-docs.txt</code>, installed by CI beside <code>requirements-lab.txt</code>.</li>
+</ul>
+<p>The parser is configured from the CommonMark preset with the table rule
+enabled. Raw HTML is disabled. Linkification, typographic substitution,
+third-party plugins, syntax highlighting, and runtime diagram rendering remain
+disabled so the result is bounded and deterministic.</p>
+<h2 id="components">Components</h2>
+<h3 id="tools-render-markdown-py"><code>tools/render_markdown.py</code></h3>
+<p>This module owns source discovery, parsing, heading identity, link rewriting,
+template rendering, output verification, and command-line behavior. It exposes
+small pure functions so formatting and safety behavior can be tested without
+writing repository files.</p>
+<p>The command has two modes:</p>
+<pre><code class="language-text">python tools/render_markdown.py
+python tools/render_markdown.py --check
+</code></pre>
+<p>The default mode stages all expected bytes and then updates sibling outputs.
+<code>--check</code> writes nothing; it compares each existing sibling byte-for-byte with
+the expected rendering and rejects missing, unexpected, or stale <code>.htm</code> files.
+Both modes return nonzero for an invalid path, non-UTF-8 source, parser failure,
+output collision, unsafe resolved link, or filesystem error.</p>
+<h3 id="tests-test-markdown-html-py"><code>tests/test_markdown_html.py</code></h3>
+<p>This test module covers pure rendering behavior, link resolution, security
+properties, deterministic bytes, command failure behavior, and the real
+repository's one-to-one publication contract.</p>
+<h3 id="make-and-ci-integration">Make and CI integration</h3>
+<p>The Makefile adds:</p>
+<pre><code class="language-text">docs-html        regenerate every sibling reader
+docs-html-check  verify exact coverage and freshness without writing
+</code></pre>
+<p><code>validate</code> depends on <code>docs-html-check</code> after the unit suite. Help output
+documents both targets and the documentation dependency. GitHub Actions installs
+both pinned requirements files before running <code>make validate</code>.</p>
+<h3 id="repository-guidance">Repository guidance</h3>
+<p>The root README and <code>tools/README.md</code> explain that Markdown is canonical, HTML
+is generated, <code>make docs-html</code> performs regeneration, and <code>make validate</code>
+rejects drift. They also warn contributors not to edit <code>.htm</code> siblings by hand.</p>
+<h2 id="rendering-data-flow">Rendering data flow</h2>
+<p>For one source document, generation proceeds as follows:</p>
+<pre><code class="language-text">tracked UTF-8 Markdown bytes
+  -&gt; SHA-256 source identity
+  -&gt; markdown-it token stream
+  -&gt; stable heading IDs and outline
+  -&gt; resolved sibling-link rewrites
+  -&gt; escaped static article HTML
+  -&gt; self-contained reader template
+  -&gt; UTF-8 bytes with one final newline
+</code></pre>
+<p>The first level-one heading becomes the display title. If no level-one heading
+exists, the first heading of any level is used. If no heading exists, the source
+filename without <code>.md</code> becomes the title.</p>
+<p>Heading IDs are derived from visible heading text by Unicode NFKC
+normalization, case folding, conversion of non-alphanumeric runs to hyphens,
+and removal of leading or trailing hyphens. An empty result becomes <code>section</code>.
+Repeated IDs receive <code>-2</code>, <code>-3</code>, and later numeric suffixes in document order.
+The outline includes levels one through three and links to those stable IDs.</p>
+<h2 id="link-rewriting">Link rewriting</h2>
+<p>Only link destination tokens are eligible for rewriting. Code, literal text,
+and image destinations are never rewritten as prose.</p>
+<p>For a destination without a URI scheme or network location, the generator:</p>
+<ol>
+<li>separates its path, query, and fragment;</li>
+<li>resolves the path against the source Markdown directory;</li>
+<li>rejects traversal outside the repository root;</li>
+<li>checks whether the resolved path is a tracked Markdown source; and</li>
+<li>if so, changes the destination suffix from <code>.md</code> to <code>.htm</code> while preserving
+query and fragment components.</li>
+</ol>
+<p>Pure fragment links remain within the current document. Absolute URLs,
+protocol-relative URLs, <code>mailto:</code>, and other explicit schemes remain unchanged.
+Relative links to images, schemas, source files, PDFs, and existing HTML remain
+unchanged. A relative <code>.md</code> link that does not resolve to the tracked source set
+also remains unchanged so generation does not disguise an existing broken or
+external-by-convention reference.</p>
+<h2 id="reader-application">Reader application</h2>
+<p>Each <code>.htm</code> is an independent document-centric single-page application. The
+complete article is present in the initial HTML document. Outline selections
+use local fragments and do not load a new application route. No action performs
+an automatic network request.</p>
+<p>The reader uses the approved visual direction:</p>
+<ul>
+<li>a restrained paper surface on a neutral canvas;</li>
+<li>a sticky desktop outline and compact mobile header;</li>
+<li>system fonts only;</li>
+<li>responsive tables and code blocks with horizontal overflow;</li>
+<li>readable measure, contrast, and spacing;</li>
+<li>light and dark themes;</li>
+<li>print rules that remove application chrome; and</li>
+<li>an explicit generated-file notice with the source path and source digest.</li>
+</ul>
+<p>JavaScript progressively enhances search, theme switching, current-section
+highlighting, and print activation. Search operates only on text nodes already
+present in the article. It neither evaluates source content nor sends queries
+elsewhere. If JavaScript is disabled or blocked, the full document, links,
+outline, images, tables, and code remain readable; only those enhancements are
+unavailable.</p>
+<h2 id="offline-and-content-security-boundary">Offline and content-security boundary</h2>
+<p>All CSS and JavaScript are embedded. The output contains no stylesheet link,
+script source, module import, remote font, preload, iframe, media embed,
+analytics beacon, service worker, or fetch/XHR call.</p>
+<p>Raw Markdown HTML is treated as text and escaped by the parser. This prevents a
+tracked Markdown file from turning a generated local reader into an executable
+HTML injection surface. Fenced Mermaid blocks remain escaped, labeled code
+blocks rather than acquiring a diagram runtime.</p>
+<p>Each reader contains a content-security policy equivalent to:</p>
+<pre><code class="language-text">default-src 'none';
+img-src 'self' data:;
+style-src 'unsafe-inline';
+script-src 'unsafe-inline';
+font-src 'none';
+connect-src 'none';
+object-src 'none';
+base-uri 'none';
+form-action 'none'
+</code></pre>
+<p>Inline style and script allowances are intentionally narrow consequences of a
+single-file offline artifact. The generator supplies all executable bytes; raw
+Markdown cannot supply HTML or script nodes. External hyperlinks remain
+clickable user-initiated navigation and do not weaken the resource-loading
+policy.</p>
+<h2 id="determinism-and-freshness">Determinism and freshness</h2>
+<p>Readers contain no timestamp, host name, absolute filesystem path, Git branch,
+or commit-dependent value. Stable inputs are:</p>
+<ul>
+<li>exact tracked source paths and bytes;</li>
+<li>generator source and template version;</li>
+<li>fixed parser configuration; and</li>
+<li>pinned parser dependency versions.</li>
+</ul>
+<p>The output metadata includes:</p>
+<pre><code class="language-text">generator: KIL Markdown Reader 1
+source-path: repository-relative Markdown path
+source-sha256: lowercase hexadecimal SHA-256 of exact source bytes
+</code></pre>
+<p>Freshness is established by full deterministic regeneration, not by trusting
+metadata alone. <code>--check</code> renders expected bytes in memory and requires exact
+equality with every sibling.</p>
+<p>Before writing, default mode discovers and reads every source, computes every
+output, and validates output uniqueness and safety. Only after the entire
+corpus renders successfully does it create temporary files in the destination
+directories and replace siblings with <code>os.replace</code>. A parse or validation
+failure therefore leaves all existing siblings untouched. An operating-system
+failure during the final series of replacements is reported as an error;
+<code>--check</code> identifies any resulting mixed generation and must pass before a
+commit.</p>
+<h2 id="test-strategy">Test strategy</h2>
+<p>Implementation follows test-driven development. Focused tests first establish
+the following behavior:</p>
+<ol>
+<li>tracked path mapping is exhaustive, stable, and collision-free;</li>
+<li>titles and duplicate Unicode heading IDs are deterministic;</li>
+<li>paragraphs, emphasis, block quotes, lists, tables, reference links, code
+fences, and Unicode render as expected;</li>
+<li>raw HTML and hostile attributes remain escaped text;</li>
+<li>tracked relative Markdown links rewrite to <code>.htm</code> with query and fragment
+preservation;</li>
+<li>external, fragment-only, image, and non-Markdown links remain unchanged;</li>
+<li>repository traversal is rejected;</li>
+<li>output contains full static article content and all offline reader controls;</li>
+<li>no external executable or presentation dependency appears in the output;</li>
+<li>source path and exact SHA-256 metadata are correct;</li>
+<li>two renders from identical inputs are byte-identical;</li>
+<li><code>--check</code> rejects a missing, altered, stale, or unexpected sibling and
+never writes;</li>
+<li>a default generation failure before replacement preserves prior outputs;</li>
+<li>every tracked <code>.md</code> has exactly one non-ignored on-disk <code>.htm</code>, and the
+committed repository tracks exactly that generated output set; and</li>
+<li>source hashes, including the two historical drafts, remain unchanged by
+regeneration.</li>
+</ol>
+<p>After focused tests pass, <code>make docs-html</code> creates the complete corpus and
+<code>make validate</code> proves unit behavior, exact output freshness, project metadata,
+and diff hygiene. Representative long-form, table-heavy, code-heavy, root, and
+fixture readers receive visual inspection at desktop and narrow widths.</p>
+<h2 id="delivery">Delivery</h2>
+<p>The implementation is complete only when:</p>
+<ul>
+<li>the design and implementation plan have sibling readers too;</li>
+<li>all tracked Markdown/HTML sibling sets are exactly equal;</li>
+<li>a second generation changes no bytes;</li>
+<li>focused and complete repository validation pass;</li>
+<li>representative readers have been visually inspected;</li>
+<li>source Markdown files changed only where documentation or the required KIL
+specialist lineage explicitly demands an authored update;</li>
+<li>the feature commit is pushed to its dedicated branch; and</li>
+<li>local HEAD, its upstream tracking ref, and the remote branch resolve to the
+same commit.</li>
+</ul>
+<p>No pull request, merge, issue comment, or issue closure is implied by the final
+push.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

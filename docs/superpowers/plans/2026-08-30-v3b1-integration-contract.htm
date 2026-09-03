@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V3B-1 Transcript-Driven Integration Contract Implementation Plan</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md">
+<meta name="source-sha256" content="09ddcb260583a076c16b133432111b4b04954070521a27ae1335ef27a457be2b">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md</code> (<code>09ddcb260583a076c16b133432111b4b04954070521a27ae1335ef27a457be2b</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">V3B-1 Transcript-Driven Integration Contract Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md</code> (<code>09ddcb260583a076c16b133432111b4b04954070521a27ae1335ef27a457be2b</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-1-transcript-driven-integration-contract-implementation-plan">V3B-1 Transcript-Driven Integration Contract Implementation Plan</a></li><li class="level-3"><a href="#task-1-lock-sanitized-transcript-and-pure-harness-contracts">Task 1: Lock sanitized transcript and pure harness contracts</a></li><li class="level-3"><a href="#task-2-add-non-consuming-readiness-and-request-stage-provenance">Task 2: Add non-consuming readiness and request-stage provenance</a></li><li class="level-3"><a href="#task-3-freeze-evidence-before-tmpfs-teardown">Task 3: Freeze evidence before tmpfs teardown</a></li><li class="level-3"><a href="#task-4-replace-error-text-absence-with-exact-inventories">Task 4: Replace error-text absence with exact inventories</a></li><li class="level-3"><a href="#task-5-independently-review-the-complete-harness">Task 5: Independently review the complete harness</a></li><li class="level-3"><a href="#task-6-execute-the-zero-request-live-smoke-gate">Task 6: Execute the zero-request live smoke gate</a></li><li class="level-3"><a href="#task-7-execute-one-accepted-local-envoy-proof-and-presenter-bundle">Task 7: Execute one accepted local Envoy proof and presenter bundle</a></li><li class="level-3"><a href="#task-8-publish-merge-synchronize-and-verify-backup-readiness">Task 8: Publish, merge, synchronize, and verify backup readiness</a></li><li class="level-2"><a href="#supersession-notice-2026-08-31">Supersession notice — 2026-08-31</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-1-transcript-driven-integration-contract-implementation-plan" href="#v3b-1-transcript-driven-integration-contract-implementation-plan">V3B-1 Transcript-Driven Integration Contract Implementation Plan</a></li><li class="level-3"><a data-section-id="task-1-lock-sanitized-transcript-and-pure-harness-contracts" href="#task-1-lock-sanitized-transcript-and-pure-harness-contracts">Task 1: Lock sanitized transcript and pure harness contracts</a></li><li class="level-3"><a data-section-id="task-2-add-non-consuming-readiness-and-request-stage-provenance" href="#task-2-add-non-consuming-readiness-and-request-stage-provenance">Task 2: Add non-consuming readiness and request-stage provenance</a></li><li class="level-3"><a data-section-id="task-3-freeze-evidence-before-tmpfs-teardown" href="#task-3-freeze-evidence-before-tmpfs-teardown">Task 3: Freeze evidence before tmpfs teardown</a></li><li class="level-3"><a data-section-id="task-4-replace-error-text-absence-with-exact-inventories" href="#task-4-replace-error-text-absence-with-exact-inventories">Task 4: Replace error-text absence with exact inventories</a></li><li class="level-3"><a data-section-id="task-5-independently-review-the-complete-harness" href="#task-5-independently-review-the-complete-harness">Task 5: Independently review the complete harness</a></li><li class="level-3"><a data-section-id="task-6-execute-the-zero-request-live-smoke-gate" href="#task-6-execute-the-zero-request-live-smoke-gate">Task 6: Execute the zero-request live smoke gate</a></li><li class="level-3"><a data-section-id="task-7-execute-one-accepted-local-envoy-proof-and-presenter-bundle" href="#task-7-execute-one-accepted-local-envoy-proof-and-presenter-bundle">Task 7: Execute one accepted local Envoy proof and presenter bundle</a></li><li class="level-3"><a data-section-id="task-8-publish-merge-synchronize-and-verify-backup-readiness" href="#task-8-publish-merge-synchronize-and-verify-backup-readiness">Task 8: Publish, merge, synchronize, and verify backup readiness</a></li><li class="level-2"><a data-section-id="supersession-notice-2026-08-31" href="#supersession-notice-2026-08-31">Supersession notice — 2026-08-31</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="v3b-1-transcript-driven-integration-contract-implementation-plan">V3B-1 Transcript-Driven Integration Contract Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Make the local Envoy harness readiness, request provenance, evidence freeze, and exact teardown contracts strong enough for a zero-request smoke cycle and one accepted live boundary proof without changing KIL authorization behavior.</p>
+<p><strong>Architecture:</strong> Add a small pure harness-contract module for closed transcript parsing and provenance records, then integrate it into the existing lifecycle controller. All behavior changes are test-first and limited to host-side orchestration and evidence collection; KIL state, decision, Envoy policy, and target semantics remain frozen.</p>
+<p><strong>Tech Stack:</strong> Python 3.12.13, <code>unittest</code>, <code>http.client</code>, Docker CLI 29.7.2, Colima 0.10.3, canonical JSON/JSONL, SHA-256, GitHub CLI.</p>
+<p><strong>Execution record:</strong> Tasks 1–5 completed across commits <code>63a8bf3</code> through
+<code>14ed92d</code> and specialist lineage T-074 through T-090. The commit commands below
+remain the original planned checkpoints; review-driven corrections required
+additional test-first commits without changing KIL, authorization, Envoy, or
+target semantics.</p>
+<hr />
+<h3 id="task-1-lock-sanitized-transcript-and-pure-harness-contracts">Task 1: Lock sanitized transcript and pure harness contracts</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>tools/v3b1_harness_contract.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/fixtures/v3b1-integration-contract.json</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Add RED tests for the closed transcript schema</strong></p>
+</li>
+</ul>
+<p>Add tests that load one canonical fixture object with explicit <code>observed</code> or
+<code>reconstructed</code> provenance, reject unknown fields and secret-bearing values,
+and parse full-ID container/network inventory rows. Assertions must require
+64-hex IDs, exact names, duplicate rejection, and no stderr interpretation.</p>
+<ul>
+<li>[x] <strong>Step 2: Run the focused tests and verify the expected import failure</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b1_local_envoy -v
+</code></pre>
+<p>Expected: new tests fail because <code>tools.v3b1_harness_contract</code> does not exist.</p>
+<ul>
+<li>[x] <strong>Step 3: Implement only the pure closed validators</strong></li>
+</ul>
+<p>Implement frozen records for request-failure provenance, source collection
+status, and inventory entries. Implement canonical fixture loading with
+duplicate-key rejection and closed field sets. Do not import or change KIL
+engine, Q-state, authorization, Envoy, or target modules.</p>
+<ul>
+<li>[x] <strong>Step 4: Verify GREEN and commit</strong></li>
+</ul>
+<p>Run the focused suite, <code>py_compile</code> on both harness files, and <code>git diff --check</code>.
+Commit:</p>
+<pre><code class="language-bash">git add tools/v3b1_harness_contract.py tests/fixtures/v3b1-integration-contract.json tests/test_v3b1_local_envoy.py
+git commit -m &quot;Lock the V3B-1 integration transcript contract&quot;
+</code></pre>
+<h3 id="task-2-add-non-consuming-readiness-and-request-stage-provenance">Task 2: Add non-consuming readiness and request-stage provenance</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Add RED readiness tests</strong></p>
+</li>
+</ul>
+<p>Use injected connection objects to prove all three <code>connect()</code> calls occur
+before any <code>claim_request_attempt</code>, no <code>request()</code> occurs during readiness,
+failed readiness leaves all request states <code>not_attempted</code>, and every opened
+socket closes on failure.</p>
+<ul>
+<li>[x] <strong>Step 2: Add RED stage-provenance tests</strong></li>
+</ul>
+<p>Inject failures separately from <code>request()</code>, <code>getresponse()</code>, and <code>read()</code>.
+Require the closed stage, allowlisted exception class, numeric errno/name,
+monotonic ordering, bytes-may-have-been-sent flag, attempt count one, no retry,
+and absence of raw messages or secrets.</p>
+<ul>
+<li>[x] <strong>Step 3: Verify RED, then implement minimal readiness/provenance behavior</strong></li>
+</ul>
+<p>Run each new test alone to observe the intended failure before changing
+production code. Integrate the already-connected sockets into <code>run()</code> and
+extend journal validation without changing request facts or authorization data.</p>
+<ul>
+<li>[x] <strong>Step 4: Verify GREEN and commit</strong></li>
+</ul>
+<p>Run the full focused controller suite, compilation, and diff hygiene. Commit:</p>
+<pre><code class="language-bash">git add tools/v3b1_local_envoy.py tests/test_v3b1_local_envoy.py
+git commit -m &quot;Add non-consuming V3B-1 gateway readiness&quot;
+</code></pre>
+<h3 id="task-3-freeze-evidence-before-tmpfs-teardown">Task 3: Freeze evidence before tmpfs teardown</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tools/v3b1_harness_contract.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Add RED ordering and independent-leg tests</strong></p>
+</li>
+</ul>
+<p>Prove Envoys stop before collection, authz/target containers remain running
+during ledger attestation and copy, source results are persisted before those
+containers stop, and one missing/copy-error/malformed leg cannot prevent all
+other legs from being preserved or exact cleanup from continuing.</p>
+<ul>
+<li>[x] <strong>Step 2: Add RED zero-byte and malformed-byte tests</strong></li>
+</ul>
+<p>Require positive in-container size/hash observation for a zero-byte <code>copied</code>
+result. Require missing to remain missing, copy mismatch to become <code>copy_error</code>,
+and malformed raw bytes to be retained privately with <code>malformed</code> status.</p>
+<ul>
+<li>[x] <strong>Step 3: Verify RED, then implement the source-freeze state machine</strong></li>
+</ul>
+<p>Use a closed JSON result from an exact <code>docker exec</code> Python ledger probe,
+compare the host copy to the observed size/hash, and record all nine source
+results independently. Incomplete sources produce no valid joins and a
+nonpromotable bundle while teardown continues.</p>
+<ul>
+<li>[x] <strong>Step 4: Verify GREEN and commit</strong></li>
+</ul>
+<p>Run focused tests, compilation, and diff hygiene. Commit:</p>
+<pre><code class="language-bash">git add tools/v3b1_local_envoy.py tools/v3b1_harness_contract.py tests/test_v3b1_local_envoy.py
+git commit -m &quot;Freeze V3B-1 evidence before service teardown&quot;
+</code></pre>
+<h3 id="task-4-replace-error-text-absence-with-exact-inventories">Task 4: Replace error-text absence with exact inventories</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tools/v3b1_harness_contract.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Add RED removal and recovery tests</strong></p>
+</li>
+</ul>
+<p>Replay successful removal followed by Docker <code>network &lt;id&gt; not found</code> and prove
+stderr is irrelevant. Require successful closed inventories to establish
+absence, expected remaining-object equality after every removal, empty network
+membership before network deletion, and no repeated deletion after a crash.</p>
+<ul>
+<li>[x] <strong>Step 2: Add RED ambiguity tests</strong></li>
+</ul>
+<p>Reject inventory command failures, malformed or duplicate JSON, shortened IDs,
+wrong names, unexpected remaining objects, and nonempty network membership.</p>
+<ul>
+<li>[x] <strong>Step 3: Verify RED, then integrate inventory-based recovery</strong></li>
+</ul>
+<p>Replace <code>_docker_object_exists</code> prose matching with closed container/network
+inventories. Preserve exact-ID delete commands, durable intents, and the rule
+that no unrecorded object is mutated.</p>
+<ul>
+<li>[x] <strong>Step 4: Verify GREEN and commit</strong></li>
+</ul>
+<p>Run focused tests, full repository validation, compilation, and diff hygiene.
+Commit:</p>
+<pre><code class="language-bash">git add tools/v3b1_local_envoy.py tools/v3b1_harness_contract.py tests/test_v3b1_local_envoy.py
+git commit -m &quot;Verify V3B-1 teardown through exact inventories&quot;
+</code></pre>
+<h3 id="task-5-independently-review-the-complete-harness">Task 5: Independently review the complete harness</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify if required by review: harness source/tests only</p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Run spec-compliance review</strong></p>
+</li>
+</ul>
+<p>Require line-by-line confirmation against
+<code>docs/superpowers/specs/2026-08-30-v3b1-integration-contract-design.md</code>, including
+the frozen KIL-semantics boundary.</p>
+<ul>
+<li>[x] <strong>Step 2: Resolve every spec issue test-first and re-review</strong></li>
+</ul>
+<p>No Critical or Important issue may remain.</p>
+<ul>
+<li>[x] <strong>Step 3: Run code-quality and security-boundary review</strong></li>
+</ul>
+<p>Review secret exclusion, journal closure, crash recovery, command construction,
+unsafe path handling, exact ownership, and claim-language boundaries.</p>
+<ul>
+<li>[x] <strong>Step 4: Run fresh static verification</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+PYTHONPATH=src .venv/bin/python -m py_compile tools/v3b1_local_envoy.py tools/v3b1_harness_contract.py
+git diff --check
+</code></pre>
+<h3 id="task-6-execute-the-zero-request-live-smoke-gate">Task 6: Execute the zero-request live smoke gate</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>docs/lab/V3-PROGRESS.md</code></p>
+</li>
+<li>
+<p>Modify: <code>artifacts/generated/v3b1-task6-live-status.md</code> (ignored live board)</p>
+</li>
+<li>
+<p>Modify: <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Record and, if necessary, temporarily pause foreign runtime state</strong></p>
+</li>
+</ul>
+<p>Capture the exact pre-run <code>default</code> Colima state. Do not alter it unless needed
+for the dedicated profile; if paused, restore the exact configuration and
+status after the KIL cycle.</p>
+<ul>
+<li>[x] <strong>Step 2: Run <code>preflight</code>, <code>up</code>, then <code>down</code> without <code>run</code></strong></li>
+</ul>
+<p>Use the exact committed implementation identity. Confirm no request intent,
+request send, authz decision, or target marker occurred.</p>
+<ul>
+<li>[x] <strong>Step 3: Verify smoke evidence and exact absence</strong></li>
+</ul>
+<p>Verify public checksums, nonpromotable classification, one bundle/archive,
+recorded object absence, dedicated profile absence, restored foreign profile,
+and unchanged global Docker context.</p>
+<ul>
+<li>[x] <strong>Step 4: Record the blocked smoke result</strong></li>
+</ul>
+<p>Commit only public-safe evidence references and documentation. Preserve raw
+runtime journals and failed runs under ignored private paths.</p>
+<p>Attempted on 2026-08-30 from public source
+<code>47c0614d49ec1a7484cdefd04cc5d080adc73ca2</code>. The nonpromotable smoke run was
+<code>v3b1-1db8b5914ce26e2e6c60e74124bcc1b2c9ed66b7dd68c2d3cf4ea1bc0d18c9b3</code>;
+all public evidence JSONLs were empty, checksums and exact teardown passed, and
+the foreign profile was restored. Three Envoy sources were copied, but six
+authorization and target ledger copies failed after zero-byte in-container
+observations. The failure bundle is nonpromotable and does not independently
+prove service-source absence. Correct the exact-byte export and repeat Task 6;
+Task 7 remains prohibited.</p>
+<p>The bounded exact-byte fallback is implemented and statically verified at 180
+controller tests and 396 repository tests, with an independent no-finding
+review. Task 6 remains open until the correction is merged and all nine source
+legs pass the repeated live zero-request freeze.</p>
+<p>Two corrected-source launch attempts on 2026-08-30 stopped before profile
+creation: first at host Docker discovery, then at Colima's rejection of the
+explicit nested-virtualization false flag. Both journals were safely archived,
+the foreign runtime was restored, and no request occurred. The minimal Colima
+compatibility correction must merge before Task 6 is attempted again.</p>
+<p>Task 6 passed on corrected public main commit
+<code>6706859d265204e0a569ebb6817d187dc1728f9d</code>. Run
+<code>v3b1-0374c771b23adcab64060cd8c854d12b72417ff8e4713d24e6f6a550e20bdbea</code>
+recorded no request intent, nine copied and byte-bound empty source legs,
+verified checksums, exact teardown, and exact foreign-runtime restoration. Task
+7 is now authorized; this smoke itself remains incomplete, nonpromotable, and
+not an accepted enforcement result.</p>
+<h3 id="task-7-execute-one-accepted-local-envoy-proof-and-presenter-bundle">Task 7: Execute one accepted local Envoy proof and presenter bundle</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>docs/lab/V3-PROGRESS.md</code></p>
+</li>
+<li>
+<p>Modify: <code>README.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/paper/kinetic-infrastructure.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code></p>
+</li>
+<li>
+<p>Generate: <code>artifacts/generated/v3b1-local-envoy/&lt;run-id&gt;/</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Run a fresh clean preflight and one <code>up</code>/<code>run</code>/<code>down</code> cycle</strong></p>
+</li>
+</ul>
+<p>Never retry after request intent. Any ambiguity remains nonpromotable and is
+preserved privately.</p>
+<ul>
+<li>[ ] <strong>Step 2: Verify the accepted proof</strong></li>
+</ul>
+<p>Require <code>permit / permit / deny</code>, markers <code>1 / 1 / 0</code>, valid joins, complete
+sources, checksums, exact teardown, restored foreign runtime state, and the
+<code>local_envoy_boundary</code> claim only.</p>
+<ul>
+<li>[ ] <strong>Step 3: Generate and inspect the presenter-facing <code>live.html</code></strong></li>
+</ul>
+<p>The visualization must derive only from accepted JSONL records and remain an
+observation surface rather than evidence authority. Run the read-only offline
+<code>view --bundle</code> verifier and accept only the exact presenter path it returns.</p>
+<ul>
+<li>[ ] <strong>Step 4: Commit the result references and public bundle</strong></li>
+</ul>
+<p>After <code>view</code> succeeds and a closed checksum and secret review passes, stage only
+the exact accepted directory:</p>
+<pre><code class="language-bash">git add -f artifacts/generated/v3b1-local-envoy/&lt;accepted-run-id&gt;/
+</code></pre>
+<p>Never force-add <code>artifacts/generated/</code>, the V3B-1 parent, a wildcard, a failed
+run, or <code>live.html</code> alone. Commit the presenter only with its exact JSONL,
+manifest, raw sources, summary, and <code>SHA256SUMS</code>, and record the run ID and
+implementation commit in the progress record.</p>
+<h3 id="task-8-publish-merge-synchronize-and-verify-backup-readiness">Task 8: Publish, merge, synchronize, and verify backup readiness</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Run final full verification and independent review</strong></p>
+</li>
+</ul>
+<p>Require all tests, compilation, diff hygiene, public checksums, and clean secret
+scan of the pending Git diff.</p>
+<ul>
+<li>[ ] <strong>Step 2: Push the feature branch and create/update the GitHub PR</strong></li>
+</ul>
+<p>Wait for required checks and resolve failures before merge.</p>
+<ul>
+<li>[ ] <strong>Step 3: Merge without force-push and fast-forward local <code>main</code></strong></li>
+</ul>
+<p>Read back <code>origin/main</code>, GitHub's merged commit, and local <code>main</code>; all must be
+the same commit.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify public/local cleanliness for offline backup</strong></li>
+</ul>
+<p>Run fresh tests on local <code>main</code>, verify every tracked public checksum, confirm
+the tracked tree is clean, and report ignored private paths separately so the
+user can decide whether to include them in the offline backup.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+<h2 id="supersession-notice-2026-08-31">Supersession notice — 2026-08-31</h2>
+<p>The plan and checked execution record above are retained as history. The
+approved correction is the
+<a href="../specs/2026-08-31-v3b1-in-network-request-driver-design.htm">V3B-1 in-network request-driver design</a>
+and its
+<a href="2026-08-31-v3b1-in-network-request-driver.htm">V3B-1 in-network request-driver plan</a>.
+The older host-published readiness and zero-request results above do not accept
+the corrected three-driver/six-network topology. Current V3B-1 has no host TCP
+publication, limits claims to <code>local_envoy_boundary</code>, and treats the driver as
+a laboratory transport witness rather than KIL enforcement.</p>
+<p>The corrected mechanism is implemented and statically approved at commits
+<code>75161f0</code> and <code>48bd81a</code>. The Task 8 implementation checkpoint passed 466
+non-runtime tests. The fresh Task 9 complete static gate passes 474 tests,
+including eight documentation tests. No corrected-topology live acceptance
+exists: request-free readiness is pending, and one central proof is conditional
+on that gate. This notice does not rewrite the historical tasks or checkboxes
+above.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

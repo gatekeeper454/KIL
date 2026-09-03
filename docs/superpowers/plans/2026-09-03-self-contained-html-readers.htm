@@ -1,0 +1,1083 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Self-Contained HTML Readers Implementation Plan</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/plans/2026-09-03-self-contained-html-readers.md">
+<meta name="source-sha256" content="d2504f123ebb4a3ac604253914d373a08e4863bdb54635304d43bae0c3f1a500">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-03-self-contained-html-readers.md</code> (<code>d2504f123ebb4a3ac604253914d373a08e4863bdb54635304d43bae0c3f1a500</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">Self-Contained HTML Readers Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-03-self-contained-html-readers.md</code> (<code>d2504f123ebb4a3ac604253914d373a08e4863bdb54635304d43bae0c3f1a500</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#self-contained-html-readers-implementation-plan">Self-Contained HTML Readers Implementation Plan</a></li><li class="level-2"><a href="#file-map">File map</a></li><li class="level-2"><a href="#task-1-pin-and-disclose-the-documentation-toolchain">Task 1: Pin and disclose the documentation toolchain</a></li><li class="level-2"><a href="#task-2-build-the-safe-deterministic-renderer">Task 2: Build the safe deterministic renderer</a></li><li class="level-2"><a href="#task-3-add-safe-repository-discovery-write-and-check-modes">Task 3: Add safe repository discovery, write, and check modes</a></li><li class="level-2"><a href="#task-4-wire-make-documentation-ci-and-the-real-corpus">Task 4: Wire Make, documentation, CI, and the real corpus</a></li><li class="level-2"><a href="#task-5-inspect-representative-readers-and-close-the-evidence-gate">Task 5: Inspect representative readers and close the evidence gate</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="self-contained-html-readers-implementation-plan" href="#self-contained-html-readers-implementation-plan">Self-Contained HTML Readers Implementation Plan</a></li><li class="level-2"><a data-section-id="file-map" href="#file-map">File map</a></li><li class="level-2"><a data-section-id="task-1-pin-and-disclose-the-documentation-toolchain" href="#task-1-pin-and-disclose-the-documentation-toolchain">Task 1: Pin and disclose the documentation toolchain</a></li><li class="level-2"><a data-section-id="task-2-build-the-safe-deterministic-renderer" href="#task-2-build-the-safe-deterministic-renderer">Task 2: Build the safe deterministic renderer</a></li><li class="level-2"><a data-section-id="task-3-add-safe-repository-discovery-write-and-check-modes" href="#task-3-add-safe-repository-discovery-write-and-check-modes">Task 3: Add safe repository discovery, write, and check modes</a></li><li class="level-2"><a data-section-id="task-4-wire-make-documentation-ci-and-the-real-corpus" href="#task-4-wire-make-documentation-ci-and-the-real-corpus">Task 4: Wire Make, documentation, CI, and the real corpus</a></li><li class="level-2"><a data-section-id="task-5-inspect-representative-readers-and-close-the-evidence-gate" href="#task-5-inspect-representative-readers-and-close-the-evidence-gate">Task 5: Inspect representative readers and close the evidence gate</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="self-contained-html-readers-implementation-plan">Self-Contained HTML Readers Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Generate and commit one deterministic, self-contained, offline <code>.htm</code> reader beside every tracked KIL Markdown document.</p>
+<p><strong>Architecture:</strong> A Python 3.11+ build-time tool discovers tracked Markdown through Git, renders safe static HTML with pinned <code>markdown-it-py</code>, rewrites sibling-document links, and either atomically updates or byte-checks the complete output set. Every output embeds the approved document-reader CSS and bounded progressive-enhancement JavaScript; Markdown remains canonical and <code>make validate</code> rejects missing, extra, or stale siblings.</p>
+<p><strong>Tech Stack:</strong> Python 3.11+, <code>markdown-it-py==4.2.0</code>, <code>mdurl==0.1.2</code>, <code>unittest</code>, Git, Make, GitHub Actions, static HTML/CSS/JavaScript</p>
+<hr />
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+<h2 id="file-map">File map</h2>
+<ul>
+<li>Create <code>requirements-docs.txt</code>: exact documentation-build dependency pins.</li>
+<li>Create <code>tools/render_markdown.py</code>: pure renderer, safe Git-backed discovery,
+generation, and <code>--check</code> command.</li>
+<li>Create <code>tests/test_markdown_html.py</code>: renderer, security, determinism, CLI,
+and real-corpus contract tests.</li>
+<li>Modify <code>tests/test_dependency_contract.py</code>: dependency, CI, Make help, and
+bootstrap contract tests.</li>
+<li>Modify <code>pyproject.toml</code>: add the exact <code>docs</code> optional dependency group.</li>
+<li>Modify <code>.github/workflows/ci.yml</code>: install lab and documentation pins.</li>
+<li>Modify <code>Makefile</code>: add <code>docs-html</code>, <code>docs-html-check</code>, and validation wiring.</li>
+<li>Modify <code>README.md</code>: document the canonical/generated relationship and local
+regeneration workflow.</li>
+<li>Modify <code>tools/README.md</code>: document renderer behavior and command use.</li>
+<li>Modify <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code>: record confirmed
+implementation and verification gates.</li>
+<li>Generate one sibling <code>.htm</code> for every tracked <code>.md</code>, including this plan and
+the approved design specification.</li>
+</ul>
+<h2 id="task-1-pin-and-disclose-the-documentation-toolchain">Task 1: Pin and disclose the documentation toolchain</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>requirements-docs.txt</code></p>
+</li>
+<li>
+<p>Modify: <code>pyproject.toml:12-14</code></p>
+</li>
+<li>
+<p>Modify: <code>.github/workflows/ci.yml:15-22</code></p>
+</li>
+<li>
+<p>Modify: <code>README.md:115-140</code></p>
+</li>
+<li>
+<p>Modify: <code>Makefile:1-15</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_dependency_contract.py:1-45</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Add failing dependency-contract tests</strong></p>
+</li>
+</ul>
+<p>Extend <code>DependencyContractTest</code> with exact, order-sensitive assertions:</p>
+<pre><code class="language-python">    def test_docs_extra_matches_the_exact_requirements_pins(self):
+        metadata = tomllib.loads((ROOT / &quot;pyproject.toml&quot;).read_text())
+        requirements = (ROOT / &quot;requirements-docs.txt&quot;).read_text().splitlines()
+        optional = metadata[&quot;project&quot;].get(&quot;optional-dependencies&quot;, {})
+
+        self.assertEqual(
+            requirements,
+            [&quot;markdown-it-py==4.2.0&quot;, &quot;mdurl==0.1.2&quot;],
+        )
+        self.assertEqual(optional.get(&quot;docs&quot;), requirements)
+
+    def test_ci_installs_docs_requirements_before_validation(self):
+        workflow = (ROOT / &quot;.github/workflows/ci.yml&quot;).read_text()
+        install = (
+            &quot;python -m pip install --disable-pip-version-check &quot;
+            &quot;-r requirements-lab.txt -r requirements-docs.txt&quot;
+        )
+
+        self.assertIn(install, workflow)
+        self.assertLess(workflow.index(install), workflow.index(&quot;make validate&quot;))
+
+    def test_bootstrap_documents_both_extras(self):
+        readme = (ROOT / &quot;README.md&quot;).read_text()
+
+        self.assertIn('python -m pip install -e &quot;.[lab,docs]&quot;', readme)
+
+    def test_make_help_discloses_the_docs_dependency(self):
+        makefile = (ROOT / &quot;Makefile&quot;).read_text()
+
+        self.assertIn(&quot;docs-html&quot;, makefile)
+        self.assertIn(&quot;requires lab and docs dependencies&quot;, makefile)
+</code></pre>
+<p>Replace the existing CI install assertion with the combined two-file command
+and replace the existing bootstrap/help assertions with the combined extras
+language so no stale one-extra contract remains.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run the dependency tests and verify RED</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest \
+  tests.test_dependency_contract -v
+</code></pre>
+<p>Expected: failures report missing <code>requirements-docs.txt</code>, missing <code>docs</code>
+metadata, the old CI installation command, and old bootstrap/help text.</p>
+<ul>
+<li>[ ] <strong>Step 3: Add exact pins and integration text</strong></li>
+</ul>
+<p>Create <code>requirements-docs.txt</code> with exactly:</p>
+<pre><code class="language-text">markdown-it-py==4.2.0
+mdurl==0.1.2
+</code></pre>
+<p>Add to <code>pyproject.toml</code>:</p>
+<pre><code class="language-toml">docs = [
+  &quot;markdown-it-py==4.2.0&quot;,
+  &quot;mdurl==0.1.2&quot;,
+]
+</code></pre>
+<p>Change the GitHub Actions installation step to:</p>
+<pre><code class="language-yaml">      - run: python -m pip install --disable-pip-version-check -r requirements-lab.txt -r requirements-docs.txt
+</code></pre>
+<p>Change README bootstrap installation to:</p>
+<pre><code class="language-bash">python -m pip install -e &quot;.[lab,docs]&quot;
+</code></pre>
+<p>Change Make help text to say the complete tests require both lab and docs
+dependencies. Add help lines for <code>docs-html</code> and <code>docs-html-check</code>; their
+targets are implemented in Task 4.</p>
+<ul>
+<li>[ ] <strong>Step 4: Install the pins and verify GREEN</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">python -m pip install --disable-pip-version-check -r requirements-docs.txt
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest \
+  tests.test_dependency_contract -v
+</code></pre>
+<p>Expected: dependency-contract tests pass and the installed versions are exactly
+<code>markdown-it-py 4.2.0</code> and <code>mdurl 0.1.2</code>.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit the dependency contract</strong></li>
+</ul>
+<pre><code class="language-bash">git add requirements-docs.txt pyproject.toml .github/workflows/ci.yml \
+  README.md Makefile tests/test_dependency_contract.py
+git commit -m &quot;build: pin Markdown reader toolchain&quot;
+</code></pre>
+<h2 id="task-2-build-the-safe-deterministic-renderer">Task 2: Build the safe deterministic renderer</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>tests/test_markdown_html.py</code></p>
+</li>
+<li>
+<p>Create: <code>tools/render_markdown.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing pure-renderer tests</strong></p>
+</li>
+</ul>
+<p>Create <code>tests/test_markdown_html.py</code> with imports and fixtures that load the
+tool directly from its repository path:</p>
+<pre><code class="language-python">from hashlib import sha256
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path, PurePosixPath
+import re
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SPEC = spec_from_file_location(
+    &quot;render_markdown&quot;, ROOT / &quot;tools/render_markdown.py&quot;
+)
+assert SPEC is not None and SPEC.loader is not None
+render_markdown = module_from_spec(SPEC)
+SPEC.loader.exec_module(render_markdown)
+
+
+class MarkdownRendererTest(unittest.TestCase):
+    def setUp(self):
+        self.source = PurePosixPath(&quot;docs/guide.md&quot;)
+        self.sources = frozenset(
+            {self.source, PurePosixPath(&quot;docs/other.md&quot;)}
+        )
+
+    def render(self, markdown: str) -&gt; str:
+        return render_markdown.render_document(
+            markdown.encode(&quot;utf-8&quot;), self.source, self.sources
+        ).decode(&quot;utf-8&quot;)
+
+    def test_renders_static_article_tables_code_and_unicode(self):
+        rendered = self.render(
+            &quot;# Café Guide\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n&quot;
+            &quot;```python\nprint('safe')\n```\n&quot;
+        )
+
+        self.assertIn('&lt;h1 id=&quot;café-guide&quot;&gt;Café Guide&lt;/h1&gt;', rendered)
+        self.assertIn(&quot;&lt;table&gt;&quot;, rendered)
+        self.assertIn('&lt;code class=&quot;language-python&quot;&gt;', rendered)
+        self.assertIn(&quot;print('safe')&quot;, rendered)
+        self.assertIn('&lt;main class=&quot;reader-main&quot;&gt;', rendered)
+
+    def test_rewrites_only_tracked_relative_markdown_links(self):
+        rendered = self.render(
+            &quot;[Other](other.md?view=1#part) &quot;
+            &quot;[Web](https://example.com/readme.md) &quot;
+            &quot;[Missing](missing.md) [Here](#part)\n&quot;
+        )
+
+        self.assertIn('href=&quot;other.htm?view=1#part&quot;', rendered)
+        self.assertIn('href=&quot;https://example.com/readme.md&quot;', rendered)
+        self.assertIn('href=&quot;missing.md&quot;', rendered)
+        self.assertIn('href=&quot;#part&quot;', rendered)
+
+    def test_escapes_raw_html_and_uses_no_remote_runtime_assets(self):
+        rendered = self.render(
+            &quot;# Safe\n\n&lt;script&gt;alert(1)&lt;/script&gt;\n&quot;
+            &quot;&lt;img src=x onerror=alert(2)&gt;\n&quot;
+        )
+
+        article = rendered.split('&lt;article id=&quot;reader-article&quot;&gt;', 1)[1]
+        self.assertNotIn(&quot;&lt;script&gt;&quot;, article)
+        self.assertIn(&quot;&amp;lt;script&amp;gt;&quot;, article)
+        self.assertIn(&quot;&amp;lt;img src=x onerror=alert(2)&amp;gt;&quot;, article)
+        self.assertNotIn(&quot;&lt;img src=x&quot;, article)
+        self.assertNotRegex(rendered, r'&lt;script[^&gt;]+src=')
+        self.assertNotRegex(rendered, r'&lt;link[^&gt;]+stylesheet')
+        self.assertNotIn(&quot;fetch(&quot;, rendered)
+        self.assertIn(&quot;connect-src &amp;#x27;none&amp;#x27;&quot;, rendered)
+
+    def test_heading_ids_are_unique_and_deterministic(self):
+        rendered = self.render(&quot;## Same\n\n## Same\n\n## !!!\n&quot;)
+
+        self.assertIn('id=&quot;same&quot;', rendered)
+        self.assertIn('id=&quot;same-2&quot;', rendered)
+        self.assertIn('id=&quot;section&quot;', rendered)
+        self.assertEqual(rendered, self.render(&quot;## Same\n\n## Same\n\n## !!!\n&quot;))
+
+    def test_embeds_source_identity_and_full_no_script_content(self):
+        source = b&quot;# Identity\n\nComplete article.\n&quot;
+        rendered = render_markdown.render_document(
+            source, self.source, self.sources
+        ).decode(&quot;utf-8&quot;)
+
+        self.assertIn('content=&quot;docs/guide.md&quot;', rendered)
+        self.assertIn(
+            f'content=&quot;{sha256(source).hexdigest()}&quot;', rendered
+        )
+        self.assertIn(&quot;Complete article.&quot;, rendered)
+        self.assertNotIn(&quot;document.write&quot;, rendered)
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the renderer tests and verify RED</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest \
+  tests.test_markdown_html.MarkdownRendererTest -v
+</code></pre>
+<p>Expected: import fails because <code>tools/render_markdown.py</code> does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement path rewriting, slugs, and token processing</strong></li>
+</ul>
+<p>Create <code>tools/render_markdown.py</code> with these public constants and helpers:</p>
+<pre><code class="language-python">from __future__ import annotations
+
+from argparse import ArgumentParser
+from hashlib import sha256
+from html import escape
+from pathlib import Path, PurePosixPath
+from urllib.parse import urlsplit, urlunsplit
+import os
+import posixpath
+import re
+import subprocess
+import sys
+import unicodedata
+
+from markdown_it import MarkdownIt
+from markdown_it.token import Token
+
+
+ROOT = Path(__file__).resolve().parents[1]
+GENERATOR = &quot;KIL Markdown Reader 1&quot;
+GENERATED_MARKER = '&lt;meta name=&quot;generator&quot; content=&quot;KIL Markdown Reader 1&quot;&gt;'
+
+
+def _slug(value: str, counts: dict[str, int]) -&gt; str:
+    normalized = unicodedata.normalize(&quot;NFKC&quot;, value).casefold()
+    base = re.sub(r&quot;[^\w]+&quot;, &quot;-&quot;, normalized, flags=re.UNICODE).strip(&quot;-&quot;)
+    base = base or &quot;section&quot;
+    counts[base] = counts.get(base, 0) + 1
+    return base if counts[base] == 1 else f&quot;{base}-{counts[base]}&quot;
+
+
+def _inline_text(token: Token) -&gt; str:
+    pieces: list[str] = []
+    for child in token.children or []:
+        if child.type in {&quot;text&quot;, &quot;code_inline&quot;, &quot;image&quot;}:
+            pieces.append(child.content)
+        elif child.type in {&quot;softbreak&quot;, &quot;hardbreak&quot;}:
+            pieces.append(&quot; &quot;)
+    return &quot;&quot;.join(pieces).strip()
+
+
+def rewrite_destination(
+    destination: str,
+    source: PurePosixPath,
+    sources: frozenset[PurePosixPath],
+) -&gt; str:
+    parsed = urlsplit(destination)
+    if parsed.scheme or parsed.netloc or not parsed.path:
+        return destination
+    if parsed.path.startswith(&quot;/&quot;):
+        return destination
+    normalized = posixpath.normpath(
+        (source.parent / PurePosixPath(parsed.path)).as_posix()
+    )
+    target = PurePosixPath(normalized)
+    if target.is_absolute() or &quot;..&quot; in target.parts:
+        raise ValueError(f&quot;link escapes repository: {destination}&quot;)
+    if target not in sources:
+        return destination
+    output = target.with_suffix(&quot;.htm&quot;)
+    relative = posixpath.relpath(output.as_posix(), source.parent.as_posix())
+    return urlunsplit((&quot;&quot;, &quot;&quot;, relative, parsed.query, parsed.fragment))
+
+
+def _prepare_tokens(
+    parser: MarkdownIt,
+    markdown: str,
+    source: PurePosixPath,
+    sources: frozenset[PurePosixPath],
+) -&gt; tuple[list[Token], list[tuple[int, str, str]]]:
+    tokens = parser.parse(markdown)
+    outline: list[tuple[int, str, str]] = []
+    counts: dict[str, int] = {}
+    for index, token in enumerate(tokens):
+        if token.type == &quot;heading_open&quot;:
+            inline = tokens[index + 1]
+            title = _inline_text(inline)
+            identifier = _slug(title, counts)
+            token.attrSet(&quot;id&quot;, identifier)
+            outline.append((int(token.tag[1]), identifier, title))
+        if token.type != &quot;inline&quot;:
+            continue
+        for child in token.children or []:
+            if child.type != &quot;link_open&quot;:
+                continue
+            href = child.attrGet(&quot;href&quot;)
+            if href is not None:
+                child.attrSet(
+                    &quot;href&quot;, rewrite_destination(href, source, sources)
+                )
+    return tokens, outline
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Implement the self-contained template and renderer</strong></li>
+</ul>
+<p>Add a compact, complete static template. The exact implementation may wrap the
+following constants for line length, but must preserve these declarations and
+behaviors verbatim:</p>
+<pre><code class="language-python">READER_CSS = r&quot;&quot;&quot;
+:root{color-scheme:light;--canvas:#eef1eb;--paper:#fffdf7;--ink:#18201d;
+--muted:#65716b;--line:#d8ddd4;--accent:#087f6b;--soft:#dff3ec;
+--code:#16211e;--code-ink:#d8f5e9}
+:root[data-theme=&quot;dark&quot;]{color-scheme:dark;--canvas:#101714;--paper:#17201c;
+--ink:#edf5f0;--muted:#a2b1aa;--line:#314039;--accent:#5bd7b8;
+--soft:#1d4439;--code:#0b100e;--code-ink:#baf0dc}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--canvas);
+color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}
+.reader-shell{min-height:100vh;display:grid;grid-template-columns:290px minmax(0,1fr)}
+.reader-rail{position:sticky;top:0;height:100vh;padding:28px 22px;border-right:1px solid
+var(--line);background:var(--paper);overflow:auto}.reader-rail a{color:var(--muted);
+text-decoration:none}.reader-rail a:hover,.reader-rail a.active{color:var(--accent)}
+.reader-search{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;
+background:var(--canvas);color:var(--ink)}.reader-outline{display:grid;gap:7px;margin-top:20px}
+.reader-outline .level-2{padding-left:12px}.reader-outline .level-3{padding-left:24px}
+.reader-stage{min-width:0;padding:42px clamp(24px,6vw,88px) 80px}.reader-paper{width:min(900px,100%);
+margin:auto;padding:clamp(34px,7vw,84px);border:1px solid var(--line);border-radius:18px;
+background:var(--paper)}.generated-note{padding:11px 14px;border:1px solid var(--line);
+border-radius:9px;background:var(--soft);color:var(--accent);font-size:.82rem}
+article{font-family:Georgia,'Times New Roman',serif;font-size:1.08rem;line-height:1.78}
+article h1,article h2,article h3{scroll-margin-top:24px;line-height:1.18}
+article h1{font-size:clamp(2.5rem,7vw,4.7rem)}article h2{margin-top:2.2em;border-bottom:1px solid var(--line)}
+article img{max-width:100%;height:auto}article table{display:block;max-width:100%;overflow:auto;
+border-collapse:collapse}th,td{padding:8px 10px;border:1px solid var(--line)}pre{overflow:auto;
+padding:18px 20px;border-radius:10px;background:var(--code);color:var(--code-ink)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}a{color:var(--accent)}mark{background:#ffe27a;color:#202018}
+.reader-actions{display:flex;gap:8px;margin-top:24px}.reader-actions button{padding:8px;border:1px solid
+var(--line);border-radius:8px;background:transparent;color:var(--muted)}
+@media(max-width:820px){.reader-shell{display:block}.reader-rail{position:static;width:auto;height:auto;
+border-right:0;border-bottom:1px solid var(--line)}.reader-stage{padding:18px 12px 50px}.reader-paper{padding:32px 22px}}
+@media print{.reader-rail,.generated-note{display:none}.reader-shell{display:block}.reader-stage,
+.reader-paper{width:auto;margin:0;padding:0;border:0}}
+&quot;&quot;&quot;.strip()
+
+READER_JS = r&quot;&quot;&quot;
+const root=document.documentElement;
+const article=document.getElementById('reader-article');
+const search=document.getElementById('reader-search');
+const original=article.innerHTML;
+document.getElementById('theme-toggle').addEventListener('click',()=&gt;{
+  root.dataset.theme=root.dataset.theme==='dark'?'':'dark';
+});
+document.getElementById('print-reader').addEventListener('click',()=&gt;window.print());
+search.addEventListener('input',()=&gt;{
+  const query=search.value.trim();article.innerHTML=original;
+  if(query.length&lt;2)return;
+  const walker=document.createTreeWalker(article,NodeFilter.SHOW_TEXT);const nodes=[];
+  while(walker.nextNode())nodes.push(walker.currentNode);
+  for(const node of nodes){const index=node.data.toLowerCase().indexOf(query.toLowerCase());
+    if(index&lt;0)continue;const hit=document.createElement('mark');
+    hit.textContent=node.data.slice(index,index+query.length);
+    node.replaceWith(document.createTextNode(node.data.slice(0,index)),hit,
+      document.createTextNode(node.data.slice(index+query.length)));}
+  article.querySelector('mark')?.scrollIntoView({block:'center'});
+});
+const links=[...document.querySelectorAll('.reader-outline a')];
+const observer=new IntersectionObserver(entries=&gt;{for(const entry of entries){if(!entry.isIntersecting)continue;
+  links.forEach(link=&gt;link.classList.toggle('active',link.hash==='#'+entry.target.id));}},
+  {rootMargin:'-15% 0px -70%'});
+document.querySelectorAll('#reader-article h1[id],#reader-article h2[id],#reader-article h3[id]')
+  .forEach(heading=&gt;observer.observe(heading));
+&quot;&quot;&quot;.strip()
+
+
+def render_document(
+    source_bytes: bytes,
+    source: PurePosixPath,
+    sources: frozenset[PurePosixPath],
+) -&gt; bytes:
+    markdown = source_bytes.decode(&quot;utf-8&quot;)
+    parser = MarkdownIt(&quot;commonmark&quot;, {&quot;html&quot;: False, &quot;typographer&quot;: False})
+    parser.enable(&quot;table&quot;)
+    tokens, outline = _prepare_tokens(parser, markdown, source, sources)
+    body = parser.renderer.render(tokens, parser.options, {})
+    title_entry = next((item for item in outline if item[0] == 1), None)
+    title_entry = title_entry or (outline[0] if outline else None)
+    title = title_entry[2] if title_entry else source.stem
+    outline_html = &quot;&quot;.join(
+        f'&lt;a class=&quot;level-{level}&quot; href=&quot;#{escape(identifier, quote=True)}&quot;&gt;'
+        f&quot;{escape(label)}&lt;/a&gt;&quot;
+        for level, identifier, label in outline
+        if level &lt;= 3
+    )
+    digest = sha256(source_bytes).hexdigest()
+    policy = (
+        &quot;default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; &quot;
+        &quot;script-src 'unsafe-inline'; font-src 'none'; connect-src 'none'; &quot;
+        &quot;object-src 'none'; base-uri 'none'; form-action 'none'&quot;
+    )
+    document = f&quot;&quot;&quot;&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;{escape(policy, quote=True)}&quot;&gt;
+{GENERATED_MARKER}
+&lt;meta name=&quot;source-path&quot; content=&quot;{escape(source.as_posix(), quote=True)}&quot;&gt;
+&lt;meta name=&quot;source-sha256&quot; content=&quot;{digest}&quot;&gt;
+&lt;title&gt;{escape(title)} — KIL Reader&lt;/title&gt;&lt;style&gt;{READER_CSS}&lt;/style&gt;&lt;/head&gt;
+&lt;body&gt;&lt;div class=&quot;reader-shell&quot;&gt;&lt;aside class=&quot;reader-rail&quot;&gt;
+&lt;strong&gt;{escape(title)}&lt;/strong&gt;
+&lt;input class=&quot;reader-search&quot; id=&quot;reader-search&quot; type=&quot;search&quot; placeholder=&quot;Find in this document…&quot;&gt;
+&lt;nav class=&quot;reader-outline&quot; aria-label=&quot;Document outline&quot;&gt;{outline_html}&lt;/nav&gt;
+&lt;div class=&quot;reader-actions&quot;&gt;&lt;button id=&quot;theme-toggle&quot; type=&quot;button&quot;&gt;Theme&lt;/button&gt;
+&lt;button id=&quot;print-reader&quot; type=&quot;button&quot;&gt;Print&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;
+&lt;main class=&quot;reader-main reader-stage&quot;&gt;&lt;div class=&quot;reader-paper&quot;&gt;
+&lt;p class=&quot;generated-note&quot;&gt;Generated from &lt;code&gt;{escape(source.as_posix())}&lt;/code&gt;
+({digest}). Edit the Markdown source, not this reader.&lt;/p&gt;
+&lt;article id=&quot;reader-article&quot;&gt;{body}&lt;/article&gt;&lt;/div&gt;&lt;/main&gt;&lt;/div&gt;
+&lt;script&gt;{READER_JS}&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;
+&quot;&quot;&quot;
+    return document.encode(&quot;utf-8&quot;)
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 5: Run the pure-renderer tests and verify GREEN</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest \
+  tests.test_markdown_html.MarkdownRendererTest -v
+</code></pre>
+<p>Expected: all renderer tests pass with no network or filesystem writes.</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit the pure renderer</strong></li>
+</ul>
+<pre><code class="language-bash">git add tools/render_markdown.py tests/test_markdown_html.py
+git commit -m &quot;feat: render self-contained Markdown readers&quot;
+</code></pre>
+<h2 id="task-3-add-safe-repository-discovery-write-and-check-modes">Task 3: Add safe repository discovery, write, and check modes</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tests/test_markdown_html.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tools/render_markdown.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Add failing discovery and lifecycle tests</strong></p>
+</li>
+</ul>
+<p>Add a temporary Git-repository test class. It initializes each repository with
+local test-only author configuration and uses <code>render_repository</code> directly:</p>
+<pre><code class="language-python">from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
+from tempfile import TemporaryDirectory
+import subprocess
+
+
+class RepositoryGenerationTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        subprocess.run([&quot;git&quot;, &quot;init&quot;, &quot;-q&quot;], cwd=self.root, check=True)
+        subprocess.run(
+            [&quot;git&quot;, &quot;config&quot;, &quot;user.email&quot;, &quot;test@example.invalid&quot;],
+            cwd=self.root,
+            check=True,
+        )
+        subprocess.run(
+            [&quot;git&quot;, &quot;config&quot;, &quot;user.name&quot;, &quot;KIL Test&quot;],
+            cwd=self.root,
+            check=True,
+        )
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def track(self, relative: str, content: str) -&gt; None:
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding=&quot;utf-8&quot;)
+        subprocess.run([&quot;git&quot;, &quot;add&quot;, &quot;--&quot;, relative], cwd=self.root, check=True)
+
+    def test_generates_exact_sibling_set_and_check_is_read_only(self):
+        self.track(&quot;README.md&quot;, &quot;# Root\n\n[Guide](docs/guide.md)\n&quot;)
+        self.track(&quot;docs/guide.md&quot;, &quot;# Guide\n&quot;)
+        before = {
+            path: (self.root / path).read_bytes()
+            for path in (&quot;README.md&quot;, &quot;docs/guide.md&quot;)
+        }
+
+        self.assertEqual(render_markdown.render_repository(self.root), [])
+        self.assertTrue((self.root / &quot;README.htm&quot;).is_file())
+        self.assertTrue((self.root / &quot;docs/guide.htm&quot;).is_file())
+        html_before = (self.root / &quot;README.htm&quot;).read_bytes()
+        self.assertEqual(
+            render_markdown.render_repository(self.root, check=True), []
+        )
+        self.assertEqual((self.root / &quot;README.htm&quot;).read_bytes(), html_before)
+        self.assertEqual(
+            {path: (self.root / path).read_bytes() for path in before}, before
+        )
+
+    def test_check_reports_missing_stale_and_unexpected_outputs(self):
+        self.track(&quot;README.md&quot;, &quot;# Root\n&quot;)
+        self.assertEqual(
+            render_markdown.render_repository(self.root, check=True),
+            [&quot;missing README.htm&quot;],
+        )
+        render_markdown.render_repository(self.root)
+        (self.root / &quot;README.htm&quot;).write_text(&quot;stale&quot;, encoding=&quot;utf-8&quot;)
+        self.assertEqual(
+            render_markdown.render_repository(self.root, check=True),
+            [&quot;stale README.htm&quot;],
+        )
+        render_markdown.render_repository(self.root)
+        (self.root / &quot;extra.htm&quot;).write_text(&quot;manual&quot;, encoding=&quot;utf-8&quot;)
+        self.assertEqual(
+            render_markdown.render_repository(self.root, check=True),
+            [&quot;unexpected extra.htm&quot;],
+        )
+
+    def test_render_failure_preserves_existing_output(self):
+        self.track(&quot;README.md&quot;, &quot;# Root\n&quot;)
+        render_markdown.render_repository(self.root)
+        output = self.root / &quot;README.htm&quot;
+        before = output.read_bytes()
+        (self.root / &quot;README.md&quot;).write_bytes(b&quot;\xff&quot;)
+
+        with self.assertRaises(UnicodeDecodeError):
+            render_markdown.render_repository(self.root)
+
+        self.assertEqual(output.read_bytes(), before)
+
+    def test_ignored_html_does_not_expand_the_publication_set(self):
+        self.track(&quot;README.md&quot;, &quot;# Root\n&quot;)
+        (self.root / &quot;.gitignore&quot;).write_text(&quot;ignored/\n&quot;, encoding=&quot;utf-8&quot;)
+        (self.root / &quot;ignored&quot;).mkdir()
+        (self.root / &quot;ignored/private.htm&quot;).write_text(&quot;private&quot;, encoding=&quot;utf-8&quot;)
+
+        render_markdown.render_repository(self.root)
+        self.assertEqual(
+            render_markdown.render_repository(self.root, check=True), []
+        )
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run lifecycle tests and verify RED</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest \
+  tests.test_markdown_html.RepositoryGenerationTest -v
+</code></pre>
+<p>Expected: failures report that <code>render_repository</code> is absent.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement Git-backed discovery and exact checking</strong></li>
+</ul>
+<p>Add these functions to <code>tools/render_markdown.py</code>:</p>
+<pre><code class="language-python">def _git_paths(root: Path, patterns: tuple[str, ...]) -&gt; tuple[PurePosixPath, ...]:
+    completed = subprocess.run(
+        [&quot;git&quot;, &quot;ls-files&quot;, &quot;--cached&quot;, &quot;--others&quot;, &quot;--exclude-standard&quot;, &quot;-z&quot;, &quot;--&quot;, *patterns],
+        cwd=root,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    values = []
+    for raw in completed.stdout.split(b&quot;\0&quot;):
+        if not raw:
+            continue
+        relative = PurePosixPath(raw.decode(&quot;utf-8&quot;))
+        if relative.is_absolute() or &quot;..&quot; in relative.parts:
+            raise ValueError(f&quot;unsafe repository path: {relative}&quot;)
+        values.append(relative)
+    if len(values) != len(set(values)):
+        raise ValueError(&quot;duplicate repository path&quot;)
+    return tuple(sorted(values, key=lambda value: value.as_posix().encode(&quot;utf-8&quot;)))
+
+
+def discover_sources(root: Path) -&gt; tuple[PurePosixPath, ...]:
+    tracked = subprocess.run(
+        [&quot;git&quot;, &quot;ls-files&quot;, &quot;-z&quot;, &quot;--&quot;, &quot;*.md&quot;],
+        cwd=root,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout
+    sources = tuple(
+        sorted(
+            (PurePosixPath(raw.decode(&quot;utf-8&quot;)) for raw in tracked.split(b&quot;\0&quot;) if raw),
+            key=lambda value: value.as_posix().encode(&quot;utf-8&quot;),
+        )
+    )
+    if len(sources) != len(set(sources)):
+        raise ValueError(&quot;duplicate Markdown source&quot;)
+    for source in sources:
+        path = root / source
+        if source.is_absolute() or &quot;..&quot; in source.parts or path.is_symlink() or not path.is_file():
+            raise ValueError(f&quot;unsafe Markdown source: {source}&quot;)
+        path.resolve().relative_to(root.resolve())
+    return sources
+
+
+def _visible_html(root: Path) -&gt; frozenset[PurePosixPath]:
+    return frozenset(_git_paths(root, (&quot;*.htm&quot;,)))
+
+
+def expected_documents(root: Path) -&gt; dict[PurePosixPath, bytes]:
+    sources = discover_sources(root)
+    source_set = frozenset(sources)
+    expected: dict[PurePosixPath, bytes] = {}
+    for source in sources:
+        output = source.with_suffix(&quot;.htm&quot;)
+        if output in expected:
+            raise ValueError(f&quot;output collision: {output}&quot;)
+        expected[output] = render_document((root / source).read_bytes(), source, source_set)
+    return expected
+
+
+def render_repository(root: Path = ROOT, check: bool = False) -&gt; list[str]:
+    expected = expected_documents(root)
+    visible = _visible_html(root)
+    problems = [f&quot;missing {path}&quot; for path in sorted(set(expected) - visible)]
+    problems.extend(f&quot;unexpected {path}&quot; for path in sorted(visible - set(expected)))
+    for relative, payload in expected.items():
+        path = root / relative
+        if path.is_file() and path.read_bytes() != payload:
+            problems.append(f&quot;stale {relative}&quot;)
+    problems = sorted(set(problems))
+    if check:
+        return problems
+    unexpected = sorted(visible - set(expected))
+    if unexpected:
+        return [f&quot;unexpected {path}&quot; for path in unexpected]
+
+    temporary: list[tuple[Path, Path]] = []
+    try:
+        for relative, payload in expected.items():
+            destination = root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            staging = destination.with_name(f&quot;.{destination.name}.{os.getpid()}.tmp&quot;)
+            staging.write_bytes(payload)
+            temporary.append((staging, destination))
+        for staging, destination in temporary:
+            os.replace(staging, destination)
+    finally:
+        for staging, _ in temporary:
+            if staging.exists():
+                staging.unlink()
+    return []
+</code></pre>
+<p>During implementation, use a dedicated <code>discover_sources</code> command rather than
+the broader <code>_git_paths</code> helper for <code>.md</code>: untracked Markdown is not part of the
+publication set, whereas generated untracked <code>.htm</code> must be visible immediately
+after generation. Keep that asymmetry covered by the tests.</p>
+<ul>
+<li>[ ] <strong>Step 4: Add the command-line entry point</strong></li>
+</ul>
+<pre><code class="language-python">def main(argv: list[str] | None = None) -&gt; int:
+    parser = ArgumentParser(description=&quot;Render tracked Markdown as sibling HTML readers&quot;)
+    parser.add_argument(&quot;--check&quot;, action=&quot;store_true&quot;, help=&quot;verify without writing&quot;)
+    arguments = parser.parse_args(argv)
+    try:
+        problems = render_repository(ROOT, check=arguments.check)
+    except (OSError, UnicodeError, ValueError, subprocess.CalledProcessError) as error:
+        print(f&quot;markdown reader error: {error}&quot;, file=sys.stderr)
+        return 1
+    if problems:
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        return 1
+    action = &quot;verified&quot; if arguments.check else &quot;generated&quot;
+    print(f&quot;{action} {len(discover_sources(ROOT))} Markdown readers&quot;)
+    return 0
+
+
+if __name__ == &quot;__main__&quot;:
+    raise SystemExit(main())
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 5: Run lifecycle and renderer tests and verify GREEN</strong></li>
+</ul>
+<pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest \
+  tests.test_markdown_html -v
+</code></pre>
+<p>Expected: all pure-renderer and repository-generation tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit lifecycle support</strong></li>
+</ul>
+<pre><code class="language-bash">git add tools/render_markdown.py tests/test_markdown_html.py
+git commit -m &quot;feat: generate and verify sibling HTML corpus&quot;
+</code></pre>
+<h2 id="task-4-wire-make-documentation-ci-and-the-real-corpus">Task 4: Wire Make, documentation, CI, and the real corpus</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>Makefile</code></p>
+</li>
+<li>
+<p>Modify: <code>README.md</code></p>
+</li>
+<li>
+<p>Modify: <code>tools/README.md</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_markdown_html.py</code></p>
+</li>
+<li>
+<p>Generate: every tracked <code>*.htm</code> sibling</p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Add failing real-repository contract tests</strong></p>
+</li>
+</ul>
+<p>Add to <code>tests/test_markdown_html.py</code>:</p>
+<pre><code class="language-python">class RepositoryPublicationContractTest(unittest.TestCase):
+    def test_every_tracked_markdown_has_exact_generated_sibling(self):
+        sources = render_markdown.discover_sources(ROOT)
+        expected = {source.with_suffix(&quot;.htm&quot;) for source in sources}
+        tracked_output = subprocess.run(
+            [&quot;git&quot;, &quot;ls-files&quot;, &quot;-z&quot;, &quot;--&quot;, &quot;*.htm&quot;],
+            cwd=ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+        tracked = {
+            PurePosixPath(raw.decode(&quot;utf-8&quot;))
+            for raw in tracked_output.split(b&quot;\0&quot;)
+            if raw
+        }
+
+        self.assertGreaterEqual(len(sources), 47)
+        self.assertEqual(tracked, expected)
+
+    def test_checked_in_readers_are_current_and_sources_are_unchanged(self):
+        before = {
+            source: (ROOT / source).read_bytes()
+            for source in render_markdown.discover_sources(ROOT)
+        }
+
+        self.assertEqual(
+            render_markdown.render_repository(ROOT, check=True), []
+        )
+        self.assertEqual(
+            {source: (ROOT / source).read_bytes() for source in before}, before
+        )
+
+    def test_byte_preserved_drafts_match_their_recorded_checksums(self):
+        recorded = dict(
+            reversed(line.split(&quot;  &quot;, 1))
+            for line in (
+                ROOT / &quot;research/source-material/SHA256SUMS&quot;
+            ).read_text().splitlines()
+            if line
+        )
+        for name in (
+            &quot;docs/drafts/kil-trust-decay-model.md&quot;,
+            &quot;docs/drafts/ambient-enforcement-vs-huggingface-incident.md&quot;,
+        ):
+            digest = sha256((ROOT / name).read_bytes()).hexdigest()
+            self.assertEqual(digest, recorded[name])
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the publication test and verify RED</strong></li>
+</ul>
+<pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest \
+  tests.test_markdown_html.RepositoryPublicationContractTest -v
+</code></pre>
+<p>Expected: failure because the sibling <code>.htm</code> corpus is not generated or tracked.</p>
+<ul>
+<li>[ ] <strong>Step 3: Add Make targets and documentation</strong></li>
+</ul>
+<p>Add to <code>.PHONY</code> and implement:</p>
+<pre><code class="language-make">docs-html: check-python
+	PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src $(PYTHON) tools/render_markdown.py
+
+docs-html-check: check-python
+	PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src $(PYTHON) tools/render_markdown.py --check
+</code></pre>
+<p>Change validation ordering to:</p>
+<pre><code class="language-make">validate: test docs-html-check
+	$(PYTHON) -c &quot;from pathlib import Path; assert '[project]' in Path('pyproject.toml').read_text()&quot;
+	git diff --check
+</code></pre>
+<p>Add this contract to the root README near bootstrap instructions:</p>
+<pre><code class="language-markdown">## Offline HTML readers
+
+Every tracked Markdown document has a generated `.htm` sibling in the same
+directory. Markdown is canonical; do not edit generated readers directly.
+
+```bash
+make docs-html
+make docs-html-check
+```
+
+The readers are self-contained and open directly from disk. Regeneration
+requires the `docs` optional dependency; `make validate` rejects missing,
+unexpected, or stale siblings.
+</code></pre>
+<p>Add the command, source-of-record rule, safe rendering policy, and <code>--check</code>
+behavior to <code>tools/README.md</code> using the same precise claims.</p>
+<ul>
+<li>[ ] <strong>Step 4: Generate and stage the exact corpus</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">make docs-html PYTHON=python
+git add -- '*.htm' '**/*.htm'
+</code></pre>
+<p>If shell glob behavior is inconsistent, stage from the generator's exact mapped
+path list rather than using a broad force-add. Do not add ignored visual
+companion or generated lab artifacts.</p>
+<p>Expected: one sibling is generated for every tracked Markdown source, including
+the design and this plan; no source Markdown byte changes as a consequence of
+generation.</p>
+<ul>
+<li>[ ] <strong>Step 5: Verify GREEN and deterministic regeneration</strong></li>
+</ul>
+<pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest \
+  tests.test_markdown_html -v
+make docs-html-check PYTHON=python
+make docs-html PYTHON=python
+git diff --exit-code -- '*.htm'
+</code></pre>
+<p>Expected: all tests pass, check mode reports the exact reader count, a second
+generation produces no tracked HTML changes, and Markdown source hashes remain
+unchanged except for explicitly authored README/tool/lineage documentation.</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit build integration and generated readers</strong></li>
+</ul>
+<pre><code class="language-bash">git add Makefile README.md tools/README.md tests/test_markdown_html.py \
+  .github/workflows/ci.yml pyproject.toml requirements-docs.txt
+git add -- '*.htm' '**/*.htm'
+git commit -m &quot;docs: publish self-contained HTML readers&quot;
+</code></pre>
+<h2 id="task-5-inspect-representative-readers-and-close-the-evidence-gate">Task 5: Inspect representative readers and close the evidence gate</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code></p>
+</li>
+<li>
+<p>Regenerate: <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Run complete automated verification</strong></p>
+</li>
+</ul>
+<pre><code class="language-bash">make validate PYTHON=python
+git diff --check
+</code></pre>
+<p>Expected: all unit tests, publication freshness, metadata, and diff-hygiene
+checks pass with zero failures.</p>
+<ul>
+<li>[ ] <strong>Step 2: Inspect representative documents</strong></li>
+</ul>
+<p>Open and inspect these local files at desktop and narrow viewport widths:</p>
+<pre><code class="language-text">README.htm
+docs/paper/kinetic-infrastructure.htm
+docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm
+docs/superpowers/plans/2026-08-29-v2-historical-replay.htm
+tests/fixtures/v3b1-public-bundle-v1/README.htm
+</code></pre>
+<p>Confirm full content without JavaScript, working outline fragments, responsive
+tables/code, local images, sibling <code>.htm</code> navigation, search, theme, print
+styles, source path/digest notice, and no automatic network request.</p>
+<ul>
+<li>[ ] <strong>Step 3: Obtain an independent code review</strong></li>
+</ul>
+<p>Ask a reviewer to compare the implementation against the approved design and
+inspect safety, deterministic regeneration, corpus coverage, source
+preservation, tests, and documentation. Resolve every Critical or Important
+finding and rerun focused plus complete verification. Record Minor findings and
+their disposition explicitly.</p>
+<ul>
+<li>[ ] <strong>Step 4: Append the implementation lineage entry and regenerate it</strong></li>
+</ul>
+<p>Record input, interpretation, confirmed implementation status, rationale,
+affected artifacts, exact test count, representative visual inspection,
+review disposition, unresolved questions, and the final push gate in
+<code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code>. Then run:</p>
+<pre><code class="language-bash">make docs-html PYTHON=python
+make docs-html-check PYTHON=python
+</code></pre>
+<p>The updated lineage Markdown and HTML digest must agree.</p>
+<ul>
+<li>[ ] <strong>Step 5: Run final clean-state verification and commit evidence</strong></li>
+</ul>
+<pre><code class="language-bash">make validate PYTHON=python
+git diff --check
+git status --short
+git add docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md \
+  docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm
+git commit -m &quot;docs: record HTML reader verification&quot;
+</code></pre>
+<p>Expected: the complete suite passes, only intended files are committed, and the
+working tree is clean after the evidence commit.</p>
+<ul>
+<li>[ ] <strong>Step 6: Push once and verify exact synchronization</strong></li>
+</ul>
+<pre><code class="language-bash">git push -u origin codex/self-contained-html-readers
+git rev-parse HEAD
+git rev-parse '@{upstream}'
+git ls-remote --heads origin codex/self-contained-html-readers
+</code></pre>
+<p>Expected: all three commands resolve to the same full commit hash. Do not create
+a pull request, merge, comment on issues, close issues, or start a KIL lab
+service unless the maintainer separately requests it.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

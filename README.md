@@ -126,6 +126,30 @@ make test
 This installs the pinned V3A cryptography and Markdown reader libraries. No
 cluster dependency is installed or downloaded by the bootstrap.
 
+## Offline HTML readers
+
+Every tracked file whose final suffix is lowercase `.md` has a generated
+`.htm` sibling in the same directory. Markdown is the canonical source; do not
+edit generated readers directly.
+
+```bash
+make docs-html
+make docs-html-check
+```
+
+The generated readers embed their rendered article, styles, and bounded reader
+controls, so they open directly from disk without a hosted runtime. Raw HTML in
+Markdown is escaped, links to tracked relative Markdown sources are rewritten
+to their reader siblings, and the embedded content security policy blocks
+remote content and network APIs. A local relative image reference remains a
+local reference rather than becoming an embedded binary, so its image file
+must remain available beside the repository content.
+
+Regeneration requires the `docs` optional dependency. `make docs-html-check`
+is read-only and reports missing, unexpected, or stale readers; `make validate`
+runs that check and rejects publication drift. Adding or removing a tracked
+lowercase-`.md` file dynamically changes the required sibling set.
+
 The V3B-1 tool bootstrap and preflight are separate, opt-in commands:
 
 ```bash

@@ -6,4 +6,11 @@ It is not historical evidence and it is not a live run. Its sole purpose is to
 freeze one complete `kil.v3b1-public-manifest.v1` presenter bundle for legacy
 verifier acceptance tests.
 
+The repository copy of the frozen bundle also contains `summary.htm` solely as
+the generated publication partner of its canonical `summary.md`. That reader is
+not runtime evidence, is not listed in the frozen manifest or `SHA256SUMS`, and
+does not relax the production verifier's closed artifact set. Tests project the
+repository fixture into the exact runtime bundle by copying it and removing
+only that root-relative `summary.htm` before verification.
+
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

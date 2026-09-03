@@ -7476,3 +7476,97 @@ visual review, remain pending.
 then proceed only to the separately scoped Task 4 integration work.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-143 — 2026-09-03 — Repository-wide offline-reader publication contract
+
+**Input:** The user approved publishing a self-contained `.htm` partner beside
+every current Markdown document and confirmed the permanent rule that every new
+tracked lowercase-final-suffix `.md` file must receive the same partner.
+
+**Interpretation:** Git-tracked Markdown is canonical. Each tracked path ending
+in lowercase `.md` dynamically maps to exactly one tracked same-directory path
+with only its final suffix changed to `.htm`. The generated reader embeds its
+article, styles, and bounded controls and requires no hosted runtime. Local
+relative images remain local file references rather than embedded binaries;
+remote content and network APIs remain blocked by the reader content security
+policy.
+
+**Decision status:** Confirmed Task 4 implementation. Make exposes generation
+and read-only checking, validation depends on the check, repository guidance
+states the source-of-record and safe-rendering rules, and the initial real-corpus
+gate passed with 47 tracked sources and 47 exact staged readers. Final
+regeneration after this entry and complete-suite verification are the remaining
+Task 4 evidence steps. No laboratory service was started, and no push or merge
+occurred.
+
+**Rationale:** Deriving both generation and validation from the Git index makes
+the one-to-one rule apply without maintaining a hand-written inventory. A
+committed offline reader gives people without a Markdown converter a directly
+openable view while preserving Markdown as the reviewable authority. Reporting
+missing, stale, and unexpected readers in read-only mode prevents silent
+publication drift. The reader beside the frozen V3B fixture's `summary.md` is
+repository publication metadata, not runtime evidence: fixture test scaffolding
+projects it out while the production verifier continues to reject every
+undeclared artifact.
+
+**Affected artifacts:** `Makefile`, `README.md`, `tools/README.md`,
+`tests/test_markdown_html.py`, `tests/test_v3b1_local_envoy.py`, this lineage,
+and the exact generated `.htm` siblings of all 47 tracked Markdown sources.
+
+**Unresolved questions:** Task 5 browser interaction and representative visual
+inspection remain pending, followed by final repository synchronization with
+the remote Git branch.
+
+**Next gate:** Regenerate after this lineage entry, prove deterministic output
+and the complete validation suite, commit Task 4, then perform the Task 5
+browser and visual evidence review before final synchronization.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-144 — 2026-09-03 — Reader publication and frozen-fixture projection corrections
+
+**Input:** Task 4 review found that the frozen V3B compatibility fixture used a
+recursive basename ignore in one copy path, another copy path could reject the
+generated `summary.htm` before reaching its intended injected-driver check, and
+the publication test imposed an unnecessary minimum count of 47 Markdown
+sources.
+
+**Interpretation:** The repository fixture contains `summary.htm` only because
+the permanent publication invariant maps every tracked lowercase-final-suffix
+`.md` to an exact same-directory `.htm`. Runtime evidence remains the manifest-
+and-checksum-bound closed bundle. Every test that copies this frozen fixture now
+uses one projection helper: it copies the repository directory, then removes
+only the root-relative `summary.htm`. The V1 driver rejection test verifies this
+projected baseline before injecting `raw/drivers`, so its failure is causally
+bound to the injected artifact. Exact source/output set equality enforces the
+dynamic publication invariant without freezing a repository-size floor.
+
+**Decision status:** Confirmed additive Task 4 correction. The causal baseline
+assertion was observed RED against the earlier direct copy and then GREEN after
+the exact projection helper. Focused compatibility, injected-driver, generation,
+and dynamic publication tests pass. Final regeneration, deterministic checking,
+and complete-suite validation remain before the amended commit. Production V3B
+verification semantics and frozen evidence bytes and checksums are unchanged;
+no laboratory service, push, or merge occurred.
+
+**Rationale:** Recursive basename exclusion could hide a future nested artifact
+with the same name, while direct copying lets repository publication metadata
+mask the actual rejection under test. One exact root-relative projection keeps
+the repository accessibility requirement separate from runtime evidence
+closure. Set equality already adapts to valid paired additions and removals, so
+a numeric source floor adds brittleness without strengthening the invariant.
+
+**Affected artifacts:** `tests/test_v3b1_local_envoy.py`,
+`tests/test_markdown_html.py`,
+`tests/fixtures/v3b1-public-bundle-v1/README.md`, this lineage, and the refreshed
+HTML partners for the fixture README and lineage.
+
+**Unresolved questions:** Task 5 browser interaction and representative visual
+inspection remain pending, followed by final synchronization of the verified
+branch with remote Git.
+
+**Next gate:** Regenerate the complete corpus after these Markdown changes,
+prove exact pairs, freshness, deterministic second generation, focused tests,
+and full validation, then amend the Task 4 commit and proceed to Task 5 review.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

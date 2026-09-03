@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V2 historical-replay live progress</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/lab/V2-PROGRESS.md">
+<meta name="source-sha256" content="376e235d83242046191b883bc82551751e9a8605d47a75fd096b989a234ef154">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/lab/V2-PROGRESS.md</code> (<code>376e235d83242046191b883bc82551751e9a8605d47a75fd096b989a234ef154</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">V2 historical-replay live progress</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/lab/V2-PROGRESS.md</code> (<code>376e235d83242046191b883bc82551751e9a8605d47a75fd096b989a234ef154</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v2-historical-replay-live-progress">V2 historical-replay live progress</a></li><li class="level-2"><a href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a href="#first-modeled-report">First modeled report</a></li><li class="level-2"><a href="#task-4-verification-note">Task 4 verification note</a></li><li class="level-2"><a href="#whole-v2-review">Whole-V2 review</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v2-historical-replay-live-progress" href="#v2-historical-replay-live-progress">V2 historical-replay live progress</a></li><li class="level-2"><a data-section-id="evidence-boundary" href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a data-section-id="first-modeled-report" href="#first-modeled-report">First modeled report</a></li><li class="level-2"><a data-section-id="task-4-verification-note" href="#task-4-verification-note">Task 4 verification note</a></li><li class="level-2"><a data-section-id="whole-v2-review" href="#whole-v2-review">Whole-V2 review</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="v2-historical-replay-live-progress">V2 historical-replay live progress</h1>
+<p><strong>Branch:</strong> <code>feature/v2-historical-replay</code></p>
+<p><strong>Started:</strong> 2026-08-29</p>
+<p><strong>Base:</strong> <code>main</code> at <code>261474c</code></p>
+<p><strong>Runtime:</strong> bundled Python 3.12
+<strong>Baseline:</strong> 79 tests passed from the primary checkout with managed worktrees present</p>
+<p>This ledger is updated at every RED, GREEN, and review checkpoint. A passing
+replay test validates deterministic software behavior only. Historical
+counterfactual decisions remain <strong>modeled</strong>, never validated.</p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>RED observed</th>
+<th>GREEN observed</th>
+<th>Review</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0 — V2 gate and runtime baseline</td>
+<td>n/a</td>
+<td>primary checkout: 79 tests passed; five source hashes passed</td>
+<td>complete</td>
+<td>completed</td>
+</tr>
+<tr>
+<td>1 — scenario schema and loader</td>
+<td>expected RED: missing <code>kil.scenario</code>; UTF-8 boundary regression then failed once</td>
+<td>focused 10 tests; full 89 tests; five source hashes and schema JSON parse passed</td>
+<td>plan and self-review approved</td>
+<td>completed</td>
+</tr>
+<tr>
+<td>2 — common-stream paired replay</td>
+<td>expected RED: <code>ModuleNotFoundError: kil.replay</code>, exit 1</td>
+<td>focused 5 tests; full 94 tests; five source hashes passed</td>
+<td>plan and self-review approved</td>
+<td>completed</td>
+</tr>
+<tr>
+<td>3 — deterministic run bundles</td>
+<td>expected RED: <code>ModuleNotFoundError: kil.run_bundle</code>, exit 1</td>
+<td>focused 5 tests; full 99 tests; five source hashes passed</td>
+<td>plan and self-review approved</td>
+<td>completed</td>
+</tr>
+<tr>
+<td>4 — eight-phase Hugging Face scenario</td>
+<td>expected RED: scenario file absent; exit 1</td>
+<td>focused 4 tests; full 103 tests; JSON parse and five source hashes passed</td>
+<td>plan and self-review approved</td>
+<td>completed</td>
+</tr>
+<tr>
+<td>5 — replay CLI and modeled report</td>
+<td>expected RED: missing <code>tools/replay.py</code>; subprocess exit 2</td>
+<td>focused 1 CLI test and 25 V2 tests; full 104 tests; six bundle hashes and five source hashes passed</td>
+<td>plan and self-review approved</td>
+<td>completed</td>
+</tr>
+</tbody>
+</table>
+<h2 id="evidence-boundary">Evidence boundary</h2>
+<p>Observed incident facts must carry primary-source references. Synthetic KTP
+state, local signals, control assumptions, and every replay decision must carry
+modeled provenance and rationale. The word <strong>validated</strong> is reserved for behavior
+reproduced under an approved validation protocol; V2 historical replay does not
+meet that threshold.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+<h2 id="first-modeled-report">First modeled report</h2>
+<ul>
+<li>Run ID: <code>1ab32d9f4ea27624</code></li>
+<li>Scenario: <code>hf-july-2026-eight-phase</code></li>
+<li>Implementation: <code>e803cd144d785c13d07f9d96670a5c52e796314f</code></li>
+<li>Profile: <code>weighted-diagonal-v0-modeled</code></li>
+<li>Events: 8</li>
+<li>Modeled credential-policy permits: 8</li>
+<li>Signed-state-only denials: 8; unreachable descendants: 7</li>
+<li>Signed-plus-local-reduction denials: 8; unreachable descendants: 7</li>
+<li>Integrity: all six public-artifact SHA-256 entries verified</li>
+<li>Persistent local path: <code>artifacts/generated/v2-historical-replay/1ab32d9f4ea27624</code></li>
+</ul>
+<p>This report is local generated evidence and is intentionally excluded from Git
+by <code>artifacts/generated/</code>. Its manifest, decisions, and metrics are modeled,
+not validated.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+<h2 id="task-4-verification-note">Task 4 verification note</h2>
+<p>The first post-write focused invocation omitted <code>PYTHONPATH=src</code> and failed at
+import; a subsequent generic <code>make validate</code> selected system Python 3.9 and was
+correctly rejected by the repository's Python 3.11 minimum. Neither was a code
+failure. The declared bundled Python 3.12 command then passed all four focused
+tests and the complete 103-test suite. The replay smoke check shows eight
+modeled baseline permits, a phase-1 KIL denial in both KIL modes, and all seven
+dependent KIL paths marked unreachable while retaining their computed modeled
+decisions.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+<h2 id="whole-v2-review">Whole-V2 review</h2>
+<p>The complete <code>main...feature/v2-historical-replay</code> diff was checked against all
+five implementation tasks and the V2 exit criteria. Review corrected four
+committed Markdown hard-break spaces that caused a branch-wide
+<code>git diff --check</code> failure, narrowed the README definition of <strong>validated</strong> to
+the approved local-cluster protocol, and renamed source “anchors” as
+section-level labels because they are audit locators rather than guaranteed URL
+fragments.</p>
+<p>The exact first report was independently regenerated from the same scenario,
+profile, and implementation commit into a separate temporary root. Its run ID
+and all seven files were byte-identical, and all six public-artifact hashes
+verified. The approved first profile denies at the signed-state gate in both KIL
+modes; it therefore demonstrates deterministic paired execution and causal
+cutoff, but it does not yet demonstrate an action permitted by signed state and
+then reduced by local evidence. That is a declared follow-on calibration case,
+not a claim made by V2.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

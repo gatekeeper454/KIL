@@ -1,0 +1,978 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V1 Deterministic KIL Kernel Implementation Plan</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/plans/2026-08-29-v1-deterministic-kernel.md">
+<meta name="source-sha256" content="391247942ff1956a28f05c74a76f89ed1f77e251a53e35aeb4f3d6586e369867">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-08-29-v1-deterministic-kernel.md</code> (<code>391247942ff1956a28f05c74a76f89ed1f77e251a53e35aeb4f3d6586e369867</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">V1 Deterministic KIL Kernel Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-08-29-v1-deterministic-kernel.md</code> (<code>391247942ff1956a28f05c74a76f89ed1f77e251a53e35aeb4f3d6586e369867</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v1-deterministic-kil-kernel-implementation-plan">V1 Deterministic KIL Kernel Implementation Plan</a></li><li class="level-3"><a href="#task-0-pin-the-supported-local-python-runtime">Task 0: Pin the supported local Python runtime</a></li><li class="level-3"><a href="#task-1-evidence-classification-contract">Task 1: Evidence classification contract</a></li><li class="level-3"><a href="#task-2-deterministic-trust-decay-arithmetic">Task 2: Deterministic trust-decay arithmetic</a></li><li class="level-3"><a href="#task-3-immutable-decision-domain-records">Task 3: Immutable decision-domain records</a></li><li class="level-3"><a href="#task-4-deterministic-decision-engine">Task 4: Deterministic decision engine</a></li><li class="level-3"><a href="#task-5-canonical-decision-serialization-and-invariant-sweep">Task 5: Canonical decision serialization and invariant sweep</a></li><li class="level-2"><a href="#v1-exit-criteria">V1 exit criteria</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v1-deterministic-kil-kernel-implementation-plan" href="#v1-deterministic-kil-kernel-implementation-plan">V1 Deterministic KIL Kernel Implementation Plan</a></li><li class="level-3"><a data-section-id="task-0-pin-the-supported-local-python-runtime" href="#task-0-pin-the-supported-local-python-runtime">Task 0: Pin the supported local Python runtime</a></li><li class="level-3"><a data-section-id="task-1-evidence-classification-contract" href="#task-1-evidence-classification-contract">Task 1: Evidence classification contract</a></li><li class="level-3"><a data-section-id="task-2-deterministic-trust-decay-arithmetic" href="#task-2-deterministic-trust-decay-arithmetic">Task 2: Deterministic trust-decay arithmetic</a></li><li class="level-3"><a data-section-id="task-3-immutable-decision-domain-records" href="#task-3-immutable-decision-domain-records">Task 3: Immutable decision-domain records</a></li><li class="level-3"><a data-section-id="task-4-deterministic-decision-engine" href="#task-4-deterministic-decision-engine">Task 4: Deterministic decision engine</a></li><li class="level-3"><a data-section-id="task-5-canonical-decision-serialization-and-invariant-sweep" href="#task-5-canonical-decision-serialization-and-invariant-sweep">Task 5: Canonical decision serialization and invariant sweep</a></li><li class="level-2"><a data-section-id="v1-exit-criteria" href="#v1-exit-criteria">V1 exit criteria</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="v1-deterministic-kil-kernel-implementation-plan">V1 Deterministic KIL Kernel Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Build and validate the dependency-free deterministic decision kernel for KIL's signed-state-only and signed-plus-local-reduction modes.</p>
+<p><strong>Architecture:</strong> The kernel separates evidence labels, deterministic decimal arithmetic, immutable domain records, and decision evaluation. It consumes an already authenticated composite-state result through an algorithm-neutral boundary; cryptographic encoding is a later KTP compatibility gate. The fast loop can reduce but never replenish authority.</p>
+<p><strong>Tech Stack:</strong> Python 3.12 standard library, frozen dataclasses, <code>Decimal</code>, <code>Enum</code>, canonical JSON, SHA-256, <code>unittest</code>.</p>
+<hr />
+<h3 id="task-0-pin-the-supported-local-python-runtime">Task 0: Pin the supported local Python runtime</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>Makefile</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Verify the bundled runtime</strong></p>
+</li>
+</ul>
+<p>Run: <code>'/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' --version</code></p>
+<p>Expected: Python 3.12.x. Stop if the reported version is below the project's
+Python 3.11 minimum.</p>
+<ul>
+<li>[ ] <strong>Step 2: Parameterize the Makefile</strong></li>
+</ul>
+<p>Add <code>PYTHON ?= python3</code> above the targets. Replace both executable occurrences
+of <code>python3</code> with <code>$(PYTHON)</code>:</p>
+<pre><code class="language-make">PYTHON ?= python3
+
+test:
+	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests -v
+
+validate: test
+	$(PYTHON) -c &quot;from pathlib import Path; assert '[project]' in Path('pyproject.toml').read_text()&quot;
+	git diff --check
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Verify the existing baseline through Python 3.12</strong></li>
+</ul>
+<p>Run: <code>make validate PYTHON='/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3'</code></p>
+<p>Expected: the existing 11 tests pass and <code>git diff --check</code> reports no errors.</p>
+<ul>
+<li>[ ] <strong>Step 4: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add Makefile
+git commit -m &quot;Parameterize the KIL Python runtime&quot;
+</code></pre>
+<h3 id="task-1-evidence-classification-contract">Task 1: Evidence classification contract</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>src/kil/evidence.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_evidence.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-python">from decimal import Decimal
+import unittest
+
+from kil.evidence import EvidenceClass, LabeledValue
+
+
+class EvidenceTest(unittest.TestCase):
+    def test_observed_requires_source_reference(self):
+        with self.assertRaisesRegex(ValueError, &quot;source_ref&quot;):
+            LabeledValue(Decimal(&quot;1&quot;), EvidenceClass.OBSERVED)
+
+    def test_modeled_requires_rationale(self):
+        with self.assertRaisesRegex(ValueError, &quot;rationale&quot;):
+            LabeledValue(Decimal(&quot;0.9&quot;), EvidenceClass.MODELED)
+
+    def test_validated_requires_run_id(self):
+        with self.assertRaisesRegex(ValueError, &quot;run_id&quot;):
+            LabeledValue(Decimal(&quot;0&quot;), EvidenceClass.VALIDATED)
+
+    def test_complete_labels_are_immutable(self):
+        value = LabeledValue(
+            Decimal(&quot;0.9&quot;),
+            EvidenceClass.MODELED,
+            rationale=&quot;synthetic origin-distance feature&quot;,
+        )
+        with self.assertRaises(Exception):
+            value.value = Decimal(&quot;0&quot;)
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the tests and verify RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_evidence -v</code></p>
+<p>Expected: import failure because <code>kil.evidence</code> does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the evidence types</strong></li>
+</ul>
+<pre><code class="language-python">from dataclasses import dataclass
+from enum import Enum
+from typing import Generic, TypeVar
+
+
+T = TypeVar(&quot;T&quot;)
+
+
+class EvidenceClass(str, Enum):
+    OBSERVED = &quot;observed&quot;
+    MODELED = &quot;modeled&quot;
+    VALIDATED = &quot;validated&quot;
+
+
+@dataclass(frozen=True, slots=True)
+class LabeledValue(Generic[T]):
+    value: T
+    evidence_class: EvidenceClass
+    source_ref: str | None = None
+    rationale: str | None = None
+    run_id: str | None = None
+
+    def __post_init__(self) -&gt; None:
+        if self.evidence_class is EvidenceClass.OBSERVED and not self.source_ref:
+            raise ValueError(&quot;observed evidence requires source_ref&quot;)
+        if self.evidence_class is EvidenceClass.MODELED and not self.rationale:
+            raise ValueError(&quot;modeled evidence requires rationale&quot;)
+        if self.evidence_class is EvidenceClass.VALIDATED and not self.run_id:
+            raise ValueError(&quot;validated evidence requires run_id&quot;)
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run the focused tests and verify GREEN</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_evidence -v</code></p>
+<p>Expected: 4 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/evidence.py tests/test_evidence.py
+git commit -m &quot;Add KIL evidence classification contract&quot;
+</code></pre>
+<h3 id="task-2-deterministic-trust-decay-arithmetic">Task 2: Deterministic trust-decay arithmetic</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>src/kil/decay.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_decay.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write the failing arithmetic tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-python">from decimal import Decimal
+import unittest
+
+from kil.decay import (
+    local_effective_charge,
+    logistic_squash,
+    passive_decay,
+    superlinear_loss,
+    weighted_diagonal_distance,
+)
+
+
+class DecayTest(unittest.TestCase):
+    def test_identical_feature_vector_has_zero_distance(self):
+        result = weighted_diagonal_distance(
+            {&quot;origin&quot;: Decimal(&quot;1&quot;)},
+            {&quot;origin&quot;: Decimal(&quot;1&quot;)},
+            {&quot;origin&quot;: Decimal(&quot;2&quot;)},
+            {&quot;origin&quot;: Decimal(&quot;1&quot;)},
+        )
+        self.assertEqual(result, Decimal(&quot;0&quot;))
+
+    def test_zero_scale_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, &quot;scale&quot;):
+            weighted_diagonal_distance(
+                {&quot;origin&quot;: Decimal(&quot;1&quot;)},
+                {&quot;origin&quot;: Decimal(&quot;0&quot;)},
+                {&quot;origin&quot;: Decimal(&quot;0&quot;)},
+                {&quot;origin&quot;: Decimal(&quot;1&quot;)},
+            )
+
+    def test_logistic_squash_is_bounded(self):
+        self.assertEqual(logistic_squash(Decimal(&quot;0&quot;), Decimal(&quot;1&quot;)), Decimal(&quot;0&quot;))
+        self.assertLess(logistic_squash(Decimal(&quot;10&quot;), Decimal(&quot;1&quot;)), Decimal(&quot;1&quot;))
+
+    def test_passive_decay_never_increases_charge(self):
+        result = passive_decay(Decimal(&quot;80&quot;), Decimal(&quot;0.1&quot;), Decimal(&quot;5&quot;))
+        self.assertGreaterEqual(result, Decimal(&quot;0&quot;))
+        self.assertLess(result, Decimal(&quot;80&quot;))
+
+    def test_loss_is_zero_inside_normal_band_and_superlinear_outside(self):
+        self.assertEqual(
+            superlinear_loss(Decimal(&quot;0.2&quot;), Decimal(&quot;0.25&quot;), Decimal(&quot;25&quot;), 3),
+            Decimal(&quot;0&quot;),
+        )
+        first = superlinear_loss(Decimal(&quot;0.5&quot;), Decimal(&quot;0.25&quot;), Decimal(&quot;25&quot;), 3)
+        second = superlinear_loss(Decimal(&quot;1.0&quot;), Decimal(&quot;0.25&quot;), Decimal(&quot;25&quot;), 3)
+        self.assertEqual(second, first * 8)
+
+    def test_local_effective_charge_clamps_and_never_increases(self):
+        self.assertEqual(
+            local_effective_charge(Decimal(&quot;20&quot;), Decimal(&quot;50&quot;), Decimal(&quot;5&quot;), Decimal(&quot;100&quot;)),
+            Decimal(&quot;0&quot;),
+        )
+        self.assertEqual(
+            local_effective_charge(Decimal(&quot;20&quot;), Decimal(&quot;0&quot;), Decimal(&quot;0&quot;), Decimal(&quot;100&quot;)),
+            Decimal(&quot;20&quot;),
+        )
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the tests and verify RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_decay -v</code></p>
+<p>Expected: import failure because <code>kil.decay</code> does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the deterministic arithmetic</strong></li>
+</ul>
+<pre><code class="language-python">from decimal import Decimal, localcontext
+from collections.abc import Mapping
+
+
+ZERO = Decimal(&quot;0&quot;)
+ONE = Decimal(&quot;1&quot;)
+
+
+def weighted_diagonal_distance(
+    features: Mapping[str, Decimal],
+    means: Mapping[str, Decimal],
+    scales: Mapping[str, Decimal],
+    weights: Mapping[str, Decimal],
+) -&gt; Decimal:
+    keys = set(features)
+    if keys != set(means) or keys != set(scales) or keys != set(weights):
+        raise ValueError(&quot;feature, mean, scale, and weight keys must match&quot;)
+    total = ZERO
+    for key in sorted(keys):
+        if scales[key] &lt;= ZERO:
+            raise ValueError(&quot;scale must be greater than zero&quot;)
+        if weights[key] &lt; ZERO:
+            raise ValueError(&quot;weight must be non-negative&quot;)
+        standardized = (features[key] - means[key]) / scales[key]
+        total += weights[key] * standardized * standardized
+    return total.sqrt()
+
+
+def logistic_squash(raw: Decimal, k: Decimal) -&gt; Decimal:
+    if raw &lt; ZERO or k &lt;= ZERO:
+        raise ValueError(&quot;raw must be non-negative and k must be positive&quot;)
+    with localcontext() as context:
+        context.prec = 28
+        return (Decimal(&quot;2&quot;) / (ONE + (-k * raw).exp())) - ONE
+
+
+def passive_decay(charge: Decimal, decay_rate: Decimal, elapsed: Decimal) -&gt; Decimal:
+    if charge &lt; ZERO or decay_rate &lt; ZERO or elapsed &lt; ZERO:
+        raise ValueError(&quot;charge, decay_rate, and elapsed must be non-negative&quot;)
+    with localcontext() as context:
+        context.prec = 28
+        return charge * (-decay_rate * elapsed).exp()
+
+
+def superlinear_loss(
+    divergence: Decimal,
+    threshold: Decimal,
+    loss_rate: Decimal,
+    exponent: int,
+) -&gt; Decimal:
+    if not ZERO &lt;= divergence &lt;= ONE:
+        raise ValueError(&quot;divergence must be in [0,1]&quot;)
+    if threshold &lt;= ZERO or loss_rate &lt; ZERO or exponent &lt;= 1:
+        raise ValueError(&quot;threshold and loss profile are invalid&quot;)
+    if divergence &lt;= threshold:
+        return ZERO
+    return loss_rate * (divergence / threshold) ** exponent
+
+
+def local_effective_charge(
+    decayed_charge: Decimal,
+    loss: Decimal,
+    coupled_loss: Decimal,
+    maximum: Decimal,
+) -&gt; Decimal:
+    if min(decayed_charge, loss, coupled_loss, maximum) &lt; ZERO:
+        raise ValueError(&quot;charge inputs must be non-negative&quot;)
+    return min(maximum, max(ZERO, decayed_charge - loss - coupled_loss))
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run the focused tests and verify GREEN</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_decay -v</code></p>
+<p>Expected: 6 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/decay.py tests/test_decay.py
+git commit -m &quot;Implement deterministic trust-decay arithmetic&quot;
+</code></pre>
+<h3 id="task-3-immutable-decision-domain-records">Task 3: Immutable decision-domain records</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>src/kil/domain.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_domain.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write the failing domain tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-python">from decimal import Decimal
+import unittest
+
+from kil.domain import (
+    ActionRequest,
+    CompositeState,
+    EnforcementMode,
+    LocalEvidence,
+)
+
+
+class DomainTest(unittest.TestCase):
+    def test_composite_state_rejects_invalid_validity_window(self):
+        with self.assertRaisesRegex(ValueError, &quot;validity&quot;):
+            CompositeState(
+                state_id=&quot;q-1&quot;, identity=&quot;worker&quot;, authority_class=&quot;admin&quot;,
+                issued_at_s=10, not_before_s=20, expires_at_s=20,
+                charge=Decimal(&quot;50&quot;), threshold=Decimal(&quot;40&quot;),
+                history_count=5, minimum_history=2, authentic=True,
+                veto_clear=True, envelope_allows=True,
+                decay_rate=Decimal(&quot;0.1&quot;), maximum_charge=Decimal(&quot;100&quot;),
+            )
+
+    def test_local_evidence_rejects_unbounded_divergence(self):
+        with self.assertRaisesRegex(ValueError, &quot;divergence&quot;):
+            LocalEvidence(Decimal(&quot;1.1&quot;), Decimal(&quot;0&quot;), True)
+
+    def test_request_and_mode_values_are_stable(self):
+        request = ActionRequest(&quot;r-1&quot;, &quot;worker&quot;, &quot;admin&quot;, 30)
+        self.assertEqual(request.request_id, &quot;r-1&quot;)
+        self.assertEqual(EnforcementMode.SIGNED_STATE_ONLY.value, &quot;signed_state_only&quot;)
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the tests and verify RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_domain -v</code></p>
+<p>Expected: import failure because <code>kil.domain</code> does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the records and enums</strong></li>
+</ul>
+<pre><code class="language-python">from dataclasses import dataclass
+from decimal import Decimal
+from enum import Enum
+
+
+class EnforcementMode(str, Enum):
+    SIGNED_STATE_ONLY = &quot;signed_state_only&quot;
+    SIGNED_PLUS_LOCAL_REDUCE = &quot;signed_plus_local_reduce&quot;
+
+
+class DecisionOutcome(str, Enum):
+    PERMIT = &quot;permit&quot;
+    CONSTRAIN = &quot;constrain&quot;
+    DENY = &quot;deny&quot;
+    INDETERMINATE = &quot;indeterminate&quot;
+
+
+class FailureDisposition(str, Enum):
+    CLOSED = &quot;closed&quot;
+    CONSTRAINED = &quot;constrained&quot;
+
+
+class ReasonCode(str, Enum):
+    PERMITTED = &quot;permitted&quot;
+    IDENTITY_MISMATCH = &quot;identity_mismatch&quot;
+    CLASS_MISMATCH = &quot;class_mismatch&quot;
+    VETO = &quot;immutable_veto&quot;
+    OUTSIDE_ENVELOPE = &quot;outside_environmental_envelope&quot;
+    STATE_UNAUTHENTIC = &quot;state_unauthentic&quot;
+    STATE_NOT_YET_VALID = &quot;state_not_yet_valid&quot;
+    STATE_EXPIRED = &quot;state_expired&quot;
+    LOCAL_EVIDENCE_STALE = &quot;local_evidence_stale&quot;
+    INSUFFICIENT_CHARGE = &quot;insufficient_charge&quot;
+    INSUFFICIENT_HISTORY = &quot;insufficient_history&quot;
+
+
+@dataclass(frozen=True, slots=True)
+class ActionRequest:
+    request_id: str
+    identity: str
+    authority_class: str
+    timestamp_s: int
+
+
+@dataclass(frozen=True, slots=True)
+class CompositeState:
+    state_id: str
+    identity: str
+    authority_class: str
+    issued_at_s: int
+    not_before_s: int
+    expires_at_s: int
+    charge: Decimal
+    threshold: Decimal
+    history_count: int
+    minimum_history: int
+    authentic: bool
+    veto_clear: bool
+    envelope_allows: bool
+    decay_rate: Decimal
+    maximum_charge: Decimal
+
+    def __post_init__(self) -&gt; None:
+        if not self.issued_at_s &lt;= self.not_before_s &lt; self.expires_at_s:
+            raise ValueError(&quot;invalid state validity window&quot;)
+        if min(self.charge, self.threshold, self.decay_rate, self.maximum_charge) &lt; 0:
+            raise ValueError(&quot;charge profile must be non-negative&quot;)
+        if self.charge &gt; self.maximum_charge:
+            raise ValueError(&quot;charge exceeds maximum&quot;)
+        if self.history_count &lt; 0 or self.minimum_history &lt; 0:
+            raise ValueError(&quot;history counts must be non-negative&quot;)
+
+
+@dataclass(frozen=True, slots=True)
+class LocalEvidence:
+    divergence: Decimal
+    coupled_loss: Decimal
+    fresh: bool
+
+    def __post_init__(self) -&gt; None:
+        if not Decimal(&quot;0&quot;) &lt;= self.divergence &lt;= Decimal(&quot;1&quot;):
+            raise ValueError(&quot;divergence must be in [0,1]&quot;)
+        if self.coupled_loss &lt; 0:
+            raise ValueError(&quot;coupled loss must be non-negative&quot;)
+
+
+@dataclass(frozen=True, slots=True)
+class ReductionProfile:
+    divergence_threshold: Decimal
+    loss_rate: Decimal
+    exponent: int
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionRecord:
+    request_id: str
+    state_id: str
+    mode: EnforcementMode
+    outcome: DecisionOutcome
+    reasons: tuple[ReasonCode, ...]
+    signed_charge: Decimal
+    decayed_charge: Decimal
+    effective_charge: Decimal
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run the focused tests and verify GREEN</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_domain -v</code></p>
+<p>Expected: 3 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/domain.py tests/test_domain.py
+git commit -m &quot;Define immutable KIL decision records&quot;
+</code></pre>
+<h3 id="task-4-deterministic-decision-engine">Task 4: Deterministic decision engine</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>src/kil/engine.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_engine.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing decision tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-python">from dataclasses import replace
+from decimal import Decimal
+import unittest
+
+from kil.domain import (
+    ActionRequest, CompositeState, DecisionOutcome, EnforcementMode,
+    FailureDisposition, LocalEvidence, ReasonCode, ReductionProfile,
+)
+from kil.engine import decide
+
+
+def state(**changes):
+    value = CompositeState(
+        state_id=&quot;q-1&quot;, identity=&quot;worker&quot;, authority_class=&quot;admin&quot;,
+        issued_at_s=0, not_before_s=0, expires_at_s=100,
+        charge=Decimal(&quot;80&quot;), threshold=Decimal(&quot;40&quot;),
+        history_count=5, minimum_history=2, authentic=True,
+        veto_clear=True, envelope_allows=True,
+        decay_rate=Decimal(&quot;0&quot;), maximum_charge=Decimal(&quot;100&quot;),
+    )
+    return replace(value, **changes)
+
+
+REQUEST = ActionRequest(&quot;r-1&quot;, &quot;worker&quot;, &quot;admin&quot;, 10)
+PROFILE = ReductionProfile(Decimal(&quot;0.25&quot;), Decimal(&quot;25&quot;), 3)
+
+
+class EngineTest(unittest.TestCase):
+    def test_valid_signed_state_permits(self):
+        record = decide(REQUEST, state(), EnforcementMode.SIGNED_STATE_ONLY)
+        self.assertEqual(record.outcome, DecisionOutcome.PERMIT)
+        self.assertEqual(record.reasons, (ReasonCode.PERMITTED,))
+
+    def test_veto_cannot_be_overridden_by_high_charge(self):
+        record = decide(REQUEST, state(veto_clear=False), EnforcementMode.SIGNED_STATE_ONLY)
+        self.assertEqual(record.outcome, DecisionOutcome.DENY)
+        self.assertIn(ReasonCode.VETO, record.reasons)
+
+    def test_invalid_and_expired_state_deny(self):
+        unauthentic = decide(
+            REQUEST, state(authentic=False), EnforcementMode.SIGNED_STATE_ONLY
+        )
+        expired = decide(
+            replace(REQUEST, timestamp_s=100), state(), EnforcementMode.SIGNED_STATE_ONLY
+        )
+        self.assertIn(ReasonCode.STATE_UNAUTHENTIC, unauthentic.reasons)
+        self.assertIn(ReasonCode.STATE_EXPIRED, expired.reasons)
+
+    def test_binding_envelope_and_history_gates_are_independent(self):
+        cases = (
+            (replace(REQUEST, identity=&quot;other&quot;), state(), ReasonCode.IDENTITY_MISMATCH),
+            (replace(REQUEST, authority_class=&quot;read&quot;), state(), ReasonCode.CLASS_MISMATCH),
+            (REQUEST, state(envelope_allows=False), ReasonCode.OUTSIDE_ENVELOPE),
+            (REQUEST, state(history_count=1), ReasonCode.INSUFFICIENT_HISTORY),
+            (replace(REQUEST, timestamp_s=-1), state(), ReasonCode.STATE_NOT_YET_VALID),
+        )
+        for request, composite, expected in cases:
+            with self.subTest(expected=expected):
+                record = decide(request, composite, EnforcementMode.SIGNED_STATE_ONLY)
+                self.assertEqual(record.outcome, DecisionOutcome.DENY)
+                self.assertIn(expected, record.reasons)
+
+    def test_local_reduction_can_deny_but_never_increase(self):
+        evidence = LocalEvidence(Decimal(&quot;0.9&quot;), Decimal(&quot;0&quot;), True)
+        record = decide(
+            REQUEST, state(), EnforcementMode.SIGNED_PLUS_LOCAL_REDUCE,
+            evidence, PROFILE,
+        )
+        self.assertEqual(record.outcome, DecisionOutcome.DENY)
+        self.assertLessEqual(record.effective_charge, record.decayed_charge)
+
+    def test_coupled_loss_only_reduces_effective_charge(self):
+        plain = decide(
+            REQUEST, state(), EnforcementMode.SIGNED_PLUS_LOCAL_REDUCE,
+            LocalEvidence(Decimal(&quot;0.1&quot;), Decimal(&quot;0&quot;), True), PROFILE,
+        )
+        coupled = decide(
+            REQUEST, state(), EnforcementMode.SIGNED_PLUS_LOCAL_REDUCE,
+            LocalEvidence(Decimal(&quot;0.1&quot;), Decimal(&quot;10&quot;), True), PROFILE,
+        )
+        self.assertEqual(coupled.effective_charge, plain.effective_charge - Decimal(&quot;10&quot;))
+
+    def test_stale_local_evidence_fails_closed_by_default(self):
+        evidence = LocalEvidence(Decimal(&quot;0.1&quot;), Decimal(&quot;0&quot;), False)
+        record = decide(
+            REQUEST, state(), EnforcementMode.SIGNED_PLUS_LOCAL_REDUCE,
+            evidence, PROFILE,
+        )
+        self.assertEqual(record.outcome, DecisionOutcome.DENY)
+        self.assertIn(ReasonCode.LOCAL_EVIDENCE_STALE, record.reasons)
+
+    def test_stale_local_evidence_can_fail_constrained_when_explicit(self):
+        evidence = LocalEvidence(Decimal(&quot;0.1&quot;), Decimal(&quot;0&quot;), False)
+        record = decide(
+            REQUEST, state(), EnforcementMode.SIGNED_PLUS_LOCAL_REDUCE,
+            evidence, PROFILE, FailureDisposition.CONSTRAINED,
+        )
+        self.assertEqual(record.outcome, DecisionOutcome.CONSTRAIN)
+
+    def test_veto_takes_precedence_over_stale_local_evidence(self):
+        evidence = LocalEvidence(Decimal(&quot;0.1&quot;), Decimal(&quot;0&quot;), False)
+        record = decide(
+            REQUEST, state(veto_clear=False),
+            EnforcementMode.SIGNED_PLUS_LOCAL_REDUCE, evidence, PROFILE,
+        )
+        self.assertEqual(record.outcome, DecisionOutcome.DENY)
+        self.assertIn(ReasonCode.VETO, record.reasons)
+
+    def test_action_cannot_authorize_itself(self):
+        evidence = LocalEvidence(Decimal(&quot;0&quot;), Decimal(&quot;0&quot;), True)
+        record = decide(
+            REQUEST, state(charge=Decimal(&quot;39&quot;)),
+            EnforcementMode.SIGNED_PLUS_LOCAL_REDUCE, evidence, PROFILE,
+        )
+        self.assertEqual(record.effective_charge, Decimal(&quot;39&quot;))
+        self.assertEqual(record.outcome, DecisionOutcome.DENY)
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the tests and verify RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_engine -v</code></p>
+<p>Expected: import failure because <code>kil.engine</code> does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the minimal decision engine</strong></li>
+</ul>
+<pre><code class="language-python">from decimal import Decimal
+
+from .decay import local_effective_charge, passive_decay, superlinear_loss
+from .domain import (
+    ActionRequest, CompositeState, DecisionOutcome, DecisionRecord,
+    EnforcementMode, FailureDisposition, LocalEvidence, ReasonCode,
+    ReductionProfile,
+)
+
+
+def decide(
+    request: ActionRequest,
+    state: CompositeState,
+    mode: EnforcementMode,
+    local_evidence: LocalEvidence | None = None,
+    reduction_profile: ReductionProfile | None = None,
+    failure_disposition: FailureDisposition = FailureDisposition.CLOSED,
+) -&gt; DecisionRecord:
+    reasons: list[ReasonCode] = []
+    if request.identity != state.identity:
+        reasons.append(ReasonCode.IDENTITY_MISMATCH)
+    if request.authority_class != state.authority_class:
+        reasons.append(ReasonCode.CLASS_MISMATCH)
+    if not state.veto_clear:
+        reasons.append(ReasonCode.VETO)
+    if not state.envelope_allows:
+        reasons.append(ReasonCode.OUTSIDE_ENVELOPE)
+    if not state.authentic:
+        reasons.append(ReasonCode.STATE_UNAUTHENTIC)
+    if request.timestamp_s &lt; state.not_before_s:
+        reasons.append(ReasonCode.STATE_NOT_YET_VALID)
+    if request.timestamp_s &gt;= state.expires_at_s:
+        reasons.append(ReasonCode.STATE_EXPIRED)
+
+    elapsed = Decimal(max(0, request.timestamp_s - state.issued_at_s))
+    decayed = passive_decay(state.charge, state.decay_rate, elapsed)
+    effective = decayed
+
+    if mode is EnforcementMode.SIGNED_PLUS_LOCAL_REDUCE:
+        if local_evidence is None or reduction_profile is None or not local_evidence.fresh:
+            reasons.append(ReasonCode.LOCAL_EVIDENCE_STALE)
+        else:
+            loss = superlinear_loss(
+                local_evidence.divergence,
+                reduction_profile.divergence_threshold,
+                reduction_profile.loss_rate,
+                reduction_profile.exponent,
+            )
+            effective = local_effective_charge(
+                decayed, loss, local_evidence.coupled_loss, state.maximum_charge
+            )
+
+    if effective &lt; state.threshold:
+        reasons.append(ReasonCode.INSUFFICIENT_CHARGE)
+    if state.history_count &lt; state.minimum_history:
+        reasons.append(ReasonCode.INSUFFICIENT_HISTORY)
+
+    decisive_reasons = [
+        reason for reason in reasons if reason is not ReasonCode.LOCAL_EVIDENCE_STALE
+    ]
+    if decisive_reasons:
+        outcome = DecisionOutcome.DENY
+    elif ReasonCode.LOCAL_EVIDENCE_STALE in reasons:
+        outcome = (
+            DecisionOutcome.CONSTRAIN
+            if failure_disposition is FailureDisposition.CONSTRAINED
+            else DecisionOutcome.DENY
+        )
+    else:
+        outcome = DecisionOutcome.PERMIT
+        reasons.append(ReasonCode.PERMITTED)
+
+    return DecisionRecord(
+        request.request_id, state.state_id, mode, outcome, tuple(reasons),
+        state.charge, decayed, effective,
+    )
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run the focused tests and verify GREEN</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_engine -v</code></p>
+<p>Expected: 10 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/engine.py tests/test_engine.py
+git commit -m &quot;Implement deterministic KIL decision engine&quot;
+</code></pre>
+<h3 id="task-5-canonical-decision-serialization-and-invariant-sweep">Task 5: Canonical decision serialization and invariant sweep</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>src/kil/canonical.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_kernel_invariants.py</code></p>
+</li>
+<li>
+<p>Modify: <code>src/kil/__init__.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing canonicalization and property-loop tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-python">from dataclasses import asdict, replace
+from decimal import Decimal
+import unittest
+
+from kil.canonical import canonical_digest, canonical_json
+from kil.domain import (
+    ActionRequest, CompositeState, EnforcementMode, LocalEvidence,
+    ReductionProfile,
+)
+from kil.engine import decide
+
+
+class KernelInvariantTest(unittest.TestCase):
+    def test_canonical_serialization_is_stable(self):
+        left = {&quot;b&quot;: Decimal(&quot;1.0&quot;), &quot;a&quot;: &quot;value&quot;}
+        right = {&quot;a&quot;: &quot;value&quot;, &quot;b&quot;: Decimal(&quot;1.0&quot;)}
+        self.assertEqual(canonical_json(left), canonical_json(right))
+        self.assertEqual(canonical_digest(left), canonical_digest(right))
+
+    def test_local_mode_never_exceeds_signed_mode(self):
+        request = ActionRequest(&quot;r&quot;, &quot;i&quot;, &quot;admin&quot;, 10)
+        base = CompositeState(
+            &quot;q&quot;, &quot;i&quot;, &quot;admin&quot;, 0, 0, 100,
+            Decimal(&quot;80&quot;), Decimal(&quot;40&quot;), 5, 2, True, True, True,
+            Decimal(&quot;0.01&quot;), Decimal(&quot;100&quot;),
+        )
+        profile = ReductionProfile(Decimal(&quot;0.25&quot;), Decimal(&quot;25&quot;), 3)
+        signed = decide(request, base, EnforcementMode.SIGNED_STATE_ONLY)
+        for step in range(0, 11):
+            evidence = LocalEvidence(Decimal(step) / Decimal(&quot;10&quot;), Decimal(&quot;0&quot;), True)
+            local = decide(
+                request, base, EnforcementMode.SIGNED_PLUS_LOCAL_REDUCE,
+                evidence, profile,
+            )
+            self.assertLessEqual(local.effective_charge, signed.effective_charge)
+
+    def test_more_loss_never_produces_more_authority(self):
+        request = ActionRequest(&quot;r&quot;, &quot;i&quot;, &quot;admin&quot;, 10)
+        state = CompositeState(
+            &quot;q&quot;, &quot;i&quot;, &quot;admin&quot;, 0, 0, 100,
+            Decimal(&quot;80&quot;), Decimal(&quot;40&quot;), 5, 2, True, True, True,
+            Decimal(&quot;0&quot;), Decimal(&quot;100&quot;),
+        )
+        profile = ReductionProfile(Decimal(&quot;0.25&quot;), Decimal(&quot;25&quot;), 3)
+        charges = []
+        for step in range(3, 11):
+            evidence = LocalEvidence(Decimal(step) / Decimal(&quot;10&quot;), Decimal(&quot;0&quot;), True)
+            charges.append(decide(
+                request, state, EnforcementMode.SIGNED_PLUS_LOCAL_REDUCE,
+                evidence, profile,
+            ).effective_charge)
+        self.assertEqual(charges, sorted(charges, reverse=True))
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the tests and verify RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_kernel_invariants -v</code></p>
+<p>Expected: import failure because <code>kil.canonical</code> does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement canonical JSON and digest</strong></li>
+</ul>
+<pre><code class="language-python">from dataclasses import asdict, is_dataclass
+from decimal import Decimal
+from enum import Enum
+from hashlib import sha256
+import json
+from typing import Any
+
+
+def _normalize(value: Any) -&gt; Any:
+    if is_dataclass(value):
+        return _normalize(asdict(value))
+    if isinstance(value, dict):
+        return {str(key): _normalize(item) for key, item in sorted(value.items())}
+    if isinstance(value, (list, tuple)):
+        return [_normalize(item) for item in value]
+    if isinstance(value, Decimal):
+        return format(value, &quot;f&quot;)
+    if isinstance(value, Enum):
+        return value.value
+    return value
+
+
+def canonical_json(value: Any) -&gt; str:
+    return json.dumps(
+        _normalize(value), sort_keys=True, separators=(&quot;,&quot;, &quot;:&quot;), ensure_ascii=False
+    )
+
+
+def canonical_digest(value: Any) -&gt; str:
+    return sha256(canonical_json(value).encode(&quot;utf-8&quot;)).hexdigest()
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Update the existing package test first, then run it RED</strong></li>
+</ul>
+<p>Change <code>tests/test_package.py</code> to expect <code>&quot;0.1.0-dev1&quot;</code>, run
+<code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_package -v</code>, and confirm it fails
+before editing <code>src/kil/__init__.py</code>.</p>
+<ul>
+<li>[ ] <strong>Step 5: Update the package version</strong></li>
+</ul>
+<p>Update <code>src/kil/__init__.py</code> to set <code>__version__ = &quot;0.1.0-dev1&quot;</code> and revise its
+module docstring to state that V1 deterministic behavior is implemented while
+cryptographic and live adapters remain outside this gate.</p>
+<ul>
+<li>[ ] <strong>Step 6: Run all V1 tests and verify GREEN</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest \
+  tests.test_evidence tests.test_decay tests.test_domain \
+  tests.test_engine tests.test_kernel_invariants tests.test_package -v
+</code></pre>
+<p>Expected: all V1 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 7: Run the repository gate and source-integrity check</strong></li>
+</ul>
+<p>Run: <code>make validate PYTHON='/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' &amp;&amp; shasum -a 256 -c research/source-material/SHA256SUMS</code></p>
+<p>Expected: all tests pass and all preserved sources report <code>OK</code>.</p>
+<ul>
+<li>[ ] <strong>Step 8: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/canonical.py src/kil/__init__.py \
+  tests/test_kernel_invariants.py tests/test_package.py
+git commit -m &quot;Complete V1 deterministic KIL kernel&quot;
+</code></pre>
+<h2 id="v1-exit-criteria">V1 exit criteria</h2>
+<ul>
+<li>Every new behavior has a recorded red-to-green test cycle.</li>
+<li>Local reduction is monotonic and cannot exceed signed-state-only authority.</li>
+<li>Veto, envelope, authenticity, validity, charge, and history gates are
+independently testable.</li>
+<li>Canonical decision serialization and digest are deterministic.</li>
+<li>No claim is made that the kernel verifies a concrete KTP signature encoding.</li>
+<li>Full repository validation and preserved-source checks pass.</li>
+</ul>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

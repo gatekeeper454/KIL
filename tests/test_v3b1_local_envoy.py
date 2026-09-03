@@ -81,6 +81,7 @@ from tools.v3b1_local_envoy import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ONLY_FIXTURE_COMPANION = "summary.htm"
 PROFILE = V3BProfile.load(ROOT / "deploy/kind/v3b-profile.json")
 HEX_A = "a" * 64
 HEX_B = "b" * 64
@@ -116,6 +117,16 @@ ENGINE_PROVENANCE = {
     "cgroup_driver": "cgroupfs",
     "cgroup_version": "2",
 }
+
+
+def copy_frozen_v1_runtime_bundle(source: Path, destination: Path) -> Path:
+    """Project the repository fixture into its exact runtime bundle."""
+    copied = Path(shutil.copytree(source, destination))
+    companion = copied / REPOSITORY_ONLY_FIXTURE_COMPANION
+    if not companion.is_file():
+        raise AssertionError("repository fixture publication companion is missing")
+    companion.unlink()
+    return copied
 
 
 class HarnessIntegrationContractTest(unittest.TestCase):
@@ -14311,8 +14322,13 @@ class EvidenceBundleTest(unittest.TestCase):
         fixture_root = ROOT / "tests/fixtures/v3b1-public-bundle-v1"
         legacy = next(path for path in fixture_root.iterdir() if path.is_dir())
         with tempfile.TemporaryDirectory() as directory:
-            copied = Path(directory) / "legacy"
-            shutil.copytree(legacy, copied)
+            copied = copy_frozen_v1_runtime_bundle(
+                legacy, Path(directory) / "legacy"
+            )
+            self.assertEqual(
+                local_envoy_module.verify_presenter_bundle(copied),
+                copied.resolve() / "live.html",
+            )
             drivers = copied / "raw/drivers"
             drivers.mkdir()
             (drivers / "credential_policy_baseline.json").write_text("{}\n")
@@ -14599,9 +14615,17 @@ class EvidenceBundleTest(unittest.TestCase):
         )
         self.assertEqual(len(fixture_bundles), 1)
         self.assertTrue(fixture_bundles[0].is_dir())
+        self.assertTrue(
+            (fixture_bundles[0] / REPOSITORY_ONLY_FIXTURE_COMPANION).is_file()
+        )
         with tempfile.TemporaryDirectory() as directory:
-            copied = Path(directory) / fixture_bundles[0].name
-            shutil.copytree(fixture_bundles[0], copied)
+            copied = copy_frozen_v1_runtime_bundle(
+                fixture_bundles[0],
+                Path(directory) / fixture_bundles[0].name,
+            )
+            self.assertFalse(
+                (copied / REPOSITORY_ONLY_FIXTURE_COMPANION).exists()
+            )
             manifest = json.loads((copied / "manifest.json").read_text())
             self.assertEqual(
                 manifest["schema_version"], "kil.v3b1-public-manifest.v1"
@@ -14748,7 +14772,16 @@ class EvidenceBundleTest(unittest.TestCase):
                 path.relative_to(fixture).as_posix()
                 for path in fixture.rglob("*")
                 if path.is_file()
+                and path.relative_to(fixture).as_posix()
+                != REPOSITORY_ONLY_FIXTURE_COMPANION
             }
+            self.assertTrue(
+                (fixture / REPOSITORY_ONLY_FIXTURE_COMPANION).is_file()
+            )
+            self.assertNotIn(
+                REPOSITORY_ONLY_FIXTURE_COMPANION,
+                frozen_inventory,
+            )
             provisional_inventory = {
                 path.relative_to(provisional).as_posix()
                 for path in provisional.rglob("*")

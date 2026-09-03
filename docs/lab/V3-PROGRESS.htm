@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gate V3 implementation progress</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/lab/V3-PROGRESS.md">
+<meta name="source-sha256" content="855a81fc845818b4bff4223e7d69a40868b33c8dcc6ea386d5f9625d69e8d192">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>855a81fc845818b4bff4223e7d69a40868b33c8dcc6ea386d5f9625d69e8d192</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">Gate V3 implementation progress</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>855a81fc845818b4bff4223e7d69a40868b33c8dcc6ea386d5f9625d69e8d192</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#gate-v3-implementation-progress">Gate V3 implementation progress</a></li><li class="level-2"><a href="#v3a-status">V3A status</a></li><li class="level-2"><a href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a href="#v3b-1-current-status">V3B-1 current status</a></li><li class="level-3"><a href="#implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</a></li><li class="level-3"><a href="#request-and-evidence-contracts">Request and evidence contracts</a></li><li class="level-3"><a href="#live-status-and-historical-boundary">Live status and historical boundary</a></li><li class="level-3"><a href="#historical-pre-driver-topology-records">Historical pre-driver topology records</a></li><li class="level-2"><a href="#architecture">Architecture</a></li><li class="level-2"><a href="#next-gate">Next gate</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="gate-v3-implementation-progress" href="#gate-v3-implementation-progress">Gate V3 implementation progress</a></li><li class="level-2"><a data-section-id="v3a-status" href="#v3a-status">V3A status</a></li><li class="level-2"><a data-section-id="evidence-boundary" href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a data-section-id="v3b-1-current-status" href="#v3b-1-current-status">V3B-1 current status</a></li><li class="level-3"><a data-section-id="implemented-topology-and-traffic-boundary" href="#implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</a></li><li class="level-3"><a data-section-id="request-and-evidence-contracts" href="#request-and-evidence-contracts">Request and evidence contracts</a></li><li class="level-3"><a data-section-id="live-status-and-historical-boundary" href="#live-status-and-historical-boundary">Live status and historical boundary</a></li><li class="level-3"><a data-section-id="historical-pre-driver-topology-records" href="#historical-pre-driver-topology-records">Historical pre-driver topology records</a></li><li class="level-2"><a data-section-id="architecture" href="#architecture">Architecture</a></li><li class="level-2"><a data-section-id="next-gate" href="#next-gate">Next gate</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="gate-v3-implementation-progress">Gate V3 implementation progress</h1>
+<h2 id="v3a-status">V3A status</h2>
+<p>V3A implements the signed-state and authorization core behind the approved
+three-track architecture. The implementation now includes:</p>
+<ul>
+<li>the closed <code>kil.q-state.v0</code> claims schema;</li>
+<li>Ed25519 compact-JWS issuance and fail-closed verification;</li>
+<li>a maximum ten-second lifetime plus revocation, time, subject, audience,
+authority-class, and action-class binding;</li>
+<li>infrastructure-fixed credential-policy, signed-only, and signed-plus-local-
+reduction tracks;</li>
+<li>resistance to an untrusted <code>x-kil-mode</code> downgrade header;</li>
+<li>a harmless target marker and a joined forward-or-withhold proof; and</li>
+<li>an atomic, content-addressed JSONL/HTML evidence bundle.</li>
+</ul>
+<p>The demonstration uses the same request facts in all three tracks. With the
+fixed V3A fixture, the expected result is <code>permit / permit / deny</code>, with target
+marker counts <code>1 / 1 / 0</code> and valid joins for all three outcomes.</p>
+<p>The first pre-review process run was <code>52c90309d00439e7</code> at implementation
+commit <code>ad3db6aa7686781761bd8622a435c279f534df05</code> with 121 passing tests. The
+intermediate review run <code>b0cdc26b471c9539</code> at implementation commit
+<code>700b307a573e3668024d51e3b156d7044b03fca3</code> passed 125 tests but preceded the
+final zero-exponent allocation fix. Both are retained only as development
+history. The canonical review-complete run is <code>ca26ff63c09cd78b</code> at
+implementation commit <code>4e02ed3727096174456de0b6edcb33403d7870df</code> with 126
+passing tests. Its eight published artifacts pass <code>SHA256SUMS</code> verification.</p>
+<p>The review-complete bundle records the full Ed25519 public-key thumbprint,
+public JWK, explicit deterministic Level 1 laboratory-fixture provenance, and
+the two audience-bound compact JWS states. No private or production key is
+claimed. The bundle is generated under
+<code>artifacts/generated/v3a-process-contract/ca26ff63c09cd78b/</code> and remains
+reproducible from the recorded implementation commit.</p>
+<h2 id="evidence-boundary">Evidence boundary</h2>
+<p>V3A is a <strong>modeled process-contract demonstration</strong>. It proves the local
+software contracts for signature verification, fixed-mode authorization,
+forwarding, target invocation, and evidence joining. It does not run Envoy or
+Kubernetes and therefore does not establish a <code>validated</code> cluster result.
+Synthetic charge, threshold, and local-divergence values remain modeled.</p>
+<h2 id="v3b-1-current-status">V3B-1 current status</h2>
+<p>The corrected in-network request-driver mechanism is implemented and statically
+approved at commits <code>75161f0</code> and <code>48bd81a</code>. Independent specification and
+quality review approved the complete lifecycle, recovery, evidence, and exact
+teardown contracts. The Task 8 implementation checkpoint passed 222 local-Envoy
+tests, 38 teardown-continuation tests, focused correction proofs, and the
+complete 466-test non-runtime repository suite. The fresh Task 9 complete static
+gate passes 474 tests, including eight documentation tests, together with Python
+compilation and diff hygiene. No Docker, Colima, network, or live laboratory
+runtime was invoked by that verification.</p>
+<h3 id="implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</h3>
+<p>V3B-1 fixes three separate tracks:</p>
+<ol>
+<li><code>credential_policy_baseline</code>;</li>
+<li><code>signed_state_only</code>; and</li>
+<li><code>signed_plus_local_reduce</code>.</li>
+</ol>
+<p>Each track has two internal networks. Its frontend is configured exactly for
+<code>{driver, Envoy}</code> and its backend is configured exactly for
+<code>{Envoy, authz, target}</code>. Physical membership is state-derived and includes
+only running roles: with Envoy running, a <code>created</code>, <code>exited</code>, or <code>dead</code> driver
+yields <code>{Envoy}</code>, while a running driver yields <code>{driver, Envoy}</code>. A stopped
+Envoy is absent from both physical networks, and a stopped backend service is
+absent from the backend inventory. Envoy is the only configured dual-homed
+component. There is no host TCP publication. The complete
+lifecycle owns twelve track containers—one
+driver, Envoy, authorization service, and harmless target per track—plus three
+transient validators, across six networks.</p>
+<p>Docker attach/stdin is only the host control channel used to supply one
+canonical instruction to a one-shot driver. Consequential traffic follows
+<code>driver -&gt; Envoy -&gt; authorization -&gt; target or withhold</code>. The driver does not
+make a KIL decision and is a laboratory transport witness, not KIL enforcement.
+The implemented evidence scope is <code>local_envoy_boundary</code>.</p>
+<p>Moving the request origin from the host-published client to an in-network
+request driver changes transport and lifecycle mechanics only. It does not
+change the signed composite KTP state or KIL authorization semantics consumed
+by the authorization services.</p>
+<h3 id="request-and-evidence-contracts">Request and evidence contracts</h3>
+<p>Request-free readiness starts all three attached drivers before reading any
+readiness record, sends no instruction and no HTTP request, and then performs
+three bounded cancellations. A central run uses a fresh three-driver set,
+persists request intent before sending exactly one canonical instruction per
+track, and performs no retry after intent. Any intent without a trusted terminal
+result is ambiguous and nonpromotable; cleanup still continues against exact
+recorded identities.</p>
+<p>Evidence bundle v2 publishes the exact canonical driver result for each track
+under <code>raw/drivers/</code>. Those three byte records are bound to the corresponding
+request and to nine authoritative Envoy, authorization, and target sources.
+The verifier reconstructs, hashes, and joins all twelve inputs before any
+complete result is eligible for publication. Teardown finalizes drivers first,
+freezes the unchanged nine service sources, removes drivers, Envoys,
+authorization services, targets, and validators, then proves all fifteen
+containers and all six empty networks absent through full-ID inventories.</p>
+<h3 id="live-status-and-historical-boundary">Live status and historical boundary</h3>
+<p>The corrected request-driver topology now has accepted Task 10 request-free
+lifecycle evidence at the local Envoy boundary. Earlier V3B-1 host-published
+cycles—including zero-request lifecycle work—remain development history for
+the superseded transport mechanism. They do not satisfy the current six-network
+topology, request-free attached-driver readiness, three-driver-result, or
+fifteen-container teardown contracts and therefore cannot be promoted as
+acceptance evidence for this implementation.</p>
+<p>The first driver-era Task 10 attempt rejected Docker's closed null-network
+validator representation; the merged correction recovered that lifecycle
+without a request. The second attempt then rejected Docker's expanded
+image-bound disabled-healthcheck representation; PR #13 merged the closed
+correction. Bounded recovery from that attempt rejected a distinct Docker
+endpoint-lifecycle representation before any removal: all three never-started
+drivers were exactly configured for their frontends in <code>created</code> state, but the
+physical frontend inventories contained only Envoy until driver start. The
+state-aware correction passed public CI and merged as
+<code>7677052f6fd2b4287f419dc01ec9a1a859191777</code>. Recovery under that commit
+accepted the created-driver topology, classified the partial-up evidence as
+nonpromotable, and cleanly stopped the baseline Envoy, then failed closed before
+stop completion because Docker changed the unbound exposed-port projection from
+<code>{&quot;10000/tcp&quot;:null}</code> to <code>{}</code> together with <code>running -&gt; exited</code>. Read-only audit
+confirmed that the other 34 normalized runtime fields were unchanged and that
+the six running authorization/target services have the corresponding fixed
+<code>{&quot;8080/tcp&quot;:null}</code> shape. A role-bound correction accepts only those exact
+one-way controlled-stop representations while preserving every other identity,
+hardening, topology, and no-publication check; its 228-test controller suite
+and complete 480-test repository gate passed, independent reviews found no
+Critical or Important issue, and PR #15 merged as
+<code>3dce7cbd0153716b9e52cae791b97f50131989f7</code>. The next bounded recovery accepted
+that port normalization without issuing another stop, then failed before any
+mutation because the stopped Envoy was absent from Docker network <code>Containers</code>.
+Read-only inspection confirmed the baseline backend contained only its running
+authz and target endpoints and its frontend was empty, while both untouched
+tracks retained their exact running endpoints. The current correction derives
+physical membership only from freshly attested <code>running</code> state and durably
+completes an already-effective pending stop without repeating it. No readiness
+instruction, request intent, HTTP action, or central <code>run</code> occurred in any
+rejected driver-era lifecycle.</p>
+<p>PR #16 merged that correction as
+<code>a46e8dc98a1af64ceadb5700e91c2f87840564fe</code> after both required public CI
+jobs passed. Bounded recovery then completed the rejected lifecycle without a
+second stop, removed all 15 recorded containers and all six networks, verified
+the dedicated profile absent, published an integrity-checked nonpromotable
+failure bundle, and preserved the foreign <code>default</code> context name. A post-run
+readback observed its stopped resource tuple, but that exact tuple was not
+durably bound at both ends of the lifecycle.</p>
+<p>The fresh driver-era Task 10 request-free gate then passed from source
+<code>a46e8dc98a1af64ceadb5700e91c2f87840564fe</code> as run
+<code>v3b1-d2b26f6c8136dcd26a6e6727b9bb1381076a1e03b71a5a44df9b2b2ef9db6cf9</code>.
+All three tracks produced exact readiness records and three clean
+cancellations. The journal contains zero driver instructions, zero request
+intents, and zero HTTP requests. All nine service-source legs terminated and
+persisted exact zero-byte evidence. Teardown removed all 15 exact containers
+and all six exact networks, recorded zero survivors, verified the dedicated
+profile absent, and cleared active state/journal/poison. The public manifest
+binds the foreign context name as <code>default</code> before and after; a post-run
+readback observed <code>Stopped/containerd/aarch64/4 CPU/4 GiB/20 GiB</code>, but the
+exact resource tuple was not durably bound before and after. Every published
+checksum passed. The bound public-safe facts are recorded in
+<a href="V3B1-TASK10-REQUEST-FREE-GATE.htm"><code>V3B1-TASK10-REQUEST-FREE-GATE.md</code></a>.</p>
+<p>The central <code>run</code> was not executed and remains prohibited until that Task 10
+record is independently reviewed, merged through public CI, and synchronized,
+and an implementation that durably binds and verifies exact before/after
+foreign-resource snapshots is tested, merged, and synchronized. Only after both
+publication gates may exactly one central local-Envoy proof be attempted. No
+retry is allowed after request intent.</p>
+<p>V3B-1 remains limited to the local Envoy boundary. V3B-2 is the future isolated
+Kind/Calico topology; its NetworkPolicy behavior, cluster-level transport,
+failure matrix, and measurements are unexecuted. V3C repetition and performance
+promotion are also future work. No historical-prevention or performance claim
+is made.</p>
+<h3 id="historical-pre-driver-topology-records">Historical pre-driver topology records</h3>
+<p>The records in this section preserve the earlier nine-service/three-network
+host-published lifecycle exactly as development history. That topology is
+retired. Its runs cannot satisfy the current six-network request-driver
+readiness, three-driver-result, or fifteen-container teardown contracts, and no
+fact below is current driver-era live acceptance.</p>
+<p>Three exploratory local cycles were rejected and remain private. The first
+committed zero-request smoke completed from merged public source
+<code>47c0614d49ec1a7484cdefd04cc5d080adc73ca2</code> with run ID
+<code>v3b1-1db8b5914ce26e2e6c60e74124bcc1b2c9ed66b7dd68c2d3cf4ea1bc0d18c9b3</code>.
+Its eight request, normalized-decision, Envoy, target, join, and raw-decision
+JSONL files were exactly zero bytes. <code>SHA256SUMS</code> verified, the manifest was
+<code>run_complete=false</code>, <code>promotion_status=not_promoted</code>, and teardown was
+complete and verified before publication. Nine service containers, three
+transient validator containers, all three networks, and only the dedicated
+profile were removed; lifecycle state, readiness poison, and the active journal
+were absent; the foreign <code>default</code> profile was restored to Running/containerd/
+4 CPU/4 GiB/20 GiB. The smoke manifest SHA-256 is
+<code>24176666cc860cfe0b66a67f8a63d0f63d66b4f91329e06464b1475eb84e55c4</code>.
+The ignored nonpromotable bundle remains private for offline backup.</p>
+<p>The run safely exercised teardown and foreign-runtime restoration, but it did
+not pass the zero-request evidence-freeze gate. The durable lifecycle journal
+records all three requests as <code>not_attempted</code>; all nine sources were observed
+as zero bytes; and the three Envoy legs were copied and byte-bound. Docker copy
+failed for all six authorization and target ledgers, however, so the empty
+failure bundle does not independently prove those service sources were absent.
+No enforcement run in the retired topology was accepted, promoted, or labeled
+validated.</p>
+<p>The bounded exact-byte correction was then implemented and statically verified.
+If normal Docker copy failed, the controller executed a fixed, no-shell
+exporter in the attested service container; bounded and opened the real ledger
+without following symlinks; required a stable regular inode and size; emitted
+its exact bytes, count, and digest in a closed canonical envelope; and required
+the host to recheck that envelope against the independent pre-copy observation
+before freezing it. It never synthesized an empty file from metadata. Empty,
+nonempty, malformed, mismatched, oversized, and symlink cases were covered,
+including direct subprocess execution of the real exporter. Independent review
+found no Important or Critical issue. Static verification passed 180 controller
+tests and 396 repository tests, plus Python compilation and diff hygiene. The
+remaining risk was the real Docker path, which motivated the repeated
+zero-request gate.</p>
+<p>The first two post-merge launch attempts remained pre-profile and
+non-enforcement events. The first could not expose the repo-pinned Docker CLI to
+Colima's dependency check; the second used the corrected explicit PATH but
+Colima v0.10.3 rejected <code>--nested-virtualization=false</code> during actual launch,
+despite advertising the boolean option in help mode. Neither attempt created
+<code>kil-v3-lab</code>, a Docker object, or a request; each journal records all request
+states as <code>not_attempted</code> and was archived through <code>down</code>. The foreign <code>default</code>
+profile was restored to its exact Running/containerd/arm64/4 CPU/4 GiB/20 GiB
+state. The minimal compatibility correction removed only that redundant false
+CLI flag. The saved-config attestation still required
+<code>nestedVirtualization: false</code> before any service container could deploy.</p>
+<p>The corrected zero-request lifecycle then passed from synchronized public main
+<code>6706859d265204e0a569ebb6817d187dc1728f9d</code> as run
+<code>v3b1-0374c771b23adcab64060cd8c854d12b72417ff8e4713d24e6f6a550e20bdbea</code>.
+No <code>run</code> command or request intent occurred. All nine Envoy, authorization, and
+target source legs terminated <code>copied</code>; every source and copied byte count was
+zero and every digest was the empty SHA-256. All 11 public <code>SHA256SUMS</code> entries
+verified. The manifest remained intentionally <code>run_complete=false</code>,
+<code>promotion_status=not_promoted</code>, and
+<code>intermediate_provisional_failure_local_boundary</code>; it did not claim an
+enforcement result. Teardown removed nine services, three transient validators,
+three networks, and only <code>kil-v3-lab</code> before publication. No active lifecycle
+state remained, and the foreign profile was host-verified after restoration as
+Running/containerd/arm64/4 CPU/4 GiB/20 GiB.</p>
+<p>Within the retired pre-driver topology, this result accepted the zero-request
+lifecycle and evidence-freeze gate. The offline presenter correctly rejected
+the smoke because it was not an accepted local-boundary enforcement run. Those
+facts remain valid historical records, but they do not authorize or substitute
+for the now-passed driver-era Task 10 lifecycle gate or the still-pending
+central enforcement gate.</p>
+<h2 id="architecture">Architecture</h2>
+<p><img src="../architecture/v3-envoy-live-validation.svg" alt="Approved V3 Envoy live-validation architecture" /></p>
+<p>The source diagram is
+<a href="../architecture/v3-envoy-live-validation.svg"><code>docs/architecture/v3-envoy-live-validation.svg</code></a>,
+and the complete approved specification is
+<a href="../superpowers/specs/2026-08-29-v3-envoy-live-validation-design.htm"><code>docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md</code></a>.</p>
+<h2 id="next-gate">Next gate</h2>
+<p>Publish and merge the Task 10 public-safe gate record, synchronize clean
+<code>main</code>, then implement, test, review, and merge durable exact before/after
+foreign-resource snapshot binding and verifier equality. Only then execute one
+central <code>preflight</code> / <code>up</code> / <code>run</code> / <code>down</code> proof with no retry after request
+intent. Its prospective acceptance criteria remain <code>permit / permit / deny</code>,
+HTTP <code>200 / 200 / 403</code>, target markers <code>1 / 1 / 0</code>, exact three-driver and
+nine-service-source joins, verified checksums, exact teardown, restored foreign
+runtime, and offline presenter acceptance. V3B-2 and V3C remain later gates;
+all V3A output remains explicitly modeled.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

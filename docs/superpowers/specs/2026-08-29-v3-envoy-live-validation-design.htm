@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gate V3 Envoy Live-Validation Design</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md">
+<meta name="source-sha256" content="1a083ec102ed1d9f1564104a44400d4e12fba7402b546e5fd329c3a46091f74b">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md</code> (<code>1a083ec102ed1d9f1564104a44400d4e12fba7402b546e5fd329c3a46091f74b</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">Gate V3 Envoy Live-Validation Design</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md</code> (<code>1a083ec102ed1d9f1564104a44400d4e12fba7402b546e5fd329c3a46091f74b</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#gate-v3-envoy-live-validation-design">Gate V3 Envoy Live-Validation Design</a></li><li class="level-2"><a href="#1-decision-and-purpose">1. Decision and purpose</a></li><li class="level-2"><a href="#2-ktp-alignment-and-extension-boundary">2. KTP alignment and extension boundary</a></li><li class="level-2"><a href="#3-graphical-architecture">3. Graphical architecture</a></li><li class="level-2"><a href="#4-components-and-responsibilities">4. Components and responsibilities</a></li><li class="level-3"><a href="#4-1-host-run-controller">4.1 Host run controller</a></li><li class="level-3"><a href="#4-2-authoritative-lab-issuer">4.2 Authoritative lab issuer</a></li><li class="level-3"><a href="#4-3-envoy-gateway">4.3 Envoy gateway</a></li><li class="level-3"><a href="#4-4-authorization-services">4.4 Authorization services</a></li><li class="level-3"><a href="#4-5-harmless-target-and-invocation-ledger">4.5 Harmless target and invocation ledger</a></li><li class="level-3"><a href="#4-6-evidence-joiner-and-live-view">4.6 Evidence joiner and live view</a></li><li class="level-2"><a href="#5-observable-enforcement-contract">5. Observable enforcement contract</a></li><li class="level-2"><a href="#6-mode-isolation-and-downgrade-resistance">6. Mode isolation and downgrade resistance</a></li><li class="level-2"><a href="#7-controlled-workload-matrix">7. Controlled workload matrix</a></li><li class="level-2"><a href="#8-evidence-classes-and-claim-limits">8. Evidence classes and claim limits</a></li><li class="level-2"><a href="#9-metrics-and-repetitions">9. Metrics and repetitions</a></li><li class="level-2"><a href="#10-environment-and-version-contract">10. Environment and version contract</a></li><li class="level-2"><a href="#11-isolation-safety-and-teardown">11. Isolation, safety, and teardown</a></li><li class="level-2"><a href="#12-run-bundle">12. Run bundle</a></li><li class="level-2"><a href="#13-implementation-stages-and-acceptance">13. Implementation stages and acceptance</a></li><li class="level-3"><a href="#v3a-contract-and-process-level-proof">V3A — Contract and process-level proof</a></li><li class="level-3"><a href="#v3b-isolated-kind-deployment">V3B — Isolated Kind deployment</a></li><li class="level-3"><a href="#v3c-repetition-measurement-and-publication-promotion">V3C — Repetition, measurement, and publication promotion</a></li><li class="level-2"><a href="#14-authoritative-sources">14. Authoritative sources</a></li><li class="level-2"><a href="#supersession-notice-2026-08-31">Supersession notice — 2026-08-31</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="gate-v3-envoy-live-validation-design" href="#gate-v3-envoy-live-validation-design">Gate V3 Envoy Live-Validation Design</a></li><li class="level-2"><a data-section-id="1-decision-and-purpose" href="#1-decision-and-purpose">1. Decision and purpose</a></li><li class="level-2"><a data-section-id="2-ktp-alignment-and-extension-boundary" href="#2-ktp-alignment-and-extension-boundary">2. KTP alignment and extension boundary</a></li><li class="level-2"><a data-section-id="3-graphical-architecture" href="#3-graphical-architecture">3. Graphical architecture</a></li><li class="level-2"><a data-section-id="4-components-and-responsibilities" href="#4-components-and-responsibilities">4. Components and responsibilities</a></li><li class="level-3"><a data-section-id="4-1-host-run-controller" href="#4-1-host-run-controller">4.1 Host run controller</a></li><li class="level-3"><a data-section-id="4-2-authoritative-lab-issuer" href="#4-2-authoritative-lab-issuer">4.2 Authoritative lab issuer</a></li><li class="level-3"><a data-section-id="4-3-envoy-gateway" href="#4-3-envoy-gateway">4.3 Envoy gateway</a></li><li class="level-3"><a data-section-id="4-4-authorization-services" href="#4-4-authorization-services">4.4 Authorization services</a></li><li class="level-3"><a data-section-id="4-5-harmless-target-and-invocation-ledger" href="#4-5-harmless-target-and-invocation-ledger">4.5 Harmless target and invocation ledger</a></li><li class="level-3"><a data-section-id="4-6-evidence-joiner-and-live-view" href="#4-6-evidence-joiner-and-live-view">4.6 Evidence joiner and live view</a></li><li class="level-2"><a data-section-id="5-observable-enforcement-contract" href="#5-observable-enforcement-contract">5. Observable enforcement contract</a></li><li class="level-2"><a data-section-id="6-mode-isolation-and-downgrade-resistance" href="#6-mode-isolation-and-downgrade-resistance">6. Mode isolation and downgrade resistance</a></li><li class="level-2"><a data-section-id="7-controlled-workload-matrix" href="#7-controlled-workload-matrix">7. Controlled workload matrix</a></li><li class="level-2"><a data-section-id="8-evidence-classes-and-claim-limits" href="#8-evidence-classes-and-claim-limits">8. Evidence classes and claim limits</a></li><li class="level-2"><a data-section-id="9-metrics-and-repetitions" href="#9-metrics-and-repetitions">9. Metrics and repetitions</a></li><li class="level-2"><a data-section-id="10-environment-and-version-contract" href="#10-environment-and-version-contract">10. Environment and version contract</a></li><li class="level-2"><a data-section-id="11-isolation-safety-and-teardown" href="#11-isolation-safety-and-teardown">11. Isolation, safety, and teardown</a></li><li class="level-2"><a data-section-id="12-run-bundle" href="#12-run-bundle">12. Run bundle</a></li><li class="level-2"><a data-section-id="13-implementation-stages-and-acceptance" href="#13-implementation-stages-and-acceptance">13. Implementation stages and acceptance</a></li><li class="level-3"><a data-section-id="v3a-contract-and-process-level-proof" href="#v3a-contract-and-process-level-proof">V3A — Contract and process-level proof</a></li><li class="level-3"><a data-section-id="v3b-isolated-kind-deployment" href="#v3b-isolated-kind-deployment">V3B — Isolated Kind deployment</a></li><li class="level-3"><a data-section-id="v3c-repetition-measurement-and-publication-promotion" href="#v3c-repetition-measurement-and-publication-promotion">V3C — Repetition, measurement, and publication promotion</a></li><li class="level-2"><a data-section-id="14-authoritative-sources" href="#14-authoritative-sources">14. Authoritative sources</a></li><li class="level-2"><a data-section-id="supersession-notice-2026-08-31" href="#supersession-notice-2026-08-31">Supersession notice — 2026-08-31</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="gate-v3-envoy-live-validation-design">Gate V3 Envoy Live-Validation Design</h1>
+<p><strong>Status:</strong> Founder-approved implementation design</p>
+<p><strong>Date:</strong> 2026-08-29</p>
+<p><strong>Protocol baseline:</strong> Kinetic Trust Protocol v2.0.0</p>
+<p><strong>Extension status:</strong> Experimental KIL profile proposed for a future KTP 2.1 or
+3.0 expression; not part of KTP v2.0.0</p>
+<h2 id="1-decision-and-purpose">1. Decision and purpose</h2>
+<p>Gate V3 will test KIL at a real pre-upstream HTTP enforcement boundary in an
+isolated local Kubernetes cluster. The first adapter is the Envoy HTTP
+<code>ext_authz</code> filter. It will compare three infrastructure-fixed tracks against
+the same normalized request sequence:</p>
+<ol>
+<li><code>credential_policy_baseline</code>;</li>
+<li><code>signed_state_only</code>; and</li>
+<li><code>signed_plus_local_reduce</code>.</li>
+</ol>
+<p>The experiment asks whether a signed, short-lived composite KTP enforcement
+state can be consumed before a consequential action reaches its target, and
+whether fresh local evidence can safely reduce authority between authoritative
+state refreshes. It does not claim Kubernetes admission, eBPF, SmartNIC, SDN,
+production-scale performance, or prevention of the historical Hugging Face
+incident.</p>
+<h2 id="2-ktp-alignment-and-extension-boundary">2. KTP alignment and extension boundary</h2>
+<p>KTP v2.0.0 already defines the pieces on which this experiment depends:</p>
+<ul>
+<li>the Zeroth Law, <code>A &lt;= E</code>, and the Silent Veto;</li>
+<li>signed Trust Proofs carrying current trust and environmental context;</li>
+<li>a Trust Proof validity ceiling of ten seconds in the canonical schema;</li>
+<li>the Kinetic Envelope interface, which tightens constraints and supplies a
+supervision floor to an authorizing gateway;</li>
+<li>KTP-Enforce policy enforcement points and KTP-Transport interfaces; and</li>
+<li>Flight Recorder evidence and declaration-bearing deployment profiles.</li>
+</ul>
+<p>KIL does not redefine those constructs. It proposes a narrow consumption
+profile, <code>kil.q-state.v0</code>, for an authority-class-bound composite state
+<code>Q_i,c</code>. The state references an existing KTP Trust Proof and the relevant
+Kinetic Envelope result. It packages the minimum additional bindings needed by
+an inline infrastructure adapter:</p>
+<ul>
+<li>subject identity and workload class;</li>
+<li>audience and deployment profile;</li>
+<li>authority class and action class;</li>
+<li>KTP Trust Proof identifier and digest;</li>
+<li>Kinetic Envelope result identifier and digest;</li>
+<li>composite charge, threshold, and minimum-history values;</li>
+<li>immutable-veto and environmental-envelope status;</li>
+<li>issuance, not-before, expiry, evidence-horizon, and unique state identifiers;</li>
+<li>schema, model, parameter, and signature-profile versions; and</li>
+<li>issuer and verification-key identifier.</li>
+</ul>
+<p>This is an experimental extension expression, not a claim of KTP v2.0.0 wire
+conformance. The KTP specialist review will determine whether the final
+standardization path is backward-compatible KTP 2.1 or a KTP 3.0 change.</p>
+<h2 id="3-graphical-architecture">3. Graphical architecture</h2>
+<p><img src="../../architecture/v3-envoy-live-validation.svg" alt="Gate V3 Envoy live-validation architecture" /></p>
+<p>The three tracks are deployed separately. A client cannot provide a mode
+header, select an authorization service, or downgrade enforcement. The run
+controller chooses a fixed gateway endpoint for each track and sends the same
+normalized action request to all three.</p>
+<pre><code class="language-mermaid">flowchart LR
+    C[Host run controller&lt;br/&gt;same request IDs and actions] --&gt; B[Baseline Envoy]
+    C --&gt; S[Signed-only Envoy]
+    C --&gt; L[Signed + local Envoy]
+    I[Authoritative lab issuer&lt;br/&gt;KTP Trust Proof ref + signed Q_i,c] --&gt; SA[Signed-only authz]
+    I --&gt; LA[Signed + local authz]
+    M[Modeled local context fixture] --&gt; LA
+    B --&gt; BA[Credential-policy authz]
+    S --&gt; SA
+    L --&gt; LA
+    BA --&gt; BT[Harmless target + invocation ledger]
+    SA --&gt; ST[Harmless target + invocation ledger]
+    LA --&gt; LT[Harmless target + invocation ledger]
+    BA --&gt; E[Evidence joiner]
+    SA --&gt; E
+    LA --&gt; E
+    BT --&gt; E
+    ST --&gt; E
+    LT --&gt; E
+    E --&gt; R[Integrity-bound run bundle&lt;br/&gt;live dashboard + paper evidence]
+</code></pre>
+<h2 id="4-components-and-responsibilities">4. Components and responsibilities</h2>
+<h3 id="4-1-host-run-controller">4.1 Host run controller</h3>
+<p>The controller owns run identity, scenario order, request identifiers, track
+selection, repetitions, monotonic timing, evidence collection, and bundle
+assembly. It sends one normalized request to each fixed endpoint. It never
+accepts a response body as proof that the target did or did not execute.</p>
+<h3 id="4-2-authoritative-lab-issuer">4.2 Authoritative lab issuer</h3>
+<p>The issuer creates deterministic fixtures for KTP Trust Proof references,
+Kinetic Envelope references, and <code>kil.q-state.v0</code> envelopes. It is not a Trust
+Oracle and will be named <code>lab_issuer</code>, never <code>oracle</code>, in code and evidence.</p>
+<p>The first cryptographic profile is <code>kil-q-jws-eddsa-lab-v0</code>:</p>
+<ul>
+<li>compact JWS with <code>alg=EdDSA</code>, <code>typ=KIL-Q+JWT</code>, and an explicit <code>kid</code>;</li>
+<li>Ed25519 signing and verification using <code>cryptography==50.0.0</code>;</li>
+<li>a software-only Level 1 laboratory key generated for the run;</li>
+<li>public-key thumbprint and key provenance recorded in the manifest;</li>
+<li>maximum <code>exp - iat</code> of ten seconds, matching the KTP v2 Trust Proof schema;</li>
+<li>an <code>aud</code> value bound to exactly one fixed authorization track; and</li>
+<li>no threshold-signature or production-HSM claim.</li>
+</ul>
+<p>The JWS protects the exact payload bytes. The payload's deterministic JSON
+serialization supports reproducibility, but signature verification never
+depends on reparsing and reserializing attacker-controlled JSON.</p>
+<h3 id="4-3-envoy-gateway">4.3 Envoy gateway</h3>
+<p>Each track has its own Envoy deployment and configuration. The external
+authorization filter is enabled before the router, <code>failure_mode_allow</code> is
+<code>false</code>, retries are disabled, the authorization timeout is fixed, and route
+cache clearing is not used. The authorization service consumes only original
+method, original path, <code>x-request-id</code>, Authorization, and <code>x-kil-q-state</code> as
+trusted semantic inputs. In Envoy raw HTTP mode, method, path, and Authorization
+are conveyed automatically; the explicit <code>allowed_headers</code> matcher adds only
+<code>x-request-id</code> and <code>x-kil-q-state</code>. Automatically present Host and
+Content-Length transport metadata are ignored by authorization evaluation. The
+client never supplies trusted local-evidence, track-mode, issuer, or
+verified-subject headers.</p>
+<p>Envoy 1.39.1 raw-HTTP <code>ext_authz</code> extracts the configured decision-digest
+response header for an authorization HTTP 200 permit and HTTP 403 policy
+denial. It converts an authorization HTTP 5xx response to an internal
+authorization error before response-header and dynamic-metadata extraction, so
+the Envoy JSON access log renders the digest field as <code>&quot;-&quot;</code> on that path. The
+error remains joinable by the fixed run manifest, fixed track, request ID, KIL
+decision record, Envoy response/no-upstream fields, and zero target markers;
+the evidence join may not invent or infer a discarded Envoy digest.</p>
+<h3 id="4-4-authorization-services">4.4 Authorization services</h3>
+<p>All three services implement the same HTTP adapter contract and emit the same
+decision-record schema:</p>
+<ul>
+<li>baseline evaluates only <code>credential_valid AND policy_allows_action</code>;</li>
+<li>signed-only verifies the envelope and evaluates the V1 gate without a fresh
+local trajectory penalty; and</li>
+<li>signed-plus-local verifies the same envelope, reads server-side local
+evidence for the request fixture, and applies the V1 reducing-only overlay.</li>
+</ul>
+<p>Mode is immutable process configuration mounted read-only. Any request header
+that resembles a mode selector is ignored and recorded as untrusted input.</p>
+<h3 id="4-5-harmless-target-and-invocation-ledger">4.5 Harmless target and invocation ledger</h3>
+<p>The target exposes two no-effect endpoints:</p>
+<ul>
+<li><code>/benign/read</code>, representing a permitted low-consequence operation; and</li>
+<li><code>/consequential/admin</code>, representing a consequential action without carrying
+out any administrative operation.</li>
+</ul>
+<p>For every request that reaches it, the target appends a record containing the
+request ID, track, path, receive time, and response time to its ledger. It
+returns a marker response only after the append succeeds. The target stores no
+credentials, secrets, cluster tokens, or destructive handlers.</p>
+<h3 id="4-6-evidence-joiner-and-live-view">4.6 Evidence joiner and live view</h3>
+<p>The joiner correlates controller, authorization, Envoy access, and target-ledger
+records by run ID, track, and request ID. A local read-only dashboard renders
+track state as requests execute and shows counts, the last decision, target
+invocation, and latency distribution. The dashboard is an observation surface,
+not an evidence source; the underlying JSONL records remain authoritative.</p>
+<h2 id="5-observable-enforcement-contract">5. Observable enforcement contract</h2>
+<p>A denial is validated only when all three conditions hold for the same request:</p>
+<ol>
+<li>the KIL decision record says <code>deny</code> or fail-closed <code>indeterminate</code>;</li>
+<li>Envoy returns the configured denied response and records no upstream host;
+and</li>
+<li>the target invocation ledger contains no matching request ID.</li>
+</ol>
+<p>A permit is validated only when:</p>
+<ol>
+<li>the decision record says <code>permit</code>;</li>
+<li>Envoy records an upstream response; and</li>
+<li>the target ledger contains exactly one matching request ID.</li>
+</ol>
+<p>Digest equality is additionally required across the KIL decision, Envoy, and
+target records for permits and policy denials where Envoy preserves the authz
+response metadata. A fail-closed authz 5xx must instead carry the documented
+<code>&quot;-&quot;</code> Envoy sentinel and is validated without digest equality on the Envoy leg.</p>
+<p>Duplicate target markers, missing decision records, conflicting track IDs, or
+unjoinable evidence invalidate the individual request result. An HTTP status
+alone is never proof of pre-execution enforcement.</p>
+<h2 id="6-mode-isolation-and-downgrade-resistance">6. Mode isolation and downgrade resistance</h2>
+<p>The cluster uses three namespaces:</p>
+<ul>
+<li><code>kil-v3-baseline</code>;</li>
+<li><code>kil-v3-signed</code>; and</li>
+<li><code>kil-v3-local-reduce</code>.</li>
+</ul>
+<p>Each contains a dedicated Envoy, authorization service, target, service account,
+and append-only ledger. NetworkPolicy permits only controller-to-Envoy,
+Envoy-to-authz, and Envoy-to-target flows inside the declared topology. Target
+services are not exposed to the host. The controller reaches gateways through
+localhost-only port forwards with track-specific local ports.</p>
+<p>The signed envelope audience differs by track. A state issued for the signed
+track is rejected by the local-reduction track and vice versa. This prevents a
+captured state from becoming a cross-mode downgrade mechanism.</p>
+<h2 id="7-controlled-workload-matrix">7. Controlled workload matrix</h2>
+<p>The minimum functional matrix is:</p>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>State/policy condition</th>
+<th>Local evidence</th>
+<th style="text-align:right">Baseline</th>
+<th style="text-align:right">Signed only</th>
+<th style="text-align:right">Signed + local</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>benign read</td>
+<td>valid and above threshold</td>
+<td>low divergence</td>
+<td style="text-align:right">permit</td>
+<td style="text-align:right">permit</td>
+<td style="text-align:right">permit</td>
+</tr>
+<tr>
+<td>credential-only admin</td>
+<td>credential and policy valid; no usable Q state</td>
+<td>none</td>
+<td style="text-align:right">permit</td>
+<td style="text-align:right">deny</td>
+<td style="text-align:right">deny</td>
+</tr>
+<tr>
+<td>two-timescale cutoff</td>
+<td>valid signed Q above threshold</td>
+<td>high fresh divergence</td>
+<td style="text-align:right">permit</td>
+<td style="text-align:right">permit</td>
+<td style="text-align:right">deny</td>
+</tr>
+<tr>
+<td>stale local evidence</td>
+<td>valid signed Q above threshold</td>
+<td>stale</td>
+<td style="text-align:right">permit</td>
+<td style="text-align:right">permit</td>
+<td style="text-align:right">fail closed for admin</td>
+</tr>
+<tr>
+<td>immutable veto</td>
+<td>valid signature, veto asserted</td>
+<td>low divergence</td>
+<td style="text-align:right">permit under limited control</td>
+<td style="text-align:right">deny</td>
+<td style="text-align:right">deny</td>
+</tr>
+<tr>
+<td>envelope violation</td>
+<td>requested action outside KTP envelope</td>
+<td>low divergence</td>
+<td style="text-align:right">permit under limited control</td>
+<td style="text-align:right">deny</td>
+<td style="text-align:right">deny</td>
+</tr>
+</tbody>
+</table>
+<p>The two-timescale cutoff is the central differentiator: the signed state is
+authentic, fresh, and sufficient, so signed-only permits; the same state plus
+fresh high-divergence evidence reduces <code>Q_effective</code> below threshold before the
+target executes.</p>
+<p>The complete failure suite also covers absent, malformed, incorrectly signed,
+expired, not-yet-valid, revoked, replayed, wrong-audience, wrong-subject,
+wrong-class, and wrong-action state; cold start; insufficient history; a
+declared rare action; local attempted increase; false reduction and signed-state
+recovery; authorization timeout; collector loss; and target-ledger conflict.</p>
+<h2 id="8-evidence-classes-and-claim-limits">8. Evidence classes and claim limits</h2>
+<p>The cluster can validate that the implemented adapter produced an observable
+pre-upstream permit or denial for a declared input. It cannot validate that the
+modeled local features accurately represent an undisclosed historical event.</p>
+<ul>
+<li>KTP v2.0.0 specification facts are <code>observed</code> from the cited source.</li>
+<li>Synthetic Q values, thresholds, local divergence, and workload mappings are
+<code>modeled</code>.</li>
+<li>The join of decision, Envoy, and target outcomes is <code>validated</code> only after a
+completed cluster run passes integrity and provenance checks.</li>
+</ul>
+<p>The phrase “KIL prevented the Hugging Face incident” remains prohibited. A
+permitted formulation is: “Under modeled profile P, the historical replay
+predicts denial; in local run R, the Envoy adapter reproduced pre-upstream
+denial for the representative action.”</p>
+<h2 id="9-metrics-and-repetitions">9. Metrics and repetitions</h2>
+<p>Functional cases run thirty times per track after one readiness pass. A case
+passes only if all thirty joins match the expected outcome and no invariant is
+violated. Timing runs use one hundred warm-up requests followed by one thousand
+measured requests per track and workload class.</p>
+<p>Latency uses monotonic nanosecond clocks. Reported fields are:</p>
+<ul>
+<li>controller end-to-end latency;</li>
+<li>authorization-service evaluation latency;</li>
+<li>Envoy upstream service time where present;</li>
+<li>target receive latency where present;</li>
+<li>p50, p95, p99, minimum, maximum, count, and error count; and</li>
+<li>hardware, operating system, architecture, runtime, cluster, image, profile,
+and implementation identities.</li>
+</ul>
+<p>The first V3 run is a single-host engineering validation, not a capacity or
+production-performance benchmark.</p>
+<h2 id="10-environment-and-version-contract">10. Environment and version contract</h2>
+<p>The original planning target was:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Planned identity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Host runtime</td>
+<td>Colima 0.10.3 on Lima 2.2.0</td>
+</tr>
+<tr>
+<td>Cluster</td>
+<td>Kind 0.33.0</td>
+</tr>
+<tr>
+<td>Kubernetes node</td>
+<td><code>kindest/node:v1.37.0</code> pinned by the official SHA-256 digest</td>
+</tr>
+<tr>
+<td>Kubernetes client</td>
+<td><code>kubectl</code> v1.37.0</td>
+</tr>
+<tr>
+<td>Envoy</td>
+<td>v1.39.1, image pinned by resolved registry digest</td>
+</tr>
+<tr>
+<td>Application runtime</td>
+<td>Python 3.12.13</td>
+</tr>
+<tr>
+<td>Ed25519 library</td>
+<td><code>cryptography</code> 50.0.0</td>
+</tr>
+</tbody>
+</table>
+<p>The mutually supported V3B profile resolved and pinned on 2026-08-30 is:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Resolved V3B identity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Host</td>
+<td>macOS (Darwin), arm64 development host; exact OS build is not recorded by the current harness</td>
+</tr>
+<tr>
+<td>Host runtime</td>
+<td>Colima 0.10.3 on Lima 2.2.0, profile <code>kil-v3-lab</code></td>
+</tr>
+<tr>
+<td>Docker client</td>
+<td>Docker CLI 29.7.2</td>
+</tr>
+<tr>
+<td>Cluster tool</td>
+<td>Kind 0.32.0</td>
+</tr>
+<tr>
+<td>Kubernetes node</td>
+<td><code>kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5</code></td>
+</tr>
+<tr>
+<td>Kubernetes client</td>
+<td><code>kubectl</code> v1.36.3</td>
+</tr>
+<tr>
+<td>Envoy</td>
+<td>v1.39.1, image pinned by resolved registry digest before use</td>
+</tr>
+<tr>
+<td>NetworkPolicy provider</td>
+<td>Calico v3.32.0, reserved for V3B-2</td>
+</tr>
+<tr>
+<td>Application runtime</td>
+<td>Python 3.12.13</td>
+</tr>
+<tr>
+<td>Ed25519 library</td>
+<td><code>cryptography</code> 50.0.0</td>
+</tr>
+</tbody>
+</table>
+<p>The tracked component pins are in <code>deploy/kind/v3b-profile.json</code>. Preflight
+records the observed profiles, reserved gateway ports, and verified tool
+identities. Later controller stages record Docker engine provenance and the
+unchanged global Docker context, then resolve the Python image tag to its
+registry digest during immutable-image preparation. The current harness does
+not record an exact host OS build or an explicit cryptography/library identity.
+Kind 0.33.0 and the Kubernetes 1.37.0 node image
+were not available as the resolved stable profile. The initial V3B profile
+therefore selected the available Envoy 1.39.0 image; that component was
+corrected to 1.39.1 on 2026-08-30 after the August 27 security release became
+available with two HTTP <code>ext_authz</code> fixes. These release corrections do not
+change the founder-approved topology, authorization semantics, comparison
+tracks, or evidence boundary. V3B-1 first proves the pinned local Envoy
+boundary; V3B-2 then reuses the same artifacts in the approved Kind/Calico
+topology.</p>
+<p>Before runtime mutation, preflight records the executable hashes and version
+outputs, profile inventory, and reserved ports. Subsequent controller stages
+capture engine/global-context provenance and resolve mutable runtime image tags
+to digests before use. A run with an unrecorded component or mutable-only image
+identity cannot be promoted to validated.</p>
+<h2 id="11-isolation-safety-and-teardown">11. Isolation, safety, and teardown</h2>
+<p>The cluster name is <code>kil-v3-lab</code>. The run controller refuses any other current
+Kubernetes context. Host exposure binds to <code>127.0.0.1</code> only. Manifests use
+dedicated namespaces, non-root containers, read-only root filesystems where
+supported, dropped Linux capabilities, resource limits, and no host mounts or
+privileged pods.</p>
+<p>Teardown deletes only the exact <code>kil-v3-lab</code> Kind cluster after recording its
+state. The controller must not use a wildcard, current-context deletion, or an
+unresolved variable. Generated run bundles remain on the host after teardown.</p>
+<h2 id="12-run-bundle">12. Run bundle</h2>
+<p>Each V3 run produces:</p>
+<ul>
+<li><code>manifest.json</code> — run identity, commit, versions, image digests, keys, clocks,
+repetitions, evidence policy, and hashes;</li>
+<li><code>scenario.json</code> — normalized functional and timing cases;</li>
+<li><code>states.jsonl</code> — KTP references and signed composite-state envelopes;</li>
+<li><code>requests.jsonl</code> — controller send/receive records;</li>
+<li><code>decisions.jsonl</code> — baseline and KIL decisions;</li>
+<li><code>envoy.jsonl</code> — normalized access records;</li>
+<li><code>targets.jsonl</code> — target invocation ledger;</li>
+<li><code>joins.jsonl</code> — per-request proof joins and validity status;</li>
+<li><code>metrics.json</code> — distributions and invariant counts;</li>
+<li><code>summary.md</code> — findings, limitations, and exact permitted claims;</li>
+<li><code>live.html</code> — read-only visualization of the same records; and</li>
+<li><code>SHA256SUMS</code> — hashes for every published artifact.</li>
+</ul>
+<p><code>live.html</code> is a deterministic read-only rendering, checksummed and included in
+the authoritative bundle attestation. It does not determine enforcement
+acceptance and is excluded from the content-addressed run ID. Offline <code>view</code>
+must rederive it from the accepted public records before presentation. Every
+paper figure and validated statement must cite the run ID and source artifact.</p>
+<h2 id="13-implementation-stages-and-acceptance">13. Implementation stages and acceptance</h2>
+<h3 id="v3a-contract-and-process-level-proof">V3A — Contract and process-level proof</h3>
+<ul>
+<li>define the signed-state, adapter-request, target-ledger, and join schemas;</li>
+<li>implement Ed25519 fixture issuance and verification test-first;</li>
+<li>implement the three fixed authorization modes;</li>
+<li>reproduce permit, deny, and the two-timescale differentiation through local
+HTTP processes; and</li>
+<li>render the live evidence view and architecture diagram.</li>
+</ul>
+<h3 id="v3b-isolated-kind-deployment">V3B — Isolated Kind deployment</h3>
+<ul>
+<li>install or resolve the approved tools and record immutable identities;</li>
+<li>build and digest-pin the KIL service image;</li>
+<li>deploy the three isolated tracks;</li>
+<li>prove that denied requests never reach their target ledger; and</li>
+<li>exercise the complete functional failure matrix.</li>
+</ul>
+<h3 id="v3c-repetition-measurement-and-publication-promotion">V3C — Repetition, measurement, and publication promotion</h3>
+<ul>
+<li>execute the thirty-repeat functional protocol;</li>
+<li>execute the warm-up and one-thousand-request timing protocol;</li>
+<li>build and verify the immutable run bundle;</li>
+<li>connect accepted results to the white paper by run ID; and</li>
+<li>retain negative or ambiguous outcomes without relabeling them.</li>
+</ul>
+<p>Gate V3 passes only when a clean run satisfies all evidence joins, zero
+authority-expansion invariants, zero unexplained target invocations, complete
+artifact hashes, and the approved evidence-language review.</p>
+<h2 id="14-authoritative-sources">14. Authoritative sources</h2>
+<ul>
+<li><a href="https://github.com/nmcitra/ktp-rfc/tree/v2.0.0">KTP RFC series, version 2.0.0</a></li>
+<li><a href="https://github.com/nmcitra/ktp-rfc/blob/v2.0.0/schemas/trust-proof.json">KTP v2.0.0 Trust Proof schema</a></li>
+<li><a href="https://github.com/nmcitra/ktp-rfc/blob/v2.0.0/specifications/kinetic-envelope.md">KTP Kinetic Envelope</a></li>
+<li><a href="https://github.com/nmcitra/ktp-rfc/blob/v2.0.0/specifications/deployment-profile.md">KTP deployment profile</a></li>
+<li><a href="https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_authz_filter.html">Envoy external authorization filter</a></li>
+<li><a href="https://github.com/kubernetes-sigs/kind/releases/tag/v0.32.0">Kind 0.32.0 release and Kubernetes 1.36.1 node digest</a></li>
+<li><a href="https://github.com/kubernetes/kubernetes/releases/tag/v1.36.3">Kubernetes 1.36.3 release</a></li>
+<li><a href="https://www.envoyproxy.io/docs/envoy/latest/version_history/v1.39/v1.39.1">Envoy 1.39.1 release notes</a></li>
+<li><a href="https://github.com/projectcalico/calico/releases/tag/v3.32.0">Calico 3.32.0 release</a></li>
+<li><a href="https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements">Calico Kubernetes compatibility</a></li>
+<li><a href="https://huggingface.co/blog/agent-intrusion-technical-timeline">Hugging Face technical incident timeline</a></li>
+</ul>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+<h2 id="supersession-notice-2026-08-31">Supersession notice — 2026-08-31</h2>
+<p>The document above is preserved as the original approved V3 design and
+historical execution record. The current V3B-1 correction is governed by the
+<a href="2026-08-31-v3b1-in-network-request-driver-design.htm">in-network request-driver design</a>
+and its
+<a href="../plans/2026-08-31-v3b1-in-network-request-driver.htm">implementation plan</a>.
+Host port forwarding and the Kind/Calico/NetworkPolicy topology described above
+are not the implemented V3B-1 boundary. Current V3B-1 uses three one-shot
+drivers, six Docker-internal networks, no host TCP publication, and a
+<code>local_envoy_boundary</code> claim scope; V3B-2 reserves Kind/Calico for future work.</p>
+<p>The corrected mechanism is implemented and statically approved at commits
+<code>75161f0</code> and <code>48bd81a</code>. The Task 8 implementation checkpoint passed 466
+non-runtime tests. The fresh Task 9 complete static gate passes 474 tests,
+including eight documentation tests. No corrected-topology live gate has yet
+been accepted. Request-free readiness is pending; one central proof is
+conditional on that gate. This notice supersedes only the live-mechanism status.
+It does not rewrite the historical text above.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

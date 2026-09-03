@@ -1,4 +1,4 @@
-.PHONY: help check-python test validate replay v3a-demo v3b-tools v3b-preflight
+.PHONY: help check-python test docs-html docs-html-check validate replay v3a-demo v3b-tools v3b-preflight
 
 PYTHON ?= python3
 
@@ -18,7 +18,13 @@ check-python:
 test: check-python
 	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests -v
 
-validate: test
+docs-html: check-python
+	PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src $(PYTHON) tools/render_markdown.py
+
+docs-html-check: check-python
+	PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src $(PYTHON) tools/render_markdown.py --check
+
+validate: test docs-html-check
 	$(PYTHON) -c "from pathlib import Path; assert '[project]' in Path('pyproject.toml').read_text()"
 	git diff --check
 

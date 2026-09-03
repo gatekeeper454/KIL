@@ -811,5 +811,67 @@ class RepositoryGenerationTest(unittest.TestCase):
         )
 
 
+class RepositoryPublicationContractTest(unittest.TestCase):
+    def test_every_tracked_markdown_has_exact_tracked_generated_sibling(self) -> None:
+        sources = render_markdown.discover_sources(ROOT)
+        expected = {source.with_suffix(".htm") for source in sources}
+        tracked_output = subprocess.run(
+            ["git", "ls-files", "-z", "--", "*.htm"],
+            cwd=ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+        tracked = {
+            PurePosixPath(raw.decode("utf-8"))
+            for raw in tracked_output.split(b"\0")
+            if raw
+        }
+
+        self.assertEqual(expected, tracked)
+
+    def test_checked_in_readers_are_current_and_sources_are_unchanged(self) -> None:
+        sources = render_markdown.discover_sources(ROOT)
+        before = {source: (ROOT / source).read_bytes() for source in sources}
+
+        self.assertEqual([], render_markdown.render_repository(ROOT, check=True))
+        self.assertEqual(
+            before,
+            {source: (ROOT / source).read_bytes() for source in sources},
+        )
+
+    def test_byte_preserved_drafts_match_their_recorded_checksums(self) -> None:
+        recorded = dict(
+            reversed(line.split("  ", 1))
+            for line in (
+                ROOT / "research/source-material/SHA256SUMS"
+            ).read_text(encoding="utf-8").splitlines()
+            if line
+        )
+        for name in (
+            "docs/drafts/kil-trust-decay-model.md",
+            "docs/drafts/ambient-enforcement-vs-huggingface-incident.md",
+        ):
+            digest = sha256((ROOT / name).read_bytes()).hexdigest()
+            self.assertEqual(recorded[name], digest)
+
+    def test_make_wires_generation_and_check_into_validation(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+        self.assertIn(".PHONY: help check-python test docs-html docs-html-check validate", makefile)
+        self.assertIn(
+            "docs-html: check-python\n"
+            "\tPYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src $(PYTHON) "
+            "tools/render_markdown.py\n",
+            makefile,
+        )
+        self.assertIn(
+            "docs-html-check: check-python\n"
+            "\tPYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src $(PYTHON) "
+            "tools/render_markdown.py --check\n",
+            makefile,
+        )
+        self.assertIn("validate: test docs-html-check\n", makefile)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,1193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V3B-1 In-Network Request Driver Implementation Plan</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md">
+<meta name="source-sha256" content="c93083f95358c140a63bbf6435b1f4b7af0d500867b51c3d1c847e6ad21cb287">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md</code> (<code>c93083f95358c140a63bbf6435b1f4b7af0d500867b51c3d1c847e6ad21cb287</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">V3B-1 In-Network Request Driver Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md</code> (<code>c93083f95358c140a63bbf6435b1f4b7af0d500867b51c3d1c847e6ad21cb287</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-1-in-network-request-driver-implementation-plan">V3B-1 In-Network Request Driver Implementation Plan</a></li><li class="level-2"><a href="#execution-constraints">Execution constraints</a></li><li class="level-2"><a href="#file-structure">File structure</a></li><li class="level-3"><a href="#task-1-freeze-legacy-verification-and-add-closed-driver-protocol-contracts">Task 1: Freeze legacy verification and add closed driver protocol contracts</a></li><li class="level-3"><a href="#task-2-implement-the-one-shot-container-side-driver">Task 2: Implement the one-shot container-side driver</a></li><li class="level-3"><a href="#task-3-advance-profile-content-identity-manifest-and-active-state-schemas">Task 3: Advance profile, content identity, manifest, and active-state schemas</a></li><li class="level-3"><a href="#task-4-build-and-attest-the-split-internal-runtime-topology">Task 4: Build and attest the split internal runtime topology</a></li><li class="level-3"><a href="#task-5-add-attached-driver-sessions-and-the-readiness-only-lifecycle">Task 5: Add attached driver sessions and the readiness-only lifecycle</a></li><li class="level-3"><a href="#task-6-replace-direct-host-requests-with-one-shot-driver-instructions">Task 6: Replace direct host requests with one-shot driver instructions</a></li><li class="level-3"><a href="#task-7-bind-exact-driver-results-into-v2-evidence-and-presenter-output">Task 7: Bind exact driver results into v2 evidence and presenter output</a></li><li class="level-3"><a href="#task-8-make-recovery-and-teardown-driver-aware">Task 8: Make recovery and teardown driver-aware</a></li><li class="level-3"><a href="#task-9-unify-documentation-diagrams-lab-status-and-static-verification">Task 9: Unify documentation, diagrams, lab status, and static verification</a></li><li class="level-3"><a href="#task-10-publish-the-correction-and-execute-the-request-free-live-gate">Task 10: Publish the correction and execute the request-free live gate</a></li><li class="level-3"><a href="#task-11-execute-and-publish-one-accepted-local-envoy-proof">Task 11: Execute and publish one accepted local-Envoy proof</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-1-in-network-request-driver-implementation-plan" href="#v3b-1-in-network-request-driver-implementation-plan">V3B-1 In-Network Request Driver Implementation Plan</a></li><li class="level-2"><a data-section-id="execution-constraints" href="#execution-constraints">Execution constraints</a></li><li class="level-2"><a data-section-id="file-structure" href="#file-structure">File structure</a></li><li class="level-3"><a data-section-id="task-1-freeze-legacy-verification-and-add-closed-driver-protocol-contracts" href="#task-1-freeze-legacy-verification-and-add-closed-driver-protocol-contracts">Task 1: Freeze legacy verification and add closed driver protocol contracts</a></li><li class="level-3"><a data-section-id="task-2-implement-the-one-shot-container-side-driver" href="#task-2-implement-the-one-shot-container-side-driver">Task 2: Implement the one-shot container-side driver</a></li><li class="level-3"><a data-section-id="task-3-advance-profile-content-identity-manifest-and-active-state-schemas" href="#task-3-advance-profile-content-identity-manifest-and-active-state-schemas">Task 3: Advance profile, content identity, manifest, and active-state schemas</a></li><li class="level-3"><a data-section-id="task-4-build-and-attest-the-split-internal-runtime-topology" href="#task-4-build-and-attest-the-split-internal-runtime-topology">Task 4: Build and attest the split internal runtime topology</a></li><li class="level-3"><a data-section-id="task-5-add-attached-driver-sessions-and-the-readiness-only-lifecycle" href="#task-5-add-attached-driver-sessions-and-the-readiness-only-lifecycle">Task 5: Add attached driver sessions and the readiness-only lifecycle</a></li><li class="level-3"><a data-section-id="task-6-replace-direct-host-requests-with-one-shot-driver-instructions" href="#task-6-replace-direct-host-requests-with-one-shot-driver-instructions">Task 6: Replace direct host requests with one-shot driver instructions</a></li><li class="level-3"><a data-section-id="task-7-bind-exact-driver-results-into-v2-evidence-and-presenter-output" href="#task-7-bind-exact-driver-results-into-v2-evidence-and-presenter-output">Task 7: Bind exact driver results into v2 evidence and presenter output</a></li><li class="level-3"><a data-section-id="task-8-make-recovery-and-teardown-driver-aware" href="#task-8-make-recovery-and-teardown-driver-aware">Task 8: Make recovery and teardown driver-aware</a></li><li class="level-3"><a data-section-id="task-9-unify-documentation-diagrams-lab-status-and-static-verification" href="#task-9-unify-documentation-diagrams-lab-status-and-static-verification">Task 9: Unify documentation, diagrams, lab status, and static verification</a></li><li class="level-3"><a data-section-id="task-10-publish-the-correction-and-execute-the-request-free-live-gate" href="#task-10-publish-the-correction-and-execute-the-request-free-live-gate">Task 10: Publish the correction and execute the request-free live gate</a></li><li class="level-3"><a data-section-id="task-11-execute-and-publish-one-accepted-local-envoy-proof" href="#task-11-execute-and-publish-one-accepted-local-envoy-proof">Task 11: Execute and publish one accepted local-Envoy proof</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="v3b-1-in-network-request-driver-implementation-plan">V3B-1 In-Network Request Driver Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Replace the failed host-published V3B-1 client path with three one-shot request drivers inside split internal track networks, then produce one request-free readiness proof and one accepted local-Envoy enforcement demonstration.</p>
+<p><strong>Architecture:</strong> Add a shared closed driver-protocol module, a container-side one-shot executable, and a host-side interactive-process adapter. Each track receives a driver/Envoy frontend and an Envoy/authz/target backend; Envoy is the only dual-homed component, has no host publication, and remains the enforcement boundary. New schema versions bind non-circular driver definitions and exact public driver results while legacy bundles remain verified by their original schema.</p>
+<p><strong>Tech Stack:</strong> Python 3.12.13, <code>unittest</code>, canonical JSON/JSONL, <code>http.client</code>, <code>subprocess</code>, Docker CLI 29.7.2, Colima 0.10.3, Envoy 1.39.1, Ed25519 compact JWS, SHA-256, SVG/HTML/Markdown, GitHub Actions and GitHub CLI.</p>
+<hr />
+<h2 id="execution-constraints">Execution constraints</h2>
+<ul>
+<li>Work only on a <code>codex/</code> feature branch in an isolated Git worktree.</li>
+<li>Follow RED -&gt; GREEN -&gt; REFACTOR for every production behavior change.</li>
+<li>Do not alter KIL decay, Q-state verification, authorization, Envoy policy, or
+target semantics.</li>
+<li>Do not start Docker/Colima during Tasks 1-9; those tasks are static only.</li>
+<li>Do not issue a consequential request until the request-free live gate passes
+from merged public main.</li>
+<li>After request intent, never restart, reconnect, replace, or retry a driver.</li>
+<li>Preserve ignored private journals and failed bundles; never force-add them.</li>
+<li>Append every substantive checkpoint to
+<code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code>.</li>
+</ul>
+<h2 id="file-structure">File structure</h2>
+<p><strong>Create:</strong></p>
+<ul>
+<li><code>src/kil/v3b1_driver_protocol.py</code> — shared closed driver definition,
+instruction, readiness, result, failure, canonicalization, and secret rules.</li>
+<li><code>src/kil/v3b1_request_driver.py</code> — image-resident one-shot retained-connection
+executable.</li>
+<li><code>tools/v3b1_driver_transport.py</code> — host-side attached Docker-process protocol,
+deadlines, stdin/stdout framing, cancellation, and process-result handling.</li>
+<li><code>tests/test_v3b1_request_driver.py</code> — pure protocol and container executable
+tests.</li>
+<li><code>tests/fixtures/v3b1-request-driver-protocol.json</code> — sanitized closed protocol
+transcript.</li>
+<li><code>tests/fixtures/v3b1-public-bundle-v1/</code> — deterministic legacy public-bundle
+fixture captured before writer migration.</li>
+</ul>
+<p><strong>Modify implementation/contracts:</strong></p>
+<ul>
+<li><code>tools/v3b1_local_envoy.py</code></li>
+<li><code>tools/v3b1_harness_contract.py</code></li>
+<li><code>tests/test_v3b1_local_envoy.py</code></li>
+<li><code>tests/fixtures/v3b1-integration-contract.json</code></li>
+<li><code>deploy/kind/Dockerfile.v3b</code></li>
+<li><code>deploy/kind/Dockerfile.v3b.dockerignore</code></li>
+<li><code>deploy/kind/v3b-profile.json</code></li>
+<li><code>src/kil/v3b_preflight.py</code></li>
+<li><code>tests/test_v3b_preflight.py</code></li>
+<li><code>tests/test_v3b_container_contract.py</code></li>
+<li><code>tests/test_v3b_tool_bootstrap.py</code></li>
+</ul>
+<p><strong>Modify documentation/publication:</strong></p>
+<ul>
+<li><code>README.md</code></li>
+<li><code>tools/README.md</code></li>
+<li><code>adapters/envoy/README.md</code></li>
+<li><code>docs/lab/V3-PROGRESS.md</code></li>
+<li><code>docs/paper/kinetic-infrastructure.md</code></li>
+<li><code>docs/architecture/v3-envoy-live-validation.svg</code></li>
+<li><code>docs/design-drafts/hybrid-two-timescale-architecture.html</code></li>
+<li><code>docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md</code></li>
+<li><code>docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md</code></li>
+<li><code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code></li>
+<li>ignored live board <code>artifacts/generated/v3b1-task6-live-status.md</code></li>
+</ul>
+<p>Do not modify <code>src/kil/run_bundle.py</code> or its modeled-replay tests; they are a
+separate V3A artifact path.</p>
+<h3 id="task-1-freeze-legacy-verification-and-add-closed-driver-protocol-contracts">Task 1: Freeze legacy verification and add closed driver protocol contracts</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>src/kil/v3b1_driver_protocol.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_v3b1_request_driver.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/fixtures/v3b1-request-driver-protocol.json</code></p>
+</li>
+<li>
+<p>Create: <code>tests/fixtures/v3b1-public-bundle-v1/</code></p>
+</li>
+<li>
+<p>Modify: <code>tools/v3b1_harness_contract.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Freeze one deterministic legacy bundle before changing writers</strong></p>
+</li>
+</ul>
+<p>Use the existing <code>published_presenter_bundle()</code> test helper to materialize the
+current complete <code>kil.v3b1-public-manifest.v1</code> file set under
+<code>tests/fixtures/v3b1-public-bundle-v1/</code>. Add a test that copies the fixture to a
+temporary directory and requires <code>verify_presenter_bundle()</code> to accept it.
+Label its request facts as a deterministic synthetic compatibility fixture; do
+not call it a historical or live run.</p>
+<ul>
+<li>[x] <strong>Step 2: Write RED tests for non-circular definitions and closed records</strong></li>
+</ul>
+<p>Add tests with these exact public APIs:</p>
+<pre><code class="language-python">from kil.v3b1_driver_protocol import (
+    DriverProtocolError,
+    canonical_record,
+    driver_definition,
+    parse_instruction,
+    parse_result,
+)
+
+definition = driver_definition(
+    track=&quot;signed_state_only&quot;,
+    image_id=&quot;sha256:&quot; + &quot;1&quot; * 64,
+    bootstrap_sha256=&quot;2&quot; * 64,
+    frontend_segment_sha256=&quot;3&quot; * 64,
+)
+self.assertEqual(definition[&quot;endpoint&quot;], {&quot;host&quot;: &quot;envoy&quot;, &quot;port&quot;: 8080})
+self.assertNotIn(&quot;container_name&quot;, definition)
+self.assertNotIn(&quot;run_id&quot;, definition)
+self.assertEqual(
+    canonical_record(definition), canonical_record(dict(reversed(list(definition.items()))))
+)
+</code></pre>
+<p>Require duplicate keys, noncanonical bytes, unknown fields, invalid track,
+unexpected endpoint, oversized input, authorization/Q-state fields in public
+records, compact JWS values, environment material, paths, tokens, and exception
+messages to fail with <code>DriverProtocolError</code>.</p>
+<ul>
+<li>[x] <strong>Step 3: Run the focused tests and verify RED</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b1_request_driver -v
+</code></pre>
+<p>Expected: FAIL because <code>kil.v3b1_driver_protocol</code> does not exist.</p>
+<ul>
+<li>[x] <strong>Step 4: Implement the minimal closed protocol</strong></li>
+</ul>
+<p>Define fixed constants and closed validators:</p>
+<pre><code class="language-python">TRACKS = (
+    &quot;credential_policy_baseline&quot;,
+    &quot;signed_state_only&quot;,
+    &quot;signed_plus_local_reduce&quot;,
+)
+DRIVER_ENDPOINT = {&quot;host&quot;: &quot;envoy&quot;, &quot;port&quot;: 8080}
+MAX_INSTRUCTION_BYTES = 32 * 1024
+MAX_RESULT_BYTES = 8 * 1024
+MAX_RESPONSE_BODY_BYTES = 4096
+DRIVER_RUNTIME_POLICY = {
+    &quot;user&quot;: &quot;65532:65532&quot;,
+    &quot;read_only&quot;: True,
+    &quot;no_new_privileges&quot;: True,
+    &quot;cap_drop&quot;: [&quot;ALL&quot;],
+    &quot;nano_cpus&quot;: 500_000_000,
+    &quot;memory&quot;: 268_435_456,
+    &quot;memory_swap&quot;: 268_435_456,
+    &quot;pids_limit&quot;: 128,
+    &quot;restart&quot;: &quot;no&quot;,
+    &quot;stop_timeout&quot;: 10,
+    &quot;log_driver&quot;: &quot;json-file&quot;,
+    &quot;log_options&quot;: {&quot;max-file&quot;: &quot;1&quot;, &quot;max-size&quot;: &quot;1m&quot;},
+    &quot;tmpfs&quot;: {&quot;/tmp&quot;: &quot;rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700&quot;},
+    &quot;stdin_open&quot;: True,
+    &quot;tty&quot;: False,
+    &quot;healthcheck&quot;: &quot;disabled&quot;,
+    &quot;mounts&quot;: [],
+    &quot;ports&quot;: {},
+}
+
+class DriverProtocolError(ValueError):
+    pass
+
+def require_track(value: object) -&gt; str:
+    if type(value) is not str or value not in TRACKS:
+        raise DriverProtocolError(&quot;driver track is invalid&quot;)
+    return value
+
+def require_sha256(value: object) -&gt; str:
+    if type(value) is not str or re.fullmatch(r&quot;[a-f0-9]{64}&quot;, value) is None:
+        raise DriverProtocolError(&quot;driver SHA-256 is invalid&quot;)
+    return value
+
+def require_image_id(value: object) -&gt; str:
+    if type(value) is not str or re.fullmatch(r&quot;sha256:[a-f0-9]{64}&quot;, value) is None:
+        raise DriverProtocolError(&quot;driver image ID is invalid&quot;)
+    return value
+
+def canonical_record(value: object) -&gt; bytes:
+    return (canonical_json(value) + &quot;\n&quot;).encode(&quot;utf-8&quot;)
+
+def driver_definition(*, track: str, image_id: str,
+                      bootstrap_sha256: str,
+                      frontend_segment_sha256: str) -&gt; dict[str, object]:
+    value = {
+        &quot;schema_version&quot;: &quot;kil.v3b1-driver-definition.v1&quot;,
+        &quot;role&quot;: &quot;request_driver&quot;,
+        &quot;track&quot;: require_track(track),
+        &quot;image_id&quot;: require_image_id(image_id),
+        &quot;bootstrap_sha256&quot;: require_sha256(bootstrap_sha256),
+        &quot;frontend_segment_sha256&quot;: require_sha256(frontend_segment_sha256),
+        &quot;endpoint&quot;: dict(DRIVER_ENDPOINT),
+        &quot;runtime_policy&quot;: DRIVER_RUNTIME_POLICY,
+    }
+    reject_sensitive_material(value)
+    return value
+</code></pre>
+<p>Use one duplicate-key rejecting JSON loader and exact field sets for readiness,
+instruction, success result, transport-failure result, and driver-control
+failure. Public-safe records must be recursively secret-scanned.</p>
+<ul>
+<li>[x] <strong>Step 5: Make harness inventory contracts recognize the new fixed names</strong></li>
+</ul>
+<p>Extend container roles to <code>authz|target|envoy|driver|validate</code> and network names
+to <code>frontend|backend</code>. Add sanitized inventory cases to both fixtures. Keep the
+legacy v1 patterns available only through explicit schema dispatch.</p>
+<ul>
+<li>[x] <strong>Step 6: Verify GREEN and commit</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b1_request_driver -v
+PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b1_local_envoy.EvidenceBundleTest -v
+PYTHONPATH=src .venv/bin/python -m py_compile src/kil/v3b1_driver_protocol.py tools/v3b1_harness_contract.py
+git diff --check
+</code></pre>
+<p>Expected: all selected tests PASS and the frozen v1 fixture still verifies.</p>
+<p>Commit:</p>
+<pre><code class="language-bash">git add src/kil/v3b1_driver_protocol.py tests/test_v3b1_request_driver.py \
+  tests/fixtures/v3b1-request-driver-protocol.json \
+  tests/fixtures/v3b1-public-bundle-v1 tools/v3b1_harness_contract.py \
+  tests/fixtures/v3b1-integration-contract.json tests/test_v3b1_local_envoy.py
+git commit -m &quot;Lock the V3B-1 request driver protocol&quot;
+</code></pre>
+<h3 id="task-2-implement-the-one-shot-container-side-driver">Task 2: Implement the one-shot container-side driver</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>src/kil/v3b1_request_driver.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b1_request_driver.py</code></p>
+</li>
+<li>
+<p>Modify: <code>deploy/kind/Dockerfile.v3b</code></p>
+</li>
+<li>
+<p>Modify: <code>deploy/kind/Dockerfile.v3b.dockerignore</code></p>
+</li>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b_container_contract.py</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Write RED executable tests with an injected connection</strong></p>
+</li>
+</ul>
+<p>Test this exact callable boundary:</p>
+<pre><code class="language-python">exit_code = execute_driver(
+    track=&quot;signed_state_only&quot;,
+    stdin=instruction_stream,
+    stdout=output_stream,
+    connection_factory=fake_connection_factory,
+    monotonic_ns=fake_clock,
+)
+</code></pre>
+<p>Require:</p>
+<ul>
+<li>
+<p>one canonical readiness line before the first stdin read;</p>
+</li>
+<li>
+<p>EOF after readiness returns zero, sends no HTTP bytes, and emits no more
+stdout;</p>
+</li>
+<li>
+<p>one valid instruction reuses the retained connection exactly once;</p>
+</li>
+<li>
+<p>the response body is read at <code>MAX_RESPONSE_BODY_BYTES + 1</code>, never echoed, and
+oversize is terminal;</p>
+</li>
+<li>
+<p>duplicate, unknown, trailing, noncanonical, wrong-track, wrong-path,
+wrong-method, nonempty-body, or unapproved-header input sends nothing;</p>
+</li>
+<li>
+<p>success emits one canonical secret-free result;</p>
+</li>
+<li>
+<p>request-send, response-header, and response-body failures emit one closed
+failure result without raw exception text; and</p>
+</li>
+<li>
+<p>no path reconnects or retries.</p>
+</li>
+<li>
+<p>[x] <strong>Step 2: Run each new test and verify RED</strong></p>
+</li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src .venv/bin/python -m unittest \
+  tests.test_v3b1_request_driver.RequestDriverTest -v
+</code></pre>
+<p>Expected: FAIL because <code>kil.v3b1_request_driver.execute_driver</code> is unavailable.</p>
+<ul>
+<li>[x] <strong>Step 3: Implement the retained-connection state machine</strong></li>
+</ul>
+<p>Implement only:</p>
+<pre><code class="language-python">def execute_driver(*, track: str, stdin: BinaryIO, stdout: BinaryIO,
+                   connection_factory: Callable[..., object] = HTTPConnection,
+                   monotonic_ns: Callable[[], int] = time.monotonic_ns) -&gt; int:
+    connection = connection_factory(&quot;envoy&quot;, 8080, timeout=2.0)
+    connection.connect()
+    stdout.write(canonical_record(readiness_record(track, monotonic_ns())))
+    stdout.flush()
+    raw = read_bounded_single_line(stdin, MAX_INSTRUCTION_BYTES)
+    if raw is None:
+        connection.close()
+        return 0
+    instruction = parse_instruction(raw, expected_track=track)
+    result = perform_one_request(connection, instruction, monotonic_ns)
+    stdout.write(canonical_record(result))
+    stdout.flush()
+    connection.close()
+    return 0 if result[&quot;status&quot;] == &quot;complete&quot; else 1
+</code></pre>
+<p>In the same module, define <code>read_bounded_single_line()</code> to read at most
+<code>limit + 1</code> bytes and reject missing newline/trailing bytes; define
+<code>readiness_record()</code> as the exact readiness schema constructor; and define
+<code>perform_one_request()</code> as the only function allowed to call <code>request()</code>,
+<code>getresponse()</code>, and bounded <code>read()</code>. These helpers return only records parsed
+by the Task 1 protocol validators.</p>
+<p><code>main()</code> accepts only <code>--track</code> and fixed <code>--endpoint envoy:8080</code>, then calls
+<code>execute_driver()</code> with binary standard streams. It must never log to stderr.</p>
+<ul>
+<li>[x] <strong>Step 4: Include and attest the module in the immutable image</strong></li>
+</ul>
+<p>Add <code>src/kil/v3b1_driver_protocol.py</code> and <code>src/kil/v3b1_request_driver.py</code> to
+the Docker build copy and dockerignore allowlist, <code>_BUILD_CONTEXT_FILES</code>, and
+container-contract tests. The bootstrap digest is the SHA-256 of the exact
+driver module bytes included in the build context.</p>
+<ul>
+<li>[x] <strong>Step 5: Verify GREEN and commit</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b1_request_driver -v
+PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b_container_contract -v
+PYTHONPATH=src .venv/bin/python -m py_compile src/kil/v3b1_driver_protocol.py src/kil/v3b1_request_driver.py
+git diff --check
+</code></pre>
+<p>Commit:</p>
+<pre><code class="language-bash">git add src/kil/v3b1_request_driver.py tests/test_v3b1_request_driver.py \
+  deploy/kind/Dockerfile.v3b deploy/kind/Dockerfile.v3b.dockerignore \
+  tools/v3b1_local_envoy.py tests/test_v3b_container_contract.py
+git commit -m &quot;Add the one-shot V3B-1 request driver&quot;
+</code></pre>
+<h3 id="task-3-advance-profile-content-identity-manifest-and-active-state-schemas">Task 3: Advance profile, content identity, manifest, and active-state schemas</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>deploy/kind/v3b-profile.json</code></p>
+</li>
+<li>
+<p>Modify: <code>src/kil/v3b_preflight.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b_preflight.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Write RED profile and identity tests</strong></p>
+</li>
+</ul>
+<p>Require <code>kil.v3b-profile.v2</code> to contain no <code>gateway_ports</code>. Require:</p>
+<pre><code class="language-python">self.assertEqual(manifest[&quot;schema_version&quot;], &quot;kil.v3b1-manifest.v2&quot;)
+self.assertEqual(
+    manifest[&quot;content_identity&quot;][&quot;schema_version&quot;],
+    &quot;kil.v3b1-content-identity.v3&quot;,
+)
+self.assertEqual(len(manifest[&quot;segment_definitions&quot;]), 6)
+self.assertEqual(len(manifest[&quot;driver_definitions&quot;]), 3)
+</code></pre>
+<p>Change only runtime names, labels, and full IDs in test data and assert the
+content-identity digest is unchanged. Add hybrid-schema rejection tests: v1 may
+not contain driver fields and v2/v3 may not omit them.</p>
+<ul>
+<li>[x] <strong>Step 2: Run focused tests and verify RED</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b_preflight -v
+PYTHONPATH=src .venv/bin/python -m unittest \
+  tests.test_v3b1_local_envoy.ControllerContractTest -v
+</code></pre>
+<p>Expected: FAIL on the old profile, gateway-port tracks, and old schema IDs.</p>
+<ul>
+<li>[x] <strong>Step 3: Implement acyclic definitions and schema dispatch</strong></li>
+</ul>
+<p>Use name-independent definitions:</p>
+<pre><code class="language-python">segment = {
+    &quot;schema_version&quot;: &quot;kil.v3b1-segment-definition.v1&quot;,
+    &quot;track&quot;: track.value,
+    &quot;segment&quot;: segment_name,
+    &quot;internal&quot;: True,
+}
+endpoint = {&quot;transport&quot;: &quot;tcp&quot;, &quot;host&quot;: &quot;envoy&quot;, &quot;port&quot;: 8080}
+</code></pre>
+<p>The content preimage contains six segment definitions and three driver
+definition hashes. The private manifest derives network/container names only
+after the content identity and run ID exist. Add explicit validators for old
+and new schema versions; never accept a permissive union.</p>
+<p>Advance active state, lifecycle journal, readiness poison, request, join,
+public manifest, public commitment, and authoritative bundle schemas only where
+new fields are required. Preserve v1 verifier functions unchanged behind
+dispatch.</p>
+<ul>
+<li>[x] <strong>Step 4: Verify GREEN and commit</strong></li>
+</ul>
+<p>Run the two focused suites, compilation, and <code>git diff --check</code>.</p>
+<p>Commit:</p>
+<pre><code class="language-bash">git add deploy/kind/v3b-profile.json src/kil/v3b_preflight.py \
+  tests/test_v3b_preflight.py tools/v3b1_local_envoy.py \
+  tests/test_v3b1_local_envoy.py
+git commit -m &quot;Define the V3B-1 driver content identity&quot;
+</code></pre>
+<h3 id="task-4-build-and-attest-the-split-internal-runtime-topology">Task 4: Build and attest the split internal runtime topology</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tools/v3b1_harness_contract.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Write RED command and attestation tests</strong></p>
+</li>
+</ul>
+<p>Add exact tests requiring:</p>
+<ul>
+<li>
+<p>six <code>--internal</code> bridge creations;</p>
+</li>
+<li>
+<p>three authz, three target, and three Envoy running containers;</p>
+</li>
+<li>
+<p>three driver <code>docker create</code> commands with interactive stdin, no TTY,
+<code>--no-healthcheck</code>, no mount, no publication, and no backend network;</p>
+</li>
+<li>
+<p>Envoy attached to backend and frontend, with fixed frontend alias <code>envoy</code>;</p>
+</li>
+<li>
+<p>frontend configuration exactly <code>{driver, envoy}</code>, with physical membership
+containing only running roles: <code>{envoy}</code> for a created/exited/dead driver and
+<code>{driver, envoy}</code> only while the driver is running;</p>
+</li>
+<li>
+<p>nominal running backend membership exactly <code>{envoy, authz, target}</code>, with
+stopped roles absent;</p>
+</li>
+<li>
+<p>driver state <code>created</code>; Envoy/authz/target states <code>running</code>;</p>
+</li>
+<li>
+<p><code>HostConfig.PortBindings == {}</code> and live published ports empty/null; and</p>
+</li>
+<li>
+<p>no command contains <code>--publish</code>, <code>-p</code>, a host port, or a non-internal segment.</p>
+</li>
+<li>
+<p>[x] <strong>Step 2: Verify RED</strong></p>
+</li>
+</ul>
+<p>Run the named topology and <code>RuntimeAttestationTest</code> cases. Expect failures on
+three networks, nine objects, running-only inspection, and host publication.</p>
+<ul>
+<li>[x] <strong>Step 3: Implement runtime commands and exact topology attestation</strong></li>
+</ul>
+<p>Create all backend segments first, then frontend segments. Start services on
+backend. Connect each Envoy to its frontend with one durable
+<code>network_connect_intent</code> / <code>network_connect_complete</code> transition and alias
+<code>envoy</code>. Create each driver stopped on frontend using its full immutable module
+command.</p>
+<p>Make <code>_inspect_container()</code> role- and phase-aware. Preserve per-network aliases
+from <code>NetworkSettings.Networks</code>. Make <code>_inspect_network()</code> validate segment and
+closed member-role sets. <code>up_complete</code> requires twelve persistent track objects,
+three validators, six networks, and no host publication.</p>
+<ul>
+<li>[x] <strong>Step 4: Update state, inventory, and pure teardown builders</strong></li>
+</ul>
+<p>Advance full-ID state validation, object counts, fixed-name parsing,
+<code>teardown_commands()</code>, and partial-up maxima to 15 containers and six networks.
+Keep source-attestation cardinality at exactly nine enforcement sources.</p>
+<ul>
+<li>[x] <strong>Step 5: Verify GREEN and commit</strong></li>
+</ul>
+<p>Run <code>ControllerContractTest</code>, <code>RuntimeAttestationTest</code>, and teardown command
+tests, then compilation and diff hygiene.</p>
+<p>Commit:</p>
+<pre><code class="language-bash">git add tools/v3b1_local_envoy.py tools/v3b1_harness_contract.py \
+  tests/test_v3b1_local_envoy.py
+git commit -m &quot;Build the isolated V3B-1 driver topology&quot;
+</code></pre>
+<h3 id="task-5-add-attached-driver-sessions-and-the-readiness-only-lifecycle">Task 5: Add attached driver sessions and the readiness-only lifecycle</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>tools/v3b1_driver_transport.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/fixtures/v3b1-integration-contract.json</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Write RED host-session tests</strong></p>
+</li>
+</ul>
+<p>Define an injected adapter:</p>
+<pre><code class="language-python">class DriverProcess(Protocol):
+    stdin: BinaryIO
+    stdout: BinaryIO
+    def poll(self) -&gt; int | None: ...
+    def wait(self, timeout: float) -&gt; int: ...
+
+class DriverProcessFactory(Protocol):
+    def start(self, command: Sequence[str]) -&gt; DriverProcess: ...
+</code></pre>
+<p>Tests must prove all three processes start before the controller waits for any
+single readiness line; all three closed readiness records are durable before
+request intent; one common deadline applies; malformed/extra output, nonzero
+exit, or ambiguous termination fails closed; and no stderr bytes reach the
+journal.</p>
+<ul>
+<li>[x] <strong>Step 2: Write RED readiness-only tests</strong></li>
+</ul>
+<p>Require the new CLI command <code>readiness</code> to:</p>
+<ul>
+<li>
+<p>start all three drivers once;</p>
+</li>
+<li>
+<p>receive all three readiness records;</p>
+</li>
+<li>
+<p>close all three stdin streams without an instruction;</p>
+</li>
+<li>
+<p>observe fixed zero exits and no later stdout;</p>
+</li>
+<li>
+<p>persist three <code>readiness_cancel_complete</code> records bound to full ID, track, and
+readiness nonce;</p>
+</li>
+<li>
+<p>leave all request states <code>not_attempted</code>; and</p>
+</li>
+<li>
+<p>mark the lifecycle diagnostic-only so <code>run</code> is prohibited before <code>down</code>.</p>
+</li>
+<li>
+<p>[x] <strong>Step 3: Verify RED</strong></p>
+</li>
+</ul>
+<p>Run <code>DriverReadinessTest</code> and the CLI subcommand test. Expect import and missing
+subcommand failures.</p>
+<ul>
+<li>[x] <strong>Step 4: Implement the bounded attached-process adapter</strong></li>
+</ul>
+<p>Use the exact command vector
+<code>[docker_binary, &quot;start&quot;, &quot;--attach&quot;, &quot;--interactive&quot;, driver_full_id]</code>
+through <code>subprocess.Popen</code>
+with binary pipes. Spawn all processes before reading. Read one bounded line per
+driver under a common deadline. Expose only closed status/exit facts; discard
+raw stderr after a bounded read and never persist it.</p>
+<p>Replace socket readiness poison with driver-control/termination categories.
+EOF cancellation is successful only when stdout is exhausted and exit status is
+zero. Any ambiguity poisons readiness and prohibits <code>run</code>.</p>
+<ul>
+<li>[x] <strong>Step 5: Verify GREEN and commit</strong></li>
+</ul>
+<p>Run driver readiness, journal replay, CLI, compilation, and diff checks.</p>
+<p>Commit:</p>
+<pre><code class="language-bash">git add tools/v3b1_driver_transport.py tools/v3b1_local_envoy.py \
+  tests/test_v3b1_local_envoy.py tests/fixtures/v3b1-integration-contract.json
+git commit -m &quot;Add V3B-1 in-network driver readiness&quot;
+</code></pre>
+<h3 id="task-6-replace-direct-host-requests-with-one-shot-driver-instructions">Task 6: Replace direct host requests with one-shot driver instructions</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tools/v3b1_driver_transport.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Write RED sequencing tests</strong></p>
+</li>
+</ul>
+<p>Require this fixed ordering for each commanded track:</p>
+<pre><code class="language-text">all_driver_readiness_complete
+q_state_issue_if_required
+request_intent_persisted
+driver_instruction_write_intent
+one bounded instruction write
+stdin close
+one bounded result read
+exact exit attestation
+raw result persist
+normalized request persist
+request_attempt_complete
+</code></pre>
+<p>Assert that the authorization value and compact Q-state occur only in the
+in-memory stdin payload after durable intent and never in commands, environment,
+mounts, stdout/stderr, journals, or evidence. Track order remains credential
+baseline, signed only, signed plus local reduction.</p>
+<ul>
+<li>[x] <strong>Step 2: Write RED failure tests</strong></li>
+</ul>
+<p>Test partial pipe write, broken stdin, invalid result, missing result, extra
+stdout, nonzero exit, timeout, and driver transport failure. Once any
+instruction byte may have been written, provenance must say
+<code>request_bytes_may_have_been_sent=true</code>. The first post-intent failure EOF-
+cancels every later driver, leaves later requests <code>not_attempted</code>, and enters
+teardown without restart, reconnect, replacement, or retry.</p>
+<ul>
+<li>[x] <strong>Step 3: Verify RED</strong></li>
+</ul>
+<p>Run <code>DriverRequestSequencingTest</code>; expect the old host <code>HTTPConnection</code> path and
+socket-specific helpers to violate the new assertions.</p>
+<ul>
+<li>[x] <strong>Step 4: Implement one-shot instruction/result handling</strong></li>
+</ul>
+<p>Remove <code>_connect_ready_gateways()</code>, <code>_reset_request_timeouts()</code>, and direct host
+<code>HTTPConnection.request()</code> use. Issue Q-state only after aggregate readiness and
+immediately before the bound instruction. Persist intent before calling
+<code>write_instruction()</code>. Parse the exact closed driver result, validate the
+decision digest/status, require exact process exit, and then construct
+<code>kil.v3b1-request.v2</code>.</p>
+<p>Controller-only failure provenance uses closed stages
+<code>instruction_write|stdout_read|process_wait|termination</code>. It never stores raw
+exception text.</p>
+<ul>
+<li>[x] <strong>Step 5: Verify GREEN and commit</strong></li>
+</ul>
+<p>Run driver sequencing, request journal, Q-state expiry, compilation, and diff
+checks.</p>
+<p>Commit:</p>
+<pre><code class="language-bash">git add tools/v3b1_local_envoy.py tools/v3b1_driver_transport.py \
+  tests/test_v3b1_local_envoy.py
+git commit -m &quot;Route V3B-1 requests through one-shot drivers&quot;
+</code></pre>
+<h3 id="task-7-bind-exact-driver-results-into-v2-evidence-and-presenter-output">Task 7: Bind exact driver results into v2 evidence and presenter output</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Write RED bundle and compatibility tests</strong></p>
+</li>
+</ul>
+<p>Require exactly:</p>
+<pre><code class="language-text">raw/drivers/credential_policy_baseline.json
+raw/drivers/signed_state_only.json
+raw/drivers/signed_plus_local_reduce.json
+</code></pre>
+<p>Each commanded file is the exact canonical, secret-free driver result with one
+trailing newline. Its SHA-256 appears in the normalized request and
+<code>SHA256SUMS</code>. The offline verifier must reconstruct the bytes, rehash them,
+validate the normalized projection, and then join request, Envoy, authz, target,
+run, track, request ID, and decision digest.</p>
+<p>Require v1 bundles to reject driver files, v2 bundles to require them, and the
+frozen v1 fixture to retain its original HTML bytes and acceptance behavior.</p>
+<ul>
+<li>[x] <strong>Step 2: Write RED presenter tests</strong></li>
+</ul>
+<p>The v2 presenter must visibly contain:</p>
+<pre><code class="language-text">request driver -&gt; Envoy -&gt; authorization -&gt; target or withhold
+No host publication
+The driver is a laboratory transport witness, not KIL enforcement
+Evidence scope: local_envoy_boundary
+</code></pre>
+<p>It must derive entirely from verified public records and keep the existing CSP,
+escaping, no-script, and no-external-asset rules.</p>
+<ul>
+<li>[x] <strong>Step 3: Verify RED</strong></li>
+</ul>
+<p>Run <code>EvidenceBundleTest</code> and presenter tests. Expect the old authoritative file
+set, v1-only validators, and old HTML model to fail.</p>
+<ul>
+<li>[x] <strong>Step 4: Implement explicit v1/v2 writer and verifier dispatch</strong></li>
+</ul>
+<p>Keep legacy expected file sets and validators separate. For v2, add the three
+driver files to authoritative names, public snapshot, artifact hashes,
+commitment, checksums, manifest, and presenter derivation. Empty files are
+permitted only for uncommanded tracks in nonpromotable failure bundles; an
+accepted bundle requires all three exact results.</p>
+<ul>
+<li>[x] <strong>Step 5: Verify GREEN and commit</strong></li>
+</ul>
+<p>Run all evidence/presenter tests, verify the frozen v1 fixture, compile, and
+check the diff.</p>
+<p>Commit:</p>
+<pre><code class="language-bash">git add tools/v3b1_local_envoy.py tests/test_v3b1_local_envoy.py
+git commit -m &quot;Bind V3B-1 driver results into public evidence&quot;
+</code></pre>
+<h3 id="task-8-make-recovery-and-teardown-driver-aware">Task 8: Make recovery and teardown driver-aware</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tools/v3b1_harness_contract.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Write RED partial-up and partial-run recovery tests</strong></p>
+</li>
+</ul>
+<p>Require partial <code>up</code> to remove a created-never-started driver only after exact
+full-ID, image, command, labels, state, and network attestation. Once any
+<code>driver_start_intent</code> exists, recovery must never start, attach, restart,
+replace, or command that driver.</p>
+<p>An intent without a trusted terminal result is ambiguous and nonpromotable;
+cleanup must still continue against exact recorded IDs.</p>
+<ul>
+<li>[x] <strong>Step 2: Write RED ordering and inventory tests</strong></li>
+</ul>
+<p>Require every driver to be durably exited or exactly stopped and re-attested
+before any Envoy stop. Preserve the existing nine-source freeze. Remove drivers,
+Envoys, authz, targets, validators, and then six empty networks through durable
+intents and full-ID survivor inventories. Final publication requires 15
+containers and six networks absent.</p>
+<ul>
+<li>[x] <strong>Step 3: Verify RED</strong></li>
+</ul>
+<p>Run <code>JournalRecoveryTest</code>, <code>TeardownContinuationTest</code>, and teardown contract
+tests. Expect old nine-container/three-network and running-driver assumptions to
+fail.</p>
+<ul>
+<li>[x] <strong>Step 4: Implement phase-aware revalidation and exact cleanup</strong></li>
+</ul>
+<p>Make <code>_load_and_reverify()</code> accept created drivers before run and exited/stopped
+drivers after readiness/run. Add driver-first finalization to <code>down()</code> and keep
+source collection restricted to Envoy/authz/target. Update both
+<code>teardown_commands()</code> and imperative teardown so they cannot diverge.</p>
+<ul>
+<li>[x] <strong>Step 5: Verify GREEN and commit</strong></li>
+</ul>
+<p>Run recovery, teardown, source-freeze, full controller tests, compilation, and
+diff hygiene.</p>
+<p>Commit:</p>
+<pre><code class="language-bash">git add tools/v3b1_local_envoy.py tools/v3b1_harness_contract.py \
+  tests/test_v3b1_local_envoy.py
+git commit -m &quot;Recover and tear down V3B-1 request drivers&quot;
+</code></pre>
+<h3 id="task-9-unify-documentation-diagrams-lab-status-and-static-verification">Task 9: Unify documentation, diagrams, lab status, and static verification</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>README.md</code></p>
+</li>
+<li>
+<p>Modify: <code>tools/README.md</code></p>
+</li>
+<li>
+<p>Modify: <code>adapters/envoy/README.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/lab/V3-PROGRESS.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/paper/kinetic-infrastructure.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/architecture/v3-envoy-live-validation.svg</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/design-drafts/hybrid-two-timescale-architecture.html</code></p>
+</li>
+<li>
+<p>Create: <code>docs/architecture/hybrid-two-timescale-architecture.html</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_v3b1_documentation.py</code></p>
+</li>
+<li>
+<p>Modify: ignored <code>artifacts/generated/v3b1-task6-live-status.md</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Update only mechanism and pending-gate claims</strong></p>
+</li>
+</ul>
+<p>Show host Docker attach/stdin control separately from consequential traffic.
+Show three tracks, each with frontend configured for <code>{driver, Envoy}</code> and
+backend <code>{Envoy, authz, target}</code>; distinguish created-state physical
+<code>{Envoy}</code> from materialized <code>{driver, Envoy}</code>. Show Envoy dual-homing, no host
+publication, and evidence joins. The hybrid diagram must separate current local-Envoy V3B-1 from future
+Kind/Calico V3B-2.</p>
+<p>Before live acceptance, state only that the mechanism is implemented and the
+readiness/central gates are pending. Do not claim validation, prevention,
+performance, Kind, or NetworkPolicy results.</p>
+<ul>
+<li>[x] <strong>Step 2: Add supersession notes without rewriting history</strong></li>
+</ul>
+<p>The older specs/plans retain their execution records but link to the approved
+driver correction. Append lineage; never rewrite older entries.</p>
+<ul>
+<li>[x] <strong>Step 3: Run independent spec and quality review</strong></li>
+</ul>
+<p>Review every requirement in design sections 4-11. Resolve every Critical or
+Important issue test-first, then re-run spec review and quality/security review
+until both approve.</p>
+<ul>
+<li>[x] <strong>Step 4: Run the complete static gate</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b1_request_driver -v
+PYTHONPATH=src .venv/bin/python -m unittest tests.test_v3b_preflight tests.test_v3b_container_contract tests.test_v3b1_local_envoy -v
+PYTHONPATH=src .venv/bin/python -m py_compile src/kil/v3b1_driver_protocol.py src/kil/v3b1_request_driver.py src/kil/v3b_preflight.py tools/v3b1_driver_transport.py tools/v3b1_harness_contract.py tools/v3b1_local_envoy.py
+PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+make validate PYTHON=.venv/bin/python
+git diff --check
+</code></pre>
+<p>Expected: every test PASS, compilation succeeds, and no diff error is emitted.</p>
+<ul>
+<li>[x] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add README.md tools/README.md adapters/envoy/README.md docs/lab/V3-PROGRESS.md \
+  docs/paper/kinetic-infrastructure.md docs/architecture/v3-envoy-live-validation.svg \
+  docs/architecture/hybrid-two-timescale-architecture.html \
+  docs/design-drafts/hybrid-two-timescale-architecture.html \
+  docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md \
+  docs/superpowers/plans/2026-08-30-v3b1-integration-contract.md \
+  docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md \
+  docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md tests/test_v3b1_documentation.py
+git commit -m &quot;Document the V3B-1 request driver boundary&quot;
+</code></pre>
+<h3 id="task-10-publish-the-correction-and-execute-the-request-free-live-gate">Task 10: Publish the correction and execute the request-free live gate</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify after the run: <code>docs/lab/V3-PROGRESS.md</code></p>
+</li>
+<li>
+<p>Modify after the run: <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code></p>
+</li>
+<li>
+<p>Modify live: ignored <code>artifacts/generated/v3b1-task6-live-status.md</code></p>
+</li>
+<li>
+<p>[x] <strong>Step 1: Push the implementation PR and require CI</strong></p>
+</li>
+</ul>
+<p>Push the feature branch, create a PR, require both GitHub bootstrap jobs and the
+local static gate to pass, resolve review findings, merge, fast-forward local
+<code>main</code>, and verify local/remote/GitHub main commit equality and a clean tree.</p>
+<p>PR #14 completed this step for the created-driver endpoint correction and
+merged as <code>7677052f6fd2b4287f419dc01ec9a1a859191777</code>. The first merged-source
+recovery stop exposed one additional engine representation: an exact service
+stop collapses an unbound exposed-port map to <code>{}</code>. PR #15 closed that exact
+role-bound transition and merged as
+<code>3dce7cbd0153716b9e52cae791b97f50131989f7</code>. Its recovery then exposed Docker's
+physical endpoint rule: a stopped container remains configured for its
+networks but is absent from each network's <code>Containers</code> map. The current
+state-derived membership correction must pass this same publish/CI/merge/
+synchronize gate before bounded <code>down</code> resumes. The stopped container is owned
+and journal-anchored; no request-side action occurred.</p>
+<ul>
+<li>[x] <strong>Step 2: Record exact host state and run preflight</strong></li>
+</ul>
+<p>Read and record all Colima profiles without mutating them. Use the pinned PATH:</p>
+<pre><code class="language-bash">PATH=&quot;$PWD/.tools/bin:$PATH&quot; PYTHONPATH=src .venv/bin/python tools/v3b1_local_envoy.py preflight
+</code></pre>
+<p>If a foreign profile must be paused, restore its exact prior status and
+resources after the lifecycle.</p>
+<ul>
+<li>[x] <strong>Step 3: Execute the request-free sequence visibly</strong></li>
+</ul>
+<p>Update the ignored live board before every command, then run exactly:</p>
+<pre><code class="language-bash">PATH=&quot;$PWD/.tools/bin:$PATH&quot; PYTHONPATH=src .venv/bin/python tools/v3b1_local_envoy.py up
+PATH=&quot;$PWD/.tools/bin:$PATH&quot; PYTHONPATH=src .venv/bin/python tools/v3b1_local_envoy.py readiness
+PATH=&quot;$PWD/.tools/bin:$PATH&quot; PYTHONPATH=src .venv/bin/python tools/v3b1_local_envoy.py down
+</code></pre>
+<p>Do not invoke <code>run</code> in this lifecycle.</p>
+<ul>
+<li>[x] <strong>Step 4: Verify the request-free gate</strong></li>
+</ul>
+<p>Require all three readiness records, three durable cancellations, zero
+instructions, zero request intents, zero HTTP actions, nine observed/copied
+empty authoritative sources, valid nonpromotable checksums, twelve track and
+three validator containers absent, six networks absent, dedicated profile
+absent, no active state/poison/journal, and preservation of the bound foreign
+context name plus a post-run resource tuple observation.</p>
+<p>Task 10 passed with the request-side and teardown conditions above. The public
+manifest durably binds the foreign context name as <code>default</code> before and after,
+and a post-run operator readback observed the stopped resource tuple. The exact
+resource tuple was not durably bound at both boundaries, so this execution does
+not provide cryptographic proof of exact tuple restoration. A future lifecycle
+must persist and bind both before- and after-resource snapshots to close that
+evidence gap.</p>
+<ul>
+<li>[ ] <strong>Step 5: Publish the public-safe gate record</strong></li>
+</ul>
+<p>Append progress and lineage with exact run ID, source commit, checksum result,
+and claim exclusions. Commit only public-safe references; keep the
+nonpromotable bundle and private journal ignored. Push, review, merge, and
+synchronize main before the central proof.</p>
+<h3 id="task-11-execute-and-publish-one-accepted-local-envoy-proof">Task 11: Execute and publish one accepted local-Envoy proof</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Force-add only the one exact accepted run directory selected and returned by
+the offline verifier.</p>
+</li>
+<li>
+<p>Modify: <code>README.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/lab/V3-PROGRESS.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/paper/kinetic-infrastructure.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code></p>
+</li>
+<li>
+<p>Modify: ignored <code>artifacts/generated/v3b1-task6-live-status.md</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Reconfirm clean merged main and run preflight/up</strong></p>
+</li>
+</ul>
+<p>Require the request-free record merged and synchronized. Before- and after-resource
+snapshots must be implemented, tested, and merged as a durable
+controller and public-evidence contract. Synchronize that prerequisite commit
+locally. The central <code>run</code> remains prohibited until both publication gates are
+complete. Only then record the exact foreign runtime state through the durable
+before snapshot and execute <code>preflight</code>, then <code>up</code> from that public commit.</p>
+<ul>
+<li>[ ] <strong>Step 2: Invoke <code>run</code> once</strong></li>
+</ul>
+<p>Run exactly one:</p>
+<pre><code class="language-bash">PATH=&quot;$PWD/.tools/bin:$PATH&quot; PYTHONPATH=src .venv/bin/python tools/v3b1_local_envoy.py run
+</code></pre>
+<p>After request intent, do not retry under any circumstance. Whether accepted or
+failed, execute <code>down</code> once and restore foreign state.</p>
+<ul>
+<li>[ ] <strong>Step 3: Verify the accepted proof before staging it</strong></li>
+</ul>
+<p>Require:</p>
+<ul>
+<li>
+<p><code>permit / permit / deny</code>;</p>
+</li>
+<li>
+<p>HTTP <code>200 / 200 / 403</code>;</p>
+</li>
+<li>
+<p>target markers <code>1 / 1 / 0</code>;</p>
+</li>
+<li>
+<p>three exact canonical driver results;</p>
+</li>
+<li>
+<p>nine complete Envoy/authz/target sources;</p>
+</li>
+<li>
+<p>valid request/decision/target joins;</p>
+</li>
+<li>
+<p>complete exact teardown;</p>
+</li>
+<li>
+<p>an offline verifier proves exact equality of the durable before- and after-
+resource snapshots for every pre-existing foreign profile;</p>
+</li>
+<li>
+<p>all <code>SHA256SUMS</code> entries valid; and</p>
+</li>
+<li>
+<p>offline <code>view --bundle</code> acceptance.</p>
+</li>
+<li>
+<p>[ ] <strong>Step 4: Stage only the exact accepted bundle</strong></p>
+</li>
+</ul>
+<p>Resolve and validate the run ID from the verified manifest, then stage only its
+explicit directory:</p>
+<pre><code class="language-bash">kil_verified_manifest=&quot;artifacts/generated/v3b1-local-envoy/$kil_verified_run_id/manifest.json&quot;
+test -f &quot;$kil_verified_manifest&quot;
+test &quot;$(jq -r .run_id &quot;$kil_verified_manifest&quot;)&quot; = &quot;$kil_verified_run_id&quot;
+git add -f &quot;artifacts/generated/v3b1-local-envoy/$kil_verified_run_id/&quot;
+git diff --cached --name-only
+git diff --cached --check
+</code></pre>
+<p><code>kil_verified_run_id</code> must be set to the exact run ID printed by the accepted
+offline <code>view --bundle</code> result and must match <code>^v3b1-[a-f0-9]{64}$</code> before these
+commands run.</p>
+<p>Reject the staging set if it includes any sibling run, private journal,
+downloaded tool, key, credential, or ignored parent directory.</p>
+<ul>
+<li>[ ] <strong>Step 5: Update the unified asset with calibrated claims</strong></li>
+</ul>
+<p>The paper, README, presenter, progress, and lineage may name the exact run as an
+accepted observed intermediate local-Envoy result. They must still exclude Kind
+cluster validation, NetworkPolicy validation, historical prevention, and
+production performance.</p>
+<ul>
+<li>[ ] <strong>Step 6: Review, publish, merge, synchronize, and prepare backup</strong></li>
+</ul>
+<p>Run the full static gate, bundle checksums, offline verifier, secret scan, spec
+review, and quality/security review. Commit, push, pass CI, merge, and
+fast-forward local main to exact public main. Leave the repo clean.</p>
+<p>Do not create the offline backup until the user supplies its destination and
+whether ignored private failed-run evidence should be included. Report phase
+completion in the active Codex thread; external email requires an available
+configured connector or automation and must not be claimed without one.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

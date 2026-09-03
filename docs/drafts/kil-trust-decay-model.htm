@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Trust-Decay Model</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/drafts/kil-trust-decay-model.md">
+<meta name="source-sha256" content="9c71878db31df419dc1f2b38f8c6e71f329b12b0bdf5e3b9d05729576f39cf77">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/drafts/kil-trust-decay-model.md</code> (<code>9c71878db31df419dc1f2b38f8c6e71f329b12b0bdf5e3b9d05729576f39cf77</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">The Trust-Decay Model</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/drafts/kil-trust-decay-model.md</code> (<code>9c71878db31df419dc1f2b38f8c6e71f329b12b0bdf5e3b9d05729576f39cf77</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#the-trust-decay-model">The Trust-Decay Model</a></li><li class="level-3"><a href="#a-formal-basis-for-ambient-enforcement-in-the-kinetic-infrastructure-layer">A formal basis for ambient enforcement in the Kinetic Infrastructure Layer</a></li><li class="level-2"><a href="#1-design-principles-stated-up-front">1. Design principles, stated up front</a></li><li class="level-2"><a href="#2-formal-definitions">2. Formal definitions</a></li><li class="level-2"><a href="#3-divergence-score">3. Divergence score</a></li><li class="level-2"><a href="#4-charge-dynamics">4. Charge dynamics</a></li><li class="level-2"><a href="#5-authorization-gate-and-cross-class-coupling">5. Authorization gate and cross-class coupling</a></li><li class="level-2"><a href="#6-the-escape-hatch-declared-trajectory-changes">6. The escape hatch: declared trajectory changes</a></li><li class="level-2"><a href="#7-worked-example-tracing-charge-through-the-incident">7. Worked example: tracing charge through the incident</a></li><li class="level-2"><a href="#8-what-would-make-this-genuinely-defensible-not-just-internally-consistent">8. What would make this genuinely defensible (not just internally consistent)</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="the-trust-decay-model" href="#the-trust-decay-model">The Trust-Decay Model</a></li><li class="level-3"><a data-section-id="a-formal-basis-for-ambient-enforcement-in-the-kinetic-infrastructure-layer" href="#a-formal-basis-for-ambient-enforcement-in-the-kinetic-infrastructure-layer">A formal basis for ambient enforcement in the Kinetic Infrastructure Layer</a></li><li class="level-2"><a data-section-id="1-design-principles-stated-up-front" href="#1-design-principles-stated-up-front">1. Design principles, stated up front</a></li><li class="level-2"><a data-section-id="2-formal-definitions" href="#2-formal-definitions">2. Formal definitions</a></li><li class="level-2"><a data-section-id="3-divergence-score" href="#3-divergence-score">3. Divergence score</a></li><li class="level-2"><a data-section-id="4-charge-dynamics" href="#4-charge-dynamics">4. Charge dynamics</a></li><li class="level-2"><a data-section-id="5-authorization-gate-and-cross-class-coupling" href="#5-authorization-gate-and-cross-class-coupling">5. Authorization gate and cross-class coupling</a></li><li class="level-2"><a data-section-id="6-the-escape-hatch-declared-trajectory-changes" href="#6-the-escape-hatch-declared-trajectory-changes">6. The escape hatch: declared trajectory changes</a></li><li class="level-2"><a data-section-id="7-worked-example-tracing-charge-through-the-incident" href="#7-worked-example-tracing-charge-through-the-incident">7. Worked example: tracing charge through the incident</a></li><li class="level-2"><a data-section-id="8-what-would-make-this-genuinely-defensible-not-just-internally-consistent" href="#8-what-would-make-this-genuinely-defensible-not-just-internally-consistent">8. What would make this genuinely defensible (not just internally consistent)</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="the-trust-decay-model">The Trust-Decay Model</h1>
+<h3 id="a-formal-basis-for-ambient-enforcement-in-the-kinetic-infrastructure-layer">A formal basis for ambient enforcement in the Kinetic Infrastructure Layer</h3>
+<p><em>This document specifies the mathematical model underlying &quot;trust charge&quot; — the mechanism that lets infrastructure grant or withhold authority to an action in real time, without a policy engine or human decision in the loop. It's built to be defensible, not just evocative: every design choice below is there because of a specific failure mode observed in the July 2026 Hugging Face incident (see the companion timeline document), and the worked example at the end traces the model numerically against that incident's actual phases.</em></p>
+<hr />
+<h2 id="1-design-principles-stated-up-front">1. Design principles, stated up front</h2>
+<p>Before the equations, four decisions that shape everything downstream — because a &quot;trust as physics&quot; metaphor is only defensible if the physics encodes real security properties, not just a decaying number that looks scientific.</p>
+<ol>
+<li><strong>Charge is earned slowly and lost quickly.</strong> Legitimate trust accumulates through repetition; a single wildly anomalous action should cost far more than any one normal action gains. This isn't poetic license — it's the direct fix for the incident's root failure, where a stolen-but-valid credential was treated as equally trustworthy on its first ever cluster-admin action as an identity with months of legitimate cluster-admin history.</li>
+<li><strong>Charge is per authority class, not a single number.</strong> An identity that has built deep trust for &quot;read my assigned dataset&quot; has built <em>none</em> for &quot;call the Kubernetes API&quot; — those are different classes of action with independent trust histories. A single scalar would let reads-heavy legitimate behavior silently subsidize an escalation attempt.</li>
+<li><strong>Charge decays passively, even with no bad behavior.</strong> An idle credential's standing authority should erode over time. This is what makes 24-hour-valid forged tokens and long-lived VPN keys structurally weaker under this model than under a validity-until-expiry model.</li>
+<li><strong>The model must have an explicit, honest escape hatch.</strong> Real infrastructure has legitimate rare events — migrations, incident response, a new deploy pattern. A model with no way to pre-register an expected trajectory change will either get bypassed by operators or cause real outages. Section 6 covers this; it is not an afterthought.</li>
+</ol>
+<hr />
+<h2 id="2-formal-definitions">2. Formal definitions</h2>
+<p><strong>Identity</strong> <code>i</code> — any workload, agent, or credential-holder whose actions are tracked: a pod, a service account, an agent session, a device.</p>
+<p><strong>Authority class</strong> <code>c ∈ C</code> — a bucket of action types requiring comparable privilege: e.g. <code>{read_own_data, read_other_resource, network_egress_internal, network_egress_external, mint_token, admin_action, privilege_escalation}</code>. Each class has its own independent trust charge for a given identity.</p>
+<p><strong>Action</strong> <code>a_t</code> — a single action taken by identity <code>i</code> at time <code>t</code>, represented as a feature vector <code>x_t ∈ ℝⁿ</code> capturing:</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>What it captures</th>
+<th>Example from the incident</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>target resource novelty</td>
+<td>has <code>i</code> ever addressed this resource before</td>
+<td>worker pod calling <code>kubernetes.default.svc/api</code> for the first time</td>
+</tr>
+<tr>
+<td>network origin distance</td>
+<td>how far this request's origin is from <code>i</code>'s historical origin set</td>
+<td>node-role credential replayed from external hosting-provider IP</td>
+</tr>
+<tr>
+<td>privilege delta</td>
+<td>requested scope vs. <code>i</code>'s historical maximum granted scope</td>
+<td>reading a 136-key secret object vs. prior single-key reads</td>
+</tr>
+<tr>
+<td>temporal anomaly</td>
+<td>deviation from <code>i</code>'s established request cadence</td>
+<td>181 enrollment attempts in under 4 hours from one key</td>
+</tr>
+<tr>
+<td>volume anomaly</td>
+<td>bytes/records touched vs. <code>i</code>'s historical distribution</td>
+<td>bulk secret-object read vs. routine per-file reads</td>
+</tr>
+<tr>
+<td>sequence anomaly</td>
+<td>likelihood of this action given <code>i</code>'s prior action, under <code>i</code>'s learned action-bigram model</td>
+<td><code>read_own_token → call_cluster_api</code> — a bigram never seen for this workload class</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Baseline trajectory</strong> <code>B_i,c</code> — the learned distribution (mean <code>μ</code> and variance <code>σ²</code> per feature, or a small sequence model) of identity <code>i</code>'s historical actions within class <code>c</code>. This is the KTP <strong>Vector Identity</strong> made concrete: not a static role or credential, but a live statistical model of how this identity actually behaves.</p>
+<hr />
+<h2 id="3-divergence-score">3. Divergence score</h2>
+<p>For an action <code>a_t</code> in class <code>c</code>, compute a normalized divergence <code>d_t ∈ [0, 1]</code> against the baseline:</p>
+<pre><code>        ___________________________
+       /  n
+d_raw = √  Σ  w_j · ((x_t,j − μ_j) / σ_j)²
+          j=1
+
+d_t = 2 / (1 + e^(−k · d_raw)) − 1        (logistic squash to [0,1])
+</code></pre>
+<p>This is a weighted Mahalanobis distance (standard practice for multivariate anomaly scoring — it naturally down-weights features with high historical variance and up-weights features that are normally very stable for this identity) squashed into a bounded range so the charge dynamics below stay well-behaved regardless of raw feature scale. <code>w_j</code> are feature weights, tunable per authority class (e.g., network-origin distance should dominate for <code>network_egress</code>, sequence anomaly should dominate for <code>privilege_escalation</code>).</p>
+<p><strong>Cold-start identities</strong> (no history yet) get <code>d_t</code> computed against the <em>class prior</em> — the population-level baseline for that workload type — rather than an individual baseline that doesn't exist yet. This is what puts new identities into a probationary tier automatically (Section 6) rather than either blocking them entirely or trusting them by default.</p>
+<hr />
+<h2 id="4-charge-dynamics">4. Charge dynamics</h2>
+<p>Each identity <code>i</code> holds a charge vector <code>E_i,c(t)</code> for each authority class <code>c</code>, bounded in <code>[0, E_max]</code>. Between actions, charge decays passively; at each action, charge is updated based on divergence.</p>
+<p><strong>Passive decay</strong> (elapsed time <code>Δt</code> since the identity's last action in class <code>c</code>):</p>
+<pre><code>E'_i,c = E_i,c(t_prev) · e^(−λ_c · Δt)
+</code></pre>
+<p>This is a direct RC-discharge analogy — charge leaks exponentially toward zero absent activity, at rate <code>λ_c</code>. Higher-privilege classes get a larger <code>λ_c</code> (leak faster) — cluster-admin authority earned last week should not still be &quot;charged&quot; today; read-only authority can persist longer, because passive decay is a strong response to exactly the pattern of a 24-hour-valid forged token: even a technically-unexpired credential arrives at a near-empty charge if it hasn't been actively re-earning trust.</p>
+<p><strong>Event update</strong> at the action itself:</p>
+<pre><code>Δ(d_t) =  +ρ_gain,c · (1 − d_t/θ_c)              if d_t ≤ θ_c   (replenishment)
+          −ρ_loss,c · (d_t/θ_c)^p                 if d_t &gt; θ_c   (penalty)
+
+E_i,c(t) = clamp( E'_i,c + Δ(d_t),  0,  E_max )
+</code></pre>
+<p><code>θ_c</code> is the acceptable-divergence threshold for class <code>c</code> (the &quot;normal noise&quot; band — even legitimate behavior isn't perfectly identical action to action). <code>p &gt; 1</code> (recommend <code>p = 3</code>) makes the penalty superlinear: an action twice over threshold costs roughly 8× the penalty of an action barely over threshold. This single exponent is what encodes &quot;a small deviation is fine, a wild one is catastrophic and immediate&quot; — directly modeling the difference between, say, a slightly unusual read pattern versus a worker pod suddenly enumerating the cloud control plane.</p>
+<p><strong>The core asymmetry</strong>, and the most important tunable in the whole model:</p>
+<pre><code>ρ_loss,c ≫ ρ_gain,c        (recommended ratio: 10× to 50×, tightening with class privilege)
+</code></pre>
+<p>Trust arrives on foot and leaves on horseback. This is not a stylistic choice — it's the direct fix for the incident's central defect, where possession of a valid credential conferred full authority instantly and losing that authority required a human to notice and manually rotate the credential.</p>
+<hr />
+<h2 id="5-authorization-gate-and-cross-class-coupling">5. Authorization gate and cross-class coupling</h2>
+<p>An action requesting authority class <code>c</code> is permitted only if:</p>
+<pre><code>E_i,c(t) ≥ τ_c        AND        history_count_i,c ≥ h_c
+</code></pre>
+<p><code>τ_c</code> is the minimum charge threshold for class <code>c</code>; <code>h_c</code> is a minimum number of prior <em>low-divergence</em> actions in that specific class — this second condition is what stops an identity from grinding charge quickly through many trivial, easy, low-divergence actions in one class and then attempting to &quot;spend&quot; that accumulated charge on an unrelated escalation. Charge earned reading files does not transfer to charge for calling the Kubernetes API, because <code>h_c</code> for <code>admin_action</code> requires a real history <em>of admin-adjacent actions specifically</em> — history that a freshly-compromised worker pod cannot possibly have.</p>
+<p><strong>Cross-class coupling.</strong> Authority classes are hierarchically related — trust in a low-privilege class is a soft precondition for trust in a higher one, but not vice versa. When a divergence event in a low class exceeds a severity threshold, it also applies a fractional penalty to related higher classes:</p>
+<pre><code>E_i,c'(t) -= κ_c,c' · penalty_magnitude(d_t)     for each c' downstream of c
+</code></pre>
+<p>This is what makes a single bad event cascade appropriately: the Phase 4 moment in the Hugging Face incident — reading a 136-key secret object — wasn't just a divergence in <code>read_other_resource</code>; under coupling, it also depletes charge for <code>mint_token</code>, <code>network_egress_external</code>, and <code>admin_action</code>, because those classes' legitimacy was resting on the same identity whose baseline just broke.</p>
+<hr />
+<h2 id="6-the-escape-hatch-declared-trajectory-changes">6. The escape hatch: declared trajectory changes</h2>
+<p>A model with no way to represent legitimate change either gets disabled by frustrated operators or causes real outages during migrations, incident response, or planned architecture changes. The fix is an explicit, auditable pre-registration mechanism, not a blanket exception:</p>
+<ul>
+<li>An operator or automated change-management system can submit a <strong>trajectory grant</strong>: <code>(identity, class, expected_feature_range, valid_window, issued_by)</code>.</li>
+<li>During the valid window, actions matching the declared range compute divergence against the <em>grant's</em> declared range in addition to the historical baseline — effectively widening <code>θ_c</code> temporarily and locally, not globally.</li>
+<li>Every grant is itself an auditable, provenance-bearing object — logged with who issued it and why — so &quot;we widened the trust window for the migration&quot; is a reviewable decision, not a silent bypass.</li>
+<li>Grants never apply retroactively and never apply to classes outside what was declared — a grant for <code>network_egress_internal</code> during a maintenance window does not quietly cover <code>admin_action</code>.</li>
+</ul>
+<p>New identities enter at a <strong>probationary tier</strong>: <code>E_i,c(0)</code> initialized low, <code>τ_c</code> for anything beyond <code>read_own_data</code> effectively unreachable until <code>h_c</code> (real history) accumulates through ordinary operation. This maps directly onto <strong>Blue Zones</strong> — the probationary tier is the innermost, most-restricted zone, and identities graduate outward only by building real trajectory, never by a one-time grant of standing privilege.</p>
+<hr />
+<h2 id="7-worked-example-tracing-charge-through-the-incident">7. Worked example: tracing charge through the incident</h2>
+<p>Take the compromised dataset-processing worker pod as identity <code>i</code>, and trace <code>E_i,c(t)</code> across four authority classes as the actual incident phases occur. Illustrative parameter values: <code>E_max = 100</code>, <code>θ_c ≈ 0.25</code>, <code>p = 3</code>, <code>ρ_gain = 1</code>, <code>ρ_loss = 25</code>, <code>λ</code> small for <code>read_own_data</code>, larger for <code>admin_action</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Class touched</th>
+<th>Divergence <code>d_t</code></th>
+<th>Charge before</th>
+<th>Charge after</th>
+<th>Gate result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Baseline operation (weeks of normal conversion jobs)</td>
+<td><code>read_own_data</code></td>
+<td>~0.05–0.15 (normal noise)</td>
+<td>—</td>
+<td>stabilizes around 60–75</td>
+<td>reads permitted, as expected</td>
+</tr>
+<tr>
+<td>Phase 1 — SA token read + cluster API call</td>
+<td><code>network_egress</code> (new class for this identity)</td>
+<td>~0.95 (never touched before)</td>
+<td>~5 (cold-start prior, no history)</td>
+<td><strong>≈ 0</strong> (penalty ≈ 25 · (0.95/0.25)³ ≈ 1,368, clamped)</td>
+<td><strong>denied</strong> — call never reaches the API</td>
+</tr>
+<tr>
+<td>Phase 2 — metadata replay from external origin</td>
+<td><code>network_egress</code></td>
+<td>~0.98 (origin never seen)</td>
+<td>0 (already floored)</td>
+<td>0</td>
+<td><strong>denied</strong></td>
+</tr>
+<tr>
+<td>Phase 4 — bulk 136-key secret read</td>
+<td><code>read_other_resource</code>, with coupling into <code>admin_action</code>, <code>mint_token</code></td>
+<td>~0.9</td>
+<td><code>read_other_resource</code> starts moderate (~40, some legitimate cross-resource reads exist); <code>admin_action</code>/<code>mint_token</code> start near 0 (no history)</td>
+<td><code>read_other_resource</code> collapses toward 0; coupled classes stay at 0</td>
+<td><strong>denied</strong> — bulk read blocked, and nothing downstream ever gets minted</td>
+</tr>
+<tr>
+<td>Phase 6 — 181 mesh enrollment attempts</td>
+<td><code>network_egress_external</code> / <code>mint_token</code>-adjacent</td>
+<td>~0.95, and cadence anomaly compounds it (181 attempts in &lt;4h vs. a legitimate key's historical rate of near-zero)</td>
+<td>0 (already floored from Phase 1/2/4 coupling)</td>
+<td>0</td>
+<td><strong>denied from attempt 1</strong>; even without upstream coupling, attempt 2 alone would floor it</td>
+</tr>
+</tbody>
+</table>
+<p>The pattern that falls out of the math, not asserted separately: <strong>the actual incident's escalation only works because every step after Phase 1 assumes the previous step's authority was legitimately obtained.</strong> Once Phase 1 is denied under this model, everything downstream is denied not because each subsequent action was separately caught, but because the coupling terms mean there was never any charge to spend in the first place. That's the property worth stating plainly in the demo: this isn't seven separate detections — it's one structural cutoff whose effects cascade for free.</p>
+<hr />
+<h2 id="8-what-would-make-this-genuinely-defensible-not-just-internally-consistent">8. What would make this genuinely defensible (not just internally consistent)</h2>
+<p>Being honest about what's still owed before this is a production claim rather than a model:</p>
+<ul>
+<li><strong>Calibration requires real telemetry.</strong> <code>θ_c</code>, <code>ρ_gain</code>, <code>ρ_loss</code>, <code>p</code>, and the feature weights <code>w_j</code> are currently reasoned from first principles and from this one incident. They need to be fit against a large corpus of <em>legitimate</em> action sequences across many workload classes to know the real false-positive rate — the model needs to not flag Tuesday's ordinary batch job as an intrusion.</li>
+<li><strong>The Mahalanobis/logistic formulation is a reasonable default, not the only valid one.</strong> A learned sequence model (small transformer or HMM over action n-grams) may outperform a hand-specified feature+distance approach once there's enough data — worth prototyping both.</li>
+<li><strong>Coupling coefficients <code>κ_c,c'</code> are the least-justified numbers in the model right now.</strong> They encode a hierarchy of authority classes that should probably be derived empirically (which classes actually predict compromise of which other classes) rather than assigned by intuition.</li>
+<li><strong>Latency is a real constraint.</strong> Computing <code>d_t</code> has to happen fast enough to gate the action inline at the transport/substrate layer — this pushes toward lightweight per-action scoring (the Mahalanobis form is cheap) rather than a heavyweight model in the hot path, with any heavier sequence modeling done asynchronously to update the baseline, not to gate the live action.</li>
+</ul>
+<hr />
+<p><em>Companion to &quot;What Ambient Enforcement Would Have Done&quot; (the annotated Hugging Face incident timeline). Together these two documents form the technical basis for the Kinetic Infrastructure Layer demo: this document supplies the model, the timeline document supplies the case it's tested against.</em></p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

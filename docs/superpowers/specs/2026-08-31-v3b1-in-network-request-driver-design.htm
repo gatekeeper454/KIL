@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V3B-1 In-Network Request Driver Design</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/specs/2026-08-31-v3b1-in-network-request-driver-design.md">
+<meta name="source-sha256" content="60dc94c63dab6cbdfe70ba1b4c826488593564c87acf0e23179cd4ad3005016c">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-08-31-v3b1-in-network-request-driver-design.md</code> (<code>60dc94c63dab6cbdfe70ba1b4c826488593564c87acf0e23179cd4ad3005016c</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">V3B-1 In-Network Request Driver Design</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-08-31-v3b1-in-network-request-driver-design.md</code> (<code>60dc94c63dab6cbdfe70ba1b4c826488593564c87acf0e23179cd4ad3005016c</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-1-in-network-request-driver-design">V3B-1 In-Network Request Driver Design</a></li><li class="level-2"><a href="#1-decision-and-scope">1. Decision and scope</a></li><li class="level-2"><a href="#2-failure-being-corrected">2. Failure being corrected</a></li><li class="level-2"><a href="#3-approved-topology">3. Approved topology</a></li><li class="level-2"><a href="#4-driver-lifecycle-and-immutable-identity">4. Driver lifecycle and immutable identity</a></li><li class="level-2"><a href="#5-non-consuming-readiness-protocol">5. Non-consuming readiness protocol</a></li><li class="level-2"><a href="#6-one-shot-request-protocol">6. One-shot request protocol</a></li><li class="level-2"><a href="#7-failure-provenance-and-no-retry-boundary">7. Failure provenance and no-retry boundary</a></li><li class="level-2"><a href="#8-evidence-and-content-identity">8. Evidence and content identity</a></li><li class="level-2"><a href="#9-teardown-and-recovery">9. Teardown and recovery</a></li><li class="level-2"><a href="#10-test-and-live-validation-gates">10. Test and live-validation gates</a></li><li class="level-2"><a href="#11-documentation-and-presentation">11. Documentation and presentation</a></li><li class="level-2"><a href="#12-rejected-alternatives">12. Rejected alternatives</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-1-in-network-request-driver-design" href="#v3b-1-in-network-request-driver-design">V3B-1 In-Network Request Driver Design</a></li><li class="level-2"><a data-section-id="1-decision-and-scope" href="#1-decision-and-scope">1. Decision and scope</a></li><li class="level-2"><a data-section-id="2-failure-being-corrected" href="#2-failure-being-corrected">2. Failure being corrected</a></li><li class="level-2"><a data-section-id="3-approved-topology" href="#3-approved-topology">3. Approved topology</a></li><li class="level-2"><a data-section-id="4-driver-lifecycle-and-immutable-identity" href="#4-driver-lifecycle-and-immutable-identity">4. Driver lifecycle and immutable identity</a></li><li class="level-2"><a data-section-id="5-non-consuming-readiness-protocol" href="#5-non-consuming-readiness-protocol">5. Non-consuming readiness protocol</a></li><li class="level-2"><a data-section-id="6-one-shot-request-protocol" href="#6-one-shot-request-protocol">6. One-shot request protocol</a></li><li class="level-2"><a data-section-id="7-failure-provenance-and-no-retry-boundary" href="#7-failure-provenance-and-no-retry-boundary">7. Failure provenance and no-retry boundary</a></li><li class="level-2"><a data-section-id="8-evidence-and-content-identity" href="#8-evidence-and-content-identity">8. Evidence and content identity</a></li><li class="level-2"><a data-section-id="9-teardown-and-recovery" href="#9-teardown-and-recovery">9. Teardown and recovery</a></li><li class="level-2"><a data-section-id="10-test-and-live-validation-gates" href="#10-test-and-live-validation-gates">10. Test and live-validation gates</a></li><li class="level-2"><a data-section-id="11-documentation-and-presentation" href="#11-documentation-and-presentation">11. Documentation and presentation</a></li><li class="level-2"><a data-section-id="12-rejected-alternatives" href="#12-rejected-alternatives">12. Rejected alternatives</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="v3b-1-in-network-request-driver-design">V3B-1 In-Network Request Driver Design</h1>
+<h2 id="1-decision-and-scope">1. Decision and scope</h2>
+<p>V3B-1 will replace the failed macOS-to-Colima published-port request path with
+one controller-owned request-driver container inside a dedicated internal
+frontend segment for each track. Envoy is dual-homed between that segment and
+the track's existing internal segment, which becomes backend-only. The driver
+is a laboratory transport component only. It does not compute trust, verify KTP
+state, authorize an action, change Envoy policy, or invoke the target directly.</p>
+<p>The following remain frozen:</p>
+<ul>
+<li>KIL trust-decay and two-timescale semantics;</li>
+<li><code>kil.q-state.v0</code> claims and Ed25519 verification;</li>
+<li>the ten-second signed-state lifetime and revocation checks;</li>
+<li>credential-policy, signed-state-only, and signed-plus-local-reduction modes;</li>
+<li>Envoy <code>ext_authz</code> behavior;</li>
+<li>the harmless target and its marker semantics; and</li>
+<li>the expected <code>permit / permit / deny</code>, HTTP <code>200 / 200 / 403</code>, and target
+marker <code>1 / 1 / 0</code> result.</li>
+</ul>
+<p>The change is limited to request transport, runtime ownership, readiness,
+failure provenance, evidence binding, teardown, and presentation. Evidence
+scope remains <code>local_envoy_boundary</code>. V3B-2 cluster and NetworkPolicy claims,
+historical-prevention claims, and production-performance claims remain
+excluded.</p>
+<h2 id="2-failure-being-corrected">2. Failure being corrected</h2>
+<p>The central attempt proved that all three Envoy containers were running and
+that Envoy was reachable from inside its isolated track. Docker retained the
+requested <code>HostConfig.PortBindings</code>, but live <code>NetworkSettings.Ports</code> contained
+null mappings because the track bridge was internal-only. No macOS listener
+existed, so readiness failed before request intent or request bytes.</p>
+<p>The correction must not make the internal network externally routable merely
+to satisfy the laboratory client. The driver instead moves the client to the
+same isolated network as the enforcement point.</p>
+<h2 id="3-approved-topology">3. Approved topology</h2>
+<p>Each track contains four owned runtime containers:</p>
+<ol>
+<li>an authorization service;</li>
+<li>a harmless target;</li>
+<li>Envoy; and</li>
+<li>a request driver.</li>
+</ol>
+<p>Each track has two internal bridge segments. The frontend segment contains only
+the request driver and Envoy. The backend segment contains only Envoy, the
+authorization service, and the harmless target. Envoy is the sole dual-homed
+container. Neither segment has a host publication or default route, and no
+container attaches to a segment belonging to another track.</p>
+<p>The split makes Envoy the only network path from the driver to consequential
+services. The driver has no route or name resolution to the authorization
+service or target and therefore cannot address either directly. It also has no
+listening port, mount, signing key, standing request, or preprovisioned,
+persistent, or standing credential.</p>
+<pre><code class="language-mermaid">flowchart LR
+    C[Host controller] --&gt;|Docker attach; stdin/stdout only| D[One-shot request driver]
+    subgraph F[Internal frontend segment]
+        D --&gt;|retained TCP connection; one HTTP request| E[Envoy]
+    end
+    subgraph B[Internal backend segment]
+        E --&gt;|ext_authz| A[Authorization service]
+        E --&gt;|permit only| H[Harmless target]
+    end
+    C -. no host TCP publication .-&gt; E
+</code></pre>
+<p>The controller communicates with a driver through the pinned Docker CLI and
+the dedicated Colima socket. This control channel is not the demonstration
+traffic path. The consequential request crosses Envoy from the isolated driver
+and cannot bypass the per-track enforcement point.</p>
+<h2 id="4-driver-lifecycle-and-immutable-identity">4. Driver lifecycle and immutable identity</h2>
+<p>During <code>up</code>, the controller creates one driver container per track but does not
+start it. The driver uses the same immutable, locally built KIL laboratory
+image already pinned in the run manifest. Its command is a fixed Python
+bootstrap plus a fixed track and the content-identity-independent frontend
+endpoint <code>envoy:8080</code>. Each isolated frontend segment assigns the fixed
+per-network alias <code>envoy</code> to its Envoy container and attests that alias
+separately from the run-derived container name. No
+signed state, authorization value, request body, private key, or dynamic header
+appears in arguments, environment variables, labels, or mounts.</p>
+<p>Each driver is attested in the <code>created</code> state before <code>up_complete</code>. Its
+non-circular <code>driver_definition</code> is computed before runtime creation and
+contains only role, track, immutable image ID, bootstrap digest, fixed
+<code>envoy:8080</code> endpoint, fixed frontend-segment definition, and fixed
+hardening/resource
+settings. That definition is hashed into content identity. Runtime-generated
+full IDs and run-derived names and labels are attested later and are excluded
+from the content-identity preimage.</p>
+<p>Runtime attestation requires:</p>
+<ul>
+<li>exact full container ID, fixed name, role, track, labels, image ID, command,
+and network membership;</li>
+<li>non-root UID/GID <code>65532:65532</code>;</li>
+<li>read-only root filesystem;</li>
+<li><code>no-new-privileges</code> and all capabilities dropped;</li>
+<li>fixed CPU, memory, PID, log, stop-timeout, tmpfs, and restart limits;</li>
+<li>no bind mount, host port, privileged mode, host namespace, or backend/extra
+network;
+and</li>
+<li>stdin enabled without a TTY.</li>
+</ul>
+<p>The three existing validators remain transient and explicit. A complete
+<code>up</code> therefore owns three validators, twelve track containers, and six internal
+networks. The frontend is configured exactly for driver plus Envoy. Physical
+membership is derived from fresh runtime state and contains only running roles:
+with Envoy running, a created, exited, or dead driver yields Envoy-only
+membership and a running driver yields driver plus Envoy. A stopped Envoy is
+absent from both physical networks. The nominal running backend is Envoy plus
+authorization service plus target, with each stopped role absent.
+Recovery and exact inventories must recognize the driver and both network
+segments as first-class owned objects rather than infer ownership from names.</p>
+<h2 id="5-non-consuming-readiness-protocol">5. Non-consuming readiness protocol</h2>
+<p>At <code>run</code>, the controller starts all three driver containers concurrently with
+attached stdin and stdout under one bounded deadline. Each bootstrap:</p>
+<ol>
+<li>creates one <code>HTTPConnection</code> to its fixed Envoy alias on port 8080;</li>
+<li>calls <code>connect()</code> without sending HTTP bytes;</li>
+<li>emits exactly one canonical, closed readiness record; and</li>
+<li>retains that connection while waiting for one stdin instruction.</li>
+</ol>
+<p>The readiness record contains only schema version, fixed track, status, and
+closed monotonic timing fields. It contains no request data or exception text.
+The controller must receive and validate readiness from all three drivers
+before persisting any request intent or writing request instructions.</p>
+<p>EOF after readiness but before an instruction is the sole valid non-request
+cancellation signal. On cancellation, the driver emits no additional stdout,
+sends no HTTP bytes, closes the retained connection, and exits with fixed status
+zero. The controller durably records <code>readiness_cancel_complete</code> bound to the
+driver full ID, track, and readiness session. Any other pre-instruction exit or
+output is a readiness failure.</p>
+<p>If any driver fails readiness, emits malformed or extra output, exits
+incorrectly, or misses the deadline, the controller sends no instruction to any
+driver. It delivers the defined EOF cancellation to ready peers, bounds process
+termination, stops any surviving driver container, persists closed readiness
+provenance, and enters nonpromotable teardown with all requests still
+<code>not_attempted</code>. Ambiguous termination creates readiness poison and prohibits a
+request.</p>
+<h2 id="6-one-shot-request-protocol">6. One-shot request protocol</h2>
+<p>After all three drivers are ready, the controller processes the tracks in their
+fixed order. For each track it:</p>
+<ol>
+<li>issues the short-lived signed state when that track requires one;</li>
+<li>constructs the same closed request facts used by V3A and the existing V3B-1
+harness;</li>
+<li>durably persists exactly one request intent bound to the driver-readiness
+session;</li>
+<li>writes one bounded canonical instruction to that driver's stdin; and</li>
+<li>closes that stdin after the instruction.</li>
+</ol>
+<p>The instruction is the only dynamic driver input. It contains the exact method,
+path, allowlisted headers, empty-body declaration, and track binding. The
+driver rejects duplicate keys, unknown fields, an unexpected method or path,
+unapproved headers, a nonempty body, oversized input, trailing input, and a
+track mismatch. The authorization value and compact Q-state are transient
+credentials present only in the driver's bounded in-memory instruction handling
+after durable request intent. They are never written to process arguments,
+environment variables, mounts, stdout, stderr, container logs, journals, or
+evidence files, and the driver never echoes them.</p>
+<p>The driver sends exactly one HTTP request over the retained readiness
+connection, reads at most the bounded response body, and emits one canonical
+result record containing only the fixed track, response status, allowlisted
+decision digest, closed request-stage timing, and retry count. The result must
+not include response bodies, raw headers, tokens, signed state, exception text,
+or environment data. The driver then closes the connection and exits. A driver
+cannot be restarted or reused, and the controller cannot reconnect or retry
+after request intent.</p>
+<h2 id="7-failure-provenance-and-no-retry-boundary">7. Failure provenance and no-retry boundary</h2>
+<p>Before instruction delivery, failures are readiness failures and cannot change
+request state. After durable intent, any controller pipe failure, driver exit,
+driver protocol violation, request send failure, response-header failure,
+response-body failure, timeout, or ambiguous process termination is a terminal
+request failure.</p>
+<p>Driver-reported transport failures use the existing closed exception class,
+errno, errno name, stage, monotonic ordering, attempt count one, and
+<code>retry_performed=false</code> contract. A controller-side failure that prevents a
+trusted driver result records a separate closed driver-control stage and
+conservatively sets <code>request_bytes_may_have_been_sent=true</code> once any instruction
+byte was written. Raw subprocess stderr is never journaled or published.</p>
+<p>No failure after intent may restart a container, start a replacement container,
+reopen a connection, resend an instruction, or promote the run.</p>
+<p>Any post-intent failure also aborts the entire remaining sequence. No later
+track receives an instruction. The controller sends the defined EOF
+cancellation to every still-ready, uncommanded driver, bounds and attests their
+termination, and leaves those track requests <code>not_attempted</code> before teardown.</p>
+<h2 id="8-evidence-and-content-identity">8. Evidence and content identity</h2>
+<p>The public request record remains the normalized client-side result and retains
+its existing comparison-fact hashes, Q-state presence/digest, send/receive
+ordering, response status, and decision digest. It adds a fixed
+<code>request_transport</code> value identifying the in-network driver boundary and binds
+the exact driver role, image ID, configuration hash, and result-record hash.</p>
+<p>The content identity and run manifest advance to a new closed schema version.
+They replace host gateway-port facts with fixed internal driver-to-Envoy
+endpoint facts and include the three non-circular <code>driver_definition</code> hashes
+and six network-segment definitions. Docker-generated IDs and run-derived
+names/labels remain runtime attestations outside the content-identity preimage.
+Old bundles remain verifiable under their old schema and cannot be
+reinterpreted as driver runs.</p>
+<p>The nine authoritative Envoy, authorization, and target sources remain the
+causal enforcement evidence. Driver output is the direct client-response source
+used to construct each public request record. The exact canonical, secret-free
+driver result for each commanded track is published under a fixed
+<code>raw/drivers/&lt;track&gt;.json</code> path and included in <code>SHA256SUMS</code>. The normalized
+request record binds that exact file's SHA-256. The offline verifier parses the
+published record with the same closed schema, recursively applies secret
+exclusion, reconstructs its exact canonical bytes, verifies its digest, and
+then verifies the normalized request projection. No opaque private-only digest
+may support acceptance. Joins must still bind request, Envoy decision,
+authorization decision, target outcome, run, request, track, and decision
+digest.</p>
+<p>An accepted bundle still requires complete sources, <code>permit / permit / deny</code>,
+HTTP <code>200 / 200 / 403</code>, target markers <code>1 / 1 / 0</code>, valid joins, exact
+checksums, complete teardown, and offline presenter acceptance.</p>
+<h2 id="9-teardown-and-recovery">9. Teardown and recovery</h2>
+<p>Teardown first prevents any further request activity. It terminates or attests
+the exited request drivers before stopping Envoy. It then performs the existing
+Envoy-first and live-ledger evidence freeze for the nine authoritative sources.
+Drivers have no writable evidence ledger and cannot block preservation of an
+otherwise available enforcement source.</p>
+<p>All driver create, start, stop, exit, and removal transitions use durable
+intents and full-ID inventory verification. Partial <code>up</code> recovery may remove a
+created-but-never-started driver only after its immutable runtime identity
+matches the journal. Partial <code>run</code> recovery never starts or restarts a driver.
+Any driver
+whose request status is ambiguous makes the bundle incomplete and
+nonpromotable while exact owned cleanup continues.</p>
+<p>The dedicated profile, twelve track containers, three validators, and six
+networks must be absent before publication. The pre-existing foreign Colima
+state and global Docker context must be restored exactly.</p>
+<h2 id="10-test-and-live-validation-gates">10. Test and live-validation gates</h2>
+<p>Implementation is test-first. Static tests must prove:</p>
+<ul>
+<li>no Envoy host publication is constructed or accepted;</li>
+<li>the fixed <code>envoy:8080</code> frontend alias is independent of run-derived
+names/labels, and changing only those runtime attestations cannot change the
+content-identity preimage;</li>
+<li>exact created-state driver attachment with an unrealized endpoint, Envoy-only
+physical frontend membership before first start, exact two-member frontend
+membership only while both roles run, nominal three-member running backend
+membership, and stopped-role endpoint omission;</li>
+<li>all three retained driver connections are ready before request intent;</li>
+<li>no instruction or HTTP request on readiness failure;</li>
+<li>signed state travels only through bounded stdin after intent;</li>
+<li>exact one-shot ordering and no restart, reconnect, or retry;</li>
+<li>closed driver results and failure provenance with secret exclusion;</li>
+<li>old content-identity and bundle schemas remain independently verifiable;</li>
+<li>partial-up and partial-run recovery fail closed; and</li>
+<li>exact twelve-container, six-network teardown and survivor inventories.</li>
+</ul>
+<p>Before a new central proof, one request-free live boundary gate runs
+<code>preflight</code>, <code>up</code>, a new readiness-only driver diagnostic, and <code>down</code>. It may
+start the drivers and establish all three TCP connections, but it sends no
+instruction, persists no request intent, and emits no Envoy, authorization, or
+target action. Acceptance requires exact driver readiness, three durable
+<code>readiness_cancel_complete</code> records, fixed zero exits with no post-readiness
+stdout, empty and byte-bound authoritative sources, valid nonpromotable
+checksums, exact teardown, and restored foreign state.</p>
+<p>Only after the correction is reviewed, merged, synchronized, and passes that
+live gate may a new central <code>run</code> be authorized. The previous readiness failure
+and request-free diagnostic remain immutable nonpromotable evidence and are
+never relabeled as enforcement validation.</p>
+<h2 id="11-documentation-and-presentation">11. Documentation and presentation</h2>
+<p>The V3 architecture diagram, live status board, progress record, specialist
+lineage, authoritative presenter, and unified KIL paper must show the request
+driver as a laboratory client inside the transport boundary. They must clearly
+distinguish the driver from KIL enforcement and state that moving the client
+does not change the signed composite KTP enforcement state or authorization
+semantics.</p>
+<p>The presenter should make the absence of host publication visible and show the
+causal path:</p>
+<p><code>request driver -&gt; Envoy -&gt; authorization -&gt; target or withhold</code>.</p>
+<h2 id="12-rejected-alternatives">12. Rejected alternatives</h2>
+<p>A controller-managed SSH tunnel was rejected because it adds a second process
+lifecycle, dynamic addressing, forwarding ownership, and recovery ambiguity at
+the exact boundary that failed. A second non-internal frontend bridge was
+rejected because it would give Envoy a default-route network and require new
+egress controls, weakening the laboratory's isolation to preserve a host-client
+convenience.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

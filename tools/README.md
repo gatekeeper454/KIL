@@ -4,6 +4,36 @@ Repository tools normalize public source material, validate evidence labels,
 run deterministic replays, compare counterfactuals, and generate paper tables
 and figures from canonical decision records.
 
+## Markdown reader publication
+
+`render_markdown.py` maps every Git-tracked file whose final suffix is
+lowercase `.md` to exactly one same-directory `.htm` reader. Markdown is the
+source of record; generated readers carry their source path and SHA-256 digest
+and must not be edited directly.
+
+```bash
+make docs-html
+make docs-html-check
+```
+
+Generation uses the exact Git-index source set, renders all documents before
+replacing any output, and reserves visible nonignored `.htm` paths for the
+generated corpus. The output embeds the rendered article, CSS, and bounded
+JavaScript controls, so no hosted runtime or network fetch is required to read
+it directly from disk. Raw HTML is escaped. Only links to tracked relative
+Markdown documents are changed to `.htm`; external, missing, fragment-only,
+image, and non-Markdown destinations retain their source destination. The
+content security policy blocks remote content and network APIs. Local relative
+image references remain file references rather than embedded binary data and
+therefore require the referenced local files to remain available.
+
+`make docs-html-check` runs the renderer with `--check`. It performs no repairs
+or removals and returns failure after reporting every missing, stale, or
+unexpected visible reader. `make validate` includes this check, so any future
+tracked lowercase-`.md` addition or removal changes the exact required `.htm`
+set automatically. Regeneration and checking require the pinned `docs`
+dependency set.
+
 `v3a_demo.py` runs the three infrastructure-fixed authorization tracks against
 one normalized request, joins each decision to its forwarding outcome and
 harmless target marker, and emits an atomic, content-addressed evidence bundle.

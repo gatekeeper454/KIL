@@ -1,0 +1,1123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V2 Historical KIL Replay Implementation Plan</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/plans/2026-08-29-v2-historical-replay.md">
+<meta name="source-sha256" content="f4a95c9be6359dd4088040293b7c750b05cade14f9a73645f2defd0cafce76d3">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-08-29-v2-historical-replay.md</code> (<code>f4a95c9be6359dd4088040293b7c750b05cade14f9a73645f2defd0cafce76d3</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">V2 Historical KIL Replay Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-08-29-v2-historical-replay.md</code> (<code>f4a95c9be6359dd4088040293b7c750b05cade14f9a73645f2defd0cafce76d3</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v2-historical-kil-replay-implementation-plan">V2 Historical KIL Replay Implementation Plan</a></li><li class="level-3"><a href="#task-1-versioned-scenario-schema-and-loader">Task 1: Versioned scenario schema and loader</a></li><li class="level-3"><a href="#task-2-common-stream-control-and-kil-replay">Task 2: Common-stream control and KIL replay</a></li><li class="level-3"><a href="#task-3-deterministic-run-bundles">Task 3: Deterministic run bundles</a></li><li class="level-3"><a href="#task-4-canonical-eight-phase-hugging-face-scenario">Task 4: Canonical eight-phase Hugging Face scenario</a></li><li class="level-3"><a href="#task-5-replay-cli-and-first-modeled-report">Task 5: Replay CLI and first modeled report</a></li><li class="level-2"><a href="#v2-exit-criteria">V2 exit criteria</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v2-historical-kil-replay-implementation-plan" href="#v2-historical-kil-replay-implementation-plan">V2 Historical KIL Replay Implementation Plan</a></li><li class="level-3"><a data-section-id="task-1-versioned-scenario-schema-and-loader" href="#task-1-versioned-scenario-schema-and-loader">Task 1: Versioned scenario schema and loader</a></li><li class="level-3"><a data-section-id="task-2-common-stream-control-and-kil-replay" href="#task-2-common-stream-control-and-kil-replay">Task 2: Common-stream control and KIL replay</a></li><li class="level-3"><a data-section-id="task-3-deterministic-run-bundles" href="#task-3-deterministic-run-bundles">Task 3: Deterministic run bundles</a></li><li class="level-3"><a data-section-id="task-4-canonical-eight-phase-hugging-face-scenario" href="#task-4-canonical-eight-phase-hugging-face-scenario">Task 4: Canonical eight-phase Hugging Face scenario</a></li><li class="level-3"><a data-section-id="task-5-replay-cli-and-first-modeled-report" href="#task-5-replay-cli-and-first-modeled-report">Task 5: Replay CLI and first modeled report</a></li><li class="level-2"><a data-section-id="v2-exit-criteria" href="#v2-exit-criteria">V2 exit criteria</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="v2-historical-kil-replay-implementation-plan">V2 Historical KIL Replay Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Normalize the source-cited Hugging Face incident sequence, execute the credential-policy control and both KIL modes, and produce deterministic modeled run bundles suitable for white-paper figures.</p>
+<p><strong>Architecture:</strong> V2 is an adapter over the V1 kernel. A strict scenario loader converts versioned JSON into immutable V1 requests, states, and local evidence. The replay engine evaluates one common event stream under three modes and writes canonical, hashed artifacts; it never promotes historical counterfactual output to validated.</p>
+<p><strong>Tech Stack:</strong> Python 3.12 standard library, V1 KIL kernel, JSON/JSONL, SHA-256, <code>argparse</code>, <code>tempfile</code>, <code>unittest</code>.</p>
+<hr />
+<h3 id="task-1-versioned-scenario-schema-and-loader">Task 1: Versioned scenario schema and loader</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>schemas/scenario-v1.schema.json</code></p>
+</li>
+<li>
+<p>Create: <code>src/kil/scenario.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/fixtures/scenario-minimal-v1.json</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_scenario.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write the failing loader tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-python">import json
+from pathlib import Path
+import unittest
+
+from kil.evidence import EvidenceClass
+from kil.scenario import load_scenario
+
+
+FIXTURE = Path(__file__).parent / &quot;fixtures/scenario-minimal-v1.json&quot;
+
+
+class ScenarioTest(unittest.TestCase):
+    def test_loads_source_cited_observed_event_and_modeled_context(self):
+        scenario = load_scenario(FIXTURE)
+        event = scenario.events[0]
+        self.assertEqual(scenario.schema_version, &quot;kil.scenario.v1&quot;)
+        self.assertEqual(event.observed_summary.evidence_class, EvidenceClass.OBSERVED)
+        self.assertEqual(event.control_assumption.evidence_class, EvidenceClass.MODELED)
+        self.assertEqual(event.state_assumption.evidence_class, EvidenceClass.MODELED)
+        self.assertEqual(event.local_evidence_assumption.evidence_class, EvidenceClass.MODELED)
+
+    def test_rejects_observed_event_without_source(self):
+        raw = json.loads(FIXTURE.read_text(encoding=&quot;utf-8&quot;))
+        del raw[&quot;events&quot;][0][&quot;source_ref&quot;]
+        with self.assertRaisesRegex(ValueError, &quot;source_ref&quot;):
+            load_scenario(raw)
+
+    def test_rejects_modeled_context_without_rationale(self):
+        raw = json.loads(FIXTURE.read_text(encoding=&quot;utf-8&quot;))
+        del raw[&quot;events&quot;][0][&quot;modeled_context&quot;][&quot;rationale&quot;]
+        with self.assertRaisesRegex(ValueError, &quot;rationale&quot;):
+            load_scenario(raw)
+
+    def test_rejects_control_assumption_without_rationale(self):
+        raw = json.loads(FIXTURE.read_text(encoding=&quot;utf-8&quot;))
+        del raw[&quot;events&quot;][0][&quot;control_rationale&quot;]
+        with self.assertRaisesRegex(ValueError, &quot;control_rationale&quot;):
+            load_scenario(raw)
+
+    def test_rejects_composite_state_without_modeled_rationale(self):
+        raw = json.loads(FIXTURE.read_text(encoding=&quot;utf-8&quot;))
+        del raw[&quot;events&quot;][0][&quot;state_rationale&quot;]
+        with self.assertRaisesRegex(ValueError, &quot;state_rationale&quot;):
+            load_scenario(raw)
+
+    def test_rejects_unknown_fields(self):
+        raw = json.loads(FIXTURE.read_text(encoding=&quot;utf-8&quot;))
+        raw[&quot;events&quot;][0][&quot;silent_override&quot;] = True
+        with self.assertRaisesRegex(ValueError, &quot;unknown fields&quot;):
+            load_scenario(raw)
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Add the exact minimal fixture</strong></li>
+</ul>
+<pre><code class="language-json">{
+  &quot;schema_version&quot;: &quot;kil.scenario.v1&quot;,
+  &quot;scenario_id&quot;: &quot;hf-july-2026-minimal&quot;,
+  &quot;primary_source&quot;: &quot;https://huggingface.co/blog/agent-intrusion-technical-timeline&quot;,
+  &quot;events&quot;: [
+    {
+      &quot;event_id&quot;: &quot;hf-p1-cluster-api&quot;,
+      &quot;phase&quot;: 1,
+      &quot;timestamp_s&quot;: 10,
+      &quot;identity&quot;: &quot;dataset-worker&quot;,
+      &quot;authority_class&quot;: &quot;admin_action&quot;,
+      &quot;summary&quot;: &quot;Worker identity addressed the Kubernetes control plane.&quot;,
+      &quot;source_ref&quot;: &quot;technical timeline: Day-by-day / cluster API transition&quot;,
+      &quot;credential_valid&quot;: true,
+      &quot;policy_allows_action&quot;: true,
+      &quot;control_rationale&quot;: &quot;Modeled credential-policy baseline for this cut point; the public timeline does not specify a complete policy evaluation record.&quot;,
+      &quot;state_rationale&quot;: &quot;Synthetic Q_i,c state for counterfactual evaluation; the public timeline contains no KTP enforcement state.&quot;,
+      &quot;depends_on&quot;: [],
+      &quot;state&quot;: {
+        &quot;state_id&quot;: &quot;q-hf-p1&quot;, &quot;issued_at_s&quot;: 0, &quot;not_before_s&quot;: 0,
+        &quot;expires_at_s&quot;: 60, &quot;charge&quot;: &quot;5&quot;, &quot;threshold&quot;: &quot;40&quot;,
+        &quot;history_count&quot;: 0, &quot;minimum_history&quot;: 2, &quot;authentic&quot;: true,
+        &quot;veto_clear&quot;: true, &quot;envelope_allows&quot;: true,
+        &quot;decay_rate&quot;: &quot;0.05&quot;, &quot;maximum_charge&quot;: &quot;100&quot;
+      },
+      &quot;modeled_context&quot;: {
+        &quot;divergence&quot;: &quot;0.95&quot;, &quot;coupled_loss&quot;: &quot;0&quot;, &quot;fresh&quot;: true,
+        &quot;rationale&quot;: &quot;Synthetic class-history and control-plane novelty signal; raw telemetry was not disclosed.&quot;
+      }
+    }
+  ]
+}
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Run the tests and verify RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_scenario -v</code></p>
+<p>Expected: import failure because <code>kil.scenario</code> does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 4: Add the machine-readable schema</strong></li>
+</ul>
+<pre><code class="language-json">{
+  &quot;$schema&quot;: &quot;https://json-schema.org/draft/2020-12/schema&quot;,
+  &quot;$id&quot;: &quot;https://github.com/gatekeeper454/KIL/schemas/scenario-v1.schema.json&quot;,
+  &quot;title&quot;: &quot;KIL historical replay scenario v1&quot;,
+  &quot;type&quot;: &quot;object&quot;,
+  &quot;additionalProperties&quot;: false,
+  &quot;required&quot;: [&quot;schema_version&quot;, &quot;scenario_id&quot;, &quot;primary_source&quot;, &quot;events&quot;],
+  &quot;properties&quot;: {
+    &quot;schema_version&quot;: {&quot;const&quot;: &quot;kil.scenario.v1&quot;},
+    &quot;scenario_id&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1},
+    &quot;primary_source&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;format&quot;: &quot;uri&quot;},
+    &quot;events&quot;: {
+      &quot;type&quot;: &quot;array&quot;, &quot;minItems&quot;: 1,
+      &quot;items&quot;: {
+        &quot;type&quot;: &quot;object&quot;, &quot;additionalProperties&quot;: false,
+        &quot;required&quot;: [&quot;event_id&quot;, &quot;phase&quot;, &quot;timestamp_s&quot;, &quot;identity&quot;,
+          &quot;authority_class&quot;, &quot;summary&quot;, &quot;source_ref&quot;, &quot;credential_valid&quot;,
+          &quot;policy_allows_action&quot;, &quot;control_rationale&quot;, &quot;state_rationale&quot;, &quot;depends_on&quot;, &quot;state&quot;,
+          &quot;modeled_context&quot;],
+        &quot;properties&quot;: {
+          &quot;event_id&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1},
+          &quot;phase&quot;: {&quot;type&quot;: &quot;integer&quot;, &quot;minimum&quot;: 1},
+          &quot;timestamp_s&quot;: {&quot;type&quot;: &quot;integer&quot;, &quot;minimum&quot;: 0},
+          &quot;identity&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1},
+          &quot;authority_class&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1},
+          &quot;summary&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1},
+          &quot;source_ref&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1},
+          &quot;credential_valid&quot;: {&quot;type&quot;: &quot;boolean&quot;},
+          &quot;policy_allows_action&quot;: {&quot;type&quot;: &quot;boolean&quot;},
+          &quot;control_rationale&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1},
+          &quot;state_rationale&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1},
+          &quot;depends_on&quot;: {&quot;type&quot;: &quot;array&quot;, &quot;items&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;uniqueItems&quot;: true},
+          &quot;state&quot;: {
+            &quot;type&quot;: &quot;object&quot;, &quot;additionalProperties&quot;: false,
+            &quot;required&quot;: [&quot;state_id&quot;, &quot;issued_at_s&quot;, &quot;not_before_s&quot;, &quot;expires_at_s&quot;,
+              &quot;charge&quot;, &quot;threshold&quot;, &quot;history_count&quot;, &quot;minimum_history&quot;,
+              &quot;authentic&quot;, &quot;veto_clear&quot;, &quot;envelope_allows&quot;, &quot;decay_rate&quot;,
+              &quot;maximum_charge&quot;],
+            &quot;properties&quot;: {
+              &quot;state_id&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1},
+              &quot;issued_at_s&quot;: {&quot;type&quot;: &quot;integer&quot;, &quot;minimum&quot;: 0},
+              &quot;not_before_s&quot;: {&quot;type&quot;: &quot;integer&quot;, &quot;minimum&quot;: 0},
+              &quot;expires_at_s&quot;: {&quot;type&quot;: &quot;integer&quot;, &quot;minimum&quot;: 1},
+              &quot;charge&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;pattern&quot;: &quot;^-?[0-9]+(\\.[0-9]+)?$&quot;},
+              &quot;threshold&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;pattern&quot;: &quot;^-?[0-9]+(\\.[0-9]+)?$&quot;},
+              &quot;history_count&quot;: {&quot;type&quot;: &quot;integer&quot;, &quot;minimum&quot;: 0},
+              &quot;minimum_history&quot;: {&quot;type&quot;: &quot;integer&quot;, &quot;minimum&quot;: 0},
+              &quot;authentic&quot;: {&quot;type&quot;: &quot;boolean&quot;},
+              &quot;veto_clear&quot;: {&quot;type&quot;: &quot;boolean&quot;},
+              &quot;envelope_allows&quot;: {&quot;type&quot;: &quot;boolean&quot;},
+              &quot;decay_rate&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;pattern&quot;: &quot;^-?[0-9]+(\\.[0-9]+)?$&quot;},
+              &quot;maximum_charge&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;pattern&quot;: &quot;^-?[0-9]+(\\.[0-9]+)?$&quot;}
+            }
+          },
+          &quot;modeled_context&quot;: {
+            &quot;type&quot;: &quot;object&quot;, &quot;additionalProperties&quot;: false,
+            &quot;required&quot;: [&quot;divergence&quot;, &quot;coupled_loss&quot;, &quot;fresh&quot;, &quot;rationale&quot;],
+            &quot;properties&quot;: {
+              &quot;divergence&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;pattern&quot;: &quot;^-?[0-9]+(\\.[0-9]+)?$&quot;},
+              &quot;coupled_loss&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;pattern&quot;: &quot;^-?[0-9]+(\\.[0-9]+)?$&quot;},
+              &quot;fresh&quot;: {&quot;type&quot;: &quot;boolean&quot;},
+              &quot;rationale&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1}
+            }
+          }
+        }
+      }
+    }
+  }
+}
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 5: Implement the strict loader</strong></li>
+</ul>
+<pre><code class="language-python">from dataclasses import dataclass
+from decimal import Decimal
+import json
+from pathlib import Path
+from typing import Any
+
+from .domain import ActionRequest, CompositeState, LocalEvidence
+from .evidence import EvidenceClass, LabeledValue
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioEvent:
+    event_id: str
+    phase: int
+    request: ActionRequest
+    observed_summary: LabeledValue[str]
+    control_assumption: LabeledValue[tuple[bool, bool]]
+    depends_on: tuple[str, ...]
+    state_assumption: LabeledValue[CompositeState]
+    local_evidence_assumption: LabeledValue[LocalEvidence]
+
+
+@dataclass(frozen=True, slots=True)
+class Scenario:
+    schema_version: str
+    scenario_id: str
+    primary_source: str
+    events: tuple[ScenarioEvent, ...]
+
+
+def _required(mapping: dict[str, Any], key: str) -&gt; Any:
+    if key not in mapping:
+        raise ValueError(f&quot;missing required field: {key}&quot;)
+    return mapping[key]
+
+
+def _expect_keys(mapping: dict[str, Any], allowed: set[str], where: str) -&gt; None:
+    unknown = set(mapping) - allowed
+    if unknown:
+        raise ValueError(f&quot;unknown fields in {where}: {sorted(unknown)}&quot;)
+
+
+def load_scenario(source: Path | dict[str, Any]) -&gt; Scenario:
+    raw = json.loads(source.read_text(encoding=&quot;utf-8&quot;)) if isinstance(source, Path) else source
+    _expect_keys(raw, {&quot;schema_version&quot;, &quot;scenario_id&quot;, &quot;primary_source&quot;, &quot;events&quot;}, &quot;scenario&quot;)
+    if _required(raw, &quot;schema_version&quot;) != &quot;kil.scenario.v1&quot;:
+        raise ValueError(&quot;unsupported schema_version&quot;)
+    primary = _required(raw, &quot;primary_source&quot;)
+    events = []
+    seen: set[str] = set()
+    for item in _required(raw, &quot;events&quot;):
+        _expect_keys(item, {
+            &quot;event_id&quot;, &quot;phase&quot;, &quot;timestamp_s&quot;, &quot;identity&quot;, &quot;authority_class&quot;,
+            &quot;summary&quot;, &quot;source_ref&quot;, &quot;credential_valid&quot;, &quot;policy_allows_action&quot;,
+            &quot;control_rationale&quot;, &quot;state_rationale&quot;, &quot;depends_on&quot;, &quot;state&quot;, &quot;modeled_context&quot;,
+        }, &quot;event&quot;)
+        event_id = _required(item, &quot;event_id&quot;)
+        if event_id in seen:
+            raise ValueError(f&quot;duplicate event_id: {event_id}&quot;)
+        dependencies = tuple(item.get(&quot;depends_on&quot;, []))
+        if any(parent not in seen for parent in dependencies):
+            raise ValueError(f&quot;event dependencies must reference earlier events: {event_id}&quot;)
+        state_raw = _required(item, &quot;state&quot;)
+        modeled = _required(item, &quot;modeled_context&quot;)
+        _expect_keys(state_raw, {
+            &quot;state_id&quot;, &quot;issued_at_s&quot;, &quot;not_before_s&quot;, &quot;expires_at_s&quot;, &quot;charge&quot;,
+            &quot;threshold&quot;, &quot;history_count&quot;, &quot;minimum_history&quot;, &quot;authentic&quot;,
+            &quot;veto_clear&quot;, &quot;envelope_allows&quot;, &quot;decay_rate&quot;, &quot;maximum_charge&quot;,
+        }, &quot;state&quot;)
+        _expect_keys(modeled, {&quot;divergence&quot;, &quot;coupled_loss&quot;, &quot;fresh&quot;, &quot;rationale&quot;}, &quot;modeled_context&quot;)
+        source_ref = _required(item, &quot;source_ref&quot;)
+        rationale = _required(modeled, &quot;rationale&quot;)
+        control_rationale = _required(item, &quot;control_rationale&quot;)
+        state_rationale = _required(item, &quot;state_rationale&quot;)
+        identity = _required(item, &quot;identity&quot;)
+        authority_class = _required(item, &quot;authority_class&quot;)
+        timestamp = int(_required(item, &quot;timestamp_s&quot;))
+        state = CompositeState(
+            state_id=_required(state_raw, &quot;state_id&quot;), identity=identity,
+            authority_class=authority_class,
+            issued_at_s=int(_required(state_raw, &quot;issued_at_s&quot;)),
+            not_before_s=int(_required(state_raw, &quot;not_before_s&quot;)),
+            expires_at_s=int(_required(state_raw, &quot;expires_at_s&quot;)),
+            charge=Decimal(_required(state_raw, &quot;charge&quot;)),
+            threshold=Decimal(_required(state_raw, &quot;threshold&quot;)),
+            history_count=int(_required(state_raw, &quot;history_count&quot;)),
+            minimum_history=int(_required(state_raw, &quot;minimum_history&quot;)),
+            authentic=bool(_required(state_raw, &quot;authentic&quot;)),
+            veto_clear=bool(_required(state_raw, &quot;veto_clear&quot;)),
+            envelope_allows=bool(_required(state_raw, &quot;envelope_allows&quot;)),
+            decay_rate=Decimal(_required(state_raw, &quot;decay_rate&quot;)),
+            maximum_charge=Decimal(_required(state_raw, &quot;maximum_charge&quot;)),
+        )
+        divergence = Decimal(_required(modeled, &quot;divergence&quot;))
+        events.append(ScenarioEvent(
+            event_id=event_id, phase=int(_required(item, &quot;phase&quot;)),
+            request=ActionRequest(event_id, identity, authority_class, timestamp),
+            observed_summary=LabeledValue(
+                _required(item, &quot;summary&quot;), EvidenceClass.OBSERVED,
+                source_ref=f&quot;{primary}#{source_ref}&quot;,
+            ),
+            control_assumption=LabeledValue(
+                (bool(_required(item, &quot;credential_valid&quot;)),
+                 bool(_required(item, &quot;policy_allows_action&quot;))),
+                EvidenceClass.MODELED, rationale=control_rationale,
+            ),
+            depends_on=dependencies,
+            state_assumption=LabeledValue(
+                state, EvidenceClass.MODELED, rationale=state_rationale,
+            ),
+            local_evidence_assumption=LabeledValue(
+                LocalEvidence(
+                    divergence, Decimal(_required(modeled, &quot;coupled_loss&quot;)),
+                    bool(_required(modeled, &quot;fresh&quot;)),
+                ),
+                EvidenceClass.MODELED, rationale=rationale,
+            ),
+        ))
+        seen.add(event_id)
+    return Scenario(raw[&quot;schema_version&quot;], _required(raw, &quot;scenario_id&quot;), primary, tuple(events))
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 6: Run the focused tests and verify GREEN</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_scenario -v</code></p>
+<p>Expected: 6 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 7: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add schemas/scenario-v1.schema.json src/kil/scenario.py \
+  tests/fixtures/scenario-minimal-v1.json tests/test_scenario.py
+git commit -m &quot;Define versioned KIL replay scenario&quot;
+</code></pre>
+<h3 id="task-2-common-stream-control-and-kil-replay">Task 2: Common-stream control and KIL replay</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>src/kil/replay.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_replay.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing paired-replay tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-python">from dataclasses import replace
+from decimal import Decimal
+from pathlib import Path
+import unittest
+
+from kil.domain import DecisionOutcome, ReductionProfile
+from kil.replay import replay
+from kil.scenario import load_scenario
+
+
+FIXTURE = Path(__file__).parent / &quot;fixtures/scenario-minimal-v1.json&quot;
+
+
+class ReplayTest(unittest.TestCase):
+    def test_all_modes_consume_the_same_event(self):
+        report = replay(
+            load_scenario(FIXTURE),
+            ReductionProfile(Decimal(&quot;0.25&quot;), Decimal(&quot;25&quot;), 3),
+        )
+        decision = report.decisions[0]
+        self.assertTrue(decision.baseline_permit)
+        self.assertEqual(decision.signed_state_only.outcome, DecisionOutcome.DENY)
+        self.assertEqual(decision.signed_plus_local_reduce.outcome, DecisionOutcome.DENY)
+        self.assertEqual(decision.evidence_class, &quot;modeled&quot;)
+
+    def test_historical_output_cannot_be_promoted_to_validated(self):
+        report = replay(
+            load_scenario(FIXTURE),
+            ReductionProfile(Decimal(&quot;0.25&quot;), Decimal(&quot;25&quot;), 3),
+        )
+        self.assertEqual(report.evidence_class, &quot;modeled&quot;)
+
+    def test_denied_parent_marks_kil_descendant_unreachable_without_hiding_decision(self):
+        scenario = load_scenario(FIXTURE)
+        parent = scenario.events[0]
+        child = replace(
+            parent,
+            event_id=&quot;child&quot;,
+            request=replace(parent.request, request_id=&quot;child&quot;, timestamp_s=20),
+            state_assumption=replace(
+                parent.state_assumption,
+                value=replace(parent.state_assumption.value, state_id=&quot;q-child&quot;,
+                              charge=Decimal(&quot;80&quot;), history_count=5),
+            ),
+            depends_on=(parent.event_id,),
+        )
+        report = replay(
+            replace(scenario, events=(parent, child)),
+            ReductionProfile(Decimal(&quot;0.25&quot;), Decimal(&quot;25&quot;), 3),
+        )
+        descendant = report.decisions[1]
+        self.assertTrue(descendant.baseline_reachable)
+        self.assertFalse(descendant.signed_state_only_reachable)
+        self.assertFalse(descendant.signed_plus_local_reduce_reachable)
+        self.assertIsNotNone(descendant.signed_state_only)
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the tests and verify RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_replay -v</code></p>
+<p>Expected: import failure because <code>kil.replay</code> does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement paired replay</strong></li>
+</ul>
+<pre><code class="language-python">from dataclasses import dataclass
+
+from .domain import DecisionOutcome, DecisionRecord, EnforcementMode, ReductionProfile
+from .engine import decide
+from .scenario import Scenario
+
+
+@dataclass(frozen=True, slots=True)
+class PairedDecision:
+    event_id: str
+    baseline_permit: bool
+    baseline_reachable: bool
+    signed_state_only: DecisionRecord
+    signed_state_only_reachable: bool
+    signed_plus_local_reduce: DecisionRecord
+    signed_plus_local_reduce_reachable: bool
+    evidence_class: str = &quot;modeled&quot;
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayReport:
+    scenario_id: str
+    decisions: tuple[PairedDecision, ...]
+    evidence_class: str = &quot;modeled&quot;
+
+
+def replay(scenario: Scenario, profile: ReductionProfile) -&gt; ReplayReport:
+    decisions = []
+    baseline_success: set[str] = set()
+    signed_success: set[str] = set()
+    local_success: set[str] = set()
+    for event in scenario.events:
+        baseline_reachable = all(parent in baseline_success for parent in event.depends_on)
+        signed_reachable = all(parent in signed_success for parent in event.depends_on)
+        local_reachable = all(parent in local_success for parent in event.depends_on)
+        credential_valid, policy_allows_action = event.control_assumption.value
+        baseline_permit = credential_valid and policy_allows_action
+        signed = decide(
+            event.request, event.state_assumption.value,
+            EnforcementMode.SIGNED_STATE_ONLY,
+        )
+        local = decide(
+            event.request, event.state_assumption.value,
+            EnforcementMode.SIGNED_PLUS_LOCAL_REDUCE,
+            event.local_evidence_assumption.value, profile,
+        )
+        decisions.append(PairedDecision(
+            event_id=event.event_id,
+            baseline_permit=baseline_permit,
+            baseline_reachable=baseline_reachable,
+            signed_state_only=signed,
+            signed_state_only_reachable=signed_reachable,
+            signed_plus_local_reduce=local,
+            signed_plus_local_reduce_reachable=local_reachable,
+        ))
+        if baseline_reachable and baseline_permit:
+            baseline_success.add(event.event_id)
+        if signed_reachable and signed.outcome is DecisionOutcome.PERMIT:
+            signed_success.add(event.event_id)
+        if local_reachable and local.outcome is DecisionOutcome.PERMIT:
+            local_success.add(event.event_id)
+    return ReplayReport(scenario.scenario_id, tuple(decisions))
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run the focused tests and verify GREEN</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_replay -v</code></p>
+<p>Expected: 3 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/replay.py tests/test_replay.py
+git commit -m &quot;Add paired KIL historical replay&quot;
+</code></pre>
+<h3 id="task-3-deterministic-run-bundles">Task 3: Deterministic run bundles</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>src/kil/run_bundle.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_run_bundle.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing bundle tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-python">from decimal import Decimal
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import unittest
+
+from kil.domain import ReductionProfile
+from kil.replay import replay
+from kil.run_bundle import write_run_bundle
+from kil.scenario import load_scenario
+
+
+FIXTURE = Path(__file__).parent / &quot;fixtures/scenario-minimal-v1.json&quot;
+
+
+class RunBundleTest(unittest.TestCase):
+    def test_same_inputs_produce_same_run_id_and_artifacts(self):
+        scenario = load_scenario(FIXTURE)
+        report = replay(scenario, ReductionProfile(Decimal(&quot;0.25&quot;), Decimal(&quot;25&quot;), 3))
+        with TemporaryDirectory() as first, TemporaryDirectory() as second:
+            one = write_run_bundle(report, scenario, Path(first), &quot;test-commit&quot;, &quot;profile-v0&quot;)
+            two = write_run_bundle(report, scenario, Path(second), &quot;test-commit&quot;, &quot;profile-v0&quot;)
+            self.assertEqual(one.name, two.name)
+            self.assertEqual(
+                (one / &quot;SHA256SUMS&quot;).read_text(encoding=&quot;utf-8&quot;),
+                (two / &quot;SHA256SUMS&quot;).read_text(encoding=&quot;utf-8&quot;),
+            )
+
+    def test_bundle_never_labels_historical_report_validated(self):
+        scenario = load_scenario(FIXTURE)
+        report = replay(scenario, ReductionProfile(Decimal(&quot;0.25&quot;), Decimal(&quot;25&quot;), 3))
+        with TemporaryDirectory() as directory:
+            bundle = write_run_bundle(report, scenario, Path(directory), &quot;test-commit&quot;, &quot;profile-v0&quot;)
+            manifest = (bundle / &quot;manifest.json&quot;).read_text(encoding=&quot;utf-8&quot;)
+            self.assertIn('&quot;evidence_class&quot;:&quot;modeled&quot;', manifest)
+            self.assertNotIn('&quot;evidence_class&quot;:&quot;validated&quot;', manifest)
+
+    def test_bundle_contains_the_complete_publication_contract(self):
+        scenario = load_scenario(FIXTURE)
+        report = replay(scenario, ReductionProfile(Decimal(&quot;0.25&quot;), Decimal(&quot;25&quot;), 3))
+        with TemporaryDirectory() as directory:
+            bundle = write_run_bundle(report, scenario, Path(directory), &quot;test-commit&quot;, &quot;profile-v0&quot;)
+            self.assertEqual(
+                {path.name for path in bundle.iterdir()},
+                {&quot;manifest.json&quot;, &quot;scenario.json&quot;, &quot;states.jsonl&quot;, &quot;decisions.jsonl&quot;,
+                 &quot;metrics.json&quot;, &quot;summary.md&quot;, &quot;SHA256SUMS&quot;},
+            )
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the tests and verify RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_run_bundle -v</code></p>
+<p>Expected: import failure because <code>kil.run_bundle</code> does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement canonical bundle output</strong></li>
+</ul>
+<pre><code class="language-python">from dataclasses import asdict
+from hashlib import sha256
+from pathlib import Path
+
+from .canonical import canonical_digest, canonical_json
+from .replay import ReplayReport
+from .scenario import Scenario
+
+
+def write_run_bundle(
+    report: ReplayReport,
+    scenario: Scenario,
+    output_root: Path,
+    implementation_version: str,
+    profile_id: str,
+) -&gt; Path:
+    identity = {
+        &quot;scenario_id&quot;: report.scenario_id,
+        &quot;implementation_version&quot;: implementation_version,
+        &quot;profile_id&quot;: profile_id,
+        &quot;scenario&quot;: scenario,
+        &quot;report&quot;: report,
+    }
+    run_id = canonical_digest(identity)[:16]
+    bundle = output_root / run_id
+    bundle.mkdir(parents=True, exist_ok=False)
+    baseline_permits = sum(item.baseline_permit for item in report.decisions)
+    baseline_reachable_permits = sum(
+        item.baseline_reachable and item.baseline_permit for item in report.decisions
+    )
+    signed_denies = sum(item.signed_state_only.outcome.value == &quot;deny&quot; for item in report.decisions)
+    local_denies = sum(item.signed_plus_local_reduce.outcome.value == &quot;deny&quot; for item in report.decisions)
+    signed_unreachable = sum(not item.signed_state_only_reachable for item in report.decisions)
+    local_unreachable = sum(not item.signed_plus_local_reduce_reachable for item in report.decisions)
+    artifacts = {
+        &quot;manifest.json&quot;: canonical_json({
+            &quot;run_id&quot;: run_id,
+            &quot;scenario_id&quot;: report.scenario_id,
+            &quot;implementation_version&quot;: implementation_version,
+            &quot;profile_id&quot;: profile_id,
+            &quot;evidence_class&quot;: &quot;modeled&quot;,
+        }) + &quot;\n&quot;,
+        &quot;scenario.json&quot;: canonical_json(scenario) + &quot;\n&quot;,
+        &quot;states.jsonl&quot;: &quot;&quot;.join(canonical_json(event.state_assumption) + &quot;\n&quot; for event in scenario.events),
+        &quot;decisions.jsonl&quot;: &quot;&quot;.join(canonical_json(item) + &quot;\n&quot; for item in report.decisions),
+        &quot;metrics.json&quot;: canonical_json({
+            &quot;event_count&quot;: len(report.decisions),
+            &quot;baseline_permits&quot;: baseline_permits,
+            &quot;baseline_reachable_permits&quot;: baseline_reachable_permits,
+            &quot;signed_state_only_denies&quot;: signed_denies,
+            &quot;signed_plus_local_reduce_denies&quot;: local_denies,
+            &quot;signed_state_only_unreachable&quot;: signed_unreachable,
+            &quot;signed_plus_local_reduce_unreachable&quot;: local_unreachable,
+            &quot;evidence_class&quot;: &quot;modeled&quot;,
+        }) + &quot;\n&quot;,
+        &quot;summary.md&quot;: (
+            f&quot;# KIL modeled replay {run_id}\n\n&quot;
+            f&quot;Scenario: `{report.scenario_id}`  \n&quot;
+            f&quot;Events: {len(report.decisions)}  \n&quot;
+            f&quot;Baseline permits: {baseline_permits}  \n&quot;
+            f&quot;Signed-state-only denials: {signed_denies}  \n&quot;
+            f&quot;Signed-plus-local-reduction denials: {local_denies}\n\n&quot;
+            &quot;These historical counterfactual decisions are modeled, not validated.\n\n&quot;
+            &quot;KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).\n&quot;
+        ),
+    }
+    for name, content in artifacts.items():
+        (bundle / name).write_text(content, encoding=&quot;utf-8&quot;)
+    checksums = []
+    for name in sorted(artifacts):
+        digest = sha256((bundle / name).read_bytes()).hexdigest()
+        checksums.append(f&quot;{digest}  {name}&quot;)
+    (bundle / &quot;SHA256SUMS&quot;).write_text(&quot;\n&quot;.join(checksums) + &quot;\n&quot;, encoding=&quot;utf-8&quot;)
+    return bundle
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run the focused tests and verify GREEN</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_run_bundle -v</code></p>
+<p>Expected: 3 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/run_bundle.py tests/test_run_bundle.py
+git commit -m &quot;Emit deterministic KIL replay bundles&quot;
+</code></pre>
+<h3 id="task-4-canonical-eight-phase-hugging-face-scenario">Task 4: Canonical eight-phase Hugging Face scenario</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>scenarios/hugging-face-july-2026/scenario-v1.json</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_hugging_face_scenario.py</code></p>
+</li>
+<li>
+<p>Modify: <code>scenarios/hugging-face-july-2026/README.md</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write the failing provenance and coverage tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-python">from pathlib import Path
+import unittest
+
+from kil.evidence import EvidenceClass
+from kil.scenario import load_scenario
+
+
+SCENARIO = Path(__file__).resolve().parents[1] / &quot;scenarios/hugging-face-july-2026/scenario-v1.json&quot;
+SOURCE = &quot;https://huggingface.co/blog/agent-intrusion-technical-timeline&quot;
+
+
+class HuggingFaceScenarioTest(unittest.TestCase):
+    def test_scenario_covers_the_eight_counterfactual_cut_points(self):
+        scenario = load_scenario(SCENARIO)
+        self.assertEqual([event.phase for event in scenario.events], list(range(1, 9)))
+        self.assertEqual(len({event.event_id for event in scenario.events}), 8)
+
+    def test_observed_and_modeled_fields_remain_distinct(self):
+        scenario = load_scenario(SCENARIO)
+        for event in scenario.events:
+            self.assertEqual(event.observed_summary.evidence_class, EvidenceClass.OBSERVED)
+            self.assertTrue(event.observed_summary.source_ref.startswith(SOURCE))
+            self.assertEqual(event.control_assumption.evidence_class, EvidenceClass.MODELED)
+            self.assertEqual(event.state_assumption.evidence_class, EvidenceClass.MODELED)
+            self.assertEqual(event.local_evidence_assumption.evidence_class, EvidenceClass.MODELED)
+            self.assertTrue(event.control_assumption.rationale)
+            self.assertTrue(event.state_assumption.rationale)
+            self.assertTrue(event.local_evidence_assumption.rationale)
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the tests and verify RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_hugging_face_scenario -v</code></p>
+<p>Expected: file-not-found failure because <code>scenario-v1.json</code> does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Populate the exact eight-event scenario</strong></li>
+</ul>
+<p>Use these stable IDs, phases, source-section labels, authority classes, and
+dependencies. Every numerical KTP signal is a string and carries a modeled
+rationale stating that raw KTP telemetry was not disclosed:</p>
+<table>
+<thead>
+<tr>
+<th>Event ID</th>
+<th style="text-align:right">Phase</th>
+<th>Source section</th>
+<th>Authority class</th>
+<th>Depends on</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hf-p1-cluster-api</code></td>
+<td style="text-align:right">1</td>
+<td><code>Day-by-day / cluster API transition</code></td>
+<td><code>admin_action</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>hf-p2-external-replay</code></td>
+<td style="text-align:right">2</td>
+<td><code>Three lateral-movement techniques / cloud credentials</code></td>
+<td><code>network_egress_external</code></td>
+<td>phase 1</td>
+</tr>
+<tr>
+<td><code>hf-p3-privileged-workload</code></td>
+<td style="text-align:right">3</td>
+<td><code>Day-by-day / node privilege</code></td>
+<td><code>privilege_escalation</code></td>
+<td>phase 1</td>
+</tr>
+<tr>
+<td><code>hf-p4-secret-read</code></td>
+<td style="text-align:right">4</td>
+<td><code>Three lateral-movement techniques / secret access</code></td>
+<td><code>read_other_resource</code></td>
+<td>phase 3</td>
+</tr>
+<tr>
+<td><code>hf-p5-cross-cluster-admin</code></td>
+<td style="text-align:right">5</td>
+<td><code>Three lateral-movement techniques / connector credential</code></td>
+<td><code>admin_action</code></td>
+<td>phase 4</td>
+</tr>
+<tr>
+<td><code>hf-p6-mesh-enrollment</code></td>
+<td style="text-align:right">6</td>
+<td><code>Command-and-control and exfiltration / mesh enrollment</code></td>
+<td><code>network_egress_external</code></td>
+<td>phase 4</td>
+</tr>
+<tr>
+<td><code>hf-p7-forged-token</code></td>
+<td style="text-align:right">7</td>
+<td><code>Three lateral-movement techniques / signing capability</code></td>
+<td><code>mint_token</code></td>
+<td>phase 4</td>
+</tr>
+<tr>
+<td><code>hf-p8-ci-pivot</code></td>
+<td style="text-align:right">8</td>
+<td><code>Day-by-day / source-control and CI pivot</code></td>
+<td><code>admin_action</code></td>
+<td>phases 6 and 7</td>
+</tr>
+</tbody>
+</table>
+<p>Use this exact modeled profile for the first replay. All states use
+<code>issued_at_s=0</code>, <code>not_before_s=0</code>, <code>expires_at_s=600</code>, <code>authentic=true</code>,
+<code>veto_clear=true</code>, <code>envelope_allows=true</code>, <code>decay_rate=&quot;0.01&quot;</code>, and
+<code>maximum_charge=&quot;100&quot;</code>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:right">Phase</th>
+<th style="text-align:right"><code>timestamp_s</code></th>
+<th>charge / threshold</th>
+<th>history / minimum</th>
+<th>divergence</th>
+<th>coupled loss</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right">1</td>
+<td style="text-align:right">10</td>
+<td><code>5</code> / <code>40</code></td>
+<td>0 / 2</td>
+<td><code>0.95</code></td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td style="text-align:right">2</td>
+<td style="text-align:right">20</td>
+<td><code>10</code> / <code>35</code></td>
+<td>0 / 2</td>
+<td><code>0.98</code></td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td style="text-align:right">3</td>
+<td style="text-align:right">30</td>
+<td><code>0</code> / <code>70</code></td>
+<td>0 / 5</td>
+<td><code>1.0</code></td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td style="text-align:right">4</td>
+<td style="text-align:right">40</td>
+<td><code>40</code> / <code>50</code></td>
+<td>1 / 3</td>
+<td><code>0.90</code></td>
+<td><code>20</code></td>
+</tr>
+<tr>
+<td style="text-align:right">5</td>
+<td style="text-align:right">50</td>
+<td><code>0</code> / <code>80</code></td>
+<td>0 / 5</td>
+<td><code>1.0</code></td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td style="text-align:right">6</td>
+<td style="text-align:right">60</td>
+<td><code>15</code> / <code>40</code></td>
+<td>0 / 2</td>
+<td><code>0.95</code></td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td style="text-align:right">7</td>
+<td style="text-align:right">70</td>
+<td><code>0</code> / <code>60</code></td>
+<td>0 / 3</td>
+<td><code>1.0</code></td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td style="text-align:right">8</td>
+<td style="text-align:right">80</td>
+<td><code>10</code> / <code>60</code></td>
+<td>0 / 3</td>
+<td><code>0.90</code></td>
+<td><code>0</code></td>
+</tr>
+</tbody>
+</table>
+<p>For the first paired control, set <code>credential_valid=true</code> and
+<code>policy_allows_action=true</code> for the consequential action selected from each
+successful incident phase. Set <code>control_rationale</code> to: “Modeled
+credential-policy baseline for the consequential action; the public timeline
+reports that the action occurred but does not provide a complete policy-engine
+decision record.” This keeps the control assumption modeled rather than
+misclassifying it as an observed policy trace. Use the paper's phase-map
+summaries verbatim to prevent narrative drift.</p>
+<p>Set every event's <code>state_rationale</code> to: “Synthetic <code>Q_i,c</code> state for
+counterfactual evaluation; the public timeline contains no KTP enforcement
+state.” This explicitly keeps charge, threshold, history, authenticity,
+freshness, envelope, and decay inputs modeled.</p>
+<ul>
+<li>[ ] <strong>Step 4: Update the scenario README</strong></li>
+</ul>
+<p>Document the primary source, schema version, event IDs, evidence distinction,
+and statement that expected KIL decisions are counterfactual and modeled.</p>
+<ul>
+<li>[ ] <strong>Step 5: Run the focused tests and verify GREEN</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_hugging_face_scenario -v</code></p>
+<p>Expected: 2 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add scenarios/hugging-face-july-2026/scenario-v1.json \
+  scenarios/hugging-face-july-2026/README.md tests/test_hugging_face_scenario.py
+git commit -m &quot;Normalize Hugging Face replay scenario&quot;
+</code></pre>
+<h3 id="task-5-replay-cli-and-first-modeled-report">Task 5: Replay CLI and first modeled report</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>tools/replay.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_replay_cli.py</code></p>
+</li>
+<li>
+<p>Modify: <code>Makefile</code></p>
+</li>
+<li>
+<p>Modify: <code>README.md</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write the failing CLI test</strong></p>
+</li>
+</ul>
+<pre><code class="language-python">from pathlib import Path
+from tempfile import TemporaryDirectory
+import os
+import subprocess
+import sys
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class ReplayCliTest(unittest.TestCase):
+    def test_cli_emits_a_modeled_integrity_checked_bundle(self):
+        with TemporaryDirectory() as directory:
+            completed = subprocess.run(
+                [sys.executable, &quot;tools/replay.py&quot;, &quot;--output&quot;, directory,
+                 &quot;--implementation-version&quot;, &quot;test-commit&quot;],
+                cwd=ROOT, env={**os.environ, &quot;PYTHONPATH&quot;: &quot;src&quot;}, text=True,
+                capture_output=True, check=True,
+            )
+            bundle = Path(completed.stdout.strip())
+            self.assertTrue((bundle / &quot;manifest.json&quot;).is_file())
+            self.assertTrue((bundle / &quot;SHA256SUMS&quot;).is_file())
+            self.assertIn('&quot;evidence_class&quot;:&quot;modeled&quot;',
+                          (bundle / &quot;manifest.json&quot;).read_text(encoding=&quot;utf-8&quot;))
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the test and verify RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest tests.test_replay_cli -v</code></p>
+<p>Expected: subprocess failure because <code>tools/replay.py</code> does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the CLI</strong></li>
+</ul>
+<pre><code class="language-python">#!/usr/bin/env python3
+from argparse import ArgumentParser
+from decimal import Decimal
+from pathlib import Path
+
+from kil.domain import ReductionProfile
+from kil.replay import replay
+from kil.run_bundle import write_run_bundle
+from kil.scenario import load_scenario
+
+
+def main() -&gt; None:
+    parser = ArgumentParser()
+    parser.add_argument(&quot;--scenario&quot;, type=Path,
+        default=Path(&quot;scenarios/hugging-face-july-2026/scenario-v1.json&quot;))
+    parser.add_argument(&quot;--output&quot;, type=Path, required=True)
+    parser.add_argument(&quot;--implementation-version&quot;, required=True)
+    args = parser.parse_args()
+    profile = ReductionProfile(Decimal(&quot;0.25&quot;), Decimal(&quot;25&quot;), 3)
+    scenario = load_scenario(args.scenario)
+    report = replay(scenario, profile)
+    bundle = write_run_bundle(
+        report, scenario, args.output, args.implementation_version,
+        &quot;weighted-diagonal-v0-modeled&quot;,
+    )
+    print(bundle)
+
+
+if __name__ == &quot;__main__&quot;:
+    main()
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Add Make targets and usage documentation</strong></li>
+</ul>
+<p>Add <code>replay</code> to <code>.PHONY</code>, document <code>make replay OUTPUT=/absolute/path VERSION=&lt;commit&gt;</code>, and invoke the CLI with those required variables. Update the
+root README status to say V2 replay is locally executable but its historical
+decisions remain modeled.</p>
+<ul>
+<li>[ ] <strong>Step 5: Run focused and complete verification</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src '/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3' -m unittest \
+  tests.test_scenario tests.test_replay tests.test_run_bundle \
+  tests.test_hugging_face_scenario tests.test_replay_cli -v
+make validate PYTHON='/Users/mistorm/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3'
+shasum -a 256 -c research/source-material/SHA256SUMS
+</code></pre>
+<p>Expected: all V2 and repository tests pass; all preserved sources report <code>OK</code>.</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add tools/replay.py tests/test_replay_cli.py Makefile README.md
+git commit -m &quot;Add reproducible KIL replay command&quot;
+</code></pre>
+<h2 id="v2-exit-criteria">V2 exit criteria</h2>
+<ul>
+<li>All eight phase cut points are normalized with primary-source references.</li>
+<li>Every synthetic KTP value has modeled provenance and rationale.</li>
+<li>The baseline and both KIL modes consume one common event stream.</li>
+<li>Historical output is always labeled modeled, never validated.</li>
+<li>Same inputs and implementation version produce identical run IDs and hashes.</li>
+<li>The CLI emits an integrity-verifiable run bundle suitable for paper figures.</li>
+<li>Full repository validation and preserved-source checks pass.</li>
+</ul>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>
