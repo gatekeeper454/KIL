@@ -3,8 +3,10 @@
 PYTHON ?= python3
 
 help:
-	@echo "test      Run the complete unit suite (requires lab dependencies)"
+	@echo "test      Run the complete unit suite (requires lab and docs dependencies)"
 	@echo "validate  Run all bootstrap checks"
+	@echo "docs-html Generate self-contained HTML readers (requires docs dependencies)"
+	@echo "docs-html-check Check generated HTML readers (requires docs dependencies)"
 	@echo "replay    Emit a modeled historical bundle (requires OUTPUT and VERSION)"
 	@echo "v3a-demo  Emit the modeled V3A process bundle (requires OUTPUT and VERSION)"
 	@echo "v3b-tools Download and content-lock the isolated V3B toolchain"

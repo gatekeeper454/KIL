@@ -7142,3 +7142,57 @@ each task with observed red/green tests and defer the remote push until every
 gate is complete.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-134 — 2026-09-03 — Documentation reader dependency contract implemented
+
+**Input:** Task 1 implementation request for a pinned Markdown reader toolchain
+and matching build, CI, bootstrap, and Make help disclosures.
+
+**Interpretation:** Markdown remains canonical; the future HTML reader will use
+`markdown-it-py==4.2.0` and `mdurl==0.1.2`, disclosed identically through the
+requirements file and `docs` optional extra.
+
+**Decision status:** Confirmed dependency contract. Local commit `110623e` was
+created; no merge or push occurred. Renderer and generated siblings remain out
+of scope for this task.
+
+**Rationale:** Exact pins and one CI installation command make the documentation
+toolchain reproducible and ensure validation has its required parser available.
+
+**Affected artifacts:** `requirements-docs.txt`, `pyproject.toml`,
+`.github/workflows/ci.yml`, `README.md`, `Makefile`, and
+`tests/test_dependency_contract.py`.
+
+**Unresolved questions:** The renderer's implementation and generated corpus
+remain pending in subsequent tasks.
+
+**Next gate:** Complete spec and quality review, then proceed to Task 2.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-135 — 2026-09-03 — Task 1 quality-review correction
+
+**Input:** Code-quality review identified that T-134 omitted the lineage log
+itself from its affected-artifacts list and that the Make help contract test
+did not execute the actual help target or enforce standalone lines.
+
+**Interpretation:** Correct the record with this additive entry and make the
+dependency disclosure test validate `make help` stdout exactly. Documentation
+targets disclose only their docs dependency; the complete test suite continues
+to disclose both lab and docs dependencies.
+
+**Decision status:** Confirmed quality-review correction. The amended local
+commit records these changes; no merge or push occurred.
+
+**Rationale:** Executing the real help target prevents stale or overlapping
+source-text assertions from allowing an inaccurate user-facing contract.
+
+**Affected artifacts:** `tests/test_dependency_contract.py`, `Makefile`, and
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`.
+
+**Unresolved questions:** The HTML reader implementation and generated corpus
+remain pending in subsequent tasks.
+
+**Next gate:** Complete Task 1 review, then proceed to Task 2.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

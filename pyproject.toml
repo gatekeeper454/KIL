@@ -13,6 +13,10 @@ dependencies = []
 
 [project.optional-dependencies]
 lab = ["cryptography==50.0.0"]
+docs = [
+  "markdown-it-py==4.2.0",
+  "mdurl==0.1.2",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

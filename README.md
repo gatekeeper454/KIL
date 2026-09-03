@@ -115,16 +115,16 @@ sensor process.
 
 ## Bootstrap check
 
-Install the optional laboratory dependency set, then run the complete unit
-suite:
+Install the optional laboratory and documentation dependency sets, then run
+the complete unit suite:
 
 ```bash
-python -m pip install -e ".[lab]"
+python -m pip install -e ".[lab,docs]"
 make test
 ```
 
-This installs the pinned V3A cryptography library. No cluster dependency is
-installed or downloaded by the bootstrap.
+This installs the pinned V3A cryptography and Markdown reader libraries. No
+cluster dependency is installed or downloaded by the bootstrap.
 
 The V3B-1 tool bootstrap and preflight are separate, opt-in commands:
 
