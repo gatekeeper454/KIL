@@ -29,6 +29,15 @@ canvas non-editable, but preserves the HTML demo's precise browser composition
 and keeps the deck self-contained for offline presentation. Semantic changes
 must be made in the HTML authority first and then deliberately re-exported.
 
+`KIL-Presenter-Audience-Technical-Deep-Dive-Editable.pptx` is the native-object
+companion to that fidelity baseline. It preserves the same four primer scenes,
+eight case-study scenes, visible wording, scene order, dark KIL palette, and
+speaker notes, while rebuilding every diagram and label with editable
+PowerPoint text boxes, shapes, lines, and connectors. It contains no embedded
+slide images or flattened diagrams. The raster deck remains the visual
+reference; the editable deck is intended for founder-led adjustment, animation,
+and audience-specific tailoring.
+
 The complete deck contains 30 slides:
 
 - a 14-slide executive spine: `C`, `F1`, `F2`, `F3`, `F4`, `1` through `8`,

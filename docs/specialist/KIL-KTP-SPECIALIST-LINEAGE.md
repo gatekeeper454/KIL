@@ -8779,3 +8779,48 @@ by native PowerPoint rendering must be logged and verified during implementation
 plan, then author and verify all 12 editable slides.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-170 — 2026-09-03 — Editable Presenter/Audience deck implemented
+
+**Input:** The founder instructed the team to execute the auto-approved native
+reconstruction specification and build the editable PowerPoint.
+
+**Interpretation:** Recreate the complete 12-scene technical presentation with
+native PowerPoint text boxes, shapes, lines, and diagram geometry while
+preserving the HTML-authoritative wording, sequence, presenter scripts, source
+statements, evidence labels, and approved dark visual system.
+
+**Decision status:** Implemented pending repository synchronization. The new
+deck contains 12 slides and 12 notes pages, retains all 12 source blocks, and
+contains zero `ppt/media` assets or PowerPoint picture objects. Every slide has
+native editable text and diagram geometry. The raster reference deck and HTML
+authority remain unchanged.
+
+**Rationale:** The editable edition allows direct founder control over every
+title, label, node, line, connector, and diagram component while the separate
+raster edition preserves the browser-fidelity baseline. The native edition
+keeps the observed, modeled, V3A, and pending V3B-1 evidence boundaries intact.
+
+**Affected artifacts:**
+
+- `docs/presentation/KIL-Presenter-Audience-Technical-Deep-Dive-Editable.pptx`
+- `docs/presentation/README.md`
+- `docs/superpowers/plans/2026-09-03-kil-presenter-audience-editable-pptx.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no HTML demo, raster deck, executive deck, live lab, protocol, model,
+  scenario, or evidence state
+
+**Verification evidence:** All 12 slides were rendered and individually
+inspected at full size. Structural verification reported 12 slides, 12 notes,
+12 `[Sources]` blocks, and zero media assets. Authoritative titles, statuses,
+takeaways, presenter scripts, and source statements were found in their matching
+slides or notes. The PowerPoint overflow test reported no overflow.
+
+**Unresolved questions:** Founder review in Microsoft PowerPoint may identify
+preferred groupings, animation paths, or small typography adjustments that do
+not change the authoritative wording or evidence state.
+
+**Next gate:** Complete repository verification and synchronization, then open
+the editable edition for founder review and optional PowerPoint-native animation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
