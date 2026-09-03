@@ -8626,3 +8626,41 @@ HTML demonstration.
 identifies any slide-level revisions before release tagging or publication.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-166 — 2026-09-02 — Presenter/Audience technical PowerPoint fidelity design approved
+
+**Input:** The founder requested a separate PowerPoint version of the existing
+Presenter/Audience HTML demo as a technical deep-dive backup to the cinematic
+executive spine. The founder required no change to look, feel, context,
+wording, storyline, scenes, or evidence semantics and selected the exact
+rendered-scene fidelity approach.
+
+**Interpretation:** Convert the 12 existing audience-view scenes into 12
+full-slide raster captures in source order. Copy each existing presenter script
+and source statement verbatim into PowerPoint speaker notes. Do not edit the
+HTML, live lab, executive deck, full technical deck, or any semantic claim.
+
+**Decision status:** Design confirmed; implementation pending written-spec
+review. The proposed output is
+`docs/presentation/KIL-Presenter-Audience-Technical-Deep-Dive.pptx`.
+
+**Rationale:** Exact rendered-scene capture is the only approach that guarantees
+browser-to-PowerPoint visual fidelity without approximating the source SVGs or
+introducing wording drift. Speaker notes preserve the presenter experience
+without exposing the talk track on the audience canvas.
+
+**Affected artifacts:**
+
+- `docs/superpowers/specs/2026-09-02-kil-presenter-audience-pptx-design.md`
+- future `docs/presentation/KIL-Presenter-Audience-Technical-Deep-Dive.pptx`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no HTML demo, live lab, existing PowerPoint, protocol, model, scenario, or
+  evidence state
+
+**Unresolved questions:** Final full-size PowerPoint render inspection and
+founder review in Microsoft PowerPoint.
+
+**Next gate:** Review the written fidelity specification, then create the
+implementation plan and build the 12-slide deck.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
