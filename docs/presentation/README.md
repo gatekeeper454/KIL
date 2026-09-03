@@ -6,6 +6,17 @@ bounded Hugging Face incident counterfactual.
 
 ## Presentation paths
 
+`KIL-Ambient-Enforcement-Executive-Spine.pptx` is the separate cinematic
+14-slide executive presentation. It uses the approved `C`, `F1` through `F4`,
+`1` through `8`, and `Z` sequence, with one graphic-led argument per slide.
+Use it for an uninterrupted executive walkthrough of the KIL premise, the
+Hugging Face incident counterfactual, the Envoy lab contract, and the evidence
+boundary.
+
+The executive deck does not replace the 30-slide technical deck. Both are
+self-contained, work offline, and include a short talk track, transition, and
+`[Sources]` block in every slide's speaker notes.
+
 The complete deck contains 30 slides:
 
 - a 14-slide executive spine: `C`, `F1`, `F2`, `F3`, `F4`, `1` through `8`,
@@ -39,4 +50,3 @@ effects; those effects are not KTP wire decisions.
 
 Kinetic Trust Protocol contributors. *Kinetic Trust Protocol*. Canonical
 citation metadata: [KTP `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-

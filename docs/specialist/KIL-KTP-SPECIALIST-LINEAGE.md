@@ -8583,3 +8583,46 @@ transition or timing choices controlled by the founder.
 an implementation plan and native PowerPoint build may begin.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-165 — 2026-09-02 — Cinematic executive PowerPoint spine implemented
+
+**Input:** The founder approved cinematic visual direction B and instructed the
+team to build the separate 14-slide executive PowerPoint, preserving the full
+eight-scene narrative, speaker scripts, KTP relationship, ambient-breach
+urgency, and incident/lab evidence boundaries.
+
+**Interpretation:** Implement the approved `C`, `F1` through `F4`, `1` through
+`8`, and `Z` sequence as a self-contained 16:9 PPTX. Use unique cinematic
+visuals and editable executive labels, credit Mike Storm as author and founder,
+and keep the existing 30-slide technical deck and live laboratory unchanged.
+
+**Decision status:** Confirmed and implemented as a presentation artifact. The
+deck contains 14 slides, 14 speaker-note scripts, and 14 `[Sources]` blocks.
+Native PowerPoint export rendering completed and the presentation overflow
+test passed. This creates no new protocol, incident, laboratory, or validation
+claim; V3B-1 remains pending.
+
+**Rationale:** A dedicated executive spine provides the vivid, continuous
+causal story requested by the founder without forcing technical drill-ins into
+the primary narrative. The slides preserve the confirmed KTP/KIL boundary,
+reducing-only authority rule, counterfactual status, and evidence ladder.
+
+**Affected artifacts:**
+
+- `docs/presentation/KIL-Ambient-Enforcement-Executive-Spine.pptx`
+- `docs/presentation/assets/executive-spine/`
+- `docs/presentation/README.md`
+- `docs/superpowers/plans/2026-09-02-kil-executive-cinematic-spine.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no existing 30-slide deck, live lab, model, scenario, authorization runtime,
+  or evidence state
+
+**Unresolved questions:** Founder review in Microsoft PowerPoint; any
+PowerPoint-native transitions, timing, or selective emphasis; and whether the
+same cinematic system should later be propagated into the Presenter/Audience
+HTML demonstration.
+
+**Next gate:** Founder reviews the 14-slide executive spine in PowerPoint and
+identifies any slide-level revisions before release tagging or publication.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
