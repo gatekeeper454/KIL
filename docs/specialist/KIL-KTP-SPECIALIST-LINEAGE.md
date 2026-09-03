@@ -7653,3 +7653,42 @@ push `codex/self-contained-html-readers`, verify the remote branch hash, and
 report the exact artifact locations and the dirty-`main` integration blocker.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-147 — 2026-09-03 — Project-boundary reference cleanup design approved
+
+**Input:** The maintainer directed removal of every current-file reference to
+an unrelated external project because KIL shares no components, data, or
+concepts with it. The maintainer explicitly excluded Git-history rewriting and
+approved the proposed KIL-only rewrite design.
+
+**Interpretation:** Rewrite the affected current Markdown sentences so they
+describe KIL and KTP without naming or indirectly preserving the unrelated
+project comparison. Regenerate the corresponding self-contained readers. The
+same narrow cleanup applies to the occurrence in the maintainer's uncommitted
+OTCS lineage work, while all other OTCS changes remain preserved and
+uncommitted.
+
+**Decision status:** Cleanup design confirmed; implementation pending written
+spec review. Historical commits, third-party dependencies, and caches remain
+outside scope.
+
+**Rationale:** Direct KIL-only language preserves useful repository-boundary
+and protocol guidance without retaining an irrelevant project association.
+Separating the cleanup commit from the maintainer's OTCS work prevents an
+unrelated partial change set from entering project history.
+
+**Affected artifacts:**
+`docs/superpowers/specs/2026-09-03-project-boundary-reference-cleanup-design.md`,
+this lineage, and their generated `.htm` partners. Implementation will update
+the three identified Markdown sources and their generated partners; the normal
+checkout's uncommitted lineage pair will receive the same narrow cleanup after
+integration.
+
+**Unresolved questions:** None. Current files are in scope; Git history is not.
+
+**Next gate:** Commit the design record and generated readers, obtain maintainer
+review of the written specification, then write and execute the implementation
+plan, validate zero current-file matches, and synchronize `main` without
+committing unrelated OTCS work.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
