@@ -7344,3 +7344,135 @@ generation/review remain pending.
 continue only with the separately scoped later tasks.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-140 — 2026-09-03 — Dynamic sibling-reader lifecycle enforcement
+
+**Input:** The maintainer confirmed that every new `.md` file must have a
+self-contained `.htm` partner in the repository, and Task 3 required safe
+Git-backed discovery, generation, read-only checking, and command-line
+behavior without generating the real corpus yet.
+
+**Interpretation:** Tracked lowercase-`.md` paths are the dynamically
+discovered canonical source set. Each maps by changing only its final suffix
+to a same-directory `.htm`; tracked and non-ignored untracked `.htm` files form
+the visible output namespace. Check mode reports every missing, stale, or
+unexpected output without writing. Default mode renders all source bytes in
+memory before staging any output, refuses unexpected or ignored output states,
+and rejects unsafe, duplicate, colliding, non-file, or symlinked paths.
+
+**Decision status:** Confirmed Task 3 implementation. Temporary Git-repository
+tests observed the absent lifecycle API as RED, then verified generation,
+checking, deterministic diagnostics, CLI results, tracked/untracked and
+ignored asymmetry, Unicode and spaced paths, suffix mapping, collision and
+symlink rejection, source preservation, and pre-write failure atomicity as
+GREEN. No real sibling corpus was generated, and no push or merge occurred.
+
+**Rationale:** Deriving the source set from the Git index makes the permanent
+one-to-one invariant update automatically when a Markdown file is added or
+removed. Treating all visible `.htm` paths as a reserved namespace detects
+manual extras, while complete in-memory rendering and preflight validation
+prevent predictable failures from partially updating derived artifacts.
+
+**Affected artifacts:** `tools/render_markdown.py`,
+`tests/test_markdown_html.py`, and
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`.
+
+**Unresolved questions:** Make/CI integration, repository guidance, real-corpus
+generation, tracked publication verification, browser interaction and visual
+inspection, and final synchronization remain for Tasks 4 and 5.
+
+**Next gate:** Review and commit the scoped Task 3 lifecycle implementation,
+then wire validation and generate the complete tracked corpus in Task 4.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-141 — 2026-09-03 — Task 3 lifecycle boundary corrections
+
+**Input:** Task 3 quality review found that deleted tracked readers were
+misclassified as unsafe, path-bearing diagnostics could contain literal
+control characters, destination-derived staging names could exceed filesystem
+limits, the CLI rediscovered Markdown after generation, and replacement-fault
+cleanup lacked an explicit regression.
+
+**Interpretation:** Git-index membership and on-disk HTML visibility are
+separate sets. A tracked reader absent from disk is missing and repairable,
+including when an ignore rule matches its tracked path; an existing or broken
+symlink remains unsafe through `lexists`-aware validation. Every lifecycle path
+is rendered through one Unicode-preserving, JSON-style, line-safe formatter.
+Staging uses a fixed short name in the destination directory. The CLI captures
+one validated source snapshot, passes it through rendering, and reports that
+snapshot's count. Replacement remains sequentially atomic per file: an
+operating-system failure may leave completed replacements, always cleans
+unconsumed staging files, and is made observable by read-only checking.
+
+**Decision status:** Confirmed additive Task 3 correction. Regressions were
+observed RED for deleted tracked output repair, control-safe diagnostics,
+near-`NAME_MAX` generation, and repeated CLI discovery, then GREEN after the
+boundary fixes. Fault injection also confirms the documented mixed-generation
+failure state and cleanup. The permanent invariant remains that every tracked
+`.md` dynamically maps to exactly one same-directory self-contained `.htm`.
+No real corpus was generated, and no push or merge occurred.
+
+**Rationale:** Index entries describe repository membership but cannot prove a
+working-tree file exists. Keeping those concepts separate restores ordinary
+repair behavior without weakening symlink safety. Stable escaped diagnostics,
+bounded staging names, and a single source snapshot remove injection,
+filesystem-limit, and post-operation race hazards while preserving the
+approved deterministic publication model.
+
+**Affected artifacts:** `tools/render_markdown.py`,
+`tests/test_markdown_html.py`, and
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`.
+
+**Unresolved questions:** Task 4 Make/CI and repository-guidance integration,
+real-corpus generation and tracked publication proof, plus Task 5 browser
+interaction and visual inspection, remain pending.
+
+**Next gate:** Amend the existing Task 3 commit after focused and complete
+validation, then proceed to the separately scoped Task 4 integration gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-142 — 2026-09-03 — Task 3 diagnostic and portability hardening
+
+**Input:** Final Task 3 review requested format-control escaping, explicit
+POSIX scoping for filesystem-specific regressions, capability-aware symlink
+skips, and removal of the pre-discovered source snapshot from the public
+repository-rendering API.
+
+**Interpretation:** Line-safe path formatting now escapes Unicode format
+controls as well as control, line-separator, and paragraph-separator code
+points, including bidirectional overrides and isolates and zero-width spaces.
+Filename-control and `NAME_MAX` tests run on POSIX systems, retaining Linux and
+macOS coverage, while symlink tests skip only when creation is unsupported or
+denied. Public `render_repository(root, check)` and
+`expected_documents(root)` discover their own tracked sources; the CLI alone
+uses a documented internal helper with one trusted pre-discovered snapshot to
+avoid post-operation rediscovery.
+
+**Decision status:** Confirmed additive Task 3 hardening. Format-control and
+public-API regressions were observed RED, then GREEN after escaping category
+`Cf` and moving snapshot reuse behind internal helpers. The permanent invariant
+remains that every tracked `.md` maps dynamically to exactly one same-directory
+self-contained `.htm`. No Task 4 work, real corpus generation, push, or merge
+occurred.
+
+**Rationale:** Invisible directionality and formatting controls can make an
+otherwise single-line diagnostic misleading, and platform assumptions should
+not turn unsupported filesystem behavior into false failures. Keeping the
+snapshot parameter internal prevents callers from mistaking arbitrary paths
+for the Git-authoritative publication set while retaining a race-free CLI
+count.
+
+**Affected artifacts:** `tools/render_markdown.py`,
+`tests/test_markdown_html.py`, and
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`.
+
+**Unresolved questions:** Task 4 Make/CI integration, guidance, real-corpus
+generation and tracked-set proof, followed by Task 5 browser interaction and
+visual review, remain pending.
+
+**Next gate:** Amend the existing Task 3 commit after focused verification,
+then proceed only to the separately scoped Task 4 integration work.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

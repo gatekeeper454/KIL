@@ -1,8 +1,15 @@
+from contextlib import redirect_stderr, redirect_stdout
 from hashlib import sha256
 from importlib.util import module_from_spec, spec_from_file_location
+from inspect import signature
+from io import StringIO
+import os
 from pathlib import Path, PurePosixPath
 import re
+import subprocess
+from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -364,6 +371,444 @@ class MarkdownRendererTest(unittest.TestCase):
 
         self.assertIn("table-layout: fixed", rendered)
         self.assertIn("white-space: pre-wrap", rendered)
+
+
+class RepositoryGenerationTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.invalid"],
+            cwd=self.root,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "KIL Test"],
+            cwd=self.root,
+            check=True,
+        )
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def track(self, relative: str, content: str | bytes) -> None:
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, bytes):
+            path.write_bytes(content)
+        else:
+            path.write_text(content, encoding="utf-8")
+        subprocess.run(["git", "add", "--", relative], cwd=self.root, check=True)
+
+    def test_generates_exact_siblings_and_check_is_read_only(self) -> None:
+        self.track("README.md", "# Root\n\n[Guide](docs/guide.md)\n")
+        self.track("docs/guide.md", "# Guide\n")
+        source_before = {
+            relative: (self.root / relative).read_bytes()
+            for relative in ("README.md", "docs/guide.md")
+        }
+
+        self.assertEqual([], render_markdown.render_repository(self.root))
+        outputs_before = {
+            relative: (self.root / relative).read_bytes()
+            for relative in ("README.htm", "docs/guide.htm")
+        }
+        self.assertIn(b'href="docs/guide.htm"', outputs_before["README.htm"])
+        self.assertEqual(
+            [], render_markdown.render_repository(self.root, check=True)
+        )
+        self.assertEqual(
+            outputs_before,
+            {
+                relative: (self.root / relative).read_bytes()
+                for relative in outputs_before
+            },
+        )
+        self.assertEqual(
+            source_before,
+            {
+                relative: (self.root / relative).read_bytes()
+                for relative in source_before
+            },
+        )
+
+    def test_tracked_sources_exclude_untracked_and_ignored_markdown(self) -> None:
+        self.track("tracked.md", "# Tracked\n")
+        (self.root / "untracked.md").write_text("# Untracked\n", encoding="utf-8")
+        (self.root / ".gitignore").write_text("ignored/\n", encoding="utf-8")
+        ignored = self.root / "ignored/private.md"
+        ignored.parent.mkdir()
+        ignored.write_text("# Private\n", encoding="utf-8")
+
+        self.assertEqual(
+            (PurePosixPath("tracked.md"),),
+            render_markdown.discover_sources(self.root),
+        )
+        self.assertEqual([], render_markdown.render_repository(self.root))
+        self.assertTrue((self.root / "tracked.htm").is_file())
+        self.assertFalse((self.root / "untracked.htm").exists())
+        self.assertFalse((self.root / "ignored/private.htm").exists())
+
+    def test_untracked_html_is_visible_but_ignored_html_is_not(self) -> None:
+        self.track("README.md", "# Root\n")
+        (self.root / ".gitignore").write_text("ignored/\n", encoding="utf-8")
+        ignored = self.root / "ignored/private.htm"
+        ignored.parent.mkdir()
+        ignored.write_text("private", encoding="utf-8")
+        (self.root / "extra.htm").write_text("manual", encoding="utf-8")
+
+        self.assertEqual(
+            ["missing README.htm", "unexpected extra.htm"],
+            render_markdown.render_repository(self.root, check=True),
+        )
+        self.assertEqual(
+            ["unexpected extra.htm"],
+            render_markdown.render_repository(self.root),
+        )
+        self.assertFalse((self.root / "README.htm").exists())
+        self.assertEqual("private", ignored.read_text(encoding="utf-8"))
+
+    @unittest.skipUnless(os.name == "posix", "control filenames require POSIX")
+    def test_default_mode_rejects_an_ignored_expected_sibling(self) -> None:
+        self.track("line\nbreak.md", "# Root\n")
+        (self.root / ".gitignore").write_text("*.htm\n", encoding="utf-8")
+
+        self.assertEqual(
+            [r"missing line\nbreak.htm"],
+            render_markdown.render_repository(self.root, check=True),
+        )
+        with self.assertRaisesRegex(
+            ValueError, r"expected HTML output is ignored: line\\nbreak.htm"
+        ):
+            render_markdown.render_repository(self.root)
+        self.assertFalse((self.root / "line\nbreak.htm").exists())
+
+    def test_deleted_tracked_expected_output_is_missing_and_repairable(self) -> None:
+        self.track("README.md", "# Root\n")
+        self.assertEqual([], render_markdown.render_repository(self.root))
+        subprocess.run(
+            ["git", "add", "--", "README.htm"], cwd=self.root, check=True
+        )
+        self.track(".gitignore", "*.htm\n")
+        (self.root / "README.htm").unlink()
+
+        self.assertEqual(
+            ["missing README.htm"],
+            render_markdown.render_repository(self.root, check=True),
+        )
+        self.assertEqual([], render_markdown.render_repository(self.root))
+        self.assertTrue((self.root / "README.htm").is_file())
+        self.assertEqual([], render_markdown.render_repository(self.root, check=True))
+
+    @unittest.skipUnless(os.name == "posix", "control filenames require POSIX")
+    def test_path_diagnostics_are_line_safe_unicode_preserving_and_sorted(self) -> None:
+        for relative in (
+            "carriage\rreturn.md",
+            "escape\x1bname.md",
+            "line\nbreak.md",
+            "next\u0085line.md",
+            'quote"slash\\name.md',
+            "right\u202eto-left.md",
+            "separator\u2028line.md",
+            "word\u200bjoin.md",
+            "isolate\u2066name.md",
+            "unicodé.md",
+        ):
+            self.track(relative, "# Document\n")
+        (self.root / "manual\nextra.htm").write_bytes(b"manual")
+
+        first = render_markdown.render_repository(self.root, check=True)
+        second = render_markdown.render_repository(self.root, check=True)
+
+        self.assertEqual(first, second)
+        self.assertEqual(
+            sorted(
+                [
+                    r"missing carriage\rreturn.htm",
+                    r"missing escape\u001bname.htm",
+                    r"missing line\nbreak.htm",
+                    r"missing next\u0085line.htm",
+                    r'missing quote\"slash\\name.htm',
+                    r"missing right\u202eto-left.htm",
+                    r"missing separator\u2028line.htm",
+                    r"missing word\u200bjoin.htm",
+                    r"missing isolate\u2066name.htm",
+                    "missing unicodé.htm",
+                    r"unexpected manual\nextra.htm",
+                ],
+                key=lambda value: value.encode("utf-8"),
+            ),
+            first,
+        )
+        for problem in first:
+            self.assertNotIn("\n", problem)
+            self.assertNotIn("\r", problem)
+            self.assertNotIn("\x1b", problem)
+            self.assertNotIn("\u0085", problem)
+            self.assertNotIn("\u2028", problem)
+            self.assertNotIn("\u202e", problem)
+            self.assertNotIn("\u2066", problem)
+            self.assertNotIn("\u200b", problem)
+
+    @unittest.skipUnless(os.name == "posix", "NAME_MAX test requires POSIX")
+    def test_near_name_max_source_generates_with_a_short_staging_name(self) -> None:
+        name_max = os.pathconf(self.root, "PC_NAME_MAX")
+        stem = "n" * (name_max - len(".htm"))
+        self.track(f"{stem}.md", "# Long name\n")
+
+        self.assertEqual([], render_markdown.render_repository(self.root))
+        self.assertTrue((self.root / f"{stem}.htm").is_file())
+        self.assertEqual([], list(self.root.glob(".kil-reader-*.tmp")))
+
+    def test_check_reports_missing_stale_and_unexpected_in_sorted_order(self) -> None:
+        self.track("z-last.md", "# Last\n")
+        self.track("a-first.md", "# First\n")
+        render_markdown.render_repository(self.root)
+        (self.root / "a-first.htm").write_text("stale", encoding="utf-8")
+        (self.root / "z-last.htm").unlink()
+        (self.root / "middle.htm").write_text("manual", encoding="utf-8")
+
+        self.assertEqual(
+            [
+                "missing z-last.htm",
+                "stale a-first.htm",
+                "unexpected middle.htm",
+            ],
+            render_markdown.render_repository(self.root, check=True),
+        )
+
+    def test_check_never_repairs_or_removes_outputs(self) -> None:
+        self.track("README.md", "# Root\n")
+        (self.root / "README.htm").write_bytes(b"stale")
+        (self.root / "extra.htm").write_bytes(b"manual")
+        before = {
+            path.name: (path.read_bytes(), path.stat().st_mtime_ns)
+            for path in self.root.glob("*.htm")
+        }
+
+        problems = render_markdown.render_repository(self.root, check=True)
+
+        self.assertEqual(
+            ["stale README.htm", "unexpected extra.htm"], problems
+        )
+        self.assertEqual(
+            before,
+            {
+                path.name: (path.read_bytes(), path.stat().st_mtime_ns)
+                for path in self.root.glob("*.htm")
+            },
+        )
+
+    def test_preflight_render_failure_preserves_every_existing_output(self) -> None:
+        self.track("a.md", "# A\n")
+        self.track("z.md", "# Z\n")
+        self.assertEqual([], render_markdown.render_repository(self.root))
+        before = {
+            relative: (self.root / relative).read_bytes()
+            for relative in ("a.htm", "z.htm")
+        }
+        (self.root / "z.md").write_bytes(b"\xff")
+
+        with self.assertRaises(UnicodeDecodeError):
+            render_markdown.render_repository(self.root)
+
+        self.assertEqual(
+            before,
+            {
+                relative: (self.root / relative).read_bytes()
+                for relative in before
+            },
+        )
+
+    def test_replace_failure_cleans_staging_and_leaves_detectable_drift(self) -> None:
+        self.track("a.md", "# A old\n")
+        self.track("z.md", "# Z old\n")
+        self.assertEqual([], render_markdown.render_repository(self.root))
+        before = {
+            relative: (self.root / relative).read_bytes()
+            for relative in ("a.htm", "z.htm")
+        }
+        (self.root / "a.md").write_text("# A new\n", encoding="utf-8")
+        (self.root / "z.md").write_text("# Z new\n", encoding="utf-8")
+        real_replace = render_markdown.os.replace
+        replacement_count = 0
+
+        def fail_second_replacement(source: Path, destination: Path) -> None:
+            nonlocal replacement_count
+            replacement_count += 1
+            if replacement_count == 2:
+                raise OSError("injected replacement failure")
+            real_replace(source, destination)
+
+        with patch.object(
+            render_markdown.os, "replace", side_effect=fail_second_replacement
+        ):
+            with self.assertRaisesRegex(OSError, "injected replacement failure"):
+                render_markdown.render_repository(self.root)
+
+        self.assertNotEqual(before["a.htm"], (self.root / "a.htm").read_bytes())
+        self.assertEqual(before["z.htm"], (self.root / "z.htm").read_bytes())
+        self.assertEqual([], list(self.root.glob(".*.tmp")))
+        self.assertEqual(
+            ["stale z.htm"],
+            render_markdown.render_repository(self.root, check=True),
+        )
+
+    def test_mapping_changes_only_the_final_lowercase_md_suffix(self) -> None:
+        self.track("nested/archive.md.md", "# Nested\n")
+        self.track("UPPER.MD", "# Upper\n")
+
+        self.assertEqual(
+            (PurePosixPath("nested/archive.md.md"),),
+            render_markdown.discover_sources(self.root),
+        )
+        self.assertEqual([], render_markdown.render_repository(self.root))
+        self.assertTrue((self.root / "nested/archive.md.htm").is_file())
+        self.assertFalse((self.root / "nested/archive.htm").exists())
+        self.assertFalse((self.root / "UPPER.htm").exists())
+
+    def test_spaces_and_unicode_paths_are_sorted_by_utf8_bytes(self) -> None:
+        for relative in ("é.md", "a space.md", "docs/ß.md"):
+            self.track(relative, f"# {relative}\n")
+
+        sources = render_markdown.discover_sources(self.root)
+
+        self.assertEqual(
+            tuple(sorted(sources, key=lambda value: value.as_posix().encode("utf-8"))),
+            sources,
+        )
+        self.assertEqual([], render_markdown.render_repository(self.root))
+        for source in sources:
+            self.assertTrue((self.root / source.with_suffix(".htm")).is_file())
+
+    def test_rejects_duplicate_sources_before_an_output_collision(self) -> None:
+        self.track("same.md", "# Same\n")
+        original = render_markdown.discover_sources
+        render_markdown.discover_sources = lambda root: (
+            PurePosixPath("same.md"),
+            PurePosixPath("same.md"),
+        )
+        try:
+            with self.assertRaisesRegex(ValueError, "output collision: same.htm"):
+                render_markdown.expected_documents(self.root)
+        finally:
+            render_markdown.discover_sources = original
+
+    @unittest.skipUnless(os.name == "posix", "symlink contract requires POSIX")
+    def test_rejects_symlinked_sources_and_outputs(self) -> None:
+        outside = self.root.parent / f"{self.root.name}-outside.md"
+        outside.write_text("# Outside\n", encoding="utf-8")
+
+        def make_symlink(link: Path) -> None:
+            try:
+                os.symlink(outside, link)
+            except (OSError, NotImplementedError) as error:
+                self.skipTest(f"symlink creation unavailable: {error}")
+
+        try:
+            make_symlink(self.root / "linked.md")
+            subprocess.run(
+                ["git", "add", "--", "linked.md"], cwd=self.root, check=True
+            )
+            with self.assertRaisesRegex(ValueError, "unsafe Markdown source"):
+                render_markdown.discover_sources(self.root)
+
+            subprocess.run(
+                ["git", "rm", "-q", "--cached", "linked.md"],
+                cwd=self.root,
+                check=True,
+            )
+            (self.root / "linked.md").unlink()
+            self.track("safe.md", "# Safe\n")
+            make_symlink(self.root / "safe.htm")
+            with self.assertRaisesRegex(ValueError, "unsafe HTML output"):
+                render_markdown.render_repository(self.root, check=True)
+        finally:
+            outside.unlink(missing_ok=True)
+
+    def test_default_mode_refuses_unexpected_output_before_any_write(self) -> None:
+        self.track("a.md", "# A\n")
+        self.track("z.md", "# Z\n")
+        render_markdown.render_repository(self.root)
+        (self.root / "a.md").write_text("# A changed\n", encoding="utf-8")
+        before = (self.root / "a.htm").read_bytes()
+        (self.root / "manual.htm").write_bytes(b"manual")
+        (self.root / "z.htm").unlink()
+
+        self.assertEqual(
+            ["unexpected manual.htm"],
+            render_markdown.render_repository(self.root),
+        )
+        self.assertEqual(before, (self.root / "a.htm").read_bytes())
+        self.assertFalse((self.root / "z.htm").exists())
+
+    def test_main_reports_generation_check_problems_and_errors(self) -> None:
+        self.track("README.md", "# Root\n")
+        old_root = render_markdown.ROOT
+        render_markdown.ROOT = self.root
+        try:
+            standard_output = StringIO()
+            standard_error = StringIO()
+            with redirect_stdout(standard_output), redirect_stderr(standard_error):
+                self.assertEqual(0, render_markdown.main([]))
+            self.assertEqual(
+                "generated 1 Markdown readers\n", standard_output.getvalue()
+            )
+            self.assertEqual("", standard_error.getvalue())
+
+            (self.root / "README.htm").write_bytes(b"stale")
+            standard_output = StringIO()
+            standard_error = StringIO()
+            with redirect_stdout(standard_output), redirect_stderr(standard_error):
+                self.assertEqual(1, render_markdown.main(["--check"]))
+            self.assertEqual("", standard_output.getvalue())
+            self.assertEqual("stale README.htm\n", standard_error.getvalue())
+
+            (self.root / "README.md").write_bytes(b"\xff")
+            standard_error = StringIO()
+            with redirect_stderr(standard_error):
+                self.assertEqual(1, render_markdown.main(["--check"]))
+            self.assertIn("markdown reader error:", standard_error.getvalue())
+        finally:
+            render_markdown.ROOT = old_root
+
+    def test_main_discovers_sources_once_and_counts_that_snapshot(self) -> None:
+        self.track("README.md", "# Root\n")
+        original = render_markdown.discover_sources
+        calls = 0
+
+        def discover_once(root: Path) -> tuple[PurePosixPath, ...]:
+            nonlocal calls
+            calls += 1
+            if calls > 1:
+                raise AssertionError("source discovery repeated")
+            return original(root)
+
+        old_root = render_markdown.ROOT
+        render_markdown.ROOT = self.root
+        try:
+            standard_output = StringIO()
+            with patch.object(
+                render_markdown, "discover_sources", side_effect=discover_once
+            ), redirect_stdout(standard_output):
+                self.assertEqual(0, render_markdown.main([]))
+            self.assertEqual(1, calls)
+            self.assertEqual(
+                "generated 1 Markdown readers\n", standard_output.getvalue()
+            )
+        finally:
+            render_markdown.ROOT = old_root
+
+    def test_snapshot_reuse_is_internal_to_the_public_repository_api(self) -> None:
+        self.assertEqual(
+            ("root", "check"),
+            tuple(signature(render_markdown.render_repository).parameters),
+        )
+        self.assertEqual(
+            ("root",),
+            tuple(signature(render_markdown.expected_documents).parameters),
+        )
 
 
 if __name__ == "__main__":

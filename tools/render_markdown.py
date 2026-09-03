@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+from argparse import ArgumentParser
 from hashlib import sha256
 from html import escape
+import json
+import os
 from pathlib import Path, PurePosixPath
 import posixpath
 import re
+import subprocess
+import sys
+import tempfile
 from typing import Iterable
-from unicodedata import normalize
+from unicodedata import category, normalize
 from urllib.parse import quote_from_bytes, unquote_to_bytes, urlsplit
 
 from markdown_it import MarkdownIt
@@ -370,3 +376,285 @@ def render_document(
 </html>
 """
     return rendered.encode("utf-8")
+
+
+def _sort_paths(paths: Iterable[PurePosixPath]) -> tuple[PurePosixPath, ...]:
+    """Return repository paths in deterministic UTF-8 byte order."""
+    return tuple(sorted(paths, key=lambda value: value.as_posix().encode("utf-8")))
+
+
+def _format_path(path: str | PurePosixPath) -> str:
+    """Render a repository path deterministically without line/control injection."""
+    encoded = json.dumps(str(path), ensure_ascii=False)[1:-1]
+    return "".join(
+        f"\\u{ord(character):04x}"
+        if category(character) in {"Cc", "Cf", "Zl", "Zp"}
+        else character
+        for character in encoded
+    )
+
+
+def _decode_git_paths(payload: bytes, description: str) -> tuple[PurePosixPath, ...]:
+    """Decode and validate a NUL-separated list of Git repository paths."""
+    paths: list[PurePosixPath] = []
+    for raw in payload.split(b"\0"):
+        if not raw:
+            continue
+        text = raw.decode("utf-8", errors="strict")
+        relative = PurePosixPath(text)
+        if (
+            relative.is_absolute()
+            or ".." in relative.parts
+            or relative.as_posix() != text
+        ):
+            raise ValueError(f"unsafe {description}: {_format_path(text)}")
+        paths.append(relative)
+    if len(paths) != len(set(paths)):
+        raise ValueError(f"duplicate {description}")
+    return _sort_paths(paths)
+
+
+def _git_paths(root: Path, patterns: tuple[str, ...]) -> tuple[PurePosixPath, ...]:
+    """Return tracked and non-ignored untracked paths matching Git pathspecs."""
+    completed = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            *patterns,
+        ],
+        cwd=root,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return _decode_git_paths(completed.stdout, "repository path")
+
+
+def _tracked_paths(
+    root: Path, patterns: tuple[str, ...]
+) -> tuple[PurePosixPath, ...]:
+    """Return Git-index paths matching the supplied pathspecs."""
+    completed = subprocess.run(
+        ["git", "ls-files", "-z", "--", *patterns],
+        cwd=root,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return _decode_git_paths(completed.stdout, "repository path")
+
+
+def _validate_regular_path(
+    root: Path, relative: PurePosixPath, description: str
+) -> Path:
+    """Return a safe regular file path with no symlink in its repository route."""
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError(f"unsafe {description}: {_format_path(relative)}")
+    resolved_root = root.resolve(strict=True)
+    candidate = root.joinpath(*relative.parts)
+    cursor = root
+    for part in relative.parts:
+        cursor = cursor / part
+        if cursor.is_symlink():
+            raise ValueError(f"unsafe {description}: {_format_path(relative)}")
+    if not candidate.is_file():
+        raise ValueError(f"unsafe {description}: {_format_path(relative)}")
+    try:
+        candidate.resolve(strict=True).relative_to(resolved_root)
+    except ValueError as error:
+        raise ValueError(
+            f"unsafe {description}: {_format_path(relative)}"
+        ) from error
+    return candidate
+
+
+def _validate_sources(
+    root: Path, sources: Iterable[PurePosixPath]
+) -> tuple[PurePosixPath, ...]:
+    """Validate and deterministically order a Markdown source snapshot."""
+    ordered = _sort_paths(sources)
+    if len(ordered) != len(set(ordered)):
+        raise ValueError("duplicate Markdown source")
+    for source in ordered:
+        if source.suffix != ".md":
+            raise ValueError(f"unsafe Markdown source: {_format_path(source)}")
+        _validate_regular_path(root, source, "Markdown source")
+    return ordered
+
+
+def discover_sources(root: Path = ROOT) -> tuple[PurePosixPath, ...]:
+    """Discover every tracked lowercase-.md source through Git."""
+    return _validate_sources(root, _tracked_paths(root, ("*.md",)))
+
+
+def _visible_html(root: Path) -> frozenset[PurePosixPath]:
+    """Return the tracked and non-ignored untracked HTML output namespace."""
+    visible: list[PurePosixPath] = []
+    for output in _git_paths(root, ("*.htm",)):
+        candidate = root.joinpath(*output.parts)
+        if not os.path.lexists(candidate):
+            continue
+        if output.suffix != ".htm":
+            raise ValueError(f"unsafe HTML output: {_format_path(output)}")
+        _validate_regular_path(root, output, "HTML output")
+        visible.append(output)
+    return frozenset(visible)
+
+
+def _ignored_paths(
+    root: Path, paths: Iterable[PurePosixPath]
+) -> tuple[PurePosixPath, ...]:
+    """Return proposed paths excluded by Git ignore rules."""
+    ordered = _sort_paths(paths)
+    if not ordered:
+        return ()
+    completed = subprocess.run(
+        ["git", "check-ignore", "--no-index", "-z", "--stdin"],
+        cwd=root,
+        check=False,
+        input=b"".join(path.as_posix().encode("utf-8") + b"\0" for path in ordered),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if completed.returncode not in (0, 1):
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            completed.args,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
+    return _decode_git_paths(completed.stdout, "ignored HTML output")
+
+
+def _expected_documents_from_snapshot(
+    root: Path, source_snapshot: tuple[PurePosixPath, ...]
+) -> dict[PurePosixPath, bytes]:
+    """Render one trusted, pre-discovered tracked-source snapshot in memory."""
+    source_set = frozenset(source_snapshot)
+    expected: dict[PurePosixPath, bytes] = {}
+    for source in source_snapshot:
+        output = source.with_suffix(".htm")
+        if output in expected:
+            raise ValueError(f"output collision: {_format_path(output)}")
+        payload = _validate_regular_path(root, source, "Markdown source").read_bytes()
+        expected[output] = render_document(payload, source, source_set)
+    return expected
+
+
+def expected_documents(root: Path = ROOT) -> dict[PurePosixPath, bytes]:
+    """Discover and render the complete expected sibling corpus in memory."""
+    return _expected_documents_from_snapshot(root, discover_sources(root))
+
+
+def _validate_output_destinations(
+    root: Path, outputs: Iterable[PurePosixPath]
+) -> None:
+    """Reject non-regular or symlinked objects in expected output slots."""
+    for output in outputs:
+        destination = root.joinpath(*output.parts)
+        if destination.is_symlink() or (
+            destination.exists() and not destination.is_file()
+        ):
+            raise ValueError(f"unsafe HTML output: {_format_path(output)}")
+
+
+def _render_repository_from_snapshot(
+    root: Path, check: bool, source_snapshot: tuple[PurePosixPath, ...]
+) -> list[str]:
+    """Generate or check one trusted, pre-discovered tracked-source snapshot.
+
+    Every payload is staged before replacement. If an operating-system failure
+    interrupts the replacement series, completed replacements remain in place,
+    unconsumed staging files are cleaned, and check mode exposes the mixed state.
+    """
+    expected = _expected_documents_from_snapshot(root, source_snapshot)
+    _validate_output_destinations(root, expected)
+    expected_paths = frozenset(expected)
+    visible = _visible_html(root)
+    tracked_html = frozenset(_tracked_paths(root, ("*.htm",)))
+    problems = [
+        f"missing {_format_path(path)}" for path in expected_paths - visible
+    ]
+    problems.extend(
+        f"unexpected {_format_path(path)}" for path in visible - expected_paths
+    )
+    for relative in expected_paths & visible:
+        if root.joinpath(*relative.parts).read_bytes() != expected[relative]:
+            problems.append(f"stale {_format_path(relative)}")
+    problems.sort(key=lambda value: value.encode("utf-8"))
+    if check:
+        return problems
+
+    unexpected = _sort_paths(visible - expected_paths)
+    if unexpected:
+        return [f"unexpected {_format_path(path)}" for path in unexpected]
+    ignored_missing = _ignored_paths(root, expected_paths - visible - tracked_html)
+    if ignored_missing:
+        joined = ", ".join(_format_path(path) for path in ignored_missing)
+        raise ValueError(f"expected HTML output is ignored: {joined}")
+
+    temporary: list[tuple[Path, Path]] = []
+    try:
+        for relative in _sort_paths(expected):
+            destination = root.joinpath(*relative.parts)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            descriptor, staging_name = tempfile.mkstemp(
+                prefix=".kil-reader-", suffix=".tmp", dir=destination.parent
+            )
+            staging = Path(staging_name)
+            temporary.append((staging, destination))
+            try:
+                with os.fdopen(descriptor, "wb") as stream:
+                    stream.write(expected[relative])
+                staging.chmod(0o644)
+            except BaseException:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+                raise
+        for staging, destination in temporary:
+            os.replace(staging, destination)
+    finally:
+        for staging, _ in temporary:
+            staging.unlink(missing_ok=True)
+    return []
+
+
+def render_repository(root: Path = ROOT, check: bool = False) -> list[str]:
+    """Discover, then generate or byte-check the tracked Markdown corpus."""
+    return _render_repository_from_snapshot(root, check, discover_sources(root))
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the repository generator or read-only verifier."""
+    parser = ArgumentParser(
+        description="Render tracked Markdown as sibling HTML readers"
+    )
+    parser.add_argument("--check", action="store_true", help="verify without writing")
+    arguments = parser.parse_args(argv)
+    try:
+        source_snapshot = discover_sources(ROOT)
+        problems = _render_repository_from_snapshot(
+            ROOT, arguments.check, source_snapshot
+        )
+        count = len(source_snapshot)
+    except (OSError, UnicodeError, ValueError, subprocess.CalledProcessError) as error:
+        print(f"markdown reader error: {error}", file=sys.stderr)
+        return 1
+    if problems:
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        return 1
+    action = "verified" if arguments.check else "generated"
+    print(f"{action} {count} Markdown readers")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
