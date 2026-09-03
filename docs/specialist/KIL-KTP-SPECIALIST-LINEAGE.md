@@ -7196,3 +7196,151 @@ remain pending in subsequent tasks.
 **Next gate:** Complete Task 1 review, then proceed to Task 2.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-136 — 2026-09-03 — Safe deterministic Markdown reader renderer implemented
+
+**Input:** Task 2 implementation request for a pure Markdown-to-self-contained
+HTML renderer with test-first evidence, stable source identity, offline runtime
+policy, safe raw-HTML handling, and no repository generation work.
+
+**Interpretation:** Markdown remains canonical. The renderer is limited to
+in-memory bytes and explicit repository-relative source identities; it assigns
+deterministic heading IDs, emits the complete static article immediately,
+rewrites only tracked relative Markdown document links, and adds bounded
+JavaScript enhancements without network capabilities.
+
+**Decision status:** Confirmed local implementation. The focused test suite was
+first observed RED because `tools/render_markdown.py` did not exist, then GREEN
+after the renderer and its tests were added. No push or merge occurred.
+
+**Rationale:** Keeping parsing, sanitizing, source identity, and reader-shell
+generation pure makes deterministic output and offline safety independently
+verifiable before Git discovery, corpus generation, or lifecycle checks are
+introduced.
+
+**Affected artifacts:** `tools/render_markdown.py`,
+`tests/test_markdown_html.py`, and
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`.
+
+**Unresolved questions:** Git-backed repository discovery, generated-sibling
+creation and check modes, Make/CI integration, complete corpus generation,
+visual review, and final repository synchronization remain pending in later
+tasks.
+
+**Next gate:** Review this pure renderer task, then implement the separate
+repository generation and check-mode task without expanding this renderer's
+scope.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-137 — 2026-09-03 — Task 2 renderer specification-review corrections
+
+**Input:** Specification review of Task 2 identified a leading-parent traversal
+bypass, lost visible spacing in multiline headings, incomplete paper-reader
+layout treatment, and coverage gaps for reference links, destination classes,
+and Unicode normalization.
+
+**Interpretation:** Preserve leading traversal during POSIX normalization and
+reject every result that remains outside the repository; visible Markdown
+softbreaks and hardbreaks become one trimmed space for title, outline, and ID
+derivation. The static reader shell also restores a neutral canvas, paper card,
+desktop rail, and compact mobile chrome without adding a runtime dependency.
+
+**Decision status:** Confirmed additive correction to Task 2. New regression
+tests were observed RED for the odd traversal bypass, multiline heading text,
+and missing paper/mobile structure, then GREEN after the fixes. No push or
+merge occurred.
+
+**Rationale:** The corrections close a repository-boundary escape and make
+reader semantics and responsive presentation conform to the approved contract
+while retaining the pure, offline, no-JavaScript-required reading path.
+
+**Affected artifacts:** `tools/render_markdown.py`,
+`tests/test_markdown_html.py`, and
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`.
+
+**Unresolved questions:** Task 3 Git discovery, generation, and check-mode
+work, followed by later integration, corpus, visual-review, and synchronization
+gates, remains outside this correction.
+
+**Next gate:** Amend the local Task 2 commit after focused verification, then
+proceed only to the separately scoped Task 3 work.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-138 — 2026-09-03 — Task 2 URL, search, and mobile quality corrections
+
+**Input:** Code-quality review required strict canonical treatment of encoded
+relative links, source-text-safe search highlighting, mobile reader semantics,
+Unicode slug correction, print wrapping, and a confirmed future publication
+invariant for every tracked Markdown document.
+
+**Interpretation:** Relative URL paths are now validated and decoded
+segment-by-segment before repository lookup, then rewritten with consistent
+UTF-8 percent encoding. Search marking normalizes previously inserted fragments
+and matches against original text offsets. The mobile reader keeps labeled
+search and provenance available, exposes a semantic outline, and retains the
+static article-first reading path. The confirmed permanent invariant is that
+every new tracked `.md` must have a self-contained sibling `.htm`; enforcement
+belongs to the later discovery, check, validation, and corpus tasks.
+
+**Decision status:** Confirmed additive Task 2 quality correction. Focused
+regressions were observed RED for encoded-source lookup, encoded traversal and
+separator safety, missing original-text search mechanics, mobile semantics,
+underscore slugging, and print wrapping; they were then observed GREEN. No
+push or merge occurred.
+
+**Rationale:** Canonical URL comparison prevents encoded paths from bypassing
+repository boundaries or missing legitimate tracked files, while the reader
+corrections preserve offline safety, accessible mobile use, deterministic
+output, and readable printing without adding runtime dependencies.
+
+**Affected artifacts:** `tools/render_markdown.py`,
+`tests/test_markdown_html.py`, and
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`.
+
+**Unresolved questions:** Task 3 repository discovery, generation, and
+check-mode implementation; Task 4 integration and validation enforcement; and
+complete sibling-corpus generation and review remain pending.
+
+**Next gate:** Amend the local Task 2 commit after final focused verification,
+then implement the separately scoped later tasks that dynamically enforce the
+tracked-Markdown/sibling-HTML invariant.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-139 — 2026-09-03 — Task 2 suffix and responsive-search cleanup
+
+**Input:** Final narrow Task 2 review identified that URL serialization lost
+empty query and fragment delimiter bytes, and that responsive search controls
+could diverge after an input event.
+
+**Interpretation:** A rewritten tracked Markdown link preserves the exact raw
+suffix beginning with the first unencoded `?` or `#`, including empty delimiter
+forms, while percent-encoded question marks and hashes remain path data.
+Shipped JavaScript now copies an active search value to its peer controls before
+marking article text; browser-executed interaction verification is explicitly
+deferred to Task 5 because this focused unit suite has no DOM runtime.
+
+**Decision status:** Confirmed additive Task 2 cleanup. The new suffix and
+search-control regressions were observed RED, then GREEN after the pure URL
+suffix preservation and static synchronization changes. No push or merge
+occurred.
+
+**Rationale:** Preserving delimiter bytes avoids output drift for semantically
+intentional URL forms, and synchronizing responsive controls keeps visible UI
+state consistent with already-rendered search matches without compromising the
+static reader.
+
+**Affected artifacts:** `tools/render_markdown.py`,
+`tests/test_markdown_html.py`, and
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`.
+
+**Unresolved questions:** Task 3 discovery/generation/check enforcement, Task
+4 integration and validation, Task 5 browser interaction tests, and corpus
+generation/review remain pending.
+
+**Next gate:** Amend the local Task 2 commit after focused verification, then
+continue only with the separately scoped later tasks.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
