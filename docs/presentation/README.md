@@ -17,6 +17,18 @@ The executive deck does not replace the 30-slide technical deck. Both are
 self-contained, work offline, and include a short talk track, transition, and
 `[Sources]` block in every slide's speaker notes.
 
+`KIL-Presenter-Audience-Technical-Deep-Dive.pptx` is the fidelity-first
+PowerPoint backup of `docs/demo/kil-presenter-audience-demo.html`. It contains
+the four primer scenes followed by all eight case-study scenes in the HTML's
+exact order. Each slide uses the complete rendered audience scene without
+rewriting, cropping, or restyling it, and its existing presenter script and
+source statement are preserved in speaker notes.
+
+The technical-deep-dive deck is intentionally rasterized. This makes the slide
+canvas non-editable, but preserves the HTML demo's precise browser composition
+and keeps the deck self-contained for offline presentation. Semantic changes
+must be made in the HTML authority first and then deliberately re-exported.
+
 The complete deck contains 30 slides:
 
 - a 14-slide executive spine: `C`, `F1`, `F2`, `F3`, `F4`, `1` through `8`,

@@ -8664,3 +8664,43 @@ founder review in Microsoft PowerPoint.
 implementation plan and build the 12-slide deck.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-167 — 2026-09-02 — Presenter/Audience technical PowerPoint implemented
+
+**Input:** The founder confirmed the written fidelity specification and
+instructed the team to build the separate technical-deep-dive PowerPoint.
+
+**Interpretation:** Render the HTML's current audience presentation surface in
+its source-supported dark theme, capture all four primer and eight case-study
+scenes in exact source order, and embed those complete renders as the 12 slide
+canvases. Preserve each source `script` and `source` field in PowerPoint notes
+without changing the HTML or live environment.
+
+**Decision status:** Implemented pending final repository synchronization. The
+PPTX contains 12 scene slides and 12 speaker-note sections. All 12 native PPTX
+renders were inspected at full size against the capture set. The conversion
+introduces no new protocol, model, incident, laboratory, or validation claim;
+V3B-1 remains pending.
+
+**Rationale:** Raster scene canvases make the source HTML's visible state the
+presentation authority and prevent approximate SVG reconstruction, font drift,
+or silent wording edits. The tradeoff is intentional: the scene canvas is not
+individually editable, while the existing talk track remains available in
+speaker notes.
+
+**Affected artifacts:**
+
+- `docs/presentation/KIL-Presenter-Audience-Technical-Deep-Dive.pptx`
+- `docs/presentation/README.md`
+- `docs/superpowers/plans/2026-09-02-kil-presenter-audience-pptx.md`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+- no HTML demo, live lab, existing PowerPoint deck, protocol, model, scenario,
+  or evidence state
+
+**Unresolved questions:** Founder review in Microsoft PowerPoint, including navigation
+preferences or native transitions that do not alter the source scenes.
+
+**Next gate:** Complete presentation and repository verification, synchronize
+the feature branch, then conduct founder review of the technical backup deck.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
