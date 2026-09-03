@@ -7570,3 +7570,86 @@ prove exact pairs, freshness, deterministic second generation, focused tests,
 and full validation, then amend the Task 4 commit and proceed to Task 5 review.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-145 — 2026-09-03 — Automated reader verification complete; browser gate pending
+
+**Input:** Task 5 required complete automated verification, an independent
+whole-feature review, and representative desktop, narrow-viewport, search,
+theme, print, outline, local-image, and network-boundary inspection before the
+final evidence commit and authorized Git synchronization.
+
+**Interpretation:** The implementation and all 47 tracked Markdown/HTML pairs
+are ready for browser inspection. Direct `file://` navigation was rejected by
+the in-app browser's security policy, so that restriction will not be bypassed
+by starting another service or using an alternate browser surface. The safe
+next step is for the maintainer to open the final reader through the existing
+localhost preview, after which the browser interaction gate can proceed on the
+user-opened page.
+
+**Decision status:** Automated and review gates confirmed; representative
+browser gate pending. `make validate` passed 538 tests, verified all 47 readers,
+and passed diff hygiene. Five representative generated scripts passed syntax
+and required-structure checks. Independent whole-feature review found no
+Critical or Important issues; its only Minor finding is the intentionally
+unresolved lack of executed production-browser behavior. No laboratory service,
+push, merge, issue mutation, or remote synchronization occurred.
+
+**Rationale:** Static and unit evidence proves deterministic generation,
+source-digest binding, exact dynamic publication coverage, restrictive CSP,
+safe Markdown rendering, and shipped-script syntax, but it cannot substitute
+for executing responsive and interactive behavior in a real browser. Respecting
+the browser policy preserves the security boundary while keeping the remaining
+gate explicit and independently auditable.
+
+**Affected artifacts:** This lineage and its generated `.htm` partner. The
+verified implementation remains in `tools/render_markdown.py`, `Makefile`,
+repository guidance and tests, plus the exact 47-reader corpus.
+
+**Unresolved questions:** The maintainer must expose the final reader in the
+already-running localhost preview so desktop/mobile interaction, print styling,
+local-image behavior, and network observations can be completed.
+
+**Next gate:** Inspect the user-opened final localhost reader and representative
+sibling pages, append the conclusive verification entry, regenerate and validate
+the lineage partner, commit the evidence, then push once and verify exact local,
+upstream, and remote-head synchronization.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-146 — 2026-09-03 — Companion-reader location and publication handoff
+
+**Input:** The maintainer reported that no `.htm` companions were visible in
+the normal repository checkout and directed the work to continue without the
+extended browser gate.
+
+**Interpretation:** The 47 companions had been generated and committed in the
+Codex-managed `codex/self-contained-html-readers` worktree, while the normal
+`main` checkout remained at its earlier revision. The absence observed by the
+maintainer was therefore a branch/worktree visibility issue, not a generation
+failure. Browser interaction remains unexecuted and is not represented as
+validated.
+
+**Decision status:** Confirmed publication handoff. Finish the reader evidence
+commit and push the feature branch so every companion is visible in Git. Do not
+overwrite the normal checkout's unrelated uncommitted OTCS lineage and input
+work while attempting a local fast-forward.
+
+**Rationale:** Publishing the completed branch provides the requested artifacts
+immediately and preserves unrelated maintainer work. Exact local-main
+integration can follow once those uncommitted changes are committed, moved, or
+otherwise resolved by the maintainer.
+
+**Affected artifacts:** This lineage and its generated `.htm` partner; the
+existing exact set of 47 tracked `.md`/`.htm` pairs remains unchanged.
+
+**Unresolved questions:** The normal `main` checkout contains unrelated
+uncommitted OTCS work, so it cannot be safely fast-forwarded without a
+maintainer decision. Browser behavior was structurally reviewed but not
+executed because direct local-file navigation was blocked and the maintainer
+redirected the task toward artifact availability.
+
+**Next gate:** Regenerate and verify the lineage partner, commit the evidence,
+push `codex/self-contained-html-readers`, verify the remote branch hash, and
+report the exact artifact locations and the dirty-`main` integration blocker.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
