@@ -15,8 +15,8 @@ instead of relying only on the validity of a credential at a checkpoint.
   extension proposal.
 - Execution: both deterministic incident replay and live local Kubernetes
   enforcement.
-- Repository boundary: separate from ShadowClaw so detection and enforcement
-  remain independent processes.
+- Repository boundary: KIL owns detection and enforcement behavior while
+  preserving provenance.
 
 ## Evidence contract
 
@@ -30,6 +30,6 @@ assumption, and `validated` is reserved for behavior reproduced locally.
 - Selecting trust-decay constants or thresholds.
 - Claiming that KIL would have prevented the historical incident.
 - Installing or changing a Kubernetes environment.
-- Modifying ShadowClaw or KTP upstream specifications.
+- Modifying KTP upstream specifications.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

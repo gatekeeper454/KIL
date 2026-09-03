@@ -6,7 +6,7 @@
 <title>Project charter</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="PROJECT.md">
-<meta name="source-sha256" content="a1ea2845e8677bd7d6d1b5affde3e8cf0147d539f8d1b11384a77ad29346afda">
+<meta name="source-sha256" content="a75a738c59bc2898e272f1e97785e4d353ae6d9c66a20a8b4265378940565c0c">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>PROJECT.md</code> (<code>a1ea2845e8677bd7d6d1b5affde3e8cf0147d539f8d1b11384a77ad29346afda</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>PROJECT.md</code> (<code>a75a738c59bc2898e272f1e97785e4d353ae6d9c66a20a8b4265378940565c0c</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Project charter</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>PROJECT.md</code> (<code>a1ea2845e8677bd7d6d1b5affde3e8cf0147d539f8d1b11384a77ad29346afda</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>PROJECT.md</code> (<code>a75a738c59bc2898e272f1e97785e4d353ae6d9c66a20a8b4265378940565c0c</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#project-charter">Project charter</a></li><li class="level-2"><a href="#objective">Objective</a></li><li class="level-2"><a href="#agreed-direction">Agreed direction</a></li><li class="level-2"><a href="#evidence-contract">Evidence contract</a></li><li class="level-2"><a href="#non-goals-for-the-bootstrap">Non-goals for the bootstrap</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="project-charter" href="#project-charter">Project charter</a></li><li class="level-2"><a data-section-id="objective" href="#objective">Objective</a></li><li class="level-2"><a data-section-id="agreed-direction" href="#agreed-direction">Agreed direction</a></li><li class="level-2"><a data-section-id="evidence-contract" href="#evidence-contract">Evidence contract</a></li><li class="level-2"><a data-section-id="non-goals-for-the-bootstrap" href="#non-goals-for-the-bootstrap">Non-goals for the bootstrap</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -78,8 +78,8 @@ architects and researchers.</li>
 extension proposal.</li>
 <li>Execution: both deterministic incident replay and live local Kubernetes
 enforcement.</li>
-<li>Repository boundary: separate from ShadowClaw so detection and enforcement
-remain independent processes.</li>
+<li>Repository boundary: KIL owns detection and enforcement behavior while
+preserving provenance.</li>
 </ul>
 <h2 id="evidence-contract">Evidence contract</h2>
 <p>The public replay may combine disclosed Hugging Face actions with synthetic KTP
@@ -91,7 +91,7 @@ assumption, and <code>validated</code> is reserved for behavior reproduced local
 <li>Selecting trust-decay constants or thresholds.</li>
 <li>Claiming that KIL would have prevented the historical incident.</li>
 <li>Installing or changing a Kubernetes environment.</li>
-<li>Modifying ShadowClaw or KTP upstream specifications.</li>
+<li>Modifying KTP upstream specifications.</li>
 </ul>
 <p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
 </article></main>

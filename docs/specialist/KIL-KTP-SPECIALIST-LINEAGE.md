@@ -7692,3 +7692,77 @@ plan, validate zero current-file matches, and synchronize `main` without
 committing unrelated OTCS work.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-148 — 2026-09-03 — Project-boundary cleanup execution planned
+
+**Input:** After reviewing the still-unchanged README, the maintainer reiterated
+that the current-file references must be removed. This confirms execution of
+the approved design rather than another documentation-only checkpoint.
+
+**Interpretation:** Apply exact KIL-only rewrites to the three authoritative
+Markdown sources, add a tracked-file regression test, regenerate every reader,
+and validate the whole repository. Then integrate and push while preserving the
+normal checkout's unrelated OTCS work as uncommitted changes; narrowly remove
+the same name from its lineage occurrence after restoration.
+
+**Decision status:** Confirmed implementation plan; execution begins inline on
+the isolated cleanup branch.
+
+**Rationale:** The visible README is the maintainer's immediate acceptance
+surface. A source-first rewrite plus deterministic reader generation corrects
+both `.md` and `.htm`, while the regression test prevents the project boundary
+from drifting back into tracked content.
+
+**Affected artifacts:**
+`docs/superpowers/plans/2026-09-03-project-boundary-reference-cleanup.md`, this
+lineage, and their `.htm` partners. Planned implementation also affects
+`PROJECT.md`, `README.md`, the specialist-consultation checkpoint, their
+readers, and `tests/test_project_boundaries.py`.
+
+**Unresolved questions:** None. The scope is current project files only; Git
+history remains unchanged.
+
+**Next gate:** Execute the regression test red/green cycle, regenerate and
+validate all readers, commit and push the branch, preserve and restore OTCS
+work around the `main` fast-forward, then prove local/remote synchronization
+and zero current-file matches.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-149 — 2026-09-03 — Project-boundary reference cleanup verified
+
+**Input:** Execute the approved current-file cleanup after the maintainer
+confirmed that the README and its reader must no longer name the unrelated
+external project.
+
+**Interpretation:** Replace the three source-document comparisons with direct
+KIL/KTP statements, regenerate their readers, and enforce the boundary with a
+case-insensitive tracked-file regression test that does not itself store the
+removed name contiguously.
+
+**Decision status:** Cleanup implementation confirmed on the isolated branch.
+The regression test first failed on exactly six stale tracked artifacts, then
+passed after the three Markdown sources and their readers were corrected. Full
+validation passed 539 tests and verified all 49 Markdown/HTML pairs.
+
+**Rationale:** The final text now states what KIL owns and which KTP telemetry
+interfaces it accepts, without preserving an irrelevant relationship or
+discarding useful protocol-boundary guidance. The source-first generation path
+keeps human-readable Markdown and self-contained readers consistent.
+
+**Affected artifacts:** `PROJECT.md`, `README.md`,
+`docs/checkpoints/2026-08-24-specialist-consultation.md`, their `.htm`
+partners, `tests/test_project_boundaries.py`, the approved design and execution
+plan pairs, and this lineage pair.
+
+**Unresolved questions:** None for committed current files. The normal
+checkout's uncommitted OTCS lineage occurrence still requires the same narrow
+rewrite during integration; its other content must remain uncommitted and
+preserved. Git history remains outside scope.
+
+**Next gate:** Regenerate this lineage reader, repeat full validation and the
+zero-match search, commit and push the cleanup branch, restore the preserved
+OTCS work around a fast-forward of `main`, remove its remaining current-file
+occurrence, regenerate its reader, and verify local/remote synchronization.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

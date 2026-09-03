@@ -18,8 +18,9 @@ architecture draft or convert modeled counterfactuals into validated results.
 - Public evidence is classified as `observed`, `modeled`, or `validated`.
   Synthetic KTP context signals are permitted only when explicitly labeled
   `modeled`; `validated` is reserved for behavior reproduced locally.
-- KIL is an enforcement and experiment harness. ShadowClaw may provide risk
-  telemetry across a stable interface but remains a separate detector project.
+- KIL is an enforcement and experiment harness. It accepts KTP Risk Factor
+  telemetry through stable, documented interfaces and owns enforcement
+  behavior.
 - Every authored project document cites the canonical KTP citation record.
 
 ## Design awaiting approval

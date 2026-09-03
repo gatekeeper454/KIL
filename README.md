@@ -87,10 +87,9 @@ historical incident.
 
 ## Project boundaries
 
-KIL is an enforcer and experiment harness. ShadowClaw remains a separate,
-detector-only project and may supply KTP Risk Factor telemetry through a stable
-interface. KIL must not import ShadowClaw internals or move enforcement into the
-sensor process.
+KIL is an enforcer and experiment harness. It accepts KTP Risk Factor telemetry
+through stable, documented interfaces and keeps enforcement within
+KIL-controlled infrastructure.
 
 ## Repository map
 
