@@ -6,6 +6,9 @@ Task 10 passed at the local Envoy boundary on 2026-08-31. This record is a
 public-safe projection of the ignored local bundle and its archived lifecycle
 journal. It records an observed request-free lifecycle result, not an
 enforcement outcome and not a validated Kind/Calico cluster result.
+It is historical driver-era v2 evidence: because it lacks durable exact
+before/after foreign-resource snapshots, it does not satisfy the v3 evidence
+prerequisite for a central proof.
 
 ## Public binding
 
@@ -83,11 +86,13 @@ before/after foreign-resource snapshots.
 
 ## Next gate
 
-After this record is reviewed, merged, and synchronized, the next gate must
-implement, test, review, and merge durable exact before/after foreign-resource
-snapshot binding with verifier equality. Only after that prerequisite may the
-project execute exactly one central local-Envoy proof from a fresh lifecycle.
-No retry is permitted after request intent. Its prospective acceptance criteria remain
+The `kil.v3b1-manifest.v3` snapshot extension is now implemented and statically
+tested on its development branch, but still requires independent review,
+merge, and synchronization. A fresh request-free v3 lifecycle must then prove
+the exact pseudonymous before/after equality contract from public `main`. The
+central `run` remains prohibited until that gate passes. Only afterward may the
+project execute exactly one central local-Envoy proof. No retry is permitted
+after request intent. Its prospective acceptance criteria remain
 three exact terminal driver results, `permit / permit / deny`, HTTP
 `200 / 200 / 403`, target markers `1 / 1 / 0`, complete driver/service joins,
 verified checksums, exact teardown, restored foreign state, and offline

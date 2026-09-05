@@ -102,6 +102,38 @@ class _PassiveHTMLParser(HTMLParser):
 
 
 class V3B1DocumentationTest(unittest.TestCase):
+    def test_v3_foreign_snapshot_prerequisite_and_next_gate_are_current(self):
+        for path in (README, ENVOY_README, V3_PROGRESS):
+            with self.subTest(path=path.relative_to(ROOT)):
+                value = normalized(path.read_text(encoding="utf-8")).lower()
+                self.assertIn("kil.v3b1-manifest.v3", value)
+                self.assertIn("pseudonym", value)
+                self.assertRegex(
+                    value,
+                    r"before/after[^.]{0,180}foreign[^.]{0,180}(?:exact|equality)",
+                )
+                self.assertRegex(
+                    value,
+                    r"central `?run`?[^.]{0,180}prohibited",
+                )
+                self.assertRegex(
+                    value,
+                    r"fresh request-free[^.]{0,180}v3",
+                )
+
+        gate = normalized(TASK10_GATE.read_text(encoding="utf-8")).lower()
+        self.assertRegex(gate, r"historical[^.]{0,100}v2")
+        self.assertRegex(gate, r"does not satisfy[^.]{0,160}v3")
+        self.assertRegex(gate, r"fresh request-free[^.]{0,180}v3")
+
+        task11 = normalized(
+            CURRENT_DRIVER_PLAN.read_text(encoding="utf-8").split(
+                "### Task 11", 1
+            )[1]
+        ).lower()
+        self.assertIn("kil.v3b1-manifest.v3", task11)
+        self.assertRegex(task11, r"fresh request-free[^.]{0,180}v3")
+
     def test_task10_request_free_gate_is_public_bound_and_claim_limited(self):
         run_id = (
             "v3b1-d2b26f6c8136dcd26a6e6727b9bb1381076a1e03b71a5a44df9b2b2ef9db6cf9"

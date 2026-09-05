@@ -52,11 +52,15 @@ nine zero-byte service legs; teardown removed all 15 exact containers and all
 six exact networks. The public manifest binds the foreign context name as
 `default` before and after the lifecycle, and a post-run readback observed its
 stopped resource tuple; the exact tuple was not durably bound at both ends.
-The central `run` was not executed and remains prohibited until the
-[Task 10 gate record](docs/lab/V3B1-TASK10-REQUEST-FREE-GATE.md) is reviewed,
-merged, and synchronized and a tested, merged evidence extension durably binds
-and verifies exact before/after resource snapshots. This is accepted request-
-free lifecycle evidence,
+The historical Task 10 bundle used evidence generation v2. The replacement
+contract is now implemented and statically tested on the development branch:
+`kil.v3b1-manifest.v3` durably records exact before/after foreign Colima state
+privately and publishes run-scoped pseudonyms with every resource field and an
+exact equality result. Existing v1 and v2 bundles remain independently
+verifiable. The central `run` was not executed and remains prohibited until
+the v3 implementation is independently reviewed, merged, synchronized, and a
+fresh request-free v3 lifecycle passes from public `main`. This is accepted
+historical request-free lifecycle evidence,
 not an enforcement result. Kind/Calico validation (V3B-2), repetition, and
 performance promotion (V3C) remain future work.
 
@@ -172,14 +176,18 @@ instruction or HTTP request. A central run starts a fresh three-driver set,
 records durable request intent, sends exactly one canonical instruction to each
 driver, and never retries after intent.
 
-The v2 public evidence contract publishes the exact canonical result from each
-driver under `raw/drivers/`, together with nine authoritative Envoy,
-authorization, and target sources. The verifier reconstructs and hashes those
-sources before joining the same request, decision, forwarding, and target facts.
-The central local-Envoy enforcement gate remains pending. Until it passes,
-these contracts are statically verified and must not be described as a
-validated enforcement result. V3B-2 Kind/Calico validation remains a later
-gate.
+The current `kil.v3b1-manifest.v3` evidence contract retains the exact
+canonical driver results under `raw/drivers/` and the nine authoritative
+Envoy, authorization, and target sources. It also binds exact before/after
+foreign-profile resources in the private journal and exposes only run-scoped
+pseudonymous profile references in the public manifest. Complete evidence
+requires exact equality; mismatch can produce only a nonpromotable failure
+bundle and never instructs the controller to mutate a foreign profile. The
+offline verifier explicitly dispatches v1, historical driver-era v2, and v3
+without accepting mixed schemas. The central `run` remains prohibited until a
+fresh request-free v3 lifecycle passes from reviewed, merged, synchronized
+public `main`; the central enforcement gate remains pending. V3B-2 Kind/Calico
+validation remains a later gate.
 
 ## Historical replay
 

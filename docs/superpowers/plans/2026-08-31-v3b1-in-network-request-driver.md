@@ -912,12 +912,15 @@ synchronize main before the central proof.
 
 - [ ] **Step 1: Reconfirm clean merged main and run preflight/up**
 
-Require the request-free record merged and synchronized. Before- and after-resource
-snapshots must be implemented, tested, and merged as a durable
-controller and public-evidence contract. Synchronize that prerequisite commit
-locally. The central `run` remains prohibited until both publication gates are
-complete. Only then record the exact foreign runtime state through the durable
-before snapshot and execute `preflight`, then `up` from that public commit.
+The historical Task 10 record is v2 evidence. Before- and after-resource
+snapshots are implemented and tested in `kil.v3b1-manifest.v3`; require that
+foreign-resource snapshot and pseudonymous public-verifier contract to pass
+independent review, merge, and synchronization.
+Then execute a fresh request-free v3 lifecycle from public `main` and require
+exact foreign-profile equality. The central `run` remains prohibited until
+that fresh v3 gate passes. Only then record the exact foreign runtime state
+through the durable before snapshot and execute `preflight`, then `up` from the
+same synchronized public commit.
 
 - [ ] **Step 2: Invoke `run` once**
 

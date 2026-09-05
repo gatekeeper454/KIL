@@ -6,7 +6,7 @@
 <title>Gate V3 implementation progress</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/lab/V3-PROGRESS.md">
-<meta name="source-sha256" content="855a81fc845818b4bff4223e7d69a40868b33c8dcc6ea386d5f9625d69e8d192">
+<meta name="source-sha256" content="d5f8a549c54c0f0b715805a61d8bd5f7c34ad0de712a3d335d63d01575518f46">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>855a81fc845818b4bff4223e7d69a40868b33c8dcc6ea386d5f9625d69e8d192</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>d5f8a549c54c0f0b715805a61d8bd5f7c34ad0de712a3d335d63d01575518f46</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Gate V3 implementation progress</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>855a81fc845818b4bff4223e7d69a40868b33c8dcc6ea386d5f9625d69e8d192</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>d5f8a549c54c0f0b715805a61d8bd5f7c34ad0de712a3d335d63d01575518f46</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#gate-v3-implementation-progress">Gate V3 implementation progress</a></li><li class="level-2"><a href="#v3a-status">V3A status</a></li><li class="level-2"><a href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a href="#v3b-1-current-status">V3B-1 current status</a></li><li class="level-3"><a href="#implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</a></li><li class="level-3"><a href="#request-and-evidence-contracts">Request and evidence contracts</a></li><li class="level-3"><a href="#live-status-and-historical-boundary">Live status and historical boundary</a></li><li class="level-3"><a href="#historical-pre-driver-topology-records">Historical pre-driver topology records</a></li><li class="level-2"><a href="#architecture">Architecture</a></li><li class="level-2"><a href="#next-gate">Next gate</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="gate-v3-implementation-progress" href="#gate-v3-implementation-progress">Gate V3 implementation progress</a></li><li class="level-2"><a data-section-id="v3a-status" href="#v3a-status">V3A status</a></li><li class="level-2"><a data-section-id="evidence-boundary" href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a data-section-id="v3b-1-current-status" href="#v3b-1-current-status">V3B-1 current status</a></li><li class="level-3"><a data-section-id="implemented-topology-and-traffic-boundary" href="#implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</a></li><li class="level-3"><a data-section-id="request-and-evidence-contracts" href="#request-and-evidence-contracts">Request and evidence contracts</a></li><li class="level-3"><a data-section-id="live-status-and-historical-boundary" href="#live-status-and-historical-boundary">Live status and historical boundary</a></li><li class="level-3"><a data-section-id="historical-pre-driver-topology-records" href="#historical-pre-driver-topology-records">Historical pre-driver topology records</a></li><li class="level-2"><a data-section-id="architecture" href="#architecture">Architecture</a></li><li class="level-2"><a data-section-id="next-gate" href="#next-gate">Next gate</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -155,6 +155,17 @@ complete result is eligible for publication. Teardown finalizes drivers first,
 freezes the unchanged nine service sources, removes drivers, Envoys,
 authorization services, targets, and validators, then proves all fifteen
 containers and all six empty networks absent through full-ID inventories.</p>
+<p>That v2 format now remains a historical verification generation. New output
+uses <code>kil.v3b1-manifest.v3</code>: the lifecycle journal durably records exact
+before/after foreign Colima profiles and requires exact equality for complete
+evidence, while the public manifest retains every resource field behind
+run-scoped HMAC pseudonyms. A foreign-state mismatch completes owned teardown, never
+mutates a foreign profile, and can publish only a nonpromotable failure bundle.
+The offline verifier dispatches v1, v2, and v3 as separate closed schemas.
+This v3 prerequisite is implemented and statically tested on the development
+branch, but is not yet a merged or live-qualified result. The central <code>run</code>
+remains prohibited until review, merge, synchronization, and a fresh
+request-free lifecycle proves the v3 contract from public <code>main</code>.</p>
 <h3 id="live-status-and-historical-boundary">Live status and historical boundary</h3>
 <p>The corrected request-driver topology now has accepted Task 10 request-free
 lifecycle evidence at the local Envoy boundary. Earlier V3B-1 host-published
@@ -305,11 +316,13 @@ central enforcement gate.</p>
 and the complete approved specification is
 <a href="../superpowers/specs/2026-08-29-v3-envoy-live-validation-design.htm"><code>docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md</code></a>.</p>
 <h2 id="next-gate">Next gate</h2>
-<p>Publish and merge the Task 10 public-safe gate record, synchronize clean
-<code>main</code>, then implement, test, review, and merge durable exact before/after
-foreign-resource snapshot binding and verifier equality. Only then execute one
-central <code>preflight</code> / <code>up</code> / <code>run</code> / <code>down</code> proof with no retry after request
-intent. Its prospective acceptance criteria remain <code>permit / permit / deny</code>,
+<p>The historical Task 10 public-safe gate record remains v2 evidence. Review,
+merge, and synchronize the implemented <code>kil.v3b1-manifest.v3</code> exact
+before/after foreign-resource snapshot and pseudonymous verifier contract, then
+execute a fresh request-free v3 lifecycle from public <code>main</code>. The central
+<code>run</code> remains prohibited until that fresh v3 prerequisite passes. Only then
+execute one central <code>preflight</code> / <code>up</code> / <code>run</code> / <code>down</code> proof with no retry
+after request intent. Its prospective acceptance criteria remain <code>permit / permit / deny</code>,
 HTTP <code>200 / 200 / 403</code>, target markers <code>1 / 1 / 0</code>, exact three-driver and
 nine-service-source joins, verified checksums, exact teardown, restored foreign
 runtime, and offline presenter acceptance. V3B-2 and V3C remain later gates;

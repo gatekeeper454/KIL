@@ -3,8 +3,9 @@
 V3B-1 implements three independently configured local Envoy `ext_authz` routes
 in front of harmless target workloads. Each authorization service instance
 fixes one track at startup. V3B-2 may reuse the same fixed tracks in a future
-Kind/Calico topology. No driver-era V3B-1 live proof has yet been accepted,
-promoted, or labeled validated:
+Kind/Calico topology. The historical driver-era request-free lifecycle gate is
+accepted as a lifecycle result, but no central V3B-1 enforcement proof has
+been accepted, promoted, or labeled validated:
 
 1. `credential_policy_baseline`
 2. `signed_state_only`
@@ -44,12 +45,23 @@ readiness records, sends no instruction and no HTTP request, and performs three
 bounded cancellations. A central run uses fresh drivers, durably records intent
 before sending one instruction per track, and never retries after intent.
 
-The corrected mechanism and recovery contract are implemented and statically
-approved at commits `75161f0` and `48bd81a`. The Task 8 implementation
-checkpoint passed 466 non-runtime tests. The fresh Task 9 complete static gate
-passes 474 tests, including eight documentation tests. The request-free
-readiness gate and the conditional central proof have not yet run against this
-topology.
+Historically, the Task 8 implementation checkpoint passed 466 non-runtime
+tests, and the fresh Task 9 complete static gate passed 474 tests, including
+eight documentation tests.
+
+The current evidence extension emits `kil.v3b1-manifest.v3`. Its private
+journal durably binds exact before/after foreign Colima records and requires
+exact equality for complete evidence, while its public manifest replaces names
+with run-scoped HMAC pseudonyms and retains status, architecture, CPU, memory,
+disk, and runtime. A mismatch never authorizes foreign mutation and can
+publish only nonpromotable failure evidence. Offline verification keeps the
+historical v1 and driver-era v2 schemas closed and independently verifiable.
+
+This v3 extension is implemented and statically tested on the development
+branch. The central `run` remains prohibited until independent review, merge,
+synchronization, and a fresh request-free v3 lifecycle from public `main` all
+pass. The previously accepted Task 10 request-free bundle is historical v2
+evidence and does not satisfy this v3 prerequisite.
 
 The request cannot select or downgrade the active track. KIL state is a signed,
 short-lived experimental extension envelope that references KTP Trust Proof and

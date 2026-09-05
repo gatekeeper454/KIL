@@ -105,6 +105,18 @@ freezes the unchanged nine service sources, removes drivers, Envoys,
 authorization services, targets, and validators, then proves all fifteen
 containers and all six empty networks absent through full-ID inventories.
 
+That v2 format now remains a historical verification generation. New output
+uses `kil.v3b1-manifest.v3`: the lifecycle journal durably records exact
+before/after foreign Colima profiles and requires exact equality for complete
+evidence, while the public manifest retains every resource field behind
+run-scoped HMAC pseudonyms. A foreign-state mismatch completes owned teardown, never
+mutates a foreign profile, and can publish only a nonpromotable failure bundle.
+The offline verifier dispatches v1, v2, and v3 as separate closed schemas.
+This v3 prerequisite is implemented and statically tested on the development
+branch, but is not yet a merged or live-qualified result. The central `run`
+remains prohibited until review, merge, synchronization, and a fresh
+request-free lifecycle proves the v3 contract from public `main`.
+
 ### Live status and historical boundary
 
 The corrected request-driver topology now has accepted Task 10 request-free
@@ -274,11 +286,13 @@ and the complete approved specification is
 
 ## Next gate
 
-Publish and merge the Task 10 public-safe gate record, synchronize clean
-`main`, then implement, test, review, and merge durable exact before/after
-foreign-resource snapshot binding and verifier equality. Only then execute one
-central `preflight` / `up` / `run` / `down` proof with no retry after request
-intent. Its prospective acceptance criteria remain `permit / permit / deny`,
+The historical Task 10 public-safe gate record remains v2 evidence. Review,
+merge, and synchronize the implemented `kil.v3b1-manifest.v3` exact
+before/after foreign-resource snapshot and pseudonymous verifier contract, then
+execute a fresh request-free v3 lifecycle from public `main`. The central
+`run` remains prohibited until that fresh v3 prerequisite passes. Only then
+execute one central `preflight` / `up` / `run` / `down` proof with no retry
+after request intent. Its prospective acceptance criteria remain `permit / permit / deny`,
 HTTP `200 / 200 / 403`, target markers `1 / 1 / 0`, exact three-driver and
 nine-service-source joins, verified checksums, exact teardown, restored foreign
 runtime, and offline presenter acceptance. V3B-2 and V3C remain later gates;
