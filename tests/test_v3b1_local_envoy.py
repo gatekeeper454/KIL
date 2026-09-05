@@ -2983,6 +2983,34 @@ class ControllerContractTest(unittest.TestCase):
         )
         self.assertNotIn("kil-v3-lab", canonical_json(snapshot))
 
+    def test_controller_captures_fresh_foreign_snapshot_from_colima(self):
+        runner = FakeRunner(
+            [
+                CommandResult(
+                    0,
+                    '{"name":"personal","status":"Stopped",'
+                    '"arch":"aarch64","cpus":4,"memory":4294967296,'
+                    '"disk":21474836480,"runtime":"containerd"}\n',
+                    "",
+                )
+            ]
+        )
+        controller = LocalEnvoyController(
+            ROOT,
+            runner,
+            home=Path("/Users/lab"),
+            port_probe=lambda port: False,
+            tool_verifier=lambda: {},
+        )
+
+        snapshot = controller._capture_foreign_profile_snapshot(
+            "before_colima_mutation"
+        )
+
+        self.assertEqual(snapshot["capture_stage"], "before_colima_mutation")
+        self.assertEqual(snapshot["profiles"][0]["name"], "personal")
+        self.assertEqual(runner.calls[-1][0], ["colima", "list", "--json"])
+
     def test_foreign_snapshot_rejects_ambiguous_or_nonclosed_records(self):
         valid = {
             "name": "personal",
@@ -6993,6 +7021,177 @@ class JournalRecoveryTest(unittest.TestCase):
             loaded = load_lifecycle_journal(journal)
             self.assertEqual(loaded["events"][-1]["event"], "foreign_profile_mismatch")
 
+    def test_controller_records_after_snapshot_only_after_verified_absence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profile = root / "deploy/kind/v3b-profile.json"
+            profile.parent.mkdir(parents=True)
+            profile.write_bytes(
+                (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+            )
+            journal = self.create_v2(root)
+            before = canonical_foreign_profile_snapshot(
+                ({"name": "personal", "status": "Stopped", "arch": "aarch64",
+                  "cpus": 4, "memory": 4294967296, "disk": 21474836480,
+                  "runtime": "containerd"},),
+                "before_colima_mutation",
+            )
+            journal_event(journal, "foreign_profile_snapshot_before", before)
+            journal_event(
+                journal, "colima_start_intent",
+                {"profile": "kil-v3-lab", "command_sha256": HEX_A},
+            )
+            controller = LocalEnvoyController(
+                root,
+                FakeRunner(
+                    [
+                        CommandResult(
+                            0,
+                            '{"name":"personal","status":"Stopped",'
+                            '"arch":"aarch64","cpus":4,"memory":4294967296,'
+                            '"disk":21474836480,"runtime":"containerd"}\n',
+                            "",
+                        )
+                    ]
+                ),
+                home=Path(directory) / "home",
+                port_probe=lambda port: False,
+                tool_verifier=lambda: {},
+            )
+            with self.assertRaisesRegex(ControllerError, "deletion"):
+                controller._record_after_foreign_profile_snapshot()
+
+            journal_event(
+                journal, "colima_delete_complete",
+                {"profile": "kil-v3-lab", "verified_absent": True},
+            )
+            before_result, after_result, comparison = (
+                controller._record_after_foreign_profile_snapshot()
+            )
+            self.assertEqual(before_result, before)
+            self.assertTrue(comparison["unchanged"])
+            self.assertEqual(
+                after_result["capture_stage"], "after_owned_profile_deletion"
+            )
+            self.assertEqual(
+                [event["event"] for event in load_lifecycle_journal(journal)["events"]][-2:],
+                ["colima_delete_complete", "foreign_profile_snapshot_after"],
+            )
+
+    def test_controller_records_digest_only_mismatch_without_foreign_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profile = root / "deploy/kind/v3b-profile.json"
+            profile.parent.mkdir(parents=True)
+            profile.write_bytes(
+                (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+            )
+            journal = self.create_v2(root)
+            before = canonical_foreign_profile_snapshot(
+                ({"name": "personal", "status": "Stopped", "arch": "aarch64",
+                  "cpus": 4, "memory": 4294967296, "disk": 21474836480,
+                  "runtime": "containerd"},),
+                "before_colima_mutation",
+            )
+            journal_event(journal, "foreign_profile_snapshot_before", before)
+            journal_event(
+                journal, "colima_start_intent",
+                {"profile": "kil-v3-lab", "command_sha256": HEX_A},
+            )
+            journal_event(
+                journal, "colima_delete_complete",
+                {"profile": "kil-v3-lab", "verified_absent": True},
+            )
+            runner = FakeRunner(
+                [
+                    CommandResult(
+                        0,
+                        '{"name":"personal","status":"Stopped",'
+                        '"arch":"aarch64","cpus":8,"memory":4294967296,'
+                        '"disk":21474836480,"runtime":"containerd"}\n',
+                        "",
+                    )
+                ]
+            )
+            controller = LocalEnvoyController(
+                root,
+                runner,
+                home=Path(directory) / "home",
+                port_probe=lambda port: False,
+                tool_verifier=lambda: {},
+            )
+
+            _, _, comparison = controller._record_after_foreign_profile_snapshot()
+
+            self.assertEqual(comparison["mismatch_categories"], ["cpus"])
+            mismatch = load_lifecycle_journal(journal)["events"][-1]
+            self.assertEqual(mismatch["event"], "foreign_profile_mismatch")
+            self.assertEqual(
+                set(mismatch["details"]),
+                {"before_sha256", "after_sha256", "mismatch_categories"},
+            )
+            flattened = [part for call, *_ in runner.calls for part in call]
+            self.assertNotIn("personal", flattened)
+
+    def test_v2_no_owned_profile_down_records_after_snapshot_before_archive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            profile = root / "deploy/kind/v3b-profile.json"
+            profile.parent.mkdir(parents=True)
+            profile.write_bytes(
+                (ROOT / "deploy/kind/v3b-profile.json").read_bytes()
+            )
+
+            class StableContextController(LocalEnvoyController):
+                def _capture_global_context(self):
+                    return "personal"
+
+            controller = StableContextController(
+                root,
+                FakeRunner(
+                    [
+                        CommandResult(0, "[]\n", ""),
+                        CommandResult(0, "[]\n", ""),
+                    ]
+                ),
+                home=Path(directory) / "home",
+                port_probe=lambda port: False,
+                tool_verifier=lambda: {},
+            )
+            controller._prepare_private_roots()
+            create_lifecycle_journal(
+                controller.journal_path,
+                private_root=controller.private_root,
+                repository_root=root,
+                docker_host=controller.docker_host,
+                source_commit="d" * 40,
+                execution_nonce=HEX_A,
+                global_context="personal",
+                schema_version="kil.v3b1-lifecycle-journal.v2",
+            )
+            journal_event(
+                controller.journal_path,
+                "foreign_profile_snapshot_before",
+                self.empty_snapshot("before_colima_mutation"),
+            )
+
+            result = controller.down()
+
+            self.assertEqual(result, controller.private_root)
+            archived = (
+                controller.private_root
+                / "completed"
+                / f"preprofile-{HEX_A}.journal.json"
+            )
+            events = load_lifecycle_journal(archived)["events"]
+            self.assertEqual(
+                [event["event"] for event in events][-2:],
+                [
+                    "down_complete_without_owned_profile",
+                    "foreign_profile_snapshot_after",
+                ],
+            )
+
     def test_legacy_v1_journal_retains_its_original_snapshot_free_rules(self):
         with tempfile.TemporaryDirectory() as directory:
             journal = self.create(Path(directory))
@@ -7901,6 +8100,19 @@ class JournalRecoveryTest(unittest.TestCase):
                 controller.up()
 
             journal = load_lifecycle_journal(controller.journal_path)
+            self.assertEqual(
+                journal["schema_version"],
+                "kil.v3b1-lifecycle-journal.v2",
+            )
+            event_names = [event["event"] for event in journal["events"]]
+            self.assertLess(
+                event_names.index("foreign_profile_snapshot_before"),
+                event_names.index("preflight_complete"),
+            )
+            self.assertLess(
+                event_names.index("foreign_profile_snapshot_before"),
+                event_names.index("colima_start_intent"),
+            )
             self.assertFalse(journal["profile_created"])
             self.assertEqual(
                 [event["event"] for event in journal["events"]][-3:],

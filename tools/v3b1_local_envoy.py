@@ -1259,9 +1259,15 @@ def _validate_foreign_snapshot_history(
         after_position = after_positions[0]
         verified_deletes = [
             index for index, event in enumerate(events)
-            if event.get("event") == "colima_delete_complete"
+            if event.get("event") in {
+                "colima_delete_complete",
+                "down_complete_without_owned_profile",
+            }
             and type(event.get("details")) is dict
-            and event["details"].get("verified_absent") is True
+            and (
+                event["details"].get("verified_absent") is True
+                or event["details"].get("profile_absent") is True
+            )
         ]
         if not verified_deletes or max(verified_deletes) > after_position:
             raise ControllerError("foreign profile after snapshot precedes verified deletion")
@@ -9913,6 +9919,99 @@ class LocalEnvoyController:
             "tool_identities": _tool_identity_projection(tools),
         }
 
+    def _capture_foreign_profile_snapshot(
+        self, capture_stage: str
+    ) -> dict[str, object]:
+        listed = self._execute(["colima", "list", "--json"], timeout_s=20)
+        return canonical_foreign_profile_snapshot(
+            parse_colima_profiles(listed.stdout), capture_stage
+        )
+
+    def _record_after_foreign_profile_snapshot(
+        self,
+    ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+        journal = load_lifecycle_journal(self.journal_path)
+        if journal["schema_version"] != JOURNAL_SCHEMA:
+            raise ControllerError("foreign profile snapshots require a v2 journal")
+        events = journal["events"]
+        assert isinstance(events, list)
+        before_events = [
+            event
+            for event in events
+            if event.get("event") == "foreign_profile_snapshot_before"
+        ]
+        after_events = [
+            event
+            for event in events
+            if event.get("event") == "foreign_profile_snapshot_after"
+        ]
+        if len(before_events) != 1 or len(after_events) > 1:
+            raise ControllerError("foreign profile snapshot history is incomplete")
+        absence_verified = any(
+            event.get("event") == "colima_delete_complete"
+            and type(event.get("details")) is dict
+            and event["details"].get("verified_absent") is True
+            for event in events
+        ) or any(
+            event.get("event") == "down_complete_without_owned_profile"
+            and type(event.get("details")) is dict
+            and event["details"].get("profile_absent") is True
+            for event in events
+        )
+        if not absence_verified:
+            raise ControllerError(
+                "foreign profile after snapshot requires verified owned-profile deletion"
+            )
+        before_details = before_events[0]["details"]
+        assert isinstance(before_details, Mapping)
+        before = _validate_foreign_profile_snapshot(
+            before_details, capture_stage="before_colima_mutation"
+        )
+        if after_events:
+            after_details = after_events[0]["details"]
+            assert isinstance(after_details, Mapping)
+            after = _validate_foreign_profile_snapshot(
+                after_details, capture_stage="after_owned_profile_deletion"
+            )
+        else:
+            after = self._capture_foreign_profile_snapshot(
+                "after_owned_profile_deletion"
+            )
+            journal_event(
+                self.journal_path,
+                "foreign_profile_snapshot_after",
+                after,
+            )
+        comparison = compare_foreign_profile_snapshots(before, after)
+        if comparison["unchanged"] is not True:
+            current = load_lifecycle_journal(self.journal_path)
+            current_events = current["events"]
+            assert isinstance(current_events, list)
+            mismatches = [
+                event
+                for event in current_events
+                if event.get("event") == "foreign_profile_mismatch"
+            ]
+            details = {
+                "before_sha256": _digest_bytes(
+                    canonical_json(before).encode("utf-8")
+                ),
+                "after_sha256": _digest_bytes(
+                    canonical_json(after).encode("utf-8")
+                ),
+                "mismatch_categories": comparison["mismatch_categories"],
+            }
+            if mismatches:
+                if len(mismatches) != 1 or mismatches[0].get("details") != details:
+                    raise ControllerError("foreign profile mismatch history changed")
+            else:
+                journal_event(
+                    self.journal_path,
+                    "foreign_profile_mismatch",
+                    details,
+                )
+        return before, after, comparison
+
     def _prepare_private_roots(self) -> None:
         for path, label in (
             (self.staging_root, "Colima staging root"),
@@ -11596,6 +11695,15 @@ class LocalEnvoyController:
             source_commit=source_commit,
             execution_nonce=execution_nonce,
             global_context=global_context,
+            schema_version=JOURNAL_SCHEMA,
+        )
+        before_snapshot = self._capture_foreign_profile_snapshot(
+            "before_colima_mutation"
+        )
+        journal_event(
+            self.journal_path,
+            "foreign_profile_snapshot_before",
+            before_snapshot,
         )
         ownership_path = execution_staging / f"ownership-{execution_nonce}.json"
         ownership_payload = _canonical_bytes(
@@ -14894,6 +15002,8 @@ class LocalEnvoyController:
                     "down_complete_without_owned_profile",
                     {"profile_absent": True},
                 )
+                if journal["schema_version"] == JOURNAL_SCHEMA:
+                    self._record_after_foreign_profile_snapshot()
                 global_after = self._capture_global_context()
                 if global_after != journal["global_context_before"]:
                     raise ControllerError("global Docker context changed during lifecycle")
@@ -14917,6 +15027,17 @@ class LocalEnvoyController:
         if dedicated is None:
             if not any(event["event"] == "colima_delete_intent" for event in events):
                 raise ControllerError("owned profile disappeared before an exact deletion intent")
+            if not any(event["event"] == "colima_delete_complete" for event in events):
+                journal_event(
+                    self.journal_path,
+                    "colima_delete_complete",
+                    {"profile": LAB_IDENTITY, "verified_absent": True},
+                )
+            if journal["schema_version"] == JOURNAL_SCHEMA:
+                self._record_after_foreign_profile_snapshot()
+            journal = load_lifecycle_journal(self.journal_path)
+            events = journal["events"]
+            assert isinstance(events, list)
             if journal["manifest_path"] is None:
                 global_after = self._capture_global_context()
                 if global_after != journal["global_context_before"]:
@@ -15210,14 +15331,16 @@ class LocalEnvoyController:
                 timeout_s=300,
             )
             self._verify_profile_absent()
-            global_after = self._capture_global_context()
-            if global_after != journal["global_context_before"]:
-                raise ControllerError("global Docker context changed during lifecycle")
             journal_event(
                 self.journal_path,
                 "colima_delete_complete",
                 {"profile": LAB_IDENTITY, "verified_absent": True},
             )
+            if journal["schema_version"] == JOURNAL_SCHEMA:
+                self._record_after_foreign_profile_snapshot()
+            global_after = self._capture_global_context()
+            if global_after != journal["global_context_before"]:
+                raise ControllerError("global Docker context changed during lifecycle")
             archive_root = self._private_completed_root()
             archived = archive_root / f"premanifest-{journal['execution_nonce']}.journal.json"
             if archived.exists():
@@ -15589,6 +15712,8 @@ class LocalEnvoyController:
             "colima_delete_complete",
             {"profile": LAB_IDENTITY, "verified_absent": True},
         )
+        if journal["schema_version"] == JOURNAL_SCHEMA:
+            self._record_after_foreign_profile_snapshot()
         global_after = self._capture_global_context()
         if global_after != journal["global_context_before"]:
             raise ControllerError("global Docker context changed during lifecycle")
