@@ -1257,7 +1257,10 @@ def _validate_foreign_snapshot_history(
     if after_positions:
         if not before_positions:
             raise ControllerError("foreign profile after snapshot lacks its before snapshot")
+        before_position = before_positions[0]
         after_position = after_positions[0]
+        if before_position >= after_position:
+            raise ControllerError("foreign profile before snapshot is phase-invalid")
         verified_deletes = [
             index for index, event in enumerate(events)
             if event.get("event") in {
@@ -1270,12 +1273,28 @@ def _validate_foreign_snapshot_history(
                 or event["details"].get("profile_absent") is True
             )
         ]
-        if not verified_deletes or max(verified_deletes) > after_position:
+        absence_lower_bound = max([before_position, *mutation_positions])
+        if not any(
+            absence_lower_bound < position < after_position
+            for position in verified_deletes
+        ):
             raise ControllerError("foreign profile after snapshot precedes verified deletion")
         if publication_positions and after_position > publication_positions[0]:
             raise ControllerError("foreign profile after snapshot follows publication intent")
     if publication_positions and not after_positions:
         raise ControllerError("publication lacks a durable foreign profile after snapshot")
+
+    if mismatch_positions:
+        if not after_positions:
+            raise ControllerError(
+                "foreign profile mismatch lacks its after snapshot"
+            )
+        mismatch_position = mismatch_positions[0]
+        if mismatch_position < after_positions[0] or (
+            publication_positions
+            and mismatch_position > publication_positions[0]
+        ):
+            raise ControllerError("foreign profile mismatch is phase-invalid")
 
     if before_positions and after_positions:
         before_event = events[before_positions[0]]
@@ -3605,6 +3624,7 @@ def _validate_foreign_profile_attestation(
         raise ControllerError("foreign profile attestation unchanged flag is untruthful")
     if completed and not unchanged:
         raise ControllerError("complete evidence requires unchanged foreign profiles")
+    _reject_public_secrets(value)
     return {
         "schema_version": FOREIGN_ATTESTATION_SCHEMA,
         "before": arrays[0],
@@ -10106,9 +10126,12 @@ class LocalEnvoyController:
         self, capture_stage: str
     ) -> dict[str, object]:
         listed = self._execute(["colima", "list", "--json"], timeout_s=20)
-        return canonical_foreign_profile_snapshot(
-            parse_colima_profiles(listed.stdout), capture_stage
-        )
+        profiles = parse_colima_profiles(listed.stdout)
+        if any(record.get("name") == LAB_IDENTITY for record in profiles):
+            raise ControllerError(
+                "dedicated Colima profile is present at foreign snapshot boundary"
+            )
+        return canonical_foreign_profile_snapshot(profiles, capture_stage)
 
     def _record_after_foreign_profile_snapshot(
         self,
@@ -15218,8 +15241,11 @@ class LocalEnvoyController:
                     "colima_delete_complete",
                     {"profile": LAB_IDENTITY, "verified_absent": True},
                 )
+            foreign_comparison: dict[str, object] | None = None
             if journal["schema_version"] == JOURNAL_SCHEMA:
-                self._record_after_foreign_profile_snapshot()
+                _, _, foreign_comparison = (
+                    self._record_after_foreign_profile_snapshot()
+                )
             journal = load_lifecycle_journal(self.journal_path)
             events = journal["events"]
             assert isinstance(events, list)
@@ -15293,6 +15319,32 @@ class LocalEnvoyController:
                 failure_transition = _post_teardown_failure_transition(
                     events, str(manifest["run_id"])
                 )
+                if (
+                    failure_transition is None
+                    and foreign_comparison is not None
+                    and foreign_comparison["unchanged"] is not True
+                ):
+                    categories = foreign_comparison["mismatch_categories"]
+                    assert isinstance(categories, list)
+                    failure_details = {
+                        "run_id": manifest["run_id"],
+                        "evidence_rejection": (
+                            "foreign_profile_mismatch:" + ",".join(categories)
+                        ),
+                        "replacement": _FAILURE_BUNDLE_REPLACEMENT,
+                    }
+                    updated = journal_event(
+                        self.journal_path,
+                        "post_teardown_failure_bundle_intent",
+                        failure_details,
+                    )
+                    updated_events = updated["events"]
+                    assert isinstance(updated_events, list)
+                    events = updated_events
+                    failure_transition = _post_teardown_failure_transition(
+                        events, str(manifest["run_id"])
+                    )
+                    assert failure_transition is not None
                 if failure_transition is not None:
                     intent, prepared = failure_transition
                     intent_details = intent["details"]

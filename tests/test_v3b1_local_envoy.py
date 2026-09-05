@@ -3045,6 +3045,35 @@ class ControllerContractTest(unittest.TestCase):
         self.assertEqual(snapshot["profiles"][0]["name"], "personal")
         self.assertEqual(runner.calls[-1][0], ["colima", "list", "--json"])
 
+    def test_controller_snapshot_boundary_rejects_dedicated_profile(self):
+        for capture_stage in (
+            "before_colima_mutation",
+            "after_owned_profile_deletion",
+        ):
+            runner = FakeRunner(
+                [
+                    CommandResult(
+                        0,
+                        '{"name":"kil-v3-lab","status":"Stopped",'
+                        '"arch":"aarch64","cpus":4,"memory":4294967296,'
+                        '"disk":21474836480,"runtime":"docker"}\n',
+                        "",
+                    )
+                ]
+            )
+            controller = LocalEnvoyController(
+                ROOT,
+                runner,
+                home=Path("/Users/lab"),
+                port_probe=lambda port: False,
+                tool_verifier=lambda: {},
+            )
+
+            with self.subTest(capture_stage=capture_stage), self.assertRaisesRegex(
+                ControllerError, "dedicated.*snapshot boundary"
+            ):
+                controller._capture_foreign_profile_snapshot(capture_stage)
+
     def test_foreign_snapshot_rejects_ambiguous_or_nonclosed_records(self):
         valid = {
             "name": "personal",
@@ -7056,6 +7085,97 @@ class JournalRecoveryTest(unittest.TestCase):
             loaded = load_lifecycle_journal(journal)
             self.assertEqual(loaded["events"][-1]["event"], "foreign_profile_mismatch")
 
+    def test_v2_journal_rejects_mismatch_before_after_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = self.create_v2(Path(directory))
+            before = self.empty_snapshot("before_colima_mutation")
+            after = canonical_foreign_profile_snapshot(
+                (
+                    {
+                        "name": "personal",
+                        "status": "Stopped",
+                        "arch": "aarch64",
+                        "cpus": 4,
+                        "memory": 4294967296,
+                        "disk": 21474836480,
+                        "runtime": "containerd",
+                    },
+                ),
+                "after_owned_profile_deletion",
+            )
+            journal_event(journal, "foreign_profile_snapshot_before", before)
+            journal_event(
+                journal,
+                "colima_delete_complete",
+                {"profile": "kil-v3-lab", "verified_absent": True},
+            )
+            with self.assertRaisesRegex(ControllerError, "mismatch.*after"):
+                journal_event(
+                    journal,
+                    "foreign_profile_mismatch",
+                    {
+                        "before_sha256": sha256(
+                            canonical_json(before).encode("utf-8")
+                        ).hexdigest(),
+                        "after_sha256": sha256(
+                            canonical_json(after).encode("utf-8")
+                        ).hexdigest(),
+                        "mismatch_categories": ["profile_set"],
+                    },
+                )
+
+    def test_v2_journal_rejects_orphan_foreign_profile_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = self.create_v2(Path(directory))
+            with self.assertRaisesRegex(ControllerError, "mismatch.*after"):
+                journal_event(
+                    journal,
+                    "foreign_profile_mismatch",
+                    {
+                        "before_sha256": HEX_A,
+                        "after_sha256": HEX_B,
+                        "mismatch_categories": ["profile_set"],
+                    },
+                )
+
+    def test_v2_journal_rejects_after_snapshot_before_before_snapshot(self):
+        before = self.empty_snapshot("before_colima_mutation")
+        after = self.empty_snapshot("after_owned_profile_deletion")
+        events = [
+            {
+                "event": "colima_delete_complete",
+                "details": {"profile": "kil-v3-lab", "verified_absent": True},
+            },
+            {"event": "foreign_profile_snapshot_after", "details": after},
+            {"event": "foreign_profile_snapshot_before", "details": before},
+        ]
+
+        with self.assertRaisesRegex(ControllerError, "before.*after|phase-invalid"):
+            local_envoy_module._validate_foreign_snapshot_history(
+                events, local_envoy_module.JOURNAL_SCHEMA
+            )
+
+    def test_v2_journal_requires_absence_after_every_colima_mutation(self):
+        before = self.empty_snapshot("before_colima_mutation")
+        after = self.empty_snapshot("after_owned_profile_deletion")
+        events = [
+            {"event": "foreign_profile_snapshot_before", "details": before},
+            {
+                "event": "down_complete_without_owned_profile",
+                "details": {"profile_absent": True},
+            },
+            {
+                "event": "colima_start_intent",
+                "details": {"profile": "kil-v3-lab", "command_sha256": HEX_A},
+            },
+            {"event": "foreign_profile_snapshot_after", "details": after},
+        ]
+
+        with self.assertRaisesRegex(ControllerError, "verified deletion"):
+            local_envoy_module._validate_foreign_snapshot_history(
+                events, local_envoy_module.JOURNAL_SCHEMA
+            )
+
     def test_controller_records_after_snapshot_only_after_verified_absence(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -8115,6 +8235,7 @@ class JournalRecoveryTest(unittest.TestCase):
                 def __init__(self, *args, **kwargs):
                     super().__init__(*args, **kwargs)
                     self.deleted = False
+                    self.started = False
                     self.commands = []
 
                 def preflight(self):
@@ -8136,7 +8257,7 @@ class JournalRecoveryTest(unittest.TestCase):
                         return CommandResult(
                             0,
                             "[]\n"
-                            if self.deleted
+                            if self.deleted or not self.started
                             else (
                                 '{"name":"kil-v3-lab","status":"Running",'
                                 '"arch":"aarch64","cpus":4,'
@@ -8145,6 +8266,8 @@ class JournalRecoveryTest(unittest.TestCase):
                             ),
                             "",
                         )
+                    if argv[0:2] == ["colima", "start"]:
+                        self.started = True
                     if argv[0:2] == ["colima", "delete"]:
                         self.deleted = True
                     return CommandResult(0, "", "")
@@ -8923,6 +9046,43 @@ class TeardownContinuationTest(unittest.TestCase):
             self.assertEqual(
                 mismatch["details"]["mismatch_categories"],
                 ["profile_set"],
+            )
+
+    def test_foreign_profile_mismatch_recovers_nonpromotable_after_capture_crash(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, _ = self._make_complete_down_controller(
+                directory,
+                foreign_after=True,
+            )
+            original = controller._record_after_foreign_profile_snapshot
+            crashed = False
+
+            def crash_after_mismatch_persistence():
+                nonlocal crashed
+                result = original()
+                if not crashed:
+                    crashed = True
+                    raise ControllerError("injected crash after mismatch persistence")
+                return result
+
+            with mock.patch.object(
+                controller,
+                "_record_after_foreign_profile_snapshot",
+                side_effect=crash_after_mismatch_persistence,
+            ), self.assertRaisesRegex(ControllerError, "injected crash"):
+                controller.down()
+
+            published = controller.down()
+            public_manifest = json.loads(
+                (published / "manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertFalse(public_manifest["run_complete"])
+            self.assertFalse(
+                public_manifest["foreign_profile_attestation"]["unchanged"]
+            )
+            self.assertEqual(
+                local_envoy_module._verify_failure_presenter_bundle(published),
+                (published / "live.html").resolve(),
             )
 
     def test_complete_down_orders_driver_proof_freeze_15_by_6_absence_and_publication(self):
@@ -14933,6 +15093,14 @@ class EvidenceBundleTest(unittest.TestCase):
             ),
             changed,
         )
+        sensitive = json.loads(json.dumps(attestation))
+        sensitive["before"][0]["runtime"] = "Bearer leaked-value"
+        sensitive["after"][0]["runtime"] = "Bearer leaked-value"
+        with self.assertRaisesRegex(ControllerError, "private|sensitive"):
+            local_envoy_module._validate_foreign_profile_attestation(
+                sensitive,
+                completed=True,
+            )
 
     def test_v3_bundle_binds_exact_canonical_driver_results_everywhere(self):
         value, requests, decisions, envoy, targets = JoinContractTest().all_records()
