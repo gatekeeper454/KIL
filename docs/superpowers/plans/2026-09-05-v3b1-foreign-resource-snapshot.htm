@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V3B-1 Foreign-Resource Snapshot Implementation Plan</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/plans/2026-09-05-v3b1-foreign-resource-snapshot.md">
+<meta name="source-sha256" content="c875ba0b81fca5e7f26f2a89140166987044a0c3d4ea180bf8be3eab338d2cf4">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-05-v3b1-foreign-resource-snapshot.md</code> (<code>c875ba0b81fca5e7f26f2a89140166987044a0c3d4ea180bf8be3eab338d2cf4</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">V3B-1 Foreign-Resource Snapshot Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-05-v3b1-foreign-resource-snapshot.md</code> (<code>c875ba0b81fca5e7f26f2a89140166987044a0c3d4ea180bf8be3eab338d2cf4</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-1-foreign-resource-snapshot-implementation-plan">V3B-1 Foreign-Resource Snapshot Implementation Plan</a></li><li class="level-3"><a href="#task-1-closed-private-snapshots-and-pseudonymous-projections">Task 1: Closed private snapshots and pseudonymous projections</a></li><li class="level-3"><a href="#task-2-versioned-lifecycle-journal-authority">Task 2: Versioned lifecycle-journal authority</a></li><li class="level-3"><a href="#task-3-capture-snapshots-at-exact-lifecycle-boundaries">Task 3: Capture snapshots at exact lifecycle boundaries</a></li><li class="level-3"><a href="#task-4-add-private-public-evidence-generation-v3">Task 4: Add private/public evidence generation v3</a></li><li class="level-3"><a href="#task-5-bind-publication-recovery-and-the-offline-verifier">Task 5: Bind publication recovery and the offline verifier</a></li><li class="level-3"><a href="#task-6-document-review-and-statically-qualify-the-prerequisite">Task 6: Document, review, and statically qualify the prerequisite</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-1-foreign-resource-snapshot-implementation-plan" href="#v3b-1-foreign-resource-snapshot-implementation-plan">V3B-1 Foreign-Resource Snapshot Implementation Plan</a></li><li class="level-3"><a data-section-id="task-1-closed-private-snapshots-and-pseudonymous-projections" href="#task-1-closed-private-snapshots-and-pseudonymous-projections">Task 1: Closed private snapshots and pseudonymous projections</a></li><li class="level-3"><a data-section-id="task-2-versioned-lifecycle-journal-authority" href="#task-2-versioned-lifecycle-journal-authority">Task 2: Versioned lifecycle-journal authority</a></li><li class="level-3"><a data-section-id="task-3-capture-snapshots-at-exact-lifecycle-boundaries" href="#task-3-capture-snapshots-at-exact-lifecycle-boundaries">Task 3: Capture snapshots at exact lifecycle boundaries</a></li><li class="level-3"><a data-section-id="task-4-add-private-public-evidence-generation-v3" href="#task-4-add-private-public-evidence-generation-v3">Task 4: Add private/public evidence generation v3</a></li><li class="level-3"><a data-section-id="task-5-bind-publication-recovery-and-the-offline-verifier" href="#task-5-bind-publication-recovery-and-the-offline-verifier">Task 5: Bind publication recovery and the offline verifier</a></li><li class="level-3"><a data-section-id="task-6-document-review-and-statically-qualify-the-prerequisite" href="#task-6-document-review-and-statically-qualify-the-prerequisite">Task 6: Document, review, and statically qualify the prerequisite</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="v3b-1-foreign-resource-snapshot-implementation-plan">V3B-1 Foreign-Resource Snapshot Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Add exact, durable before/after foreign Colima resource evidence so a fresh request-free V3B-1 lifecycle can safely unlock the one-shot central proof gate.</p>
+<p><strong>Architecture:</strong> Keep raw profile names only in the private lifecycle journal, derive run-scoped HMAC pseudonyms for public evidence, and advance new controller output to manifest generation v3 while retaining explicit v1/v2 verification. Capture the before snapshot after journal creation and before the first Colima mutation intent; capture the after snapshot after exact dedicated-profile deletion and before publication. Any missing, malformed, duplicate, phase-invalid, or unequal snapshot fails closed and never authorizes mutation of foreign profiles.</p>
+<p><strong>Tech Stack:</strong> Python 3.12 standard library (<code>hmac</code>, <code>hashlib</code>, <code>json</code>), existing canonical JSON helpers, <code>unittest</code>, Colima closed JSON inventory, generated Markdown readers.</p>
+<hr />
+<h3 id="task-1-closed-private-snapshots-and-pseudonymous-projections">Task 1: Closed private snapshots and pseudonymous projections</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Test: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing pure-contract tests</strong></p>
+</li>
+</ul>
+<p>Import <code>canonical_foreign_profile_snapshot</code>, <code>compare_foreign_profile_snapshots</code>, and <code>project_foreign_profile_snapshot</code>, then add tests that exercise the real helpers:</p>
+<pre><code class="language-python">def test_foreign_snapshots_are_closed_sorted_and_exclude_the_lab_profile(self):
+    records = parse_colima_profiles(
+        '[{&quot;name&quot;:&quot;zeta&quot;,&quot;status&quot;:&quot;Stopped&quot;,&quot;arch&quot;:&quot;aarch64&quot;,'
+        '&quot;cpus&quot;:2,&quot;memory&quot;:4294967296,&quot;disk&quot;:21474836480,&quot;runtime&quot;:&quot;docker&quot;},'
+        '{&quot;name&quot;:&quot;kil-v3-lab&quot;,&quot;status&quot;:&quot;Running&quot;,&quot;arch&quot;:&quot;aarch64&quot;,'
+        '&quot;cpus&quot;:4,&quot;memory&quot;:8589934592,&quot;disk&quot;:64424509440,&quot;runtime&quot;:&quot;docker&quot;},'
+        '{&quot;name&quot;:&quot;alpha&quot;,&quot;status&quot;:&quot;Stopped&quot;,&quot;arch&quot;:&quot;x86_64&quot;,'
+        '&quot;cpus&quot;:1,&quot;memory&quot;:2147483648,&quot;disk&quot;:10737418240,&quot;runtime&quot;:&quot;containerd&quot;}]'
+    )
+    snapshot = canonical_foreign_profile_snapshot(
+        records, &quot;before_colima_mutation&quot;
+    )
+    self.assertEqual([item[&quot;name&quot;] for item in snapshot[&quot;profiles&quot;]], [&quot;alpha&quot;, &quot;zeta&quot;])
+    self.assertNotIn(&quot;kil-v3-lab&quot;, canonical_json(snapshot))
+
+def test_public_projection_is_nonce_scoped_and_name_free(self):
+    snapshot = canonical_foreign_profile_snapshot(
+        ({&quot;name&quot;: &quot;personal&quot;, &quot;status&quot;: &quot;Stopped&quot;, &quot;arch&quot;: &quot;aarch64&quot;,
+          &quot;cpus&quot;: 4, &quot;memory&quot;: 4294967296, &quot;disk&quot;: 21474836480,
+          &quot;runtime&quot;: &quot;containerd&quot;},),
+        &quot;before_colima_mutation&quot;,
+    )
+    first = project_foreign_profile_snapshot(snapshot, HEX_A)
+    second = project_foreign_profile_snapshot(snapshot, HEX_B)
+    self.assertNotEqual(first, second)
+    self.assertNotIn(&quot;personal&quot;, canonical_json(first))
+</code></pre>
+<p>Also cover duplicate names, unknown fields, boolean resources, nonpositive resources, surrogate-containing names, invalid stages, duplicate public references, and every mismatch category.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run the tests and verify RED</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src python -m unittest tests.test_v3b1_local_envoy.ControllerContractTest -v
+</code></pre>
+<p>Expected: import failure because the three snapshot helpers do not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the minimal pure helpers</strong></li>
+</ul>
+<p>Add closed constants and helpers near <code>parse_colima_profiles</code>:</p>
+<pre><code class="language-python">FOREIGN_SNAPSHOT_SCHEMA = &quot;kil.v3b1-foreign-profile-snapshot.v1&quot;
+FOREIGN_ATTESTATION_SCHEMA = &quot;kil.v3b1-foreign-profile-attestation.v1&quot;
+_FOREIGN_CAPTURE_STAGES = {
+    &quot;before_colima_mutation&quot;,
+    &quot;after_owned_profile_deletion&quot;,
+}
+_FOREIGN_PROFILE_FIELDS = {
+    &quot;name&quot;, &quot;status&quot;, &quot;arch&quot;, &quot;cpus&quot;, &quot;memory&quot;, &quot;disk&quot;, &quot;runtime&quot;,
+}
+
+def canonical_foreign_profile_snapshot(
+    records: Sequence[Mapping[str, object]], capture_stage: str
+) -&gt; dict[str, object]:
+    &quot;&quot;&quot;Validate and sort one exact private foreign-profile observation.&quot;&quot;&quot;
+
+def project_foreign_profile_snapshot(
+    snapshot: Mapping[str, object], execution_nonce: str
+) -&gt; list[dict[str, object]]:
+    &quot;&quot;&quot;Replace exact private names with run-scoped HMAC references.&quot;&quot;&quot;
+
+def compare_foreign_profile_snapshots(
+    before: Mapping[str, object], after: Mapping[str, object]
+) -&gt; dict[str, object]:
+    &quot;&quot;&quot;Return exact equality plus sorted closed mismatch categories.&quot;&quot;&quot;
+</code></pre>
+<p>Use <code>hmac.new(bytes.fromhex(execution_nonce), b&quot;kil.v3b1-foreign-profile-ref.v1\0&quot; + name.encode(&quot;utf-8&quot;), sha256).hexdigest()</code> and reject all ambiguous inputs before producing a projection.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run focused tests and verify GREEN</strong></li>
+</ul>
+<p>Run the focused class from Step 2. Expected: all tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit the pure contract</strong></li>
+</ul>
+<pre><code class="language-bash">git add tools/v3b1_local_envoy.py tests/test_v3b1_local_envoy.py
+git commit -m &quot;feat: define V3B-1 foreign resource snapshots&quot;
+</code></pre>
+<h3 id="task-2-versioned-lifecycle-journal-authority">Task 2: Versioned lifecycle-journal authority</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Test: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing journal-schema and ordering tests</strong></p>
+</li>
+</ul>
+<p>Create a v2 journal, append <code>foreign_profile_snapshot_before</code>, and assert it must be unique and must precede <code>preflight_complete</code> and <code>colima_start_intent</code>. Append <code>foreign_profile_snapshot_after</code> and assert it must follow <code>colima_delete_complete</code> and precede <code>publication_intent</code>. Verify missing, duplicated, reordered, or synthesized snapshots fail loading. Retain a fixture proving a v1 journal without snapshot events still loads only under its legacy rules.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run journal tests and verify RED</strong></li>
+</ul>
+<pre><code class="language-bash">PYTHONPATH=src python -m unittest tests.test_v3b1_local_envoy.JournalRecoveryTest -v
+</code></pre>
+<p>Expected: failures because snapshot events and journal v2 dispatch are absent.</p>
+<ul>
+<li>[ ] <strong>Step 3: Add explicit journal generation dispatch</strong></li>
+</ul>
+<pre><code class="language-python">LEGACY_JOURNAL_SCHEMA = &quot;kil.v3b1-lifecycle-journal.v1&quot;
+JOURNAL_SCHEMA = &quot;kil.v3b1-lifecycle-journal.v2&quot;
+</code></pre>
+<p>Keep the closed top-level fields unchanged. Teach <code>_validate_lifecycle_event_details</code> to validate the two snapshot events and a closed <code>foreign_profile_mismatch</code> record. Teach <code>_validate_lifecycle_history</code> to enforce v2 ordering, uniqueness, and mutation/publication prerequisites while preserving exact v1 acceptance.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run journal tests and verify GREEN</strong></li>
+</ul>
+<p>Run the command from Step 2. Expected: all journal recovery tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit durable journal authority</strong></li>
+</ul>
+<pre><code class="language-bash">git add tools/v3b1_local_envoy.py tests/test_v3b1_local_envoy.py
+git commit -m &quot;feat: bind foreign snapshots in the V3B-1 journal&quot;
+</code></pre>
+<h3 id="task-3-capture-snapshots-at-exact-lifecycle-boundaries">Task 3: Capture snapshots at exact lifecycle boundaries</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Test: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing controller-order tests</strong></p>
+</li>
+</ul>
+<p>Use <code>FakeRunner</code> and a temporary repository to prove:</p>
+<pre><code class="language-python">before = controller._capture_foreign_profile_snapshot(&quot;before_colima_mutation&quot;)
+self.assertEqual(before[&quot;capture_stage&quot;], &quot;before_colima_mutation&quot;)
+self.assertEqual(runner.calls[-1][0], [&quot;colima&quot;, &quot;list&quot;, &quot;--json&quot;])
+</code></pre>
+<p>For <code>up</code>, inject a crash immediately after the durable before event and prove no <code>colima start</code> call occurred. For <code>down</code> and both recovery publication paths, assert the after event follows verified dedicated-profile absence and precedes publication intent. Assert a mismatch records only snapshot digests and categories, finishes owned teardown, never issues a command naming a foreign profile, and remains nonpromotable.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run controller and teardown tests and verify RED</strong></li>
+</ul>
+<pre><code class="language-bash">PYTHONPATH=src python -m unittest \
+  tests.test_v3b1_local_envoy.ControllerContractTest \
+  tests.test_v3b1_local_envoy.TeardownContinuationTest -v
+</code></pre>
+<p>Expected: failures because the capture method and lifecycle calls are absent.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement fresh capture and recovery reuse</strong></li>
+</ul>
+<p>Add:</p>
+<pre><code class="language-python">def _capture_foreign_profile_snapshot(self, capture_stage: str) -&gt; dict[str, object]:
+    listed = self._execute([&quot;colima&quot;, &quot;list&quot;, &quot;--json&quot;], timeout_s=20)
+    return canonical_foreign_profile_snapshot(
+        parse_colima_profiles(listed.stdout), capture_stage
+    )
+</code></pre>
+<p>Call it from <code>up</code> after journal creation and before <code>preflight_complete</code>. Add one shared post-deletion helper that loads the durable before snapshot, captures and journals the after snapshot exactly once, compares them, records a mismatch when needed, and returns both snapshots plus comparison. Use that helper in normal teardown, pre-manifest teardown, post-delete recovery, and publication recovery without synthesizing missing evidence.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run focused tests and verify GREEN</strong></li>
+</ul>
+<p>Run the command from Step 2. Expected: all focused tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit lifecycle capture</strong></li>
+</ul>
+<pre><code class="language-bash">git add tools/v3b1_local_envoy.py tests/test_v3b1_local_envoy.py
+git commit -m &quot;feat: capture foreign resources around V3B-1 lifecycle&quot;
+</code></pre>
+<h3 id="task-4-add-private-public-evidence-generation-v3">Task 4: Add private/public evidence generation v3</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Test: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Test: <code>tests/fixtures/v3b1-public-bundle-v1/manifest.json</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing generation-dispatch tests</strong></p>
+</li>
+</ul>
+<p>Require new runs to use:</p>
+<pre><code class="language-python">self.assertEqual(manifest()[&quot;schema_version&quot;], &quot;kil.v3b1-manifest.v3&quot;)
+self.assertEqual(public_manifest[&quot;schema_version&quot;], &quot;kil.v3b1-public-manifest.v3&quot;)
+self.assertEqual(
+    public_manifest[&quot;foreign_profile_attestation&quot;][&quot;unchanged&quot;], True
+)
+</code></pre>
+<p>Prove v1 and v2 inputs retain their original file sets and validators; reject cross-generation snapshot fields, repaired checksums, inconsistent <code>unchanged</code>, duplicate or unordered references, and changed complete tuples.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run evidence tests and verify RED</strong></li>
+</ul>
+<pre><code class="language-bash">PYTHONPATH=src python -m unittest tests.test_v3b1_local_envoy.EvidenceBundleTest -v
+</code></pre>
+<p>Expected: schema and attestation assertions fail because generation v3 is absent.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement explicit v3 schemas and validators</strong></li>
+</ul>
+<p>Add v3 constants for private manifest, public manifest, authoritative bundle, and public commitment. Extend <code>_bundle_generation</code>, <code>_authoritative_file_names</code>, <code>_validate_manifest</code>, <code>_validate_public_manifest</code>, <code>_public_commitment_sha256</code>, and authoritative-attestation dispatch. New <code>create_run_manifest</code> output is v3; legacy v1/v2 validators remain unchanged and reject v3-only fields.</p>
+<p>Build the public record only from journal-authoritative snapshots:</p>
+<pre><code class="language-python">{
+    &quot;schema_version&quot;: FOREIGN_ATTESTATION_SCHEMA,
+    &quot;before&quot;: project_foreign_profile_snapshot(before, execution_nonce),
+    &quot;after&quot;: project_foreign_profile_snapshot(after, execution_nonce),
+    &quot;unchanged&quot;: comparison[&quot;unchanged&quot;],
+}
+</code></pre>
+<p>Complete publication requires <code>unchanged is True</code>; incomplete failure publication may retain a truthful <code>False</code>.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run evidence and legacy tests and verify GREEN</strong></li>
+</ul>
+<pre><code class="language-bash">PYTHONPATH=src python -m unittest \
+  tests.test_v3b1_local_envoy.EvidenceBundleTest \
+  tests.test_v3b1_request_driver.DriverProtocolTest -v
+</code></pre>
+<p>Expected: v3 and legacy compatibility tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit evidence generation v3</strong></li>
+</ul>
+<pre><code class="language-bash">git add tools/v3b1_local_envoy.py tests/test_v3b1_local_envoy.py tests/fixtures/v3b1-public-bundle-v1
+git commit -m &quot;feat: publish V3B-1 foreign resource evidence&quot;
+</code></pre>
+<h3 id="task-5-bind-publication-recovery-and-the-offline-verifier">Task 5: Bind publication recovery and the offline verifier</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Test: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing recovery and presenter tests</strong></p>
+</li>
+</ul>
+<p>Prove publication recovery re-derives the public attestation from the two exact journal events and the private execution nonce, rejects public/private divergence even after repaired hashes, and refuses a complete presenter when either snapshot is missing or unequal. Prove empty equal arrays are valid and unequal failure bundles remain nonpresentable.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run recovery and evidence tests and verify RED</strong></li>
+</ul>
+<pre><code class="language-bash">PYTHONPATH=src python -m unittest \
+  tests.test_v3b1_local_envoy.JournalRecoveryTest \
+  tests.test_v3b1_local_envoy.EvidenceBundleTest -v
+</code></pre>
+<p>Expected: failures because recovery does not bind snapshot authority.</p>
+<ul>
+<li>[ ] <strong>Step 3: Thread journal authority through publication</strong></li>
+</ul>
+<p>Add <code>_journal_foreign_profile_attestation(events, execution_nonce)</code> and pass its result into both <code>finalize_publication</code> and <code>_verify_recovered_publication</code>. Validate the exact attestation inside <code>_validate_presenter_snapshot</code>; bind it through <code>manifest.json</code>, the v3 public commitment, and <code>SHA256SUMS</code>. Do not add a sidecar.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run recovery and evidence tests and verify GREEN</strong></li>
+</ul>
+<p>Run the command from Step 2. Expected: all tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit recovery/verifier binding</strong></li>
+</ul>
+<pre><code class="language-bash">git add tools/v3b1_local_envoy.py tests/test_v3b1_local_envoy.py
+git commit -m &quot;feat: verify V3B-1 foreign snapshot equality&quot;
+</code></pre>
+<h3 id="task-6-document-review-and-statically-qualify-the-prerequisite">Task 6: Document, review, and statically qualify the prerequisite</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>README.md</code></p>
+</li>
+<li>
+<p>Modify: <code>adapters/envoy/README.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/lab/V3-PROGRESS.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/lab/V3B1-TASK10-REQUEST-FREE-GATE.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code></p>
+</li>
+<li>
+<p>Modify: generated <code>.htm</code> companions</p>
+</li>
+<li>
+<p>Test: <code>tests/test_v3b1_documentation.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing documentation assertions</strong></p>
+</li>
+</ul>
+<p>Require the current docs to name the implemented v3 snapshot contract, preserve Task 10 as historical v2 evidence, and state that a fresh request-free v3 lifecycle must pass before the central run.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run documentation tests and verify RED</strong></li>
+</ul>
+<pre><code class="language-bash">PYTHONPATH=src python -m unittest tests.test_v3b1_documentation -v
+</code></pre>
+<p>Expected: new assertions fail against the pre-extension wording.</p>
+<ul>
+<li>[ ] <strong>Step 3: Update calibrated claims and generate readers</strong></li>
+</ul>
+<p>Update only the implementation/prerequisite status. Do not claim an accepted enforcement outcome, Kind/Calico validation, historical prevention, repetition, performance, or production suitability. Run:</p>
+<pre><code class="language-bash">make docs-html PYTHON=python
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run the complete static gate</strong></li>
+</ul>
+<pre><code class="language-bash">make validate PYTHON=python
+</code></pre>
+<p>Expected: all unit tests, all Markdown-reader checks, project metadata, and <code>git diff --check</code> pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Review the exact change set</strong></li>
+</ul>
+<pre><code class="language-bash">git diff --check
+git status --short
+git diff --stat origin/main...HEAD
+</code></pre>
+<p>Confirm no generated runtime bundle, <code>.tools</code> state, private journal, credential, key, or unrelated presentation artifact is staged.</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit the static prerequisite</strong></li>
+</ul>
+<pre><code class="language-bash">git add README.md adapters/envoy/README.md docs/lab/V3-PROGRESS.md \
+  docs/lab/V3B1-TASK10-REQUEST-FREE-GATE.md \
+  docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md \
+  docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md \
+  tests/test_v3b1_documentation.py
+git add '*.htm'
+git commit -m &quot;docs: qualify V3B-1 snapshot prerequisite&quot;
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 7: Stop before live execution</strong></li>
+</ul>
+<p>The implementation branch must be independently reviewed, pushed, pass public CI, merge, and synchronize with <code>main</code>. Only then run a fresh request-free <code>preflight -&gt; up -&gt; readiness -&gt; down</code> lifecycle. The central <code>run</code> remains prohibited until that new v3 gate is published, reviewed, merged, and synchronized.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>
