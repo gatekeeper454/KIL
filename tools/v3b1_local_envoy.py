@@ -6,6 +6,7 @@ from base64 import urlsafe_b64encode
 from dataclasses import dataclass
 from decimal import Decimal
 from hashlib import sha256
+import hmac
 from html import escape
 import json
 import os
@@ -3237,6 +3238,164 @@ def parse_colima_profiles(output: str) -> tuple[dict[str, object], ...]:
             raise ControllerError("Colima profile values are invalid")
         records.append(dict(item))
     return tuple(records)
+
+
+FOREIGN_SNAPSHOT_SCHEMA = "kil.v3b1-foreign-profile-snapshot.v1"
+FOREIGN_ATTESTATION_SCHEMA = "kil.v3b1-foreign-profile-attestation.v1"
+_FOREIGN_CAPTURE_STAGES = {
+    "before_colima_mutation",
+    "after_owned_profile_deletion",
+}
+_FOREIGN_PROFILE_FIELDS = {
+    "name",
+    "status",
+    "arch",
+    "cpus",
+    "memory",
+    "disk",
+    "runtime",
+}
+_FOREIGN_RESOURCE_FIELDS = (
+    "status",
+    "arch",
+    "cpus",
+    "memory",
+    "disk",
+    "runtime",
+)
+_FOREIGN_PROFILE_REF_DOMAIN = b"kil.v3b1-foreign-profile-ref.v1\0"
+
+
+def _closed_foreign_profile(record: Mapping[str, object]) -> dict[str, object]:
+    if type(record) is not dict or set(record) != _FOREIGN_PROFILE_FIELDS:
+        raise ControllerError("foreign Colima profile fields are not closed")
+    if any(
+        type(record[name]) is not str or not record[name]
+        for name in ("name", "status", "arch", "runtime")
+    ) or any(
+        type(record[name]) is not int or record[name] <= 0
+        for name in ("cpus", "memory", "disk")
+    ):
+        raise ControllerError("foreign Colima profile values are invalid")
+    try:
+        for name in ("name", "status", "arch", "runtime"):
+            str(record[name]).encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise ControllerError("foreign Colima profile contains invalid Unicode") from error
+    return {name: record[name] for name in (
+        "name", "status", "arch", "cpus", "memory", "disk", "runtime"
+    )}
+
+
+def canonical_foreign_profile_snapshot(
+    records: Sequence[Mapping[str, object]], capture_stage: str
+) -> dict[str, object]:
+    """Validate and sort one exact private foreign-profile observation."""
+    if capture_stage not in _FOREIGN_CAPTURE_STAGES:
+        raise ControllerError("foreign profile capture stage is invalid")
+    if type(records) not in (list, tuple):
+        raise ControllerError("foreign profile snapshot must be a closed sequence")
+    closed = [_closed_foreign_profile(record) for record in records]
+    names = [str(record["name"]) for record in closed]
+    if len(names) != len(set(names)):
+        raise ControllerError("foreign Colima profile names are duplicated")
+    foreign = [record for record in closed if record["name"] != LAB_IDENTITY]
+    foreign.sort(key=lambda record: str(record["name"]).encode("utf-8"))
+    return {
+        "schema_version": FOREIGN_SNAPSHOT_SCHEMA,
+        "capture_stage": capture_stage,
+        "profiles": foreign,
+    }
+
+
+def _validate_foreign_profile_snapshot(
+    value: Mapping[str, object], *, capture_stage: str
+) -> dict[str, object]:
+    if type(value) is not dict or set(value) != {
+        "schema_version", "capture_stage", "profiles"
+    }:
+        raise ControllerError("foreign profile snapshot fields are not closed")
+    if (
+        value["schema_version"] != FOREIGN_SNAPSHOT_SCHEMA
+        or value["capture_stage"] != capture_stage
+        or type(value["profiles"]) is not list
+    ):
+        raise ControllerError("foreign profile snapshot identity is invalid")
+    canonical = canonical_foreign_profile_snapshot(
+        value["profiles"], capture_stage  # type: ignore[arg-type]
+    )
+    if canonical != value:
+        raise ControllerError("foreign profile snapshot is not canonical")
+    return canonical
+
+
+def project_foreign_profile_snapshot(
+    snapshot: Mapping[str, object], execution_nonce: str
+) -> list[dict[str, object]]:
+    """Replace exact private names with run-scoped HMAC references."""
+    if type(snapshot) is not dict or snapshot.get("capture_stage") not in (
+        _FOREIGN_CAPTURE_STAGES
+    ):
+        raise ControllerError("foreign profile snapshot capture stage is invalid")
+    capture_stage = str(snapshot["capture_stage"])
+    private = _validate_foreign_profile_snapshot(
+        snapshot, capture_stage=capture_stage
+    )
+    nonce = _require_sha256("foreign profile execution nonce", execution_nonce)
+    key = bytes.fromhex(nonce)
+    projected = []
+    for record in private["profiles"]:
+        assert isinstance(record, dict)
+        name = str(record["name"])
+        profile_ref = hmac.new(
+            key,
+            _FOREIGN_PROFILE_REF_DOMAIN + name.encode("utf-8"),
+            sha256,
+        ).hexdigest()
+        projected.append(
+            {
+                "profile_ref": profile_ref,
+                **{field: record[field] for field in _FOREIGN_RESOURCE_FIELDS},
+            }
+        )
+    references = [str(record["profile_ref"]) for record in projected]
+    if len(references) != len(set(references)):
+        raise ControllerError("foreign profile references are duplicated")
+    projected.sort(key=lambda record: str(record["profile_ref"]))
+    return projected
+
+
+def compare_foreign_profile_snapshots(
+    before: Mapping[str, object], after: Mapping[str, object]
+) -> dict[str, object]:
+    """Return exact equality plus sorted closed mismatch categories."""
+    before_value = _validate_foreign_profile_snapshot(
+        before, capture_stage="before_colima_mutation"
+    )
+    after_value = _validate_foreign_profile_snapshot(
+        after, capture_stage="after_owned_profile_deletion"
+    )
+    before_by_name = {
+        str(record["name"]): record for record in before_value["profiles"]
+    }
+    after_by_name = {
+        str(record["name"]): record for record in after_value["profiles"]
+    }
+    if set(before_by_name) != set(after_by_name):
+        categories = ["profile_set"]
+    else:
+        categories = [
+            field
+            for field in _FOREIGN_RESOURCE_FIELDS
+            if any(
+                before_by_name[name][field] != after_by_name[name][field]
+                for name in sorted(before_by_name)
+            )
+        ]
+    return {
+        "unchanged": not categories,
+        "mismatch_categories": categories,
+    }
 
 
 def validate_colima_profiles(records: Sequence[Mapping[str, object]]) -> None:

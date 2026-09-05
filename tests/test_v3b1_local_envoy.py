@@ -51,6 +51,8 @@ from tools.v3b1_local_envoy import (
     LocalEnvoyController,
     RETRY_CONTROL_HEADERS,
     build_runtime_commands,
+    canonical_foreign_profile_snapshot,
+    compare_foreign_profile_snapshots,
     create_run_manifest,
     claim_request_attempt,
     comparison_facts_sha256,
@@ -66,6 +68,7 @@ from tools.v3b1_local_envoy import (
     materialize_run_inputs,
     parse_colima_profiles,
     persist_active_state,
+    project_foreign_profile_snapshot,
     recovery_plan,
     stage_build_context,
     select_registry_digest,
@@ -2955,6 +2958,150 @@ class ControllerContractTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(ControllerError, "18081"):
             occupied.validate_ports()
+
+    def test_foreign_snapshots_are_closed_sorted_and_exclude_the_lab_profile(self):
+        records = parse_colima_profiles(
+            '[{"name":"zeta","status":"Stopped","arch":"aarch64",'
+            '"cpus":2,"memory":4294967296,"disk":21474836480,"runtime":"docker"},'
+            '{"name":"kil-v3-lab","status":"Running","arch":"aarch64",'
+            '"cpus":4,"memory":8589934592,"disk":64424509440,"runtime":"docker"},'
+            '{"name":"alpha","status":"Stopped","arch":"x86_64",'
+            '"cpus":1,"memory":2147483648,"disk":10737418240,"runtime":"containerd"}]'
+        )
+
+        snapshot = canonical_foreign_profile_snapshot(
+            records, "before_colima_mutation"
+        )
+
+        self.assertEqual(
+            snapshot["schema_version"],
+            "kil.v3b1-foreign-profile-snapshot.v1",
+        )
+        self.assertEqual(
+            [item["name"] for item in snapshot["profiles"]],
+            ["alpha", "zeta"],
+        )
+        self.assertNotIn("kil-v3-lab", canonical_json(snapshot))
+
+    def test_foreign_snapshot_rejects_ambiguous_or_nonclosed_records(self):
+        valid = {
+            "name": "personal",
+            "status": "Stopped",
+            "arch": "aarch64",
+            "cpus": 4,
+            "memory": 4294967296,
+            "disk": 21474836480,
+            "runtime": "containerd",
+        }
+        cases = {
+            "duplicate": (valid, dict(valid)),
+            "extra": ({**valid, "extra": True},),
+            "boolean": ({**valid, "cpus": True},),
+            "nonpositive": ({**valid, "disk": 0},),
+            "surrogate": ({**valid, "name": "bad\ud800"},),
+        }
+        for name, records in cases.items():
+            with self.subTest(name=name), self.assertRaises(ControllerError):
+                canonical_foreign_profile_snapshot(
+                    records, "before_colima_mutation"
+                )
+        with self.assertRaisesRegex(ControllerError, "capture stage"):
+            canonical_foreign_profile_snapshot((valid,), "after_preflight")
+
+    def test_public_projection_is_nonce_scoped_sorted_and_name_free(self):
+        records = (
+            {
+                "name": "personal",
+                "status": "Stopped",
+                "arch": "aarch64",
+                "cpus": 4,
+                "memory": 4294967296,
+                "disk": 21474836480,
+                "runtime": "containerd",
+            },
+            {
+                "name": "work",
+                "status": "Stopped",
+                "arch": "x86_64",
+                "cpus": 2,
+                "memory": 2147483648,
+                "disk": 10737418240,
+                "runtime": "docker",
+            },
+        )
+        snapshot = canonical_foreign_profile_snapshot(
+            records, "before_colima_mutation"
+        )
+
+        first = project_foreign_profile_snapshot(snapshot, HEX_A)
+        repeated = project_foreign_profile_snapshot(snapshot, HEX_A)
+        second = project_foreign_profile_snapshot(snapshot, HEX_B)
+
+        self.assertEqual(first, repeated)
+        self.assertNotEqual(first, second)
+        self.assertEqual(
+            [item["profile_ref"] for item in first],
+            sorted(item["profile_ref"] for item in first),
+        )
+        encoded = canonical_json(first)
+        self.assertNotIn("personal", encoded)
+        self.assertNotIn("work", encoded)
+        self.assertTrue(
+            all(set(item) == {
+                "profile_ref", "status", "arch", "cpus", "memory", "disk",
+                "runtime",
+            } for item in first)
+        )
+
+    def test_foreign_snapshot_comparison_reports_closed_mismatch_categories(self):
+        before_record = {
+            "name": "personal",
+            "status": "Stopped",
+            "arch": "aarch64",
+            "cpus": 4,
+            "memory": 4294967296,
+            "disk": 21474836480,
+            "runtime": "containerd",
+        }
+        before = canonical_foreign_profile_snapshot(
+            (before_record,), "before_colima_mutation"
+        )
+        unchanged = canonical_foreign_profile_snapshot(
+            (before_record,), "after_owned_profile_deletion"
+        )
+        changed = canonical_foreign_profile_snapshot(
+            ({
+                **before_record,
+                "status": "Running",
+                "arch": "x86_64",
+                "cpus": 8,
+                "memory": 8589934592,
+                "disk": 42949672960,
+                "runtime": "docker",
+            },),
+            "after_owned_profile_deletion",
+        )
+        different_set = canonical_foreign_profile_snapshot(
+            (), "after_owned_profile_deletion"
+        )
+
+        self.assertEqual(
+            compare_foreign_profile_snapshots(before, unchanged),
+            {"unchanged": True, "mismatch_categories": []},
+        )
+        self.assertEqual(
+            compare_foreign_profile_snapshots(before, changed),
+            {
+                "unchanged": False,
+                "mismatch_categories": [
+                    "status", "arch", "cpus", "memory", "disk", "runtime",
+                ],
+            },
+        )
+        self.assertEqual(
+            compare_foreign_profile_snapshots(before, different_set),
+            {"unchanged": False, "mismatch_categories": ["profile_set"]},
+        )
 
     def test_post_start_colima_attestation_checks_actual_list_and_saved_config(self):
         with tempfile.TemporaryDirectory() as directory:
