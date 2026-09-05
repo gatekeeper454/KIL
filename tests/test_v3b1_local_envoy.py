@@ -6861,6 +6861,155 @@ class JournalRecoveryTest(unittest.TestCase):
         )
         return journal
 
+    def create_v2(self, root: Path) -> Path:
+        private_root = root / ".tools/v3b1-private"
+        private_root.mkdir(parents=True)
+        journal = private_root / "journal.json"
+        create_lifecycle_journal(
+            journal,
+            private_root=private_root,
+            repository_root=root,
+            docker_host="unix:///Users/lab/.colima/kil-v3-lab/docker.sock",
+            source_commit="d" * 40,
+            execution_nonce=HEX_A,
+            global_context="personal",
+            schema_version="kil.v3b1-lifecycle-journal.v2",
+        )
+        return journal
+
+    @staticmethod
+    def empty_snapshot(stage: str) -> dict[str, object]:
+        return canonical_foreign_profile_snapshot((), stage)
+
+    def test_v2_journal_requires_before_snapshot_ahead_of_colima_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = self.create_v2(Path(directory))
+            with self.assertRaisesRegex(ControllerError, "before snapshot"):
+                journal_event(
+                    journal,
+                    "colima_start_intent",
+                    {"profile": "kil-v3-lab", "command_sha256": HEX_A},
+                )
+
+            journal_event(
+                journal,
+                "foreign_profile_snapshot_before",
+                self.empty_snapshot("before_colima_mutation"),
+            )
+            journal_event(
+                journal,
+                "preflight_complete",
+                {"tool_identities": {}, "ports": [18080, 18081, 18082],
+                 "dedicated_profile_absent": True},
+            )
+            journal_event(
+                journal,
+                "colima_start_intent",
+                {"profile": "kil-v3-lab", "command_sha256": HEX_A},
+            )
+            with self.assertRaisesRegex(ControllerError, "duplicated"):
+                journal_event(
+                    journal,
+                    "foreign_profile_snapshot_before",
+                    self.empty_snapshot("before_colima_mutation"),
+                )
+
+    def test_v2_journal_requires_after_snapshot_between_delete_and_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = self.create_v2(Path(directory))
+            journal_event(
+                journal,
+                "foreign_profile_snapshot_before",
+                self.empty_snapshot("before_colima_mutation"),
+            )
+            journal_event(
+                journal,
+                "colima_start_intent",
+                {"profile": "kil-v3-lab", "command_sha256": HEX_A},
+            )
+            journal_event(
+                journal,
+                "colima_delete_complete",
+                {"profile": "kil-v3-lab", "verified_absent": True},
+            )
+            with self.assertRaisesRegex(ControllerError, "after snapshot"):
+                journal_event(
+                    journal,
+                    "publication_intent",
+                    {"run_id": f"v3b1-{HEX_A}", "completed": False},
+                )
+            journal_event(
+                journal,
+                "foreign_profile_snapshot_after",
+                self.empty_snapshot("after_owned_profile_deletion"),
+            )
+            journal_event(
+                journal,
+                "publication_intent",
+                {"run_id": f"v3b1-{HEX_A}", "completed": False},
+            )
+            loaded = load_lifecycle_journal(journal)
+            self.assertEqual(
+                [event["event"] for event in loaded["events"]][-2:],
+                ["foreign_profile_snapshot_after", "publication_intent"],
+            )
+
+    def test_v2_journal_binds_truthful_foreign_profile_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = self.create_v2(Path(directory))
+            before = canonical_foreign_profile_snapshot(
+                ({"name": "personal", "status": "Stopped", "arch": "aarch64",
+                  "cpus": 4, "memory": 4294967296, "disk": 21474836480,
+                  "runtime": "containerd"},),
+                "before_colima_mutation",
+            )
+            after = canonical_foreign_profile_snapshot(
+                ({**before["profiles"][0], "cpus": 8},),
+                "after_owned_profile_deletion",
+            )
+            journal_event(journal, "foreign_profile_snapshot_before", before)
+            journal_event(
+                journal, "colima_start_intent",
+                {"profile": "kil-v3-lab", "command_sha256": HEX_A},
+            )
+            journal_event(
+                journal, "colima_delete_complete",
+                {"profile": "kil-v3-lab", "verified_absent": True},
+            )
+            journal_event(journal, "foreign_profile_snapshot_after", after)
+            journal_event(
+                journal,
+                "foreign_profile_mismatch",
+                {
+                    "before_sha256": sha256(
+                        canonical_json(before).encode("utf-8")
+                    ).hexdigest(),
+                    "after_sha256": sha256(
+                        canonical_json(after).encode("utf-8")
+                    ).hexdigest(),
+                    "mismatch_categories": ["cpus"],
+                },
+            )
+            loaded = load_lifecycle_journal(journal)
+            self.assertEqual(loaded["events"][-1]["event"], "foreign_profile_mismatch")
+
+    def test_legacy_v1_journal_retains_its_original_snapshot_free_rules(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = self.create(Path(directory))
+            self.assertEqual(
+                load_lifecycle_journal(journal)["schema_version"],
+                "kil.v3b1-lifecycle-journal.v1",
+            )
+            journal_event(
+                journal,
+                "colima_start_intent",
+                {"profile": "kil-v3-lab", "command_sha256": HEX_A},
+            )
+            self.assertEqual(
+                load_lifecycle_journal(journal)["events"][-1]["event"],
+                "colima_start_intent",
+            )
+
     def test_driver_recovery_authority_is_journal_phase_closed(self):
         track = LiveTrack.CREDENTIAL_POLICY_BASELINE.value
         driver_id = HEX_A

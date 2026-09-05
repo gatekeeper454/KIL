@@ -109,7 +109,8 @@ PLATFORM = "linux/arm64"
 LEGACY_MANIFEST_SCHEMA = "kil.v3b1-manifest.v1"
 MANIFEST_SCHEMA = "kil.v3b1-manifest.v2"
 STATE_SCHEMA = "kil.v3b1-active-state.v2"
-JOURNAL_SCHEMA = "kil.v3b1-lifecycle-journal.v1"
+LEGACY_JOURNAL_SCHEMA = "kil.v3b1-lifecycle-journal.v1"
+JOURNAL_SCHEMA = "kil.v3b1-lifecycle-journal.v2"
 READINESS_POISON_SCHEMA = "kil.v3b1-readiness-poison.v1"
 JOIN_SCHEMA = "kil.v3b1-join.v1"
 _HEX = re.compile(r"^[a-f0-9]{64}$")
@@ -559,6 +560,34 @@ def _validate_lifecycle_event_details(
     details: Mapping[str, object],
     requests: Mapping[str, object] | None = None,
 ) -> None:
+    if event_name in {
+        "foreign_profile_snapshot_before",
+        "foreign_profile_snapshot_after",
+    }:
+        capture_stage = (
+            "before_colima_mutation"
+            if event_name.endswith("_before")
+            else "after_owned_profile_deletion"
+        )
+        _validate_foreign_profile_snapshot(details, capture_stage=capture_stage)
+        return
+    if event_name == "foreign_profile_mismatch":
+        if set(details) != {
+            "before_sha256", "after_sha256", "mismatch_categories"
+        }:
+            raise ControllerError("foreign profile mismatch fields are not closed")
+        _require_sha256("foreign before snapshot", details["before_sha256"])
+        _require_sha256("foreign after snapshot", details["after_sha256"])
+        categories = details["mismatch_categories"]
+        if (
+            type(categories) is not list
+            or not categories
+            or categories != [
+                name for name in _FOREIGN_MISMATCH_CATEGORIES if name in categories
+            ]
+        ):
+            raise ControllerError("foreign profile mismatch categories are invalid")
+        return
     if event_name == "topology_absence_attested":
         if set(details) != {
             "container_count",
@@ -1170,10 +1199,117 @@ def _validate_lifecycle_event_details(
             tracks.add(failure["track"])
 
 
+def _validate_foreign_snapshot_history(
+    events: Sequence[Mapping[str, object]], journal_schema: str
+) -> None:
+    snapshot_names = {
+        "foreign_profile_snapshot_before",
+        "foreign_profile_snapshot_after",
+        "foreign_profile_mismatch",
+    }
+    if journal_schema == LEGACY_JOURNAL_SCHEMA:
+        if any(event.get("event") in snapshot_names for event in events):
+            raise ControllerError("legacy journal contains v2 snapshot evidence")
+        return
+    if journal_schema != JOURNAL_SCHEMA:
+        raise ControllerError("lifecycle journal schema is invalid")
+
+    positions = {
+        name: [
+            index for index, event in enumerate(events)
+            if event.get("event") == name
+        ]
+        for name in snapshot_names
+    }
+    before_positions = positions["foreign_profile_snapshot_before"]
+    after_positions = positions["foreign_profile_snapshot_after"]
+    mismatch_positions = positions["foreign_profile_mismatch"]
+    if len(before_positions) > 1:
+        raise ControllerError("foreign profile before snapshot is duplicated")
+    if len(after_positions) > 1:
+        raise ControllerError("foreign profile after snapshot is duplicated")
+    if len(mismatch_positions) > 1:
+        raise ControllerError("foreign profile mismatch is duplicated")
+
+    preflight_positions = [
+        index for index, event in enumerate(events)
+        if event.get("event") == "preflight_complete"
+    ]
+    mutation_positions = [
+        index for index, event in enumerate(events)
+        if event.get("event") in {"colima_start_intent", "colima_recovery_start_intent"}
+    ]
+    publication_positions = [
+        index for index, event in enumerate(events)
+        if event.get("event") == "publication_intent"
+    ]
+    if mutation_positions and not before_positions:
+        raise ControllerError("Colima mutation lacks a durable foreign profile before snapshot")
+    if before_positions:
+        before_position = before_positions[0]
+        if (
+            preflight_positions and before_position > preflight_positions[0]
+        ) or (
+            mutation_positions and before_position > mutation_positions[0]
+        ):
+            raise ControllerError("foreign profile before snapshot is phase-invalid")
+    if after_positions:
+        if not before_positions:
+            raise ControllerError("foreign profile after snapshot lacks its before snapshot")
+        after_position = after_positions[0]
+        verified_deletes = [
+            index for index, event in enumerate(events)
+            if event.get("event") == "colima_delete_complete"
+            and type(event.get("details")) is dict
+            and event["details"].get("verified_absent") is True
+        ]
+        if not verified_deletes or max(verified_deletes) > after_position:
+            raise ControllerError("foreign profile after snapshot precedes verified deletion")
+        if publication_positions and after_position > publication_positions[0]:
+            raise ControllerError("foreign profile after snapshot follows publication intent")
+    if publication_positions and not after_positions:
+        raise ControllerError("publication lacks a durable foreign profile after snapshot")
+
+    if before_positions and after_positions:
+        before_event = events[before_positions[0]]
+        after_event = events[after_positions[0]]
+        before = before_event["details"]
+        after = after_event["details"]
+        assert isinstance(before, Mapping)
+        assert isinstance(after, Mapping)
+        comparison = compare_foreign_profile_snapshots(before, after)
+        if comparison["unchanged"] is True:
+            if mismatch_positions:
+                raise ControllerError("unchanged foreign profiles have mismatch evidence")
+        elif publication_positions and not mismatch_positions:
+            raise ControllerError("changed foreign profiles lack mismatch evidence")
+        if mismatch_positions:
+            mismatch_position = mismatch_positions[0]
+            if mismatch_position < after_positions[0] or (
+                publication_positions and mismatch_position > publication_positions[0]
+            ):
+                raise ControllerError("foreign profile mismatch is phase-invalid")
+            details = events[mismatch_position]["details"]
+            assert isinstance(details, Mapping)
+            expected = {
+                "before_sha256": _digest_bytes(
+                    canonical_json(before).encode("utf-8")
+                ),
+                "after_sha256": _digest_bytes(
+                    canonical_json(after).encode("utf-8")
+                ),
+                "mismatch_categories": comparison["mismatch_categories"],
+            }
+            if dict(details) != expected:
+                raise ControllerError("foreign profile mismatch does not bind snapshots")
+
+
 def _validate_lifecycle_history(
     events: Sequence[Mapping[str, object]],
     requests: Mapping[str, object],
+    journal_schema: str = LEGACY_JOURNAL_SCHEMA,
 ) -> tuple[str | None, bool]:
+    _validate_foreign_snapshot_history(events, journal_schema)
     current_readiness: str | None = None
     readiness_complete = False
     readiness_session_terminal = True
@@ -2074,6 +2210,7 @@ def create_lifecycle_journal(
     source_commit: str,
     execution_nonce: str,
     global_context: str,
+    schema_version: str = LEGACY_JOURNAL_SCHEMA,
 ) -> dict[str, object]:
     """Create durable private ownership state before the first Colima mutation."""
     repository = Path(os.path.abspath(repository_root))
@@ -2088,10 +2225,12 @@ def create_lifecycle_journal(
     _require_sha256("execution_nonce", execution_nonce)
     if type(global_context) is not str or not global_context:
         raise ControllerError("journal global Docker context is invalid")
+    if schema_version not in {LEGACY_JOURNAL_SCHEMA, JOURNAL_SCHEMA}:
+        raise ControllerError("journal schema version is invalid")
     private.mkdir(parents=True, exist_ok=True)
     os.chmod(private, 0o700)
     value: dict[str, object] = {
-        "schema_version": JOURNAL_SCHEMA,
+        "schema_version": schema_version,
         "repository_root": str(repository),
         "private_root": str(private),
         "docker_host": docker_host,
@@ -2123,7 +2262,9 @@ def load_lifecycle_journal(journal_path: Path) -> dict[str, object]:
         "profile_created", "manifest_path", "manifest_sha256", "events",
         "requests", "binding_sha256",
     }
-    if set(value) != expected or value["schema_version"] != JOURNAL_SCHEMA:
+    if set(value) != expected or value["schema_version"] not in {
+        LEGACY_JOURNAL_SCHEMA, JOURNAL_SCHEMA
+    }:
         raise ControllerError("lifecycle journal fields are not closed")
     if value["binding_sha256"] != _journal_binding(value):
         raise ControllerError("lifecycle journal binding does not match")
@@ -2186,7 +2327,7 @@ def load_lifecycle_journal(journal_path: Path) -> dict[str, object]:
         _validate_manifest(bound_value)
         if details["run_id"] != bound_value["run_id"]:
             raise ControllerError("evidence freeze run ID does not bind the manifest")
-    _validate_lifecycle_history(events, requests)
+    _validate_lifecycle_history(events, requests, str(value["schema_version"]))
     return value
 
 
@@ -2210,7 +2351,7 @@ def journal_event(
     events = value["events"]
     assert isinstance(events, list)
     events.append({"sequence": len(events) + 1, "event": event, "details": dict(details)})
-    _validate_lifecycle_history(events, requests)
+    _validate_lifecycle_history(events, requests, str(value["schema_version"]))
     value["phase"] = event
     if event == "colima_attestation_complete":
         value["profile_created"] = True
@@ -3263,6 +3404,7 @@ _FOREIGN_RESOURCE_FIELDS = (
     "disk",
     "runtime",
 )
+_FOREIGN_MISMATCH_CATEGORIES = ("profile_set", *_FOREIGN_RESOURCE_FIELDS)
 _FOREIGN_PROFILE_REF_DOMAIN = b"kil.v3b1-foreign-profile-ref.v1\0"
 
 
