@@ -6,7 +6,7 @@
 <title>Envoy adapter boundary — Gate V3B</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="adapters/envoy/README.md">
-<meta name="source-sha256" content="3e52e51e54c89de869e631214eb307c04faf0540fc043e443fc38d585f358ddc">
+<meta name="source-sha256" content="655398eb839e2765a623873ab668885c2b5149d9e8e42a4bd3458d5582c92efe">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>adapters/envoy/README.md</code> (<code>3e52e51e54c89de869e631214eb307c04faf0540fc043e443fc38d585f358ddc</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>adapters/envoy/README.md</code> (<code>655398eb839e2765a623873ab668885c2b5149d9e8e42a4bd3458d5582c92efe</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Envoy adapter boundary — Gate V3B</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>adapters/envoy/README.md</code> (<code>3e52e51e54c89de869e631214eb307c04faf0540fc043e443fc38d585f358ddc</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>adapters/envoy/README.md</code> (<code>655398eb839e2765a623873ab668885c2b5149d9e8e42a4bd3458d5582c92efe</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#envoy-adapter-boundary-gate-v3b">Envoy adapter boundary — Gate V3B</a></li><li class="level-2"><a href="#corrected-local-topology">Corrected local topology</a></li><li class="level-2"><a href="#fixed-http-contract">Fixed HTTP contract</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="envoy-adapter-boundary-gate-v3b" href="#envoy-adapter-boundary-gate-v3b">Envoy adapter boundary — Gate V3B</a></li><li class="level-2"><a data-section-id="corrected-local-topology" href="#corrected-local-topology">Corrected local topology</a></li><li class="level-2"><a data-section-id="fixed-http-contract" href="#fixed-http-contract">Fixed HTTP contract</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -113,11 +113,17 @@ with run-scoped HMAC pseudonyms and retains status, architecture, CPU, memory,
 disk, and runtime. A mismatch never authorizes foreign mutation and can
 publish only nonpromotable failure evidence. Offline verification keeps the
 historical v1 and driver-era v2 schemas closed and independently verifiable.</p>
-<p>This v3 extension is implemented and statically tested on the development
-branch. The central <code>run</code> remains prohibited until independent review, merge,
-synchronization, and a fresh request-free v3 lifecycle from public <code>main</code> all
-pass. The previously accepted Task 10 request-free bundle is historical v2
-evidence and does not satisfy this v3 prerequisite.</p>
+<p>The fresh request-free v3 lifecycle ran from synchronized public-main source
+<code>5ebf21a88794a9f83a0e6c8ee53e76f6d8e5142d</code> as
+<code>v3b1-4ac0b6eef70b0483f7883c8a26753d15a007f612953b25e23b8ecb6afd021a8f</code>.
+Its <code>kil.v3b1-public-manifest.v3</code> records three readiness completions, three
+clean cancellations, zero driver instructions, zero request intents, zero HTTP
+requests, exact teardown of 15 containers and six networks, and exact equality
+of the pseudonymous foreign-resource arrays. The result is request-free and
+nonpromotable, not an enforcement result. The central <code>run</code> remains prohibited
+until this public-safe checkpoint passes independent review, merge, and
+synchronization. The previously accepted Task 10 bundle remains historical v2
+evidence and does not satisfy the v3 prerequisite by itself.</p>
 <p>The request cannot select or downgrade the active track. KIL state is a signed,
 short-lived experimental extension envelope that references KTP Trust Proof and
 Kinetic Envelope results; it does not replace either KTP construct. The first

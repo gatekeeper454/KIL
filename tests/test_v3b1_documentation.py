@@ -31,6 +31,10 @@ LIVE_BOARD = ROOT / "artifacts/generated/v3b1-task6-live-status.md"
 REQUEST_DRIVER_DESIGN = "2026-08-31-v3b1-in-network-request-driver-design.md"
 REQUEST_DRIVER_PLAN = "2026-08-31-v3b1-in-network-request-driver.md"
 CURRENT_DRIVER_PLAN = ROOT / "docs/superpowers/plans" / REQUEST_DRIVER_PLAN
+FOREIGN_SNAPSHOT_DESIGN = (
+    ROOT
+    / "docs/superpowers/specs/2026-08-31-v3b1-foreign-resource-snapshot-design.md"
+)
 
 LEGACY_PREFIXES = {
     LEGACY_SPEC: (
@@ -133,6 +137,69 @@ class V3B1DocumentationTest(unittest.TestCase):
         ).lower()
         self.assertIn("kil.v3b1-manifest.v3", task11)
         self.assertRegex(task11, r"fresh request-free[^.]{0,180}v3")
+
+    def test_fresh_v3_request_free_gate_is_public_bound_and_claim_limited(self):
+        run_id = (
+            "v3b1-4ac0b6eef70b0483f7883c8a26753d15a007f612953b25e23b8ecb6afd021a8f"
+        )
+        source_commit = "5ebf21a88794a9f83a0e6c8ee53e76f6d8e5142d"
+        public_commitment = (
+            "10101f8ddb3d11682955444d5b3330ab5b290f2663302afdd5fade23530cf112"
+        )
+        manifest_sha256 = (
+            "3572ad5b9f7a2da66ce8b5cf13c020179283c5b1635aef8302977e8c562bb475"
+        )
+        for path in (README, ENVOY_README, V3_PROGRESS, TASK10_GATE):
+            with self.subTest(path=path.relative_to(ROOT)):
+                text = path.read_text(encoding="utf-8")
+                value = normalized(text).lower()
+                self.assertIn(run_id, text)
+                self.assertIn(source_commit, text)
+                self.assertIn("kil.v3b1-public-manifest.v3", text)
+                self.assertRegex(
+                    value,
+                    r"foreign[^.]{0,180}(?:exact equality|exactly equal|unchanged)",
+                )
+                self.assertRegex(value, r"zero[^.]{0,120}(?:http|requests?)")
+                self.assertRegex(value, r"central `?run`?[^.]{0,180}prohibited")
+
+        gate_text = TASK10_GATE.read_text(encoding="utf-8")
+        self.assertIn(public_commitment, gate_text)
+        self.assertIn(manifest_sha256, gate_text)
+        self.assertIn("intermediate_provisional_failure_local_boundary", gate_text)
+        self.assertIn("not_promoted", gate_text)
+
+        task11 = CURRENT_DRIVER_PLAN.read_text(encoding="utf-8").split(
+            "### Task 11", 1
+        )[1]
+        self.assertIn("- [x] **Step 1:", task11)
+        self.assertIn(run_id, task11)
+        self.assertRegex(
+            normalized(task11).lower(),
+            r"review[^.]{0,120}merge[^.]{0,120}synchron",
+        )
+
+        publication_gate = FOREIGN_SNAPSHOT_DESIGN.read_text(
+            encoding="utf-8"
+        ).split("## 10. Publication and live gates", 1)[1].split(
+            "## 11.", 1
+        )[0]
+        publication_value = normalized(publication_gate).lower()
+        self.assertIn("failure-bundle verifier", publication_value)
+        self.assertRegex(
+            publication_value,
+            r"view --bundle[^.]{0,180}(?:completed|central)",
+        )
+        mismatch_section = FOREIGN_SNAPSHOT_DESIGN.read_text(
+            encoding="utf-8"
+        ).split("## 6. Mismatch and failure behavior", 1)[1].split(
+            "## 7.", 1
+        )[0]
+        self.assertRegex(
+            normalized(mismatch_section).lower(),
+            r"failure bundle[^.]{0,160}unequal[^.]{0,160}"
+            r"cannot satisfy the fresh request-free gate",
+        )
 
     def test_task10_request_free_gate_is_public_bound_and_claim_limited(self):
         run_id = (

@@ -910,17 +910,28 @@ synchronize main before the central proof.
 - Modify: `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
 - Modify: ignored `artifacts/generated/v3b1-task6-live-status.md`
 
-- [ ] **Step 1: Reconfirm clean merged main and run preflight/up**
+- [x] **Step 1: Reconfirm clean merged main and pass the fresh request-free v3 gate**
 
-The historical Task 10 record is v2 evidence. Before- and after-resource
-snapshots are implemented and tested in `kil.v3b1-manifest.v3`; require that
-foreign-resource snapshot and pseudonymous public-verifier contract to pass
-independent review, merge, and synchronization.
-Then execute a fresh request-free v3 lifecycle from public `main` and require
-exact foreign-profile equality. The central `run` remains prohibited until
-that fresh v3 gate passes. Only then record the exact foreign runtime state
-through the durable before snapshot and execute `preflight`, then `up` from the
-same synchronized public commit.
+The historical Task 10 record remains v2 evidence. The foreign-resource
+snapshot and pseudonymous verifier contract passed independent review, merge,
+and synchronization at `5ebf21a88794a9f83a0e6c8ee53e76f6d8e5142d`.
+The before- and after-resource snapshots are implemented, tested, and merged
+under the private `kil.v3b1-manifest.v3` contract.
+A clean worktree at that exact public-main commit executed
+`preflight -> up -> readiness -> down` as request-free v3 run
+`v3b1-4ac0b6eef70b0483f7883c8a26753d15a007f612953b25e23b8ecb6afd021a8f`.
+It recorded three readiness completions, three clean cancellations, zero
+instructions, zero request intents, zero HTTP requests, exact owned teardown,
+and exactly equal pseudonymous foreign-resource arrays in
+`kil.v3b1-public-manifest.v3`. All checksums and the internal nonpromotable
+failure-bundle verifier passed. The completed private journal was archived;
+the active state, active journal path, and readiness poison were absent after
+teardown.
+
+The central `run` remains prohibited until this public-safe checkpoint passes
+independent review, public CI, merge, and exact synchronization. After that
+publication gate, start a new clean lifecycle with `preflight` and `up` from the
+new synchronized public commit before Step 2.
 
 - [ ] **Step 2: Invoke `run` once**
 

@@ -6,7 +6,7 @@
 <title>V3B-1 Foreign-Resource Snapshot Contract Design</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/specs/2026-08-31-v3b1-foreign-resource-snapshot-design.md">
-<meta name="source-sha256" content="97f998e7147e9d00c208744c60470b324b71f045387a12ff6b5071172b5d6546">
+<meta name="source-sha256" content="28ce235c29dabf1d8edc1448ebb8397504bf513f22e7b6e21b691b1410179839">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-08-31-v3b1-foreign-resource-snapshot-design.md</code> (<code>97f998e7147e9d00c208744c60470b324b71f045387a12ff6b5071172b5d6546</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-08-31-v3b1-foreign-resource-snapshot-design.md</code> (<code>28ce235c29dabf1d8edc1448ebb8397504bf513f22e7b6e21b691b1410179839</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">V3B-1 Foreign-Resource Snapshot Contract Design</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-08-31-v3b1-foreign-resource-snapshot-design.md</code> (<code>97f998e7147e9d00c208744c60470b324b71f045387a12ff6b5071172b5d6546</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-08-31-v3b1-foreign-resource-snapshot-design.md</code> (<code>28ce235c29dabf1d8edc1448ebb8397504bf513f22e7b6e21b691b1410179839</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-1-foreign-resource-snapshot-contract-design">V3B-1 Foreign-Resource Snapshot Contract Design</a></li><li class="level-2"><a href="#1-decision-and-scope">1. Decision and scope</a></li><li class="level-2"><a href="#2-security-claim">2. Security claim</a></li><li class="level-2"><a href="#3-closed-snapshot-model">3. Closed snapshot model</a></li><li class="level-2"><a href="#4-pseudonymous-public-projection">4. Pseudonymous public projection</a></li><li class="level-2"><a href="#5-capture-and-lifecycle-ordering">5. Capture and lifecycle ordering</a></li><li class="level-2"><a href="#6-mismatch-and-failure-behavior">6. Mismatch and failure behavior</a></li><li class="level-2"><a href="#7-schema-generation-and-verifier-behavior">7. Schema generation and verifier behavior</a></li><li class="level-2"><a href="#8-controller-interfaces">8. Controller interfaces</a></li><li class="level-2"><a href="#9-test-strategy">9. Test strategy</a></li><li class="level-2"><a href="#10-publication-and-live-gates">10. Publication and live gates</a></li><li class="level-2"><a href="#11-rejected-alternatives">11. Rejected alternatives</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-1-foreign-resource-snapshot-contract-design" href="#v3b-1-foreign-resource-snapshot-contract-design">V3B-1 Foreign-Resource Snapshot Contract Design</a></li><li class="level-2"><a data-section-id="1-decision-and-scope" href="#1-decision-and-scope">1. Decision and scope</a></li><li class="level-2"><a data-section-id="2-security-claim" href="#2-security-claim">2. Security claim</a></li><li class="level-2"><a data-section-id="3-closed-snapshot-model" href="#3-closed-snapshot-model">3. Closed snapshot model</a></li><li class="level-2"><a data-section-id="4-pseudonymous-public-projection" href="#4-pseudonymous-public-projection">4. Pseudonymous public projection</a></li><li class="level-2"><a data-section-id="5-capture-and-lifecycle-ordering" href="#5-capture-and-lifecycle-ordering">5. Capture and lifecycle ordering</a></li><li class="level-2"><a data-section-id="6-mismatch-and-failure-behavior" href="#6-mismatch-and-failure-behavior">6. Mismatch and failure behavior</a></li><li class="level-2"><a data-section-id="7-schema-generation-and-verifier-behavior" href="#7-schema-generation-and-verifier-behavior">7. Schema generation and verifier behavior</a></li><li class="level-2"><a data-section-id="8-controller-interfaces" href="#8-controller-interfaces">8. Controller interfaces</a></li><li class="level-2"><a data-section-id="9-test-strategy" href="#9-test-strategy">9. Test strategy</a></li><li class="level-2"><a data-section-id="10-publication-and-live-gates" href="#10-publication-and-live-gates">10. Publication and live gates</a></li><li class="level-2"><a data-section-id="11-rejected-alternatives" href="#11-rejected-alternatives">11. Rejected alternatives</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -229,8 +229,8 @@ has <code>unchanged: false</code> and contains both pseudonymous projections.</l
 </ol>
 <p>Mismatch categories are closed: <code>profile_set</code>, <code>status</code>, <code>arch</code>, <code>cpus</code>,
 <code>memory</code>, <code>disk</code>, or <code>runtime</code>. Raw profile names and execution nonces remain
-private. A failure bundle is diagnostic evidence and cannot satisfy the fresh
-request-free gate.</p>
+private. A failure bundle with unequal foreign profiles is diagnostic evidence
+and cannot satisfy the fresh request-free gate.</p>
 <p>If pseudonym construction or public projection would be ambiguous, the
 controller records no public snapshot and the lifecycle remains private and
 nonpromotable. Privacy failure cannot be traded for public completeness.</p>
@@ -312,8 +312,14 @@ showing:</p>
 <li>zero instructions and zero HTTP requests;</li>
 <li>exact owned-object teardown;</li>
 <li>a v3 foreign-profile attestation with exact equality; and</li>
-<li>offline presenter acceptance.</li>
+<li>offline failure-bundle verifier acceptance of the nonpromotable diagnostic
+presenter.</li>
 </ul>
+<p>The public <code>view --bundle</code> path remains reserved for completed central evidence
+and must continue to reject request-free nonpromotable bundles. This request-free
+gate uses the same immutable snapshot and semantic checks in explicit failure-
+bundle mode; it does not relabel diagnostic evidence as an accepted enforcement
+result.</p>
 <p>Only after that public-safe v3 gate is reviewed, merged, and synchronized may
 the founder authorize one central <code>run</code>. No consequential request is authorized
 by this design or its implementation alone.</p>

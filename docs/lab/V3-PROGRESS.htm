@@ -6,7 +6,7 @@
 <title>Gate V3 implementation progress</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/lab/V3-PROGRESS.md">
-<meta name="source-sha256" content="d5f8a549c54c0f0b715805a61d8bd5f7c34ad0de712a3d335d63d01575518f46">
+<meta name="source-sha256" content="f96e211171d7a6005e6b4ca9a3c66ee4c4ba520312921cc617fd7a4f55a74e54">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>d5f8a549c54c0f0b715805a61d8bd5f7c34ad0de712a3d335d63d01575518f46</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>f96e211171d7a6005e6b4ca9a3c66ee4c4ba520312921cc617fd7a4f55a74e54</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Gate V3 implementation progress</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>d5f8a549c54c0f0b715805a61d8bd5f7c34ad0de712a3d335d63d01575518f46</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>f96e211171d7a6005e6b4ca9a3c66ee4c4ba520312921cc617fd7a4f55a74e54</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#gate-v3-implementation-progress">Gate V3 implementation progress</a></li><li class="level-2"><a href="#v3a-status">V3A status</a></li><li class="level-2"><a href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a href="#v3b-1-current-status">V3B-1 current status</a></li><li class="level-3"><a href="#implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</a></li><li class="level-3"><a href="#request-and-evidence-contracts">Request and evidence contracts</a></li><li class="level-3"><a href="#live-status-and-historical-boundary">Live status and historical boundary</a></li><li class="level-3"><a href="#historical-pre-driver-topology-records">Historical pre-driver topology records</a></li><li class="level-2"><a href="#architecture">Architecture</a></li><li class="level-2"><a href="#next-gate">Next gate</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="gate-v3-implementation-progress" href="#gate-v3-implementation-progress">Gate V3 implementation progress</a></li><li class="level-2"><a data-section-id="v3a-status" href="#v3a-status">V3A status</a></li><li class="level-2"><a data-section-id="evidence-boundary" href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a data-section-id="v3b-1-current-status" href="#v3b-1-current-status">V3B-1 current status</a></li><li class="level-3"><a data-section-id="implemented-topology-and-traffic-boundary" href="#implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</a></li><li class="level-3"><a data-section-id="request-and-evidence-contracts" href="#request-and-evidence-contracts">Request and evidence contracts</a></li><li class="level-3"><a data-section-id="live-status-and-historical-boundary" href="#live-status-and-historical-boundary">Live status and historical boundary</a></li><li class="level-3"><a data-section-id="historical-pre-driver-topology-records" href="#historical-pre-driver-topology-records">Historical pre-driver topology records</a></li><li class="level-2"><a data-section-id="architecture" href="#architecture">Architecture</a></li><li class="level-2"><a data-section-id="next-gate" href="#next-gate">Next gate</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -162,10 +162,17 @@ evidence, while the public manifest retains every resource field behind
 run-scoped HMAC pseudonyms. A foreign-state mismatch completes owned teardown, never
 mutates a foreign profile, and can publish only a nonpromotable failure bundle.
 The offline verifier dispatches v1, v2, and v3 as separate closed schemas.
-This v3 prerequisite is implemented and statically tested on the development
-branch, but is not yet a merged or live-qualified result. The central <code>run</code>
-remains prohibited until review, merge, synchronization, and a fresh
-request-free lifecycle proves the v3 contract from public <code>main</code>.</p>
+The v3 prerequisite was independently reviewed, merged, and synchronized at
+<code>5ebf21a88794a9f83a0e6c8ee53e76f6d8e5142d</code>. A fresh request-free v3 lifecycle
+then published run
+<code>v3b1-4ac0b6eef70b0483f7883c8a26753d15a007f612953b25e23b8ecb6afd021a8f</code>
+with <code>kil.v3b1-public-manifest.v3</code>. It records three readiness completions,
+three clean cancellations, zero driver instructions, zero request intents,
+zero HTTP requests, nine exact empty service sources, all 15 containers and
+six networks absent, and exact equality of its pseudonymous foreign-resource
+arrays. The bundle is intentionally nonpromotable and does not establish an
+enforcement result. The central <code>run</code> remains prohibited until this public-safe
+checkpoint passes review, merge, and synchronization.</p>
 <h3 id="live-status-and-historical-boundary">Live status and historical boundary</h3>
 <p>The corrected request-driver topology now has accepted Task 10 request-free
 lifecycle evidence at the local Envoy boundary. Earlier V3B-1 host-published
@@ -227,12 +234,12 @@ readback observed <code>Stopped/containerd/aarch64/4 CPU/4 GiB/20 GiB</code>, bu
 exact resource tuple was not durably bound before and after. Every published
 checksum passed. The bound public-safe facts are recorded in
 <a href="V3B1-TASK10-REQUEST-FREE-GATE.htm"><code>V3B1-TASK10-REQUEST-FREE-GATE.md</code></a>.</p>
-<p>The central <code>run</code> was not executed and remains prohibited until that Task 10
-record is independently reviewed, merged through public CI, and synchronized,
-and an implementation that durably binds and verifies exact before/after
-foreign-resource snapshots is tested, merged, and synchronized. Only after both
-publication gates may exactly one central local-Envoy proof be attempted. No
-retry is allowed after request intent.</p>
+<p>The central <code>run</code> was not executed. The historical Task 10 record and the V3
+snapshot implementation are merged and synchronized, and the fresh V3
+request-free gate above passed locally. The central <code>run</code> remains prohibited
+until the new public-safe checkpoint itself passes independent review, public
+CI, merge, and exact synchronization. Only then may exactly one central
+local-Envoy proof be attempted. No retry is allowed after request intent.</p>
 <p>V3B-1 remains limited to the local Envoy boundary. V3B-2 is the future isolated
 Kind/Calico topology; its NetworkPolicy behavior, cluster-level transport,
 failure matrix, and measurements are unexecuted. V3C repetition and performance
@@ -316,13 +323,13 @@ central enforcement gate.</p>
 and the complete approved specification is
 <a href="../superpowers/specs/2026-08-29-v3-envoy-live-validation-design.htm"><code>docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md</code></a>.</p>
 <h2 id="next-gate">Next gate</h2>
-<p>The historical Task 10 public-safe gate record remains v2 evidence. Review,
-merge, and synchronize the implemented <code>kil.v3b1-manifest.v3</code> exact
-before/after foreign-resource snapshot and pseudonymous verifier contract, then
-execute a fresh request-free v3 lifecycle from public <code>main</code>. The central
-<code>run</code> remains prohibited until that fresh v3 prerequisite passes. Only then
-execute one central <code>preflight</code> / <code>up</code> / <code>run</code> / <code>down</code> proof with no retry
-after request intent. Its prospective acceptance criteria remain <code>permit / permit / deny</code>,
+<p>The fresh request-free v3 lifecycle passed from public <code>main</code> with exact
+before/after foreign-resource equality. Review, merge, and synchronize its
+public-safe checkpoint while keeping the nonpromotable bundle and private
+journal ignored. The central <code>run</code> remains prohibited through that publication
+gate. Only afterward start a new synchronized <code>preflight</code> / <code>up</code> lifecycle and
+execute one central <code>run</code> / <code>down</code> proof with no retry after request intent.
+Its prospective acceptance criteria remain <code>permit / permit / deny</code>,
 HTTP <code>200 / 200 / 403</code>, target markers <code>1 / 1 / 0</code>, exact three-driver and
 nine-service-source joins, verified checksums, exact teardown, restored foreign
 runtime, and offline presenter acceptance. V3B-2 and V3C remain later gates;
