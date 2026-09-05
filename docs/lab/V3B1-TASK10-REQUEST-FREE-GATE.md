@@ -86,16 +86,55 @@ before/after foreign-resource snapshots.
 
 ## Next gate
 
-The `kil.v3b1-manifest.v3` snapshot extension is now implemented and statically
-tested on its development branch, but still requires independent review,
-merge, and synchronization. A fresh request-free v3 lifecycle must then prove
-the exact pseudonymous before/after equality contract from public `main`. The
-central `run` remains prohibited until that gate passes. Only afterward may the
-project execute exactly one central local-Envoy proof. No retry is permitted
-after request intent. Its prospective acceptance criteria remain
+The historical v2 record remains unchanged. The fresh request-free v3 successor
+gate described below now proves the exact pseudonymous before/after equality
+contract from public `main`. The central `run` remains prohibited until that
+new public-safe checkpoint passes review, merge, and synchronization. Only
+afterward may the project execute exactly one central local-Envoy proof. No
+retry is permitted after request intent. Its prospective acceptance criteria remain
 three exact terminal driver results, `permit / permit / deny`, HTTP
 `200 / 200 / 403`, target markers `1 / 1 / 0`, complete driver/service joins,
 verified checksums, exact teardown, restored foreign state, and offline
 presenter acceptance.
+
+## Fresh v3 successor gate — 2026-09-05
+
+- Source commit: `5ebf21a88794a9f83a0e6c8ee53e76f6d8e5142d`
+- Run ID: `v3b1-4ac0b6eef70b0483f7883c8a26753d15a007f612953b25e23b8ecb6afd021a8f`
+- Public schema: `kil.v3b1-public-manifest.v3`
+- Public commitment SHA-256:
+  `10101f8ddb3d11682955444d5b3330ab5b290f2663302afdd5fade23530cf112`
+- Public manifest SHA-256:
+  `3572ad5b9f7a2da66ce8b5cf13c020179283c5b1635aef8302977e8c562bb475`
+- Bundle class: `intermediate_provisional_failure_local_boundary`
+- Promotion status: `not_promoted`
+- Lifecycle result: `run_complete=false`
+
+The exact sequence was `preflight -> up -> readiness -> down`; neither `run`
+nor `collect` was invoked. All three tracks reached readiness and completed
+clean pre-instruction cancellation. The journal contains zero driver
+instructions, zero request intents, and zero HTTP requests. All nine
+Envoy/authorization/target sources were copied and frozen as exact zero-byte
+inputs with the empty SHA-256. Every published `SHA256SUMS` entry verified.
+Teardown proved all 15 containers and six networks absent, archived the
+completed private journal, and cleared the active state, active journal path,
+and readiness poison.
+
+The V3 public attestation contains one run-scoped pseudonymous foreign-profile
+reference with status, architecture, CPU, memory, disk, and runtime fields.
+Its before and after arrays are exactly equal and `unchanged=true`; raw foreign
+profile names remain private. The internal failure-bundle verifier accepted the
+nonpromotable diagnostic presenter. Public `view --bundle` acceptance remains
+reserved for the later complete central proof.
+
+Foreign-resource restoration therefore has exact equality in the bound V3
+attestation, without exposing the private profile name.
+
+This record establishes only the request-free V3 lifecycle, evidence-freeze,
+exact teardown, and foreign-resource equality gates at the local Envoy
+boundary. It is not an enforcement result and does not establish Kind/Calico,
+NetworkPolicy, historical prevention, repetition, production performance, or
+production suitability. The central `run` remains prohibited until this
+checkpoint passes independent review, public CI, merge, and synchronization.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

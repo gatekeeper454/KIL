@@ -112,10 +112,17 @@ evidence, while the public manifest retains every resource field behind
 run-scoped HMAC pseudonyms. A foreign-state mismatch completes owned teardown, never
 mutates a foreign profile, and can publish only a nonpromotable failure bundle.
 The offline verifier dispatches v1, v2, and v3 as separate closed schemas.
-This v3 prerequisite is implemented and statically tested on the development
-branch, but is not yet a merged or live-qualified result. The central `run`
-remains prohibited until review, merge, synchronization, and a fresh
-request-free lifecycle proves the v3 contract from public `main`.
+The v3 prerequisite was independently reviewed, merged, and synchronized at
+`5ebf21a88794a9f83a0e6c8ee53e76f6d8e5142d`. A fresh request-free v3 lifecycle
+then published run
+`v3b1-4ac0b6eef70b0483f7883c8a26753d15a007f612953b25e23b8ecb6afd021a8f`
+with `kil.v3b1-public-manifest.v3`. It records three readiness completions,
+three clean cancellations, zero driver instructions, zero request intents,
+zero HTTP requests, nine exact empty service sources, all 15 containers and
+six networks absent, and exact equality of its pseudonymous foreign-resource
+arrays. The bundle is intentionally nonpromotable and does not establish an
+enforcement result. The central `run` remains prohibited until this public-safe
+checkpoint passes review, merge, and synchronization.
 
 ### Live status and historical boundary
 
@@ -183,12 +190,12 @@ exact resource tuple was not durably bound before and after. Every published
 checksum passed. The bound public-safe facts are recorded in
 [`V3B1-TASK10-REQUEST-FREE-GATE.md`](V3B1-TASK10-REQUEST-FREE-GATE.md).
 
-The central `run` was not executed and remains prohibited until that Task 10
-record is independently reviewed, merged through public CI, and synchronized,
-and an implementation that durably binds and verifies exact before/after
-foreign-resource snapshots is tested, merged, and synchronized. Only after both
-publication gates may exactly one central local-Envoy proof be attempted. No
-retry is allowed after request intent.
+The central `run` was not executed. The historical Task 10 record and the V3
+snapshot implementation are merged and synchronized, and the fresh V3
+request-free gate above passed locally. The central `run` remains prohibited
+until the new public-safe checkpoint itself passes independent review, public
+CI, merge, and exact synchronization. Only then may exactly one central
+local-Envoy proof be attempted. No retry is allowed after request intent.
 
 V3B-1 remains limited to the local Envoy boundary. V3B-2 is the future isolated
 Kind/Calico topology; its NetworkPolicy behavior, cluster-level transport,
@@ -286,13 +293,13 @@ and the complete approved specification is
 
 ## Next gate
 
-The historical Task 10 public-safe gate record remains v2 evidence. Review,
-merge, and synchronize the implemented `kil.v3b1-manifest.v3` exact
-before/after foreign-resource snapshot and pseudonymous verifier contract, then
-execute a fresh request-free v3 lifecycle from public `main`. The central
-`run` remains prohibited until that fresh v3 prerequisite passes. Only then
-execute one central `preflight` / `up` / `run` / `down` proof with no retry
-after request intent. Its prospective acceptance criteria remain `permit / permit / deny`,
+The fresh request-free v3 lifecycle passed from public `main` with exact
+before/after foreign-resource equality. Review, merge, and synchronize its
+public-safe checkpoint while keeping the nonpromotable bundle and private
+journal ignored. The central `run` remains prohibited through that publication
+gate. Only afterward start a new synchronized `preflight` / `up` lifecycle and
+execute one central `run` / `down` proof with no retry after request intent.
+Its prospective acceptance criteria remain `permit / permit / deny`,
 HTTP `200 / 200 / 403`, target markers `1 / 1 / 0`, exact three-driver and
 nine-service-source joins, verified checksums, exact teardown, restored foreign
 runtime, and offline presenter acceptance. V3B-2 and V3C remain later gates;

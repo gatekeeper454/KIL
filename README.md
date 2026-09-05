@@ -52,16 +52,20 @@ nine zero-byte service legs; teardown removed all 15 exact containers and all
 six exact networks. The public manifest binds the foreign context name as
 `default` before and after the lifecycle, and a post-run readback observed its
 stopped resource tuple; the exact tuple was not durably bound at both ends.
-The historical Task 10 bundle used evidence generation v2. The replacement
-contract is now implemented and statically tested on the development branch:
-`kil.v3b1-manifest.v3` durably records exact before/after foreign Colima state
-privately and publishes run-scoped pseudonyms with every resource field and an
-exact equality result. Existing v1 and v2 bundles remain independently
-verifiable. The central `run` was not executed and remains prohibited until
-the v3 implementation is independently reviewed, merged, synchronized, and a
-fresh request-free v3 lifecycle passes from public `main`. This is accepted
-historical request-free lifecycle evidence,
-not an enforcement result. Kind/Calico validation (V3B-2), repetition, and
+The historical Task 10 bundle used evidence generation v2. Its V3 successor
+ran from synchronized public-main source
+`5ebf21a88794a9f83a0e6c8ee53e76f6d8e5142d` as
+`v3b1-4ac0b6eef70b0483f7883c8a26753d15a007f612953b25e23b8ecb6afd021a8f`.
+The `kil.v3b1-public-manifest.v3` bundle records three readiness completions,
+three clean cancellations, zero driver instructions, zero request intents, and
+zero HTTP requests. All nine service sources were exactly empty, teardown
+proved all 15 containers and six networks absent, and its before/after foreign
+resource arrays have exact equality under pseudonymous references. This
+request-free result is intentionally nonpromotable and is not an enforcement
+result. The central
+`run` was not executed and remains prohibited until this public-safe checkpoint
+passes review, merge, and synchronization. Existing v1 and v2 bundles remain
+independently verifiable. Kind/Calico validation (V3B-2), repetition, and
 performance promotion (V3C) remain future work.
 
 Historical pre-driver records remain available for provenance. The rejected
@@ -184,10 +188,12 @@ pseudonymous profile references in the public manifest. Complete evidence
 requires exact equality; mismatch can produce only a nonpromotable failure
 bundle and never instructs the controller to mutate a foreign profile. The
 offline verifier explicitly dispatches v1, historical driver-era v2, and v3
-without accepting mixed schemas. The central `run` remains prohibited until a
-fresh request-free v3 lifecycle passes from reviewed, merged, synchronized
-public `main`; the central enforcement gate remains pending. V3B-2 Kind/Calico
-validation remains a later gate.
+without accepting mixed schemas. The fresh request-free v3 lifecycle passed
+from reviewed, merged, synchronized public `main` with exact foreign-resource
+equality and zero HTTP requests. The central `run` remains prohibited pending
+review, merge, and synchronization of that public-safe checkpoint; the central
+enforcement gate remains pending. V3B-2 Kind/Calico validation remains a later
+gate.
 
 ## Historical replay
 

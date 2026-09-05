@@ -57,11 +57,17 @@ disk, and runtime. A mismatch never authorizes foreign mutation and can
 publish only nonpromotable failure evidence. Offline verification keeps the
 historical v1 and driver-era v2 schemas closed and independently verifiable.
 
-This v3 extension is implemented and statically tested on the development
-branch. The central `run` remains prohibited until independent review, merge,
-synchronization, and a fresh request-free v3 lifecycle from public `main` all
-pass. The previously accepted Task 10 request-free bundle is historical v2
-evidence and does not satisfy this v3 prerequisite.
+The fresh request-free v3 lifecycle ran from synchronized public-main source
+`5ebf21a88794a9f83a0e6c8ee53e76f6d8e5142d` as
+`v3b1-4ac0b6eef70b0483f7883c8a26753d15a007f612953b25e23b8ecb6afd021a8f`.
+Its `kil.v3b1-public-manifest.v3` records three readiness completions, three
+clean cancellations, zero driver instructions, zero request intents, zero HTTP
+requests, exact teardown of 15 containers and six networks, and exact equality
+of the pseudonymous foreign-resource arrays. The result is request-free and
+nonpromotable, not an enforcement result. The central `run` remains prohibited
+until this public-safe checkpoint passes independent review, merge, and
+synchronization. The previously accepted Task 10 bundle remains historical v2
+evidence and does not satisfy the v3 prerequisite by itself.
 
 The request cannot select or downgrade the active track. KIL state is a signed,
 short-lived experimental extension envelope that references KTP Trust Proof and

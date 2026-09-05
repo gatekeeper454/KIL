@@ -195,8 +195,8 @@ When exact private snapshots differ, the controller:
 
 Mismatch categories are closed: `profile_set`, `status`, `arch`, `cpus`,
 `memory`, `disk`, or `runtime`. Raw profile names and execution nonces remain
-private. A failure bundle is diagnostic evidence and cannot satisfy the fresh
-request-free gate.
+private. A failure bundle with unequal foreign profiles is diagnostic evidence
+and cannot satisfy the fresh request-free gate.
 
 If pseudonym construction or public projection would be ambiguous, the
 controller records no public snapshot and the lifecycle remains private and
@@ -288,7 +288,14 @@ showing:
 - zero instructions and zero HTTP requests;
 - exact owned-object teardown;
 - a v3 foreign-profile attestation with exact equality; and
-- offline presenter acceptance.
+- offline failure-bundle verifier acceptance of the nonpromotable diagnostic
+  presenter.
+
+The public `view --bundle` path remains reserved for completed central evidence
+and must continue to reject request-free nonpromotable bundles. This request-free
+gate uses the same immutable snapshot and semantic checks in explicit failure-
+bundle mode; it does not relabel diagnostic evidence as an accepted enforcement
+result.
 
 Only after that public-safe v3 gate is reviewed, merged, and synchronized may
 the founder authorize one central `run`. No consequential request is authorized
