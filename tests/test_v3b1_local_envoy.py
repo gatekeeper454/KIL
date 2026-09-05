@@ -1092,6 +1092,40 @@ def manifest(
     )
 
 
+def foreign_attestation(
+    *,
+    execution_nonce="0" * 64,
+    before_records=(),
+    after_records=(),
+):
+    before = canonical_foreign_profile_snapshot(
+        before_records, "before_colima_mutation"
+    )
+    after = canonical_foreign_profile_snapshot(
+        after_records, "after_owned_profile_deletion"
+    )
+    return {
+        "schema_version": "kil.v3b1-foreign-profile-attestation.v1",
+        "before": project_foreign_profile_snapshot(before, execution_nonce),
+        "after": project_foreign_profile_snapshot(after, execution_nonce),
+        "unchanged": before_records == after_records,
+    }
+
+
+def create_snapshot_lifecycle_journal(journal_path, **kwargs):
+    journal = create_lifecycle_journal(
+        journal_path,
+        **kwargs,
+        schema_version="kil.v3b1-lifecycle-journal.v2",
+    )
+    journal_event(
+        journal_path,
+        "foreign_profile_snapshot_before",
+        canonical_foreign_profile_snapshot((), "before_colima_mutation"),
+    )
+    return journal
+
+
 def request_record(run_manifest, track, **changes):
     denied = track is LiveTrack.SIGNED_PLUS_LOCAL_REDUCE
     client_digest = (
@@ -3303,7 +3337,7 @@ class ControllerContractTest(unittest.TestCase):
     def test_manifest_is_content_addressed_and_refuses_mutable_images(self):
         value = manifest()
 
-        self.assertEqual(value["schema_version"], "kil.v3b1-manifest.v2")
+        self.assertEqual(value["schema_version"], "kil.v3b1-manifest.v3")
         self.assertRegex(value["run_id"], r"^v3b1-[a-f0-9]{64}$")
         identity = value["content_identity"]
         self.assertEqual(
@@ -5816,7 +5850,7 @@ class DriverRequestSequencingTest(unittest.TestCase):
                 )
             self.assertEqual(
                 authoritative_bundle_attestation(output)["schema_version"],
-                "kil.v3b1-authoritative-bundle.v2",
+                "kil.v3b1-authoritative-bundle.v3",
             )
 
     def test_dangling_private_driver_result_symlink_is_never_uncommanded(self):
@@ -6786,6 +6820,7 @@ class DriverRequestSequencingTest(unittest.TestCase):
                     engine_provenance=ENGINE_PROVENANCE,
                     global_context_before="personal",
                     global_context_after="personal",
+                    foreign_profile_attestation=foreign_attestation(),
                     completed=False,
                     authoritative_attestation=authority,
                 )
@@ -7191,6 +7226,38 @@ class JournalRecoveryTest(unittest.TestCase):
                     "foreign_profile_snapshot_after",
                 ],
             )
+
+    def test_journal_foreign_attestation_rederives_name_free_projection(self):
+        record = {
+            "name": "personal",
+            "status": "Stopped",
+            "arch": "aarch64",
+            "cpus": 4,
+            "memory": 4294967296,
+            "disk": 21474836480,
+            "runtime": "containerd",
+        }
+        before = canonical_foreign_profile_snapshot(
+            (record,), "before_colima_mutation"
+        )
+        after = canonical_foreign_profile_snapshot(
+            (record,), "after_owned_profile_deletion"
+        )
+        events = [
+            {"event": "foreign_profile_snapshot_before", "details": before},
+            {"event": "foreign_profile_snapshot_after", "details": after},
+        ]
+
+        attestation = local_envoy_module._journal_foreign_profile_attestation(
+            events, HEX_A
+        )
+
+        self.assertTrue(attestation["unchanged"])
+        self.assertNotIn("personal", canonical_json(attestation))
+        self.assertEqual(
+            attestation["before"],
+            project_foreign_profile_snapshot(before, HEX_A),
+        )
 
     def test_legacy_v1_journal_retains_its_original_snapshot_free_rules(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -8250,7 +8317,12 @@ class JournalRecoveryTest(unittest.TestCase):
 
 class TeardownContinuationTest(unittest.TestCase):
     def _make_complete_down_controller(
-        self, directory, *, lifecycle="trusted", suppress_absence=False
+        self,
+        directory,
+        *,
+        lifecycle="trusted",
+        suppress_absence=False,
+        foreign_after=False,
     ):
         root = Path(directory) / "repo"
         profile_path = root / "deploy/kind/v3b-profile.json"
@@ -8304,7 +8376,14 @@ class TeardownContinuationTest(unittest.TestCase):
                 if command[:3] == ["colima", "list", "--json"]:
                     return CommandResult(
                         0,
-                        "[]\n"
+                        (
+                            '{"name":"personal","status":"Stopped",'
+                            '"arch":"aarch64","cpus":4,'
+                            '"memory":4294967296,"disk":21474836480,'
+                            '"runtime":"containerd"}\n'
+                        )
+                        if self.deleted and foreign_after
+                        else "[]\n"
                         if self.deleted
                         else (
                             '{"name":"kil-v3-lab","status":"Running",'
@@ -8632,6 +8711,12 @@ class TeardownContinuationTest(unittest.TestCase):
             source_commit="d" * 40,
             execution_nonce=HEX_A,
             global_context="personal",
+            schema_version="kil.v3b1-lifecycle-journal.v2",
+        )
+        journal_event(
+            controller.journal_path,
+            "foreign_profile_snapshot_before",
+            canonical_foreign_profile_snapshot((), "before_colima_mutation"),
         )
         journal_event(
             controller.journal_path,
@@ -8805,6 +8890,40 @@ class TeardownContinuationTest(unittest.TestCase):
             controller.payloads = {key: b"" for key in controller.payloads}
 
         return controller, value, bound, validators
+
+    def test_foreign_profile_mismatch_publishes_nonpromotable_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller, _, _, _ = self._make_complete_down_controller(
+                directory,
+                foreign_after=True,
+            )
+
+            published = controller.down()
+
+            public_manifest = json.loads(
+                (published / "manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertFalse(public_manifest["run_complete"])
+            self.assertFalse(
+                public_manifest["foreign_profile_attestation"]["unchanged"]
+            )
+            self.assertEqual(
+                local_envoy_module._verify_failure_presenter_bundle(published),
+                (published / "live.html").resolve(),
+            )
+            events = load_lifecycle_journal(
+                controller._private_completed_root()
+                / f"{public_manifest['run_id']}.journal.json"
+            )["events"]
+            mismatch = next(
+                event
+                for event in events
+                if event["event"] == "foreign_profile_mismatch"
+            )
+            self.assertEqual(
+                mismatch["details"]["mismatch_categories"],
+                ["profile_set"],
+            )
 
     def test_complete_down_orders_driver_proof_freeze_15_by_6_absence_and_publication(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -9285,7 +9404,7 @@ class TeardownContinuationTest(unittest.TestCase):
             if mutation is not None:
                 mutation(controller.live_driver)
 
-            create_lifecycle_journal(
+            create_snapshot_lifecycle_journal(
                 controller.journal_path,
                 private_root=controller.private_root,
                 repository_root=root,
@@ -9541,7 +9660,7 @@ class TeardownContinuationTest(unittest.TestCase):
                 )
                 private_manifest = controller.private_root / "manifests/run.json"
                 private_manifest.write_text(canonical_json(value) + "\n")
-                create_lifecycle_journal(
+                create_snapshot_lifecycle_journal(
                     controller.journal_path,
                     private_root=controller.private_root,
                     repository_root=root,
@@ -9863,7 +9982,7 @@ class TeardownContinuationTest(unittest.TestCase):
                 controller.objects = [complete_state["objects"][0]]
                 controller.networks = [complete_state["network_objects"][0]]
                 controller.running_ids = {controller.objects[0]["id"]}
-                create_lifecycle_journal(
+                create_snapshot_lifecycle_journal(
                     controller.journal_path,
                     private_root=controller.private_root,
                     repository_root=root,
@@ -10113,7 +10232,7 @@ class TeardownContinuationTest(unittest.TestCase):
                 )
                 private_manifest = controller.private_root / "manifests/run.json"
                 private_manifest.write_text(canonical_json(value) + "\n")
-                create_lifecycle_journal(
+                create_snapshot_lifecycle_journal(
                     controller.journal_path,
                     private_root=controller.private_root,
                     repository_root=root,
@@ -10461,7 +10580,7 @@ class TeardownContinuationTest(unittest.TestCase):
         private_manifest = controller.private_root / "manifests/run.json"
         private_manifest.parent.mkdir(parents=True, exist_ok=True)
         private_manifest.write_text(canonical_json(value) + "\n")
-        create_lifecycle_journal(
+        create_snapshot_lifecycle_journal(
             controller.journal_path,
             private_root=controller.private_root,
             repository_root=root,
@@ -12016,7 +12135,7 @@ class TeardownContinuationTest(unittest.TestCase):
                 private_manifest = controller.private_root / "manifests/run.json"
                 private_manifest.parent.mkdir(parents=True, exist_ok=True)
                 private_manifest.write_text(canonical_json(value) + "\n")
-                create_lifecycle_journal(
+                create_snapshot_lifecycle_journal(
                     controller.journal_path,
                     private_root=controller.private_root,
                     repository_root=root,
@@ -12212,7 +12331,7 @@ class TeardownContinuationTest(unittest.TestCase):
             )
             private_manifest = controller.private_root / "manifests/run.json"
             private_manifest.write_text(canonical_json(value) + "\n")
-            create_lifecycle_journal(
+            create_snapshot_lifecycle_journal(
                 controller.journal_path,
                 private_root=controller.private_root,
                 repository_root=root,
@@ -14580,6 +14699,7 @@ def published_presenter_bundle(
         engine_provenance=ENGINE_PROVENANCE,
         global_context_before=global_context,
         global_context_after=global_context,
+        foreign_profile_attestation=foreign_attestation(),
         completed=completed,
         authoritative_attestation=authority,
         publication_fault=publication_fault,
@@ -14647,6 +14767,12 @@ def interrupted_published_recovery(root, *, completed):
         source_commit="d" * 40,
         execution_nonce=HEX_A,
         global_context="personal",
+        schema_version="kil.v3b1-lifecycle-journal.v2",
+    )
+    journal_event(
+        controller.journal_path,
+        "foreign_profile_snapshot_before",
+        canonical_foreign_profile_snapshot((), "before_colima_mutation"),
     )
     journal_event(
         controller.journal_path,
@@ -14737,6 +14863,13 @@ def interrupted_published_recovery(root, *, completed):
     )
     journal_event(
         controller.journal_path,
+        "foreign_profile_snapshot_after",
+        canonical_foreign_profile_snapshot(
+            (), "after_owned_profile_deletion"
+        ),
+    )
+    journal_event(
+        controller.journal_path,
         "publication_intent",
         {"run_id": value["run_id"], "completed": completed},
     )
@@ -14749,6 +14882,7 @@ def interrupted_published_recovery(root, *, completed):
         engine_provenance=ENGINE_PROVENANCE,
         global_context_before="personal",
         global_context_after="personal",
+        foreign_profile_attestation=foreign_attestation(),
         completed=completed,
         authoritative_attestation=authority,
         repository_root=repository,
@@ -14762,7 +14896,45 @@ class EvidenceBundleTest(unittest.TestCase):
         "https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff"
     )
 
-    def test_v2_bundle_binds_exact_canonical_driver_results_everywhere(self):
+    def test_v3_foreign_profile_attestation_is_closed_and_truthful(self):
+        record = {
+            "name": "personal",
+            "status": "Stopped",
+            "arch": "aarch64",
+            "cpus": 4,
+            "memory": 4294967296,
+            "disk": 21474836480,
+            "runtime": "containerd",
+        }
+        attestation = foreign_attestation(
+            execution_nonce=HEX_A,
+            before_records=(record,),
+            after_records=(record,),
+        )
+        validated = local_envoy_module._validate_foreign_profile_attestation(
+            attestation,
+            completed=True,
+        )
+        self.assertEqual(validated, attestation)
+        self.assertNotIn("personal", canonical_json(validated))
+
+        changed = dict(attestation)
+        changed["after"] = [{**attestation["after"][0], "cpus": 8}]
+        changed["unchanged"] = False
+        with self.assertRaisesRegex(ControllerError, "unchanged|complete"):
+            local_envoy_module._validate_foreign_profile_attestation(
+                changed,
+                completed=True,
+            )
+        self.assertEqual(
+            local_envoy_module._validate_foreign_profile_attestation(
+                changed,
+                completed=False,
+            ),
+            changed,
+        )
+
+    def test_v3_bundle_binds_exact_canonical_driver_results_everywhere(self):
         value, requests, decisions, envoy, targets = JoinContractTest().all_records()
         raw_driver_results = driver_results_for_requests(requests)
         with tempfile.TemporaryDirectory() as directory:
@@ -14789,11 +14961,20 @@ class EvidenceBundleTest(unittest.TestCase):
                 engine_provenance=ENGINE_PROVENANCE,
                 global_context_before="personal",
                 global_context_after="personal",
+                foreign_profile_attestation=foreign_attestation(),
                 completed=True,
                 authoritative_attestation=authority,
             )
             public_manifest = json.loads(
                 (published / "manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                public_manifest["schema_version"],
+                "kil.v3b1-public-manifest.v3",
+            )
+            self.assertEqual(
+                public_manifest["foreign_profile_attestation"],
+                foreign_attestation(),
             )
             sums = {
                 relative: digest
@@ -14821,6 +15002,54 @@ class EvidenceBundleTest(unittest.TestCase):
                 self.assertEqual(sums[relative], digest)
                 self.assertEqual(public_manifest["artifact_sha256"][relative], digest)
                 self.assertEqual(authority["file_sha256"][relative], digest)
+            self.assertEqual(
+                local_envoy_module.verify_presenter_bundle(published),
+                (published / "live.html").resolve(),
+            )
+
+    def test_v2_driver_bundle_remains_independently_verifiable(self):
+        value, requests, decisions, envoy, targets = JoinContractTest().all_records()
+        value = {**value, "schema_version": "kil.v3b1-manifest.v2"}
+        raw_driver_results = driver_results_for_requests(requests)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provisional = write_evidence_bundle(
+                root / "private",
+                value,
+                requests=requests,
+                decisions=decisions,
+                envoy=envoy,
+                targets=targets,
+                joins=join_evidence(value, requests, decisions, envoy, targets),
+                raw_driver_results=raw_driver_results,
+            )
+            authority = authoritative_bundle_attestation(provisional)
+            self.assertEqual(
+                authority["schema_version"],
+                "kil.v3b1-authoritative-bundle.v2",
+            )
+            published = finalize_publication(
+                provisional,
+                root / "public",
+                value,
+                source_attestations=presenter_source_attestations(
+                    provisional, envoy, targets
+                ),
+                tool_identities=TOOL_IDENTITIES,
+                engine_provenance=ENGINE_PROVENANCE,
+                global_context_before="personal",
+                global_context_after="personal",
+                completed=True,
+                authoritative_attestation=authority,
+            )
+            public_manifest = json.loads(
+                (published / "manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                public_manifest["schema_version"],
+                "kil.v3b1-public-manifest.v2",
+            )
+            self.assertNotIn("foreign_profile_attestation", public_manifest)
             self.assertEqual(
                 local_envoy_module.verify_presenter_bundle(published),
                 (published / "live.html").resolve(),
@@ -15395,6 +15624,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 engine_provenance=ENGINE_PROVENANCE,
                 global_context_before="personal",
                 global_context_after="personal",
+                foreign_profile_attestation=foreign_attestation(),
                 completed=True,
                 authoritative_attestation=authoritative,
             )
@@ -15421,6 +15651,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 engine_provenance=ENGINE_PROVENANCE,
                 global_context_before="personal",
                 global_context_after="personal",
+                foreign_profile_attestation=foreign_attestation(),
                 completed=False,
                 authoritative_attestation=authoritative,
             )
@@ -15656,6 +15887,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 engine_provenance=ENGINE_PROVENANCE,
                 global_context_before="personal",
                 global_context_after="personal",
+                foreign_profile_attestation=foreign_attestation(),
                 completed=True,
                 authoritative_attestation=authoritative_bundle_attestation(
                     provisional
@@ -15792,6 +16024,7 @@ class EvidenceBundleTest(unittest.TestCase):
                         engine_provenance=ENGINE_PROVENANCE,
                         global_context_before="personal",
                         global_context_after="personal",
+                        foreign_profile_attestation=foreign_attestation(),
                         completed=True,
                         authoritative_attestation=authoritative_bundle_attestation(
                             provisional
@@ -15922,6 +16155,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     engine_provenance=ENGINE_PROVENANCE,
                     global_context_before="personal",
                     global_context_after="personal",
+                    foreign_profile_attestation=foreign_attestation(),
                     completed=True,
                     authoritative_attestation=authoritative_bundle_attestation(
                         provisional
@@ -16340,7 +16574,7 @@ class EvidenceBundleTest(unittest.TestCase):
             expected_commitment = sha256(
                 canonical_json(
                     {
-                        "schema_version": "kil.v3b1-public-commitment.v2",
+                        "schema_version": "kil.v3b1-public-commitment.v3",
                         "manifest": projected,
                         "file_sha256": dict(sorted(committed_files.items())),
                     }
@@ -16867,6 +17101,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     engine_provenance=ENGINE_PROVENANCE,
                     global_context_before="personal",
                     global_context_after="personal",
+                    foreign_profile_attestation=foreign_attestation(),
                     completed=True,
                     authoritative_attestation=authority,
                 )
@@ -17139,6 +17374,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     engine_provenance=ENGINE_PROVENANCE,
                     global_context_before="personal",
                     global_context_after="personal",
+                    foreign_profile_attestation=foreign_attestation(),
                     completed=True,
                     authoritative_attestation=authoritative,
                 )
@@ -17155,6 +17391,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     engine_provenance=ENGINE_PROVENANCE,
                     global_context_before="personal",
                     global_context_after="personal",
+                    foreign_profile_attestation=foreign_attestation(),
                     completed=True,
                     authoritative_attestation=authoritative,
                 )
@@ -17171,6 +17408,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     engine_provenance=ENGINE_PROVENANCE,
                     global_context_before="personal",
                     global_context_after="personal",
+                    foreign_profile_attestation=foreign_attestation(),
                     completed=True,
                     authoritative_attestation=authoritative,
                 )
@@ -17185,6 +17423,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     engine_provenance=extra_engine,
                     global_context_before="personal",
                     global_context_after="personal",
+                    foreign_profile_attestation=foreign_attestation(),
                     completed=True,
                     authoritative_attestation=authoritative,
                 )
@@ -17203,6 +17442,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     engine_provenance=ENGINE_PROVENANCE,
                     global_context_before="personal",
                     global_context_after="personal",
+                    foreign_profile_attestation=foreign_attestation(),
                     completed=True,
                     authoritative_attestation=authoritative,
                     repository_root=root,
@@ -17224,6 +17464,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     engine_provenance=ENGINE_PROVENANCE,
                     global_context_before="personal",
                     global_context_after="personal",
+                    foreign_profile_attestation=foreign_attestation(),
                     completed=True,
                     authoritative_attestation=authoritative,
                     repository_root=root,
@@ -17272,6 +17513,7 @@ class EvidenceBundleTest(unittest.TestCase):
                             engine_provenance=ENGINE_PROVENANCE,
                             global_context_before="personal",
                             global_context_after="personal",
+                            foreign_profile_attestation=foreign_attestation(),
                             completed=True,
                             authoritative_attestation=authoritative,
                         )
@@ -17304,6 +17546,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     engine_provenance=ENGINE_PROVENANCE,
                     global_context_before="personal",
                     global_context_after="personal",
+                    foreign_profile_attestation=foreign_attestation(),
                     completed=True,
                     authoritative_attestation=authoritative,
                     publication_fault=fail_after_manifest,
@@ -17336,6 +17579,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     engine_provenance=ENGINE_PROVENANCE,
                     global_context_before="personal",
                     global_context_after="personal",
+                    foreign_profile_attestation=foreign_attestation(),
                     completed=True,
                     authoritative_attestation=authoritative,
                     publication_fault=mutate_staged_request,
@@ -17366,6 +17610,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     engine_provenance=ENGINE_PROVENANCE,
                     global_context_before="personal",
                     global_context_after="personal",
+                    foreign_profile_attestation=foreign_attestation(),
                     completed=True,
                     authoritative_attestation=authoritative,
                     publication_fault=mutate_staged_summary,
@@ -17389,6 +17634,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 engine_provenance=ENGINE_PROVENANCE,
                 global_context_before="personal",
                 global_context_after="personal",
+                foreign_profile_attestation=foreign_attestation(),
                 completed=True,
                 authoritative_attestation=authoritative,
             )
@@ -17454,6 +17700,7 @@ class EvidenceBundleTest(unittest.TestCase):
                     engine_provenance=ENGINE_PROVENANCE,
                     global_context_before="personal",
                     global_context_after="personal",
+                    foreign_profile_attestation=foreign_attestation(),
                     completed=True,
                     authoritative_attestation=authoritative,
                 )
@@ -17491,6 +17738,7 @@ class EvidenceBundleTest(unittest.TestCase):
                 engine_provenance=ENGINE_PROVENANCE,
                 global_context_before="default",
                 global_context_after="default",
+                foreign_profile_attestation=foreign_attestation(),
                 completed=False,
                 authoritative_attestation=authoritative,
             )

@@ -107,7 +107,8 @@ AUTHORIZATION = "Bearer v3b1-lab-credential"
 SUBJECT = "spiffe://kil.local/workload/demo"
 PLATFORM = "linux/arm64"
 LEGACY_MANIFEST_SCHEMA = "kil.v3b1-manifest.v1"
-MANIFEST_SCHEMA = "kil.v3b1-manifest.v2"
+DRIVER_MANIFEST_SCHEMA = "kil.v3b1-manifest.v2"
+MANIFEST_SCHEMA = "kil.v3b1-manifest.v3"
 STATE_SCHEMA = "kil.v3b1-active-state.v2"
 LEGACY_JOURNAL_SCHEMA = "kil.v3b1-lifecycle-journal.v1"
 JOURNAL_SCHEMA = "kil.v3b1-lifecycle-journal.v2"
@@ -2640,7 +2641,7 @@ def _complete_request_attempt(
     events.append(
         {"sequence": len(events) + 1, "event": event, "details": details}
     )
-    _validate_lifecycle_history(events, requests)
+    _validate_lifecycle_history(events, requests, str(value["schema_version"]))
     value["phase"] = event
     return _persist_journal(journal_path, value)
 
@@ -2750,7 +2751,9 @@ def claim_request_attempt(
     events = value["events"]
     assert isinstance(events, list)
     current_readiness, readiness_complete = _validate_lifecycle_history(
-        events, value["requests"]  # type: ignore[arg-type]
+        events,
+        value["requests"],  # type: ignore[arg-type]
+        str(value["schema_version"]),
     )
     if current_readiness != readiness_nonce or not readiness_complete:
         raise ControllerError("request intent lacks a complete fresh readiness set")
@@ -2769,7 +2772,7 @@ def claim_request_attempt(
             "details": {"track": track.value, "intent_id": intent_id},
         }
     )
-    _validate_lifecycle_history(events, requests)
+    _validate_lifecycle_history(events, requests, str(value["schema_version"]))
     value["phase"] = "request_send_intent"
     _persist_journal(journal_path, value)
     return {"track": track.value, "status": "intent_persisted", "intent_id": intent_id}
@@ -3546,6 +3549,102 @@ def compare_foreign_profile_snapshots(
     }
 
 
+def _validate_foreign_profile_attestation(
+    value: Mapping[str, object], *, completed: bool
+) -> dict[str, object]:
+    """Validate one name-free public before/after projection."""
+    if type(value) is not dict or set(value) != {
+        "schema_version", "before", "after", "unchanged"
+    }:
+        raise ControllerError("foreign profile attestation fields are not closed")
+    if (
+        value["schema_version"] != FOREIGN_ATTESTATION_SCHEMA
+        or type(value["before"]) is not list
+        or type(value["after"]) is not list
+        or type(value["unchanged"]) is not bool
+    ):
+        raise ControllerError("foreign profile attestation identity is invalid")
+    expected_fields = {"profile_ref", *_FOREIGN_RESOURCE_FIELDS}
+    arrays: list[list[dict[str, object]]] = []
+    for label in ("before", "after"):
+        records = value[label]
+        assert isinstance(records, list)
+        closed: list[dict[str, object]] = []
+        for record in records:
+            if type(record) is not dict or set(record) != expected_fields:
+                raise ControllerError(
+                    "foreign profile attestation record fields are not closed"
+                )
+            _require_sha256("foreign profile reference", record["profile_ref"])
+            if any(
+                type(record[name]) is not str or not record[name]
+                for name in ("status", "arch", "runtime")
+            ) or any(
+                type(record[name]) is not int or record[name] <= 0
+                for name in ("cpus", "memory", "disk")
+            ):
+                raise ControllerError(
+                    "foreign profile attestation record values are invalid"
+                )
+            try:
+                for name in ("status", "arch", "runtime"):
+                    str(record[name]).encode("utf-8")
+            except UnicodeEncodeError as error:
+                raise ControllerError(
+                    "foreign profile attestation contains invalid Unicode"
+                ) from error
+            closed.append(dict(record))
+        references = [str(record["profile_ref"]) for record in closed]
+        if references != sorted(references) or len(references) != len(set(references)):
+            raise ControllerError(
+                "foreign profile attestation references are unordered or duplicated"
+            )
+        arrays.append(closed)
+    unchanged = arrays[0] == arrays[1]
+    if value["unchanged"] is not unchanged:
+        raise ControllerError("foreign profile attestation unchanged flag is untruthful")
+    if completed and not unchanged:
+        raise ControllerError("complete evidence requires unchanged foreign profiles")
+    return {
+        "schema_version": FOREIGN_ATTESTATION_SCHEMA,
+        "before": arrays[0],
+        "after": arrays[1],
+        "unchanged": unchanged,
+    }
+
+
+def _journal_foreign_profile_attestation(
+    events: Sequence[Mapping[str, object]], execution_nonce: str
+) -> dict[str, object]:
+    """Derive the public projection only from the two durable journal records."""
+    snapshots: dict[str, Mapping[str, object]] = {}
+    for event_name, stage in (
+        ("foreign_profile_snapshot_before", "before_colima_mutation"),
+        ("foreign_profile_snapshot_after", "after_owned_profile_deletion"),
+    ):
+        matches = [
+            event for event in events if event.get("event") == event_name
+        ]
+        if len(matches) != 1 or type(matches[0].get("details")) is not dict:
+            raise ControllerError(
+                "foreign profile journal snapshots are incomplete or duplicated"
+            )
+        snapshots[event_name] = _validate_foreign_profile_snapshot(
+            matches[0]["details"],  # type: ignore[arg-type]
+            capture_stage=stage,
+        )
+    before = snapshots["foreign_profile_snapshot_before"]
+    after = snapshots["foreign_profile_snapshot_after"]
+    comparison = compare_foreign_profile_snapshots(before, after)
+    attestation = {
+        "schema_version": FOREIGN_ATTESTATION_SCHEMA,
+        "before": project_foreign_profile_snapshot(before, execution_nonce),
+        "after": project_foreign_profile_snapshot(after, execution_nonce),
+        "unchanged": comparison["unchanged"],
+    }
+    return _validate_foreign_profile_attestation(attestation, completed=False)
+
+
 def validate_colima_profiles(records: Sequence[Mapping[str, object]]) -> None:
     for record in records:
         if record.get("status", "").lower() == "running" and record.get("name") != LAB_IDENTITY:
@@ -4179,7 +4278,7 @@ def _validate_manifest_v2(value: object) -> dict[str, object]:
     if type(value) is not dict or set(value) != expected:
         raise ControllerError("manifest fields are not closed")
     if (
-        value["schema_version"] != MANIFEST_SCHEMA
+        value["schema_version"] != DRIVER_MANIFEST_SCHEMA
         or value["evidence_scope"] != EVIDENCE_SCOPE
     ):
         raise ControllerError("manifest identity is invalid")
@@ -4384,8 +4483,13 @@ def _validate_manifest(value: object) -> dict[str, object]:
     schema = value.get("schema_version")
     if schema == LEGACY_MANIFEST_SCHEMA:
         return _validate_manifest_v1(value)
-    if schema == MANIFEST_SCHEMA:
+    if schema == DRIVER_MANIFEST_SCHEMA:
         return _validate_manifest_v2(value)
+    if schema == MANIFEST_SCHEMA:
+        projected = dict(value)
+        projected["schema_version"] = DRIVER_MANIFEST_SCHEMA
+        _validate_manifest_v2(projected)
+        return value
     raise ControllerError("manifest schema is invalid")
 
 
@@ -6436,14 +6540,17 @@ _PRESENTER_FORBIDDEN = (
 )
 _PUBLIC_COMMITMENT_SCHEMA = "kil.v3b1-public-commitment.v1"
 _PUBLIC_COMMITMENT_SCHEMA_V2 = "kil.v3b1-public-commitment.v2"
+_PUBLIC_COMMITMENT_SCHEMA_V3 = "kil.v3b1-public-commitment.v3"
 _PUBLIC_COMMITMENT_RULE = (
     "sha256_of_canonical_manifest_without_public_commitment_sha256_and_"
     "all_public_file_sha256_except_manifest_and_SHA256SUMS"
 )
 _LEGACY_PUBLIC_MANIFEST_SCHEMA = "kil.v3b1-public-manifest.v1"
 _DRIVER_PUBLIC_MANIFEST_SCHEMA = "kil.v3b1-public-manifest.v2"
+_FOREIGN_PUBLIC_MANIFEST_SCHEMA = "kil.v3b1-public-manifest.v3"
 _LEGACY_AUTHORITATIVE_BUNDLE_SCHEMA = "kil.v3b1-authoritative-bundle.v1"
 _DRIVER_AUTHORITATIVE_BUNDLE_SCHEMA = "kil.v3b1-authoritative-bundle.v2"
+_FOREIGN_AUTHORITATIVE_BUNDLE_SCHEMA = "kil.v3b1-authoritative-bundle.v3"
 
 
 def _bundle_generation(schema_version: object) -> int:
@@ -6452,8 +6559,10 @@ def _bundle_generation(schema_version: object) -> int:
         _LEGACY_PUBLIC_MANIFEST_SCHEMA,
     }:
         return 1
-    if schema_version in {MANIFEST_SCHEMA, _DRIVER_PUBLIC_MANIFEST_SCHEMA}:
+    if schema_version in {DRIVER_MANIFEST_SCHEMA, _DRIVER_PUBLIC_MANIFEST_SCHEMA}:
         return 2
+    if schema_version in {MANIFEST_SCHEMA, _FOREIGN_PUBLIC_MANIFEST_SCHEMA}:
+        return 3
     raise ControllerError("evidence manifest schema is invalid")
 
 
@@ -6467,7 +6576,7 @@ def _authoritative_file_names(schema_version: object) -> set[str]:
         "SHA256SUMS",
         *{f"raw/decisions/{track.value}.jsonl" for track in _TRACKS},
     }
-    if _bundle_generation(schema_version) == 2:
+    if _bundle_generation(schema_version) in {2, 3}:
         names.update(_driver_result_file_names())
     return names
 
@@ -6518,7 +6627,7 @@ def _presenter_model(
             source_commit,
             (),
             False,
-            _bundle_generation(manifest.get("schema_version")) == 2,
+            _bundle_generation(manifest.get("schema_version")) in {2, 3},
         )
     decisions_by_track = {
         str(item.get("track")): item for item in decisions
@@ -6624,7 +6733,7 @@ def _presenter_model(
         source_commit,
         tuple(tracks),
         True,
-        _bundle_generation(manifest.get("schema_version")) == 2,
+        _bundle_generation(manifest.get("schema_version")) in {2, 3},
     )
 
 
@@ -6896,7 +7005,7 @@ def _public_bundle_snapshot(
                 "decisions", directory_flags, dir_fd=raw_fd
             )
             decisions_opened = os.fstat(decisions_fd)
-            if generation == 2:
+            if generation in {2, 3}:
                 drivers_fd = os.open(
                     "drivers", directory_flags, dir_fd=raw_fd
                 )
@@ -6921,13 +7030,13 @@ def _public_bundle_snapshot(
             else _snapshot_identity(drivers_opened)
         )
         expected_raw_names = {"decisions"} | (
-            {"drivers"} if generation == 2 else set()
+            {"drivers"} if generation in {2, 3} else set()
         )
         if (
             set(os.listdir(root_fd)) != root_names
             or set(os.listdir(raw_fd)) != expected_raw_names
             or set(os.listdir(decisions_fd)) != raw_decision_names
-            or generation == 2
+            or generation in {2, 3}
             and set(os.listdir(drivers_fd)) != raw_driver_names
         ):
             raise ControllerError("public evidence artifact set is not closed")
@@ -6935,7 +7044,7 @@ def _public_bundle_snapshot(
             os.stat("raw", dir_fd=root_fd, follow_symlinks=False)
         ) or decisions_identity != _snapshot_identity(
             os.stat("decisions", dir_fd=raw_fd, follow_symlinks=False)
-        ) or generation == 2 and drivers_identity != _snapshot_identity(
+        ) or generation in {2, 3} and drivers_identity != _snapshot_identity(
             os.stat("drivers", dir_fd=raw_fd, follow_symlinks=False)
         ):
             raise ControllerError("public evidence directory identity is unstable")
@@ -6989,12 +7098,12 @@ def _public_bundle_snapshot(
             root_identity != _snapshot_identity(os.fstat(root_fd))
             or raw_identity != _snapshot_identity(os.fstat(raw_fd))
             or decisions_identity != _snapshot_identity(os.fstat(decisions_fd))
-            or generation == 2
+            or generation in {2, 3}
             and drivers_identity != _snapshot_identity(os.fstat(drivers_fd))
             or set(os.listdir(root_fd)) != root_names
             or set(os.listdir(raw_fd)) != expected_raw_names
             or set(os.listdir(decisions_fd)) != raw_decision_names
-            or generation == 2
+            or generation in {2, 3}
             and set(os.listdir(drivers_fd)) != raw_driver_names
         ):
             raise ControllerError("public evidence inventory changed during snapshot")
@@ -7017,7 +7126,7 @@ def _public_bundle_snapshot(
             root_identity != _snapshot_identity(root_path)
             or raw_identity != _snapshot_identity(raw_path)
             or decisions_identity != _snapshot_identity(decisions_path)
-            or generation == 2
+            or generation in {2, 3}
             and drivers_identity != _snapshot_identity(drivers_path)
         ):
             raise ControllerError("public evidence directory changed during snapshot")
@@ -7038,12 +7147,12 @@ def _public_bundle_snapshot(
                 or raw_identity != _snapshot_identity(os.fstat(raw_fd))
                 or decisions_identity
                 != _snapshot_identity(os.fstat(decisions_fd))
-                or generation == 2
+                or generation in {2, 3}
                 and drivers_identity != _snapshot_identity(os.fstat(drivers_fd))
                 or set(os.listdir(root_fd)) != root_names
                 or set(os.listdir(raw_fd)) != expected_raw_names
                 or set(os.listdir(decisions_fd)) != raw_decision_names
-                or generation == 2
+                or generation in {2, 3}
                 and set(os.listdir(drivers_fd)) != raw_driver_names
             ):
                 raise ControllerError(
@@ -7060,7 +7169,7 @@ def _public_bundle_snapshot(
                     os.stat("raw", dir_fd=root_fd, follow_symlinks=False)
                 ) or decisions_identity != _snapshot_identity(
                     os.stat("decisions", dir_fd=raw_fd, follow_symlinks=False)
-                ) or generation == 2 and drivers_identity != _snapshot_identity(
+                ) or generation in {2, 3} and drivers_identity != _snapshot_identity(
                     os.stat("drivers", dir_fd=raw_fd, follow_symlinks=False)
                 ):
                     raise ControllerError(
@@ -7384,6 +7493,34 @@ def _validate_public_manifest_v2(
         raise ControllerError("public commitment does not bind the snapshot")
 
 
+def _validate_public_manifest_v3(
+    value: Mapping[str, object],
+    payloads: Mapping[str, bytes],
+    *,
+    completed: bool = True,
+) -> None:
+    """Validate driver evidence plus the closed foreign-profile attestation."""
+    if type(value) is not dict or value.get("schema_version") != (
+        _FOREIGN_PUBLIC_MANIFEST_SCHEMA
+    ):
+        raise ControllerError("public manifest schema is invalid")
+    foreign = value.get("foreign_profile_attestation")
+    if type(foreign) is not dict:
+        raise ControllerError("public foreign profile attestation is required")
+    _validate_foreign_profile_attestation(foreign, completed=completed)
+    projected = dict(value)
+    projected.pop("foreign_profile_attestation")
+    projected["schema_version"] = _DRIVER_PUBLIC_MANIFEST_SCHEMA
+    projected["public_commitment_sha256"] = _public_commitment_sha256(
+        projected, payloads
+    )
+    _validate_public_manifest_v2(projected, payloads, completed=completed)
+    if value.get("public_commitment_sha256") != _public_commitment_sha256(
+        value, payloads
+    ):
+        raise ControllerError("public commitment does not bind the snapshot")
+
+
 def _validate_public_manifest(
     value: Mapping[str, object],
     payloads: Mapping[str, bytes],
@@ -7399,6 +7536,9 @@ def _validate_public_manifest(
         return
     if schema == "kil.v3b1-public-manifest.v2":
         _validate_public_manifest_v2(value, payloads, completed=completed)
+        return
+    if schema == _FOREIGN_PUBLIC_MANIFEST_SCHEMA:
+        _validate_public_manifest_v3(value, payloads, completed=completed)
         return
     raise ControllerError("public manifest schema is invalid")
 
@@ -7825,6 +7965,8 @@ def _public_commitment_sha256(
         commitment_schema = _PUBLIC_COMMITMENT_SCHEMA
     elif public_schema == "kil.v3b1-public-manifest.v2":
         commitment_schema = _PUBLIC_COMMITMENT_SCHEMA_V2
+    elif public_schema == _FOREIGN_PUBLIC_MANIFEST_SCHEMA:
+        commitment_schema = _PUBLIC_COMMITMENT_SCHEMA_V3
     else:
         raise ControllerError("public commitment manifest schema is invalid")
     commitment = {
@@ -7860,6 +8002,8 @@ def _validate_authoritative_attestation(
     if schema == _LEGACY_AUTHORITATIVE_BUNDLE_SCHEMA:
         manifest_schema = LEGACY_MANIFEST_SCHEMA
     elif schema == _DRIVER_AUTHORITATIVE_BUNDLE_SCHEMA:
+        manifest_schema = DRIVER_MANIFEST_SCHEMA
+    elif schema == _FOREIGN_AUTHORITATIVE_BUNDLE_SCHEMA:
         manifest_schema = MANIFEST_SCHEMA
     else:
         raise ControllerError("authoritative bundle attestation schema is invalid")
@@ -7886,11 +8030,11 @@ def _validate_authoritative_attestation(
 def authoritative_bundle_attestation(output: Path) -> dict[str, object]:
     """Bind every byte in one closed, checksummed provisional bundle."""
     manifest_schema = _manifest_schema_from_output(output)
-    authority_schema = (
-        _LEGACY_AUTHORITATIVE_BUNDLE_SCHEMA
-        if _bundle_generation(manifest_schema) == 1
-        else _DRIVER_AUTHORITATIVE_BUNDLE_SCHEMA
-    )
+    authority_schema = {
+        1: _LEGACY_AUTHORITATIVE_BUNDLE_SCHEMA,
+        2: _DRIVER_AUTHORITATIVE_BUNDLE_SCHEMA,
+        3: _FOREIGN_AUTHORITATIVE_BUNDLE_SCHEMA,
+    }[_bundle_generation(manifest_schema)]
     verify_public_checksums(output)
     hashes = {
         relative: _digest_file(output / relative)
@@ -8054,6 +8198,7 @@ def _verify_recovered_publication(
     tool_identities: Mapping[str, object],
     engine_provenance: Mapping[str, object],
     global_context: str,
+    foreign_profile_attestation: Mapping[str, object] | None = None,
     before_completion: Callable[[], None] | None = None,
     publication_complete: Callable[[str], None] | None = None,
     publication_cleanup: Callable[[], None] | None = None,
@@ -8064,11 +8209,26 @@ def _verify_recovered_publication(
     assert isinstance(authority_hashes, dict)
     private_schema = private_manifest.get("schema_version")
     private_generation = _bundle_generation(private_schema)
-    expected_public_schema = (
-        _LEGACY_PUBLIC_MANIFEST_SCHEMA
-        if private_generation == 1
-        else _DRIVER_PUBLIC_MANIFEST_SCHEMA
-    )
+    expected_public_schema = {
+        1: _LEGACY_PUBLIC_MANIFEST_SCHEMA,
+        2: _DRIVER_PUBLIC_MANIFEST_SCHEMA,
+        3: _FOREIGN_PUBLIC_MANIFEST_SCHEMA,
+    }[private_generation]
+    if private_generation == 3:
+        if type(foreign_profile_attestation) is not dict:
+            raise ControllerError(
+                "v3 recovery requires foreign profile attestation"
+            )
+        expected_foreign = _validate_foreign_profile_attestation(
+            foreign_profile_attestation,
+            completed=completed,
+        )
+    else:
+        if foreign_profile_attestation is not None:
+            raise ControllerError(
+                "legacy recovery rejects foreign profile attestation"
+            )
+        expected_foreign = None
     expected_authority_names = _authoritative_file_names(private_schema)
     if set(authority_hashes) != expected_authority_names:
         raise ControllerError(
@@ -8114,6 +8274,12 @@ def _verify_recovered_publication(
         ]:
             raise ControllerError(
                 "public publication source provenance diverges from journal"
+            )
+        if private_generation == 3 and public_manifest.get(
+            "foreign_profile_attestation"
+        ) != expected_foreign:
+            raise ControllerError(
+                "public foreign profile attestation diverges from journal"
             )
         if (
             public_manifest.get("verified_tool_identities")
@@ -8553,6 +8719,7 @@ def finalize_publication(
     engine_provenance: Mapping[str, object],
     global_context_before: str,
     global_context_after: str,
+    foreign_profile_attestation: Mapping[str, object] | None = None,
     completed: bool,
     authoritative_attestation: Mapping[str, object],
     publication_fault: Callable[[str, Path], None] | None = None,
@@ -8565,11 +8732,11 @@ def finalize_publication(
     _validate_manifest(private_manifest)
     private_schema = private_manifest.get("schema_version")
     generation = _bundle_generation(private_schema)
-    public_schema = (
-        _LEGACY_PUBLIC_MANIFEST_SCHEMA
-        if generation == 1
-        else _DRIVER_PUBLIC_MANIFEST_SCHEMA
-    )
+    public_schema = {
+        1: _LEGACY_PUBLIC_MANIFEST_SCHEMA,
+        2: _DRIVER_PUBLIC_MANIFEST_SCHEMA,
+        3: _FOREIGN_PUBLIC_MANIFEST_SCHEMA,
+    }[generation]
     private_file_names = _authoritative_file_names(private_schema)
     public_file_names = _authoritative_file_names(public_schema)
     if private_file_names != public_file_names:
@@ -8608,6 +8775,17 @@ def finalize_publication(
     )
     if global_context_before != global_context_after:
         raise ControllerError("global Docker context changed during controller lifecycle")
+    if generation == 3:
+        if type(foreign_profile_attestation) is not dict:
+            raise ControllerError("v3 publication requires foreign profile attestation")
+        foreign_profile_attestation = _validate_foreign_profile_attestation(
+            foreign_profile_attestation,
+            completed=completed,
+        )
+    elif foreign_profile_attestation is not None:
+        raise ControllerError(
+            "legacy publication rejects foreign profile attestation"
+        )
     if type(source_attestations) not in (list, tuple):
         raise ControllerError("source attestations must be a sequence")
     _validate_public_provenance(tool_identities, engine_provenance)
@@ -8681,6 +8859,11 @@ def finalize_publication(
             "network_policy_validation",
         ],
     }
+    if generation == 3:
+        assert foreign_profile_attestation is not None
+        public_manifest["foreign_profile_attestation"] = dict(
+            foreign_profile_attestation
+        )
     _reject_public_secrets(public_manifest)
     publication_root = (
         publication_staging_root
@@ -9326,13 +9509,13 @@ def _require_private_bundle_inventory(
         raise ControllerError("private evidence artifact set is not closed")
     if _private_directory_names(
         transaction.raw_fd, "private evidence raw directory"
-    ) != {"decisions"} | ({"drivers"} if generation == 2 else set()):
+    ) != {"decisions"} | ({"drivers"} if generation in {2, 3} else set()):
         raise ControllerError("private evidence raw artifact set is not closed")
     if _private_directory_names(
         transaction.decisions_fd, "private evidence decision directory"
     ) != {f"{track.value}.jsonl" for track in _TRACKS}:
         raise ControllerError("private evidence decision artifact set is not closed")
-    if generation == 2 and _private_directory_names(
+    if generation in {2, 3} and _private_directory_names(
         transaction.drivers_fd, "private evidence driver directory"
     ) != {f"{track.value}.json" for track in _TRACKS}:
         raise ControllerError("private evidence driver artifact set is not closed")
@@ -9377,7 +9560,7 @@ def write_evidence_bundle(
                 f"evidence directory contains unexpected files: {sorted(unexpected)}"
             )
         _prepare_private_evidence_raw_directories(
-            transaction, include_drivers=generation == 2
+            transaction, include_drivers=generation in {2, 3}
         )
         if private_evidence_fault is not None:
             private_evidence_fault("after_prepare", transaction.output)
@@ -9415,7 +9598,7 @@ def write_evidence_bundle(
                 payload,
                 0o444,
             )
-        if generation == 2:
+        if generation in {2, 3}:
             if (
                 type(raw_driver_results) is not dict
                 or set(raw_driver_results) != set(_TRACKS)
@@ -9535,7 +9718,7 @@ def _prepare_failure_provisional(
         if unexpected:
             raise ControllerError("failure provisional contains unexpected files")
         _prepare_private_evidence_raw_directories(
-            transaction, include_drivers=generation == 2
+            transaction, include_drivers=generation in {2, 3}
         )
         if private_evidence_fault is not None:
             private_evidence_fault("after_prepare", transaction.output)
@@ -9565,7 +9748,7 @@ def _prepare_failure_provisional(
                 _write_private_file_at(
                     transaction.decisions_fd, name, b"", 0o444
                 )
-        if generation == 2:
+        if generation in {2, 3}:
             if (
                 type(raw_driver_results) is not dict
                 or set(raw_driver_results) != set(_TRACKS)
@@ -10192,7 +10375,9 @@ class LocalEnvoyController:
         events = journal["events"]
         assert isinstance(events, list)
         current_readiness, _ = _validate_lifecycle_history(
-            events, journal["requests"]  # type: ignore[arg-type]
+            events,
+            journal["requests"],  # type: ignore[arg-type]
+            str(journal["schema_version"]),
         )
         if current_readiness != readiness_nonce:
             raise ControllerError("readiness poison session is not current")
@@ -15186,6 +15371,13 @@ class LocalEnvoyController:
                 provisional = self._private_provisional_root() / str(manifest["run_id"])
                 if not provisional.is_dir():
                     raise ControllerError("post-delete provisional evidence is unavailable")
+                foreign_attestation = (
+                    _journal_foreign_profile_attestation(
+                        events, str(journal["execution_nonce"])
+                    )
+                    if _bundle_generation(manifest.get("schema_version")) == 3
+                    else None
+                )
                 global_after = self._capture_global_context()
                 if not any(
                     event["event"] == "publication_intent"
@@ -15211,6 +15403,7 @@ class LocalEnvoyController:
                     engine_provenance=engine_provenance,
                     global_context_before=str(journal["global_context_before"]),
                     global_context_after=global_after,
+                    foreign_profile_attestation=foreign_attestation,
                     completed=completed,
                     authoritative_attestation=authoritative,
                     publication_fault=self.publication_fault,
@@ -15248,6 +15441,14 @@ class LocalEnvoyController:
                     "durable publication provenance is malformed"
                 )
             _validate_public_provenance(tool_identities, engine_provenance)
+            recovered_foreign_attestation = (
+                _journal_foreign_profile_attestation(
+                    recovered_events,
+                    str(recovered_journal["execution_nonce"]),
+                )
+                if _bundle_generation(manifest.get("schema_version")) == 3
+                else None
+            )
             global_after = self._capture_global_context()
             if global_after != recovered_journal["global_context_before"]:
                 raise ControllerError(
@@ -15262,6 +15463,7 @@ class LocalEnvoyController:
                 tool_identities=tool_identities,
                 engine_provenance=engine_provenance,
                 global_context=str(recovered_journal["global_context_before"]),
+                foreign_profile_attestation=recovered_foreign_attestation,
                 before_completion=before_publication_completion,
                 publication_complete=complete_publication,
                 publication_cleanup=cleanup_completed_publication,
@@ -15712,11 +15914,27 @@ class LocalEnvoyController:
             "colima_delete_complete",
             {"profile": LAB_IDENTITY, "verified_absent": True},
         )
+        foreign_comparison: dict[str, object] | None = None
         if journal["schema_version"] == JOURNAL_SCHEMA:
-            self._record_after_foreign_profile_snapshot()
+            _, _, foreign_comparison = (
+                self._record_after_foreign_profile_snapshot()
+            )
         global_after = self._capture_global_context()
         if global_after != journal["global_context_before"]:
             raise ControllerError("global Docker context changed during lifecycle")
+        if (
+            foreign_comparison is not None
+            and foreign_comparison["unchanged"] is not True
+            and output is not None
+        ):
+            categories = foreign_comparison["mismatch_categories"]
+            assert isinstance(categories, list)
+            output = None
+            source_attestations = []
+            completed = False
+            evidence_rejection = (
+                "foreign_profile_mismatch:" + ",".join(categories)
+            )
         if output is None:
             if failure_details is None:
                 failure_details = {
@@ -15773,6 +15991,13 @@ class LocalEnvoyController:
         )
         if up_complete_observed:
             self._require_complete_topology_absence(manifest)
+        foreign_attestation = (
+            _journal_foreign_profile_attestation(
+                events, str(journal["execution_nonce"])
+            )
+            if _bundle_generation(manifest.get("schema_version")) == 3
+            else None
+        )
         journal_event(
             self.journal_path,
             "publication_intent",
@@ -15816,6 +16041,7 @@ class LocalEnvoyController:
             engine_provenance=engine_provenance,
             global_context_before=str(journal["global_context_before"]),
             global_context_after=global_after,
+            foreign_profile_attestation=foreign_attestation,
             completed=completed,
             authoritative_attestation=authoritative,
             publication_fault=self.publication_fault,
