@@ -13477,24 +13477,55 @@ class LocalEnvoyController:
                 timeout_s=remaining_seconds(),
                 docker=True,
             )
-            source_stat = destination.lstat()
-            if destination.is_symlink() or not stat.S_ISREG(source_stat.st_mode):
-                raise ControllerError(
-                    "Docker copy did not produce a regular file"
-                )
-            if source_stat.st_size != source_count:
-                raise ControllerError("live ledger copied byte count changed")
-            copied = destination.read_bytes()
+            descriptor = os.open(
+                destination, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            )
+            try:
+                opened = os.fstat(descriptor)
+                if (
+                    not stat.S_ISREG(opened.st_mode)
+                    or opened.st_size != source_count
+                ):
+                    raise ControllerError(
+                        "live ledger copied byte count changed"
+                    )
+                chunks: list[bytes] = []
+                copied_count = 0
+                while copied_count <= source_count:
+                    chunk = os.read(
+                        descriptor,
+                        min(1024 * 1024, source_count + 1 - copied_count),
+                    )
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    copied_count += len(chunk)
+                finished = os.fstat(descriptor)
+                os.fchmod(descriptor, 0o400)
+            finally:
+                os.close(descriptor)
+            current = os.stat(destination, follow_symlinks=False)
+            if (
+                not stat.S_ISREG(current.st_mode)
+                or (opened.st_dev, opened.st_ino)
+                != (finished.st_dev, finished.st_ino)
+                or (opened.st_dev, opened.st_ino)
+                != (current.st_dev, current.st_ino)
+                or opened.st_size != finished.st_size
+            ):
+                raise ControllerError("live ledger copy changed during read")
+            copied = b"".join(chunks)
             if len(copied) != source_count:
                 raise ControllerError("live ledger copied byte count changed")
             if _digest_bytes(copied) != source_sha:
                 raise ControllerError("live ledger copied SHA-256 changed")
-            os.chmod(destination, 0o400)
             return copied
-        except (ControllerError, OSError, UnicodeError):
+        except (ControllerError, OSError, UnicodeError) as error:
             if destination.is_symlink() or destination.exists():
                 destination.unlink(missing_ok=True)
-            raise
+            if isinstance(error, ControllerError):
+                raise
+            raise ControllerError("live ledger copy failed") from error
 
     def _copy_sources(
         self,
