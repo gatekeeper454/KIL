@@ -1,8 +1,10 @@
 import copy
 from dataclasses import FrozenInstanceError, fields
+import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest import mock
@@ -33,6 +35,106 @@ from kil.v3b2_contracts import (
 
 ROOT = Path(__file__).resolve().parents[1]
 PROFILE_PATH = ROOT / "deploy/kind/v3b2-profile.json"
+CALICO_PATH = ROOT / "deploy/kind/calico-v3.32.0.yaml"
+
+EXPECTED_PROFILE_FIELDS = frozenset(
+    {
+        "schema_version",
+        "host_os",
+        "host_arch",
+        "colima_version",
+        "colima_profile",
+        "lima_version",
+        "docker_cli_version",
+        "kind_version",
+        "kubernetes_version",
+        "kind_node_image",
+        "kubectl_version",
+        "envoy_image",
+        "calico_version",
+        "calico_upstream_url",
+        "calico_upstream_sha256",
+        "calico_manifest_path",
+        "calico_manifest_sha256",
+        "calico_images",
+        "cluster_name",
+        "pod_subnet",
+        "service_subnet",
+        "system_namespaces",
+        "application_namespaces",
+        "evidence_scope",
+    }
+)
+EXPECTED_JOURNAL_FIELDS = frozenset(
+    {
+        "schema_version",
+        "run_id",
+        "execution_nonce",
+        "source_commit",
+        "profile_sha256",
+        "phase",
+        "global_context_before",
+        "foreign_profiles_before",
+        "expected_objects",
+        "owned_identity",
+        "events",
+    }
+)
+EXPECTED_PRIVATE_MANIFEST_FIELDS = frozenset(
+    {
+        "schema_version",
+        "run_id",
+        "execution_nonce",
+        "source_commit",
+        "profile_sha256",
+        "tool_identities",
+        "content_identities",
+        "expected_topology",
+        "expected_policy_graph",
+        "request_cases",
+        "runtime_identities",
+        "source_attestations",
+        "foreign_profiles_before",
+        "global_context_before",
+    }
+)
+EXPECTED_PUBLIC_MANIFEST_FIELDS = frozenset(
+    {
+        "schema_version",
+        "run_id",
+        "source_commit",
+        "profile_sha256",
+        "evidence_scope",
+        "result_class",
+        "promotion_status",
+        "content_identities",
+        "topology_attestation",
+        "policy_attestation",
+        "request_results",
+        "semantic_joins",
+        "source_attestations",
+        "foreign_profile_attestation",
+        "global_context_unchanged",
+        "owned_teardown",
+        "claim_exclusions",
+        "public_commitment_sha256",
+    }
+)
+EXPECTED_CAMPAIGN_FIELDS = frozenset(
+    {
+        "schema_version",
+        "source_commit",
+        "case_contract_sha256",
+        "cases",
+        "run_bundles",
+        "coverage",
+        "duplicate_case_ids",
+        "omitted_case_ids",
+        "promotion_status",
+        "claim_exclusions",
+        "public_commitment_sha256",
+    }
+)
 
 
 def valid_profile() -> dict[str, object]:
@@ -64,17 +166,67 @@ class V3B2ProfileTests(unittest.TestCase):
         self.assertEqual(PRIVATE_MANIFEST_SCHEMA, "kil.v3b2-private-manifest.v1")
         self.assertEqual(PUBLIC_MANIFEST_SCHEMA, "kil.v3b2-public-manifest.v1")
         self.assertEqual(CAMPAIGN_SCHEMA, "kil.v3b2-campaign.v1")
-        self.assertEqual(set(valid_profile()), PROFILE_FIELDS)
-        self.assertEqual({field.name for field in fields(V3B2Profile)}, PROFILE_FIELDS)
+        self.assertEqual(PROFILE_FIELDS, EXPECTED_PROFILE_FIELDS)
+        self.assertEqual(JOURNAL_FIELDS, EXPECTED_JOURNAL_FIELDS)
+        self.assertEqual(PRIVATE_MANIFEST_FIELDS, EXPECTED_PRIVATE_MANIFEST_FIELDS)
+        self.assertEqual(PUBLIC_MANIFEST_FIELDS, EXPECTED_PUBLIC_MANIFEST_FIELDS)
+        self.assertEqual(CAMPAIGN_FIELDS, EXPECTED_CAMPAIGN_FIELDS)
+        self.assertEqual(set(valid_profile()), EXPECTED_PROFILE_FIELDS)
+        self.assertEqual(
+            {field.name for field in fields(V3B2Profile)},
+            EXPECTED_PROFILE_FIELDS,
+        )
         self.assertEqual(
             SCHEMA_FIELDS,
             {
-                PROFILE_SCHEMA: PROFILE_FIELDS,
-                JOURNAL_SCHEMA: JOURNAL_FIELDS,
-                PRIVATE_MANIFEST_SCHEMA: PRIVATE_MANIFEST_FIELDS,
-                PUBLIC_MANIFEST_SCHEMA: PUBLIC_MANIFEST_FIELDS,
-                CAMPAIGN_SCHEMA: CAMPAIGN_FIELDS,
+                PROFILE_SCHEMA: EXPECTED_PROFILE_FIELDS,
+                JOURNAL_SCHEMA: EXPECTED_JOURNAL_FIELDS,
+                PRIVATE_MANIFEST_SCHEMA: EXPECTED_PRIVATE_MANIFEST_FIELDS,
+                PUBLIC_MANIFEST_SCHEMA: EXPECTED_PUBLIC_MANIFEST_FIELDS,
+                CAMPAIGN_SCHEMA: EXPECTED_CAMPAIGN_FIELDS,
             },
+        )
+
+    def test_vendored_calico_reconstructs_the_approved_upstream_bytes(self) -> None:
+        vendored = CALICO_PATH.read_bytes()
+        self.assertEqual(
+            hashlib.sha256(vendored).hexdigest(),
+            "ac5ab7451dda57cfbf47d584ee901b896b1a9ff388d95b6f01b59f1e1130fdfa",
+        )
+        substitutions = (
+            (
+                b"quay.io/calico/cni@sha256:"
+                b"1cfc6aa9c4dad3575fdf36b78185fd7d68bcd4acc95778f8342be4fb6a851a14",
+                b"quay.io/calico/cni:v3.32.0",
+                2,
+            ),
+            (
+                b"quay.io/calico/node@sha256:"
+                b"f4fafd8ba641d96c5a91b01e5a519117d77d55dee789a3562ba3ad4aa125b36a",
+                b"quay.io/calico/node:v3.32.0",
+                2,
+            ),
+            (
+                b"quay.io/calico/kube-controllers@sha256:"
+                b"adf0ac895796d21bca5383bc81c4cd2614be3a4308085b47857d7999f4cc2b1f",
+                b"quay.io/calico/kube-controllers:v3.32.0",
+                1,
+            ),
+        )
+        expected_images = {digest for digest, _, _ in substitutions}
+        image_references = re.findall(rb"(?m)^\s*image:\s+(\S+)\s*$", vendored)
+        self.assertEqual(set(image_references), expected_images)
+
+        reconstructed = vendored
+        for digest_reference, tag_reference, count in substitutions:
+            self.assertEqual(vendored.count(digest_reference), count)
+            self.assertNotIn(tag_reference, vendored)
+            reconstructed = reconstructed.replace(digest_reference, tag_reference)
+        self.assertEqual(sum(vendored.count(item) for item in expected_images), 5)
+        self.assertEqual(len(reconstructed), 349123)
+        self.assertEqual(
+            hashlib.sha256(reconstructed).hexdigest(),
+            "bccabc607685551db918f66da724893eca3e69a50c5a3e3077029b02dbab8d35",
         )
 
     def test_loads_the_pinned_v3b2_profile(self) -> None:
@@ -262,6 +414,16 @@ class SchemaDispatchTests(unittest.TestCase):
         schema = "kil.v3b1-driver-result.v1"
         self.assertEqual(dispatch_schema({"schema_version": schema}), schema)
 
+    def test_dispatch_rejects_malformed_and_unknown_v3b1_like_schemas(self) -> None:
+        for schema in (
+            "kil.v3b1-.v",
+            "kil.v3b1-not-a-real-schema.v999",
+            "kil.v3b1-public-manifest.v999",
+        ):
+            with self.subTest(schema=schema):
+                with self.assertRaises(SchemaError):
+                    dispatch_schema({"schema_version": schema})
+
     def test_profile_dispatch_runs_the_exact_profile_validator(self) -> None:
         value = valid_profile()
         value["cluster_name"] = "foreign"
@@ -285,8 +447,19 @@ class SchemaDispatchTests(unittest.TestCase):
                 with self.assertRaises(SchemaError):
                     dispatch_schema(value)
 
+        campaign = {name: None for name in EXPECTED_CAMPAIGN_FIELDS}
+        campaign["schema_version"] = CAMPAIGN_SCHEMA
         with self.assertRaisesRegex(SchemaError, "campaign_not_implemented"):
-            dispatch_schema({"schema_version": CAMPAIGN_SCHEMA})
+            dispatch_schema(campaign)
+
+        missing = dict(campaign)
+        missing.pop("coverage")
+        extra = {**campaign, "unexpected": None}
+        for label, invalid in (("missing", missing), ("extra", extra)):
+            with self.subTest(label=label):
+                with self.assertRaises(SchemaError) as raised:
+                    dispatch_schema(invalid)
+                self.assertNotIn("campaign_not_implemented", str(raised.exception))
 
 
 if __name__ == "__main__":

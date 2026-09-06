@@ -140,6 +140,17 @@ SCHEMA_FIELDS = MappingProxyType(
 )
 
 _MAX_PROFILE_BYTES = 64 * 1024
+_V3B1_VERIFIER_SCHEMAS = frozenset(
+    {
+        "kil.v3b1-manifest.v1",
+        "kil.v3b1-manifest.v2",
+        "kil.v3b1-manifest.v3",
+        "kil.v3b1-public-manifest.v1",
+        "kil.v3b1-public-manifest.v2",
+        "kil.v3b1-public-manifest.v3",
+        "kil.v3b1-driver-result.v1",
+    }
+)
 _SYSTEM_NAMESPACES = (
     "default",
     "kube-node-lease",
@@ -351,9 +362,10 @@ def dispatch_schema(value: object) -> str:
     schema = value.get("schema_version")
     if type(schema) is not str:
         raise SchemaError("schema_version must be present and a string")
-    if schema.startswith("kil.v3b1-") and ".v" in schema:
+    if schema in _V3B1_VERIFIER_SCHEMAS:
         return schema
     if schema == CAMPAIGN_SCHEMA:
+        require_closed_object(schema, value, CAMPAIGN_FIELDS)
         raise SchemaError("campaign_not_implemented")
     expected_fields = SCHEMA_FIELDS.get(schema)
     if expected_fields is None:
