@@ -408,11 +408,10 @@ class JournalInputs:
             or len(names) != len(set(names))
         ):
             raise JournalError("foreign profile snapshot must be sorted and duplicate-free")
-        if type(self.expected_objects) is not tuple or any(
-            type(item) is not str or not item or len(item.encode("utf-8")) > 4096
-            for item in self.expected_objects
-        ):
+        if type(self.expected_objects) is not tuple:
             raise JournalError("expected objects must be an exact tuple of strings")
+        for item in self.expected_objects:
+            _exact_string("expected object", item, maximum=4096)
         if len(self.expected_objects) > 4096:
             raise JournalError("expected objects exceed their record bound")
         if (

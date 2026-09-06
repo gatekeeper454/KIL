@@ -445,6 +445,10 @@ class V3B2JournalTest(unittest.TestCase):
         values["global_context_before"] = "bad\ud800context"
         with self.assertRaises(JournalError):
             JournalInputs(**values)
+        values["global_context_before"] = self.inputs.global_context_before
+        values["expected_objects"] = ("bad\ud800object",)
+        with self.assertRaises(JournalError):
+            JournalInputs(**values)
         with self.assertRaises(JournalError):
             Command(("unknown\ud800",), 30)
 
