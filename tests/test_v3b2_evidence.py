@@ -491,23 +491,81 @@ class V3B2EvidenceTest(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(PublicBoundaryError):
                 validate_public_projection(candidate)
 
+    def test_public_projection_rejects_embedded_cross_platform_host_paths(self):
+        for value in (
+            "prefix /private/tmp/kil-secret suffix",
+            "prefix /home/name/kil-secret suffix",
+            "prefix /VAR/FOLDERS/ab/cd suffix",
+            "file:///Users/name/private.json",
+            r"prefix C:\Users\name\secret suffix",
+            r"prefix \\server\share\secret suffix",
+            "unix:///private/tmp/kil.sock",
+            "unix://local-socket",
+            "prefix ~/kil-secret suffix",
+            "prefix $HOME/kil-secret suffix",
+            r"prefix %USERPROFILE%\kil-secret suffix",
+        ):
+            with self.subTest(value=value), self.assertRaises(PublicBoundaryError):
+                validate_public_projection({"value": value})
+        with self.assertRaises(PublicBoundaryError):
+            validate_public_projection({"prefix /PRIVATE/TMP/secret suffix": True})
+
     def test_original_foreign_names_are_rejected_anywhere_in_projection(self):
         evidence = private_evidence()
         for leaked in ("client-a", "prefix client-a suffix", "xclient-a", "client-ax"):
             candidate = deepcopy(evidence)
             candidate["runtime_identities"]["topology_attestation"]["objects"][0]["uid"] = leaked  # type: ignore[index]
-            with self.subTest(leaked=leaked), self.assertRaises(PublicBoundaryError):
+            with self.subTest(leaked=leaked), self.assertRaises(EvidenceError):
                 build_public_bundle(candidate)
 
-    def test_original_foreign_names_are_rejected_in_keys_and_rendered_artifacts(self):
-        with self.assertRaises(PublicBoundaryError):
-            validate_public_projection({"xclient-ay": "safe"}, forbidden_names=("client-a",))
+    def test_structural_foreign_name_rule_allows_reviewed_vocabulary_collisions(self):
         evidence = private_evidence()
+        names = ("default", "id")
+        for side in (
+            evidence["foreign_profiles_before"],
+            evidence["runtime_identities"]["foreign_profiles_after"],  # type: ignore[index]
+        ):
+            for record, name in zip(side, names, strict=True):  # type: ignore[arg-type]
+                record["name"] = name
         public = build_public_bundle(evidence)
-        public["result_class"] = "xclient-a"
-        with tempfile.TemporaryDirectory() as directory, self.assertRaises(PublicBoundaryError):
-            with patch.object(evidence_module, "build_public_bundle", return_value=public):
-                publish_bundle(evidence, Path(directory).resolve() / "public")
+        self.assertEqual(public["topology_attestation"]["namespaces"][0], "default")  # type: ignore[index]
+        validate_public_projection(
+            {"xdefault-key": "reviewed"},
+            forbidden_names=("default", "id"),
+        )
+        with self.assertRaises(PublicBoundaryError):
+            validate_public_projection(
+                {"provenance": "prefix client-a suffix"},
+                forbidden_names=("client-a",),
+            )
+        with tempfile.TemporaryDirectory() as directory:
+            published = publish_bundle(evidence, Path(directory).resolve() / "public")
+            self.assertEqual(verify_bundle(published).schema_family, "v3b2-run")
+
+    def test_original_foreign_names_are_rejected_in_dynamic_identity_fields(self):
+        evidence = private_evidence()
+        for field, value in (
+            ("cluster_incarnation_uid", "xclient-a"),
+            ("uid", "xclient-a"),
+            ("resource_version", "client-ax"),
+            ("pod", "envoy-client-a"),
+        ):
+            candidate = deepcopy(evidence)
+            topology = candidate["runtime_identities"]["topology_attestation"]  # type: ignore[index]
+            if field == "cluster_incarnation_uid":
+                topology[field] = value  # type: ignore[index]
+            elif field == "pod":
+                topology["pod_images"][5][field] = value  # type: ignore[index]
+            else:
+                topology["objects"][0][field] = value  # type: ignore[index]
+            with self.subTest(field=field), self.assertRaises(EvidenceError):
+                build_public_bundle(candidate)
+        for field in ("arch", "runtime"):
+            candidate = deepcopy(evidence)
+            candidate["foreign_profiles_before"][0][field] = "client-a"  # type: ignore[index]
+            candidate["runtime_identities"]["foreign_profiles_after"][0][field] = "client-a"  # type: ignore[index]
+            with self.subTest(field=field), self.assertRaises(EvidenceError):
+                build_public_bundle(candidate)
 
     def test_foreign_profiles_are_keyed_sorted_and_bind_normalized_resources(self):
         evidence = private_evidence()
@@ -865,6 +923,38 @@ class V3B2EvidenceTest(unittest.TestCase):
             with self.assertRaises(EvidenceError):
                 verify_bundle(published)
 
+    def test_verifier_totalizes_closed_member_shape_failures_before_rendering(self):
+        mutations = (
+            "empty_request",
+            "missing_request_key",
+            "extra_request_key",
+            "malformed_join_member",
+            "extra_join_key",
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                published = publish_bundle(
+                    private_evidence(),
+                    Path(directory).resolve() / "public",
+                )
+                manifest_path = published / "manifest.json"
+                manifest = json.loads(manifest_path.read_text())
+                if mutation == "empty_request":
+                    manifest["request_results"] = [{}]
+                elif mutation == "missing_request_key":
+                    del manifest["request_results"][0]["decision_digest"]
+                elif mutation == "extra_request_key":
+                    manifest["request_results"][0]["extra"] = "closed"
+                elif mutation == "malformed_join_member":
+                    manifest["semantic_joins"][0] = []
+                else:
+                    manifest["semantic_joins"][0]["extra"] = "closed"
+                manifest_path.chmod(0o600)
+                manifest_path.write_bytes(canonical(manifest))
+                self._repair_commitment_from_existing_artifacts(published)
+                with self.assertRaises(EvidenceError):
+                    verify_bundle(published)
+
     def test_missing_symlink_malformed_and_oversized_are_rejected(self):
         mutations = ("missing", "symlink", "malformed", "oversized")
         for mutation in mutations:
@@ -919,6 +1009,21 @@ class V3B2EvidenceTest(unittest.TestCase):
             path.chmod(0o600)
             path.write_bytes(payload)
         manifest["public_commitment_sha256"] = evidence_module._public_commitment(manifest, artifacts)
+        manifest_path.write_bytes(canonical(manifest))
+        V3B2EvidenceTest._rewrite_sums(bundle)
+
+    @staticmethod
+    def _repair_commitment_from_existing_artifacts(bundle: Path) -> None:
+        manifest_path = bundle / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        artifacts = {
+            name: (bundle / name).read_bytes()
+            for name in evidence_module._DATA_FILES
+        }
+        manifest["public_commitment_sha256"] = evidence_module._public_commitment(
+            manifest,
+            artifacts,
+        )
         manifest_path.write_bytes(canonical(manifest))
         V3B2EvidenceTest._rewrite_sums(bundle)
 

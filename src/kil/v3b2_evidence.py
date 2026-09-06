@@ -73,6 +73,16 @@ _HEX64 = re.compile(r"[0-9a-f]{64}")
 _HEX40 = re.compile(r"[0-9a-f]{40}")
 _SAFE_RUN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 _V3B2_RUN = re.compile(r"v3b2-[0-9a-f]{64}")
+_KUBERNETES_UID = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+)
+_FIXTURE_OBJECT_UID = re.compile(r"uid-(?:[1-9][0-9]?|calico-(?:node|controller))")
+_FIXTURE_POD_UID = re.compile(
+    r"pod-(?:(?:[123]-(?:driver|envoy|authz|target))|calico|controller)"
+)
+_RESOURCE_VERSION = re.compile(
+    r"(?:[1-9][0-9]{0,19}|rv-[1-9][0-9]?|system-[123]|rv-pod-[123]-(?:driver|envoy|authz|target))"
+)
 _PROFILE_PATH = Path(__file__).resolve().parents[2] / "deploy/kind/v3b2-profile.json"
 _PROFILE_SHA256 = "cc630f343f87f89180a2cfc98baf1d23686e0b39e364569ff579b3e8efa8cee8"
 _TOPOLOGY_FIELDS = frozenset({"cluster_incarnation_uid", "node_container_id", "namespaces", "objects", "pod_images", "endpoints", "calico_readiness"})
@@ -103,6 +113,37 @@ _PRIVATE_TEXT = (
     "private_journal",
     "foreign-profile-name",
 )
+_HOST_PATH_PATTERNS = (
+    re.compile(r"/(?:users|home|private|tmp)/", re.IGNORECASE),
+    re.compile(r"/var/folders/", re.IGNORECASE),
+    re.compile(r"file://", re.IGNORECASE),
+    re.compile(r"(?:http\+)?unix://", re.IGNORECASE),
+    re.compile(r"(?:^|[^a-z0-9+.-])[a-z]:[\\/]", re.IGNORECASE),
+    re.compile(r"\\\\[^\\/\s]+[\\/][^\\/\s]+"),
+    re.compile(r"(?:^|[^a-z0-9])~[\\/]", re.IGNORECASE),
+    re.compile(r"\$(?:home|\{home\})|%userprofile%", re.IGNORECASE),
+)
+_FOREIGN_COPY_FIELDS = frozenset(
+    {
+        "cluster_incarnation_uid",
+        "uid",
+        "resource_version",
+        "pod",
+        "arch",
+        "runtime",
+        "value",
+        "rationale",
+        "source_reference",
+        "provenance",
+        "detail",
+        "description",
+    }
+)
+_REVIEWED_FOREIGN_COLLISIONS = frozenset(
+    {"aarch64", "x86_64", "amd64", "arm64", "docker", "containerd"}
+)
+_FOREIGN_ARCHES = frozenset({"aarch64", "x86_64", "amd64", "arm64"})
+_FOREIGN_RUNTIMES = frozenset({"docker", "containerd"})
 
 
 class EvidenceError(ValueError):
@@ -463,20 +504,13 @@ def _foreign_records(value: object) -> list[dict[str, object]]:
             raise EvidenceError("foreign profile status is invalid")
         if any(type(record[field]) is not int or record[field] < 0 for field in ("cpus", "memory", "disk")):
             raise EvidenceError("foreign profile resource is invalid")
-        for field in ("arch", "runtime"):
-            text = record[field]
-            try:
-                invalid_text = (
-                    type(text) is not str
-                    or not text
-                    or len(text.encode("utf-8")) > 4096
-                )
-            except UnicodeEncodeError:
-                raise EvidenceError(
-                    "foreign profile resource text contains invalid Unicode"
-                ) from None
-            if invalid_text:
-                raise EvidenceError("foreign profile resource text is invalid")
+        if (
+            type(record["arch"]) is not str
+            or record["arch"] not in _FOREIGN_ARCHES
+            or type(record["runtime"]) is not str
+            or record["runtime"] not in _FOREIGN_RUNTIMES
+        ):
+            raise EvidenceError("foreign profile resource text is not normalized")
         names.add(name)
         normalized.append(dict(record))
     return sorted(normalized, key=lambda item: str(item["name"]))
@@ -564,7 +598,7 @@ def _validate_topology_attestation(
     topology = _closed_record("topology attestation", value, _TOPOLOGY_FIELDS)
     if (
         type(topology["cluster_incarnation_uid"]) is not str
-        or not topology["cluster_incarnation_uid"]
+        or _KUBERNETES_UID.fullmatch(topology["cluster_incarnation_uid"]) is None
         or type(topology["node_container_id"]) is not str
         or _HEX64.fullmatch(topology["node_container_id"]) is None
     ):
@@ -587,6 +621,16 @@ def _validate_topology_attestation(
     objects: list[ObjectIdentity] = []
     for raw in topology["objects"]:
         record = _closed_record("topology object", raw, frozenset({"api_version", "kind", "namespace", "name", "uid", "resource_version"}))
+        if (
+            type(record["uid"]) is not str
+            or (
+                _KUBERNETES_UID.fullmatch(record["uid"]) is None
+                and _FIXTURE_OBJECT_UID.fullmatch(record["uid"]) is None
+            )
+            or type(record["resource_version"]) is not str
+            or _RESOURCE_VERSION.fullmatch(record["resource_version"]) is None
+        ):
+            raise EvidenceError("topology object runtime identity grammar is invalid")
         try:
             objects.append(ObjectIdentity(**record))
         except (TypeError, ValueError):
@@ -618,6 +662,17 @@ def _validate_pod_images(
     fields = frozenset({"image_role", "container_type", "namespace", "pod", "container", "uid", "resource_version", "image", "image_id", "ready"})
     for raw in value:
         item = _closed_record("Pod image identity", raw, fields)
+        if (
+            type(item["uid"]) is not str
+            or (
+                _KUBERNETES_UID.fullmatch(item["uid"]) is None
+                and _FIXTURE_POD_UID.fullmatch(item["uid"]) is None
+                and _FIXTURE_OBJECT_UID.fullmatch(item["uid"]) is None
+            )
+            or type(item["resource_version"]) is not str
+            or _RESOURCE_VERSION.fullmatch(item["resource_version"]) is None
+        ):
+            raise EvidenceError("Pod image runtime identity grammar is invalid")
         try:
             records.append(PodImageIdentity(**item))
         except (TypeError, ValueError):
@@ -956,7 +1011,7 @@ def validate_public_projection(
         raise PublicBoundaryError("foreign-name boundary contains invalid Unicode") from None
     unique_names = tuple(sorted(set(forbidden_names)))
     seen: set[int] = set()
-    def walk(member: object, depth: int) -> None:
+    def walk(member: object, depth: int, field_name: str | None = None) -> None:
         if depth > 32:
             raise PublicBoundaryError("public projection nesting is excessive")
         if type(member) in (dict, list):
@@ -971,7 +1026,11 @@ def validate_public_projection(
                         type(key) is not str
                         or len(key.encode("utf-8")) > 4096
                         or any(token in key.lower() for token in _PRIVATE_KEYS)
-                        or any(name in key for name in unique_names)
+                        or key.startswith("/")
+                        or any(
+                            pattern.search(key) is not None
+                            for pattern in _HOST_PATH_PATTERNS
+                        )
                     )
                 except UnicodeEncodeError:
                     raise PublicBoundaryError(
@@ -979,16 +1038,19 @@ def validate_public_projection(
                     ) from None
                 if invalid_key:
                     raise PublicBoundaryError("public projection contains a private field name")
-                walk(child, depth + 1)
+                walk(child, depth + 1, key)
         elif type(member) is list:
             for child in member:
-                walk(child, depth + 1)
+                walk(child, depth + 1, field_name)
         elif type(member) is str:
             lowered = member.lower()
             if (
                 member not in TRACKS
                 and any(token in lowered for token in _PRIVATE_TEXT)
-            ) or member.startswith("/"):
+            ) or member.startswith("/") or any(
+                pattern.search(member) is not None
+                for pattern in _HOST_PATH_PATTERNS
+            ):
                 raise PublicBoundaryError("public projection contains private material")
             try:
                 encoded = member.encode("utf-8")
@@ -998,8 +1060,16 @@ def validate_public_projection(
                 ) from None
             if len(encoded) > 65536:
                 raise PublicBoundaryError("public string exceeds its bound")
+            # Foreign names are compared only against dynamic/free-form
+            # provenance values. Schema keys and reviewed constants are never
+            # rejected merely because a profile happens to share vocabulary.
             for name in unique_names:
-                if name in member:
+                if (
+                    field_name in _FOREIGN_COPY_FIELDS
+                    and len(name) > 2
+                    and member not in _REVIEWED_FOREIGN_COLLISIONS
+                    and name in member
+                ):
                     raise PublicBoundaryError(
                         "public projection contains a foreign profile name"
                     )
@@ -1232,16 +1302,6 @@ def _publish_bundle(private: object, public_parent: Path) -> Path:
     public = build_public_bundle(private)
     parent, parent_fd, parent_identity = _prepare_public_parent(public_parent)
     run_id = str(public["run_id"])
-    private_manifest = _private_manifest(private)
-    runtime = private_manifest["runtime_identities"]
-    assert type(runtime) is dict
-    foreign_names = tuple(
-        record["name"]
-        for record in (
-            *_foreign_records(private_manifest["foreign_profiles_before"]),
-            *_foreign_records(runtime["foreign_profiles_after"]),
-        )
-    )
     destination = parent / run_id
     if _entry_exists(parent_fd, run_id):
         os.close(parent_fd)
@@ -1258,16 +1318,6 @@ def _publish_bundle(private: object, public_parent: Path) -> Path:
         )
         staging_identity = _directory_identity(os.fstat(staging_fd))
         artifacts = _artifacts(public)
-        for name, payload in artifacts.items():
-            try:
-                text = payload.decode("utf-8", errors="strict")
-            except UnicodeDecodeError:
-                raise PublicBoundaryError("public artifact is not UTF-8") from None
-            for foreign_name in foreign_names:
-                if foreign_name in text:
-                    raise PublicBoundaryError(
-                        "public artifact contains a foreign profile name"
-                    )
         public["public_commitment_sha256"] = _public_commitment(public, artifacts)
         validate_public_projection(public)
         payloads = {"manifest.json": _canonical_bytes(public), **artifacts}
@@ -1491,12 +1541,6 @@ def _verify_v3b2(payloads: Mapping[str, bytes]) -> VerifiedBundle:
         name: _parse_jsonl(payloads[name], name)
         for name in ("requests.jsonl", "decisions.jsonl", "envoy.jsonl", "targets.jsonl", "kubernetes.jsonl", "policies.jsonl", "joins.jsonl")
     }
-    artifacts = {name: payloads[name] for name in _DATA_FILES}
-    if value.get("public_commitment_sha256") != _public_commitment(value, artifacts):
-        raise EvidenceError("public semantic commitment does not match")
-    expected_artifacts = _artifacts(value)
-    if any(payloads[name] != expected_artifacts[name] for name in _DATA_FILES):
-        raise EvidenceError("public artifacts do not rederive from the manifest")
     joins = value.get("semantic_joins")
     requests = value.get("request_results")
     result_class = value.get("result_class")
@@ -1530,6 +1574,14 @@ def _verify_v3b2(payloads: Mapping[str, bytes]) -> VerifiedBundle:
             raise EvidenceError("foreign mismatch diagnostic is invalid")
     else:
         raise EvidenceError("public result class is invalid")
+    # Only render after every manifest list and member has passed its exact
+    # closed semantic schema. Rendering is never an untrusted shape parser.
+    artifacts = {name: payloads[name] for name in _DATA_FILES}
+    if value.get("public_commitment_sha256") != _public_commitment(value, artifacts):
+        raise EvidenceError("public semantic commitment does not match")
+    expected_artifacts = _artifacts(value)
+    if any(payloads[name] != expected_artifacts[name] for name in _DATA_FILES):
+        raise EvidenceError("public artifacts do not rederive from the manifest")
     commitment = value["public_commitment_sha256"]
     run_id = value["run_id"]
     if type(commitment) is not str or type(run_id) is not str:
@@ -1557,7 +1609,12 @@ def _verify_foreign_projection(value: object) -> None:
                 raise EvidenceError("foreign profile projected status is invalid")
             if any(type(item[name]) is not int or item[name] < 0 for name in ("cpus", "memory", "disk")):
                 raise EvidenceError("foreign profile projected resources are invalid")
-            if any(type(item[name]) is not str or not item[name] for name in ("arch", "runtime")):
+            if (
+                type(item["arch"]) is not str
+                or item["arch"] not in _FOREIGN_ARCHES
+                or type(item["runtime"]) is not str
+                or item["runtime"] not in _FOREIGN_RUNTIMES
+            ):
                 raise EvidenceError("foreign profile projected resource text is invalid")
             pseudonyms.append(pseudonym)
         if pseudonyms != sorted(pseudonyms) or len(pseudonyms) != len(set(pseudonyms)):
@@ -1667,7 +1724,15 @@ def verify_bundle(path: Path, *, before_completion: Callable[[], None] | None = 
         return _verify_bundle(path, before_completion=before_completion)
     except EvidenceError:
         raise
-    except (OSError, TypeError, ValueError, UnicodeError, RecursionError):
+    except (
+        OSError,
+        KeyError,
+        IndexError,
+        TypeError,
+        ValueError,
+        UnicodeError,
+        RecursionError,
+    ):
         raise EvidenceError("bundle verification failed closed") from None
 
 
