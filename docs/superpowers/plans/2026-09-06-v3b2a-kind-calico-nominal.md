@@ -368,7 +368,7 @@ class V3B2ManifestTest(unittest.TestCase):
         objects = json.loads(render_objects(self.profile, self.content))["items"]
         for namespace in self.profile.application_namespaces:
             policies = [item for item in objects if item["kind"] == "NetworkPolicy" and item["metadata"]["namespace"] == namespace]
-            self.assertEqual({item["metadata"]["name"] for item in policies}, {"default-deny", "allow-dns", "allow-driver-envoy", "allow-envoy-authz", "allow-envoy-target"})
+            self.assertEqual({item["metadata"]["name"] for item in policies}, {"default-deny", "allow-dns", "allow-driver-egress-envoy", "allow-envoy-ingress-egress", "allow-backends-ingress-envoy"})
 
     def test_pods_are_nonroot_bounded_and_have_no_host_escape(self):
         for pod_template in self.workload_templates:
@@ -418,11 +418,27 @@ Secrets are absent. Each fixed-track namespace uses labels
 `kil.dev/managed=v3b2` and `kil.dev/track` equal to its literal member of
 `TRACKS`.
 
-The five policies per namespace are default deny ingress/egress, minimum DNS,
-driver-to-Envoy TCP 8080, Envoy-to-authz TCP 8080, and Envoy-to-target TCP
-8080. Every allow rule includes both the exact namespace track label and exact
-Pod role label. No IPBlock, empty selector, SCTP, UDP application edge, or
-cross-track selector is permitted.
+The five policies per namespace are grouped by the workloads they select so
+Kubernetes' additive ingress/egress semantics do not broaden an edge:
+
+1. `default-deny` uses the standard empty `podSelector: {}` with both policy
+   types and no allow rules, isolating every current or unexpected Pod in the
+   namespace.
+2. `allow-dns` selects only same-track driver and Envoy roles for egress to the
+   exact `kube-system` / `k8s-app=kube-dns` peer on UDP and TCP 53.
+3. `allow-driver-egress-envoy` selects only the driver and permits egress to the
+   exact same-track Envoy on TCP 8080.
+4. `allow-envoy-ingress-egress` selects only Envoy and permits ingress from the
+   exact same-track driver plus egress to the exact same-track authz and target
+   roles on TCP 8080.
+5. `allow-backends-ingress-envoy` selects same-track authz and target roles and
+   permits ingress only from the exact same-track Envoy on TCP 8080.
+
+In each peer, `namespaceSelector` and `podSelector` occupy the same `from` or
+`to` item, making them an AND rather than two OR alternatives. Every allow rule
+includes the exact namespace track and Pod role labels. No allow policy may use
+an empty selector. No IPBlock, SCTP, UDP application edge, or cross-track
+selector is permitted.
 
 - [ ] **Step 4: Add adversarial manifest tests**
 
@@ -433,7 +449,7 @@ for mutation, reason in (
     (("Service", "spec.type", "NodePort"), "ClusterIP"),
     (("Deployment", "spec.template.spec.hostNetwork", True), "hostNetwork"),
     (("Deployment", "spec.template.spec.containers.0.securityContext.privileged", True), "privileged"),
-    (("NetworkPolicy", "spec.podSelector", {}), "selector"),
+    (("NetworkPolicy/allow-driver-egress-envoy", "spec.podSelector", {}), "selector"),
 ):
     with self.subTest(reason=reason):
         with self.assertRaisesRegex(ManifestError, reason):

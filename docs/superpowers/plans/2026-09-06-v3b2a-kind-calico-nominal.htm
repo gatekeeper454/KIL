@@ -6,7 +6,7 @@
 <title>V3B-2a Kind/Calico Nominal Validation Implementation Plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-06-v3b2a-kind-calico-nominal.md">
-<meta name="source-sha256" content="2b09d0bf2dd9ed3441e675c43832d623acc4c4c6ab159ca3365a50cdab02a83b">
+<meta name="source-sha256" content="aea0ebcc65db436dc80cc2c465d72a3cc8dd45e37b52b6f15c45896be94c2491">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-06-v3b2a-kind-calico-nominal.md</code> (<code>2b09d0bf2dd9ed3441e675c43832d623acc4c4c6ab159ca3365a50cdab02a83b</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-06-v3b2a-kind-calico-nominal.md</code> (<code>aea0ebcc65db436dc80cc2c465d72a3cc8dd45e37b52b6f15c45896be94c2491</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">V3B-2a Kind/Calico Nominal Validation Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-06-v3b2a-kind-calico-nominal.md</code> (<code>2b09d0bf2dd9ed3441e675c43832d623acc4c4c6ab159ca3365a50cdab02a83b</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-06-v3b2a-kind-calico-nominal.md</code> (<code>aea0ebcc65db436dc80cc2c465d72a3cc8dd45e37b52b6f15c45896be94c2491</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-2a-kind-calico-nominal-validation-implementation-plan">V3B-2a Kind/Calico Nominal Validation Implementation Plan</a></li><li class="level-2"><a href="#scope-split-and-hard-gates">Scope split and hard gates</a></li><li class="level-2"><a href="#resolved-calico-content-identity">Resolved Calico content identity</a></li><li class="level-2"><a href="#closed-schema-inventory">Closed schema inventory</a></li><li class="level-2"><a href="#file-map">File map</a></li><li class="level-3"><a href="#task-1-pin-and-validate-the-v3b-2-profile-and-calico-bytes">Task 1: Pin and validate the V3B-2 profile and Calico bytes</a></li><li class="level-3"><a href="#task-2-render-the-exact-kind-and-application-object-set">Task 2: Render the exact Kind and application object set</a></li><li class="level-3"><a href="#task-3-validate-kubernetes-calico-endpoint-and-policy-inventory">Task 3: Validate Kubernetes, Calico, endpoint, and policy inventory</a></li><li class="level-3"><a href="#task-4-implement-journal-bound-commands-intent-ordering-and-recovery">Task 4: Implement journal-bound commands, intent ordering, and recovery</a></li><li class="level-3"><a href="#task-5-build-bounded-evidence-semantic-joins-and-offline-verification">Task 5: Build bounded evidence, semantic joins, and offline verification</a></li><li class="level-3"><a href="#task-6-compose-the-request-free-and-nominal-controller">Task 6: Compose the request-free and nominal controller</a></li><li class="level-3"><a href="#task-7-wire-documentation-make-targets-and-static-acceptance">Task 7: Wire documentation, Make targets, and static acceptance</a></li><li class="level-3"><a href="#task-8-complete-review-public-ci-merge-and-exact-synchronization">Task 8: Complete review, public CI, merge, and exact synchronization</a></li><li class="level-3"><a href="#task-9-execute-and-publish-the-request-free-lifecycle">Task 9: Execute and publish the request-free lifecycle</a></li><li class="level-3"><a href="#task-10-execute-and-publish-the-one-shot-nominal-lifecycle">Task 10: Execute and publish the one-shot nominal lifecycle</a></li><li class="level-2"><a href="#plan-self-review-record">Plan self-review record</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-2a-kind-calico-nominal-validation-implementation-plan" href="#v3b-2a-kind-calico-nominal-validation-implementation-plan">V3B-2a Kind/Calico Nominal Validation Implementation Plan</a></li><li class="level-2"><a data-section-id="scope-split-and-hard-gates" href="#scope-split-and-hard-gates">Scope split and hard gates</a></li><li class="level-2"><a data-section-id="resolved-calico-content-identity" href="#resolved-calico-content-identity">Resolved Calico content identity</a></li><li class="level-2"><a data-section-id="closed-schema-inventory" href="#closed-schema-inventory">Closed schema inventory</a></li><li class="level-2"><a data-section-id="file-map" href="#file-map">File map</a></li><li class="level-3"><a data-section-id="task-1-pin-and-validate-the-v3b-2-profile-and-calico-bytes" href="#task-1-pin-and-validate-the-v3b-2-profile-and-calico-bytes">Task 1: Pin and validate the V3B-2 profile and Calico bytes</a></li><li class="level-3"><a data-section-id="task-2-render-the-exact-kind-and-application-object-set" href="#task-2-render-the-exact-kind-and-application-object-set">Task 2: Render the exact Kind and application object set</a></li><li class="level-3"><a data-section-id="task-3-validate-kubernetes-calico-endpoint-and-policy-inventory" href="#task-3-validate-kubernetes-calico-endpoint-and-policy-inventory">Task 3: Validate Kubernetes, Calico, endpoint, and policy inventory</a></li><li class="level-3"><a data-section-id="task-4-implement-journal-bound-commands-intent-ordering-and-recovery" href="#task-4-implement-journal-bound-commands-intent-ordering-and-recovery">Task 4: Implement journal-bound commands, intent ordering, and recovery</a></li><li class="level-3"><a data-section-id="task-5-build-bounded-evidence-semantic-joins-and-offline-verification" href="#task-5-build-bounded-evidence-semantic-joins-and-offline-verification">Task 5: Build bounded evidence, semantic joins, and offline verification</a></li><li class="level-3"><a data-section-id="task-6-compose-the-request-free-and-nominal-controller" href="#task-6-compose-the-request-free-and-nominal-controller">Task 6: Compose the request-free and nominal controller</a></li><li class="level-3"><a data-section-id="task-7-wire-documentation-make-targets-and-static-acceptance" href="#task-7-wire-documentation-make-targets-and-static-acceptance">Task 7: Wire documentation, Make targets, and static acceptance</a></li><li class="level-3"><a data-section-id="task-8-complete-review-public-ci-merge-and-exact-synchronization" href="#task-8-complete-review-public-ci-merge-and-exact-synchronization">Task 8: Complete review, public CI, merge, and exact synchronization</a></li><li class="level-3"><a data-section-id="task-9-execute-and-publish-the-request-free-lifecycle" href="#task-9-execute-and-publish-the-request-free-lifecycle">Task 9: Execute and publish the request-free lifecycle</a></li><li class="level-3"><a data-section-id="task-10-execute-and-publish-the-one-shot-nominal-lifecycle" href="#task-10-execute-and-publish-the-one-shot-nominal-lifecycle">Task 10: Execute and publish the one-shot nominal lifecycle</a></li><li class="level-2"><a data-section-id="plan-self-review-record" href="#plan-self-review-record">Plan self-review record</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -438,7 +438,7 @@ class V3B2ManifestTest(unittest.TestCase):
         objects = json.loads(render_objects(self.profile, self.content))[&quot;items&quot;]
         for namespace in self.profile.application_namespaces:
             policies = [item for item in objects if item[&quot;kind&quot;] == &quot;NetworkPolicy&quot; and item[&quot;metadata&quot;][&quot;namespace&quot;] == namespace]
-            self.assertEqual({item[&quot;metadata&quot;][&quot;name&quot;] for item in policies}, {&quot;default-deny&quot;, &quot;allow-dns&quot;, &quot;allow-driver-envoy&quot;, &quot;allow-envoy-authz&quot;, &quot;allow-envoy-target&quot;})
+            self.assertEqual({item[&quot;metadata&quot;][&quot;name&quot;] for item in policies}, {&quot;default-deny&quot;, &quot;allow-dns&quot;, &quot;allow-driver-egress-envoy&quot;, &quot;allow-envoy-ingress-egress&quot;, &quot;allow-backends-ingress-envoy&quot;})
 
     def test_pods_are_nonroot_bounded_and_have_no_host_escape(self):
         for pod_template in self.workload_templates:
@@ -481,11 +481,27 @@ only. ConfigMaps contain only canonical public JSON and Envoy configuration;
 Secrets are absent. Each fixed-track namespace uses labels
 <code>kil.dev/managed=v3b2</code> and <code>kil.dev/track</code> equal to its literal member of
 <code>TRACKS</code>.</p>
-<p>The five policies per namespace are default deny ingress/egress, minimum DNS,
-driver-to-Envoy TCP 8080, Envoy-to-authz TCP 8080, and Envoy-to-target TCP
-8080. Every allow rule includes both the exact namespace track label and exact
-Pod role label. No IPBlock, empty selector, SCTP, UDP application edge, or
-cross-track selector is permitted.</p>
+<p>The five policies per namespace are grouped by the workloads they select so
+Kubernetes' additive ingress/egress semantics do not broaden an edge:</p>
+<ol>
+<li><code>default-deny</code> uses the standard empty <code>podSelector: {}</code> with both policy
+types and no allow rules, isolating every current or unexpected Pod in the
+namespace.</li>
+<li><code>allow-dns</code> selects only same-track driver and Envoy roles for egress to the
+exact <code>kube-system</code> / <code>k8s-app=kube-dns</code> peer on UDP and TCP 53.</li>
+<li><code>allow-driver-egress-envoy</code> selects only the driver and permits egress to the
+exact same-track Envoy on TCP 8080.</li>
+<li><code>allow-envoy-ingress-egress</code> selects only Envoy and permits ingress from the
+exact same-track driver plus egress to the exact same-track authz and target
+roles on TCP 8080.</li>
+<li><code>allow-backends-ingress-envoy</code> selects same-track authz and target roles and
+permits ingress only from the exact same-track Envoy on TCP 8080.</li>
+</ol>
+<p>In each peer, <code>namespaceSelector</code> and <code>podSelector</code> occupy the same <code>from</code> or
+<code>to</code> item, making them an AND rather than two OR alternatives. Every allow rule
+includes the exact namespace track and Pod role labels. No allow policy may use
+an empty selector. No IPBlock, SCTP, UDP application edge, or cross-track
+selector is permitted.</p>
 <ul>
 <li>[ ] <strong>Step 4: Add adversarial manifest tests</strong></li>
 </ul>
@@ -494,7 +510,7 @@ cross-track selector is permitted.</p>
     ((&quot;Service&quot;, &quot;spec.type&quot;, &quot;NodePort&quot;), &quot;ClusterIP&quot;),
     ((&quot;Deployment&quot;, &quot;spec.template.spec.hostNetwork&quot;, True), &quot;hostNetwork&quot;),
     ((&quot;Deployment&quot;, &quot;spec.template.spec.containers.0.securityContext.privileged&quot;, True), &quot;privileged&quot;),
-    ((&quot;NetworkPolicy&quot;, &quot;spec.podSelector&quot;, {}), &quot;selector&quot;),
+    ((&quot;NetworkPolicy/allow-driver-egress-envoy&quot;, &quot;spec.podSelector&quot;, {}), &quot;selector&quot;),
 ):
     with self.subTest(reason=reason):
         with self.assertRaisesRegex(ManifestError, reason):
