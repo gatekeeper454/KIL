@@ -97,6 +97,29 @@ def private_evidence(*, request_free: bool = False) -> dict[str, object]:
     ]
     object_rows = [asdict(item) for item in inventory.objects]
     image_rows = [asdict(item) for item in inventory.pod_images]
+    uid_map: dict[str, str] = {}
+    resource_version_map: dict[str, str] = {}
+
+    def canonical_uid(value: str) -> str:
+        if value == inventory.cluster_incarnation_uid:
+            return value
+        if value not in uid_map:
+            number = len(uid_map) + 1
+            uid_map[value] = (
+                f"{number:08x}-0000-4000-8000-{number:012x}"
+            )
+        return uid_map[value]
+
+    def canonical_resource_version(value: str) -> str:
+        if value not in resource_version_map:
+            resource_version_map[value] = str(len(resource_version_map) + 1)
+        return resource_version_map[value]
+
+    for row in (*object_rows, *image_rows):
+        row["uid"] = canonical_uid(row["uid"])
+        row["resource_version"] = canonical_resource_version(
+            row["resource_version"]
+        )
     for image in image_rows:
         if image["image_role"] == "workload" and image["container"] == "driver":
             bound = next(
@@ -495,6 +518,8 @@ class V3B2EvidenceTest(unittest.TestCase):
         for value in (
             "prefix /private/tmp/kil-secret suffix",
             "prefix /home/name/kil-secret suffix",
+            "prefix /opt/kil/bin suffix",
+            "prefix /Volumes/KIL/data suffix",
             "prefix /VAR/FOLDERS/ab/cd suffix",
             "file:///Users/name/private.json",
             r"prefix C:\Users\name\secret suffix",
@@ -509,6 +534,13 @@ class V3B2EvidenceTest(unittest.TestCase):
                 validate_public_projection({"value": value})
         with self.assertRaises(PublicBoundaryError):
             validate_public_projection({"prefix /PRIVATE/TMP/secret suffix": True})
+        for allowed in (
+            "https://example.test/opt/kil",
+            "docker.io/example/image@sha256:" + "a" * 64,
+            "ordinary prose 1/2 fraction and/or alternative",
+        ):
+            with self.subTest(allowed=allowed):
+                validate_public_projection({"value": allowed})
 
     def test_original_foreign_names_are_rejected_anywhere_in_projection(self):
         evidence = private_evidence()
@@ -529,10 +561,6 @@ class V3B2EvidenceTest(unittest.TestCase):
                 record["name"] = name
         public = build_public_bundle(evidence)
         self.assertEqual(public["topology_attestation"]["namespaces"][0], "default")  # type: ignore[index]
-        validate_public_projection(
-            {"xdefault-key": "reviewed"},
-            forbidden_names=("default", "id"),
-        )
         with self.assertRaises(PublicBoundaryError):
             validate_public_projection(
                 {"provenance": "prefix client-a suffix"},
@@ -541,6 +569,18 @@ class V3B2EvidenceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             published = publish_bundle(evidence, Path(directory).resolve() / "public")
             self.assertEqual(verify_bundle(published).schema_family, "v3b2-run")
+
+    def test_unknown_public_structure_is_foreign_name_sensitive_by_default(self):
+        for candidate in (
+            {"arbitrary": "client-a"},
+            {"client-a": "safe"},
+            {"nested": [{"arbitrary": "xclient-a suffix"}]},
+        ):
+            with self.subTest(candidate=candidate), self.assertRaises(PublicBoundaryError):
+                validate_public_projection(
+                    candidate,
+                    forbidden_names=("client-a",),
+                )
 
     def test_original_foreign_names_are_rejected_in_dynamic_identity_fields(self):
         evidence = private_evidence()
@@ -566,6 +606,34 @@ class V3B2EvidenceTest(unittest.TestCase):
             candidate["runtime_identities"]["foreign_profiles_after"][0][field] = "client-a"  # type: ignore[index]
             with self.subTest(field=field), self.assertRaises(EvidenceError):
                 build_public_bundle(candidate)
+
+    def test_counterfeit_fixture_uids_are_rejected_by_builder_and_verifier(self):
+        for location, counterfeit in (("object", "uid-1"), ("pod", "pod-1-envoy")):
+            evidence = private_evidence()
+            topology = evidence["runtime_identities"]["topology_attestation"]  # type: ignore[index]
+            if location == "object":
+                topology["objects"][0]["uid"] = counterfeit  # type: ignore[index]
+            else:
+                topology["pod_images"][0]["uid"] = counterfeit  # type: ignore[index]
+            with self.subTest(boundary="builder", location=location), self.assertRaises(EvidenceError):
+                build_public_bundle(evidence)
+
+            with self.subTest(boundary="verifier", location=location), tempfile.TemporaryDirectory() as directory:
+                published = publish_bundle(
+                    private_evidence(),
+                    Path(directory).resolve() / "public",
+                )
+                manifest_path = published / "manifest.json"
+                manifest = json.loads(manifest_path.read_text())
+                if location == "object":
+                    manifest["topology_attestation"]["objects"][0]["uid"] = counterfeit
+                else:
+                    manifest["topology_attestation"]["pod_images"][0]["uid"] = counterfeit
+                manifest_path.chmod(0o600)
+                manifest_path.write_bytes(canonical(manifest))
+                self._repair_commitment_and_sums(published)
+                with self.assertRaises(EvidenceError):
+                    verify_bundle(published)
 
     def test_foreign_profiles_are_keyed_sorted_and_bind_normalized_resources(self):
         evidence = private_evidence()

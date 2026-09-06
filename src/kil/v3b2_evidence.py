@@ -76,12 +76,10 @@ _V3B2_RUN = re.compile(r"v3b2-[0-9a-f]{64}")
 _KUBERNETES_UID = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 )
-_FIXTURE_OBJECT_UID = re.compile(r"uid-(?:[1-9][0-9]?|calico-(?:node|controller))")
-_FIXTURE_POD_UID = re.compile(
-    r"pod-(?:(?:[123]-(?:driver|envoy|authz|target))|calico|controller)"
-)
-_RESOURCE_VERSION = re.compile(
-    r"(?:[1-9][0-9]{0,19}|rv-[1-9][0-9]?|system-[123]|rv-pod-[123]-(?:driver|envoy|authz|target))"
+_RESOURCE_VERSION = re.compile(r"(?:0|[1-9][0-9]{0,19})")
+_ABSOLUTE_POSIX_PATH = re.compile(
+    r"(?<![A-Za-z0-9._~/-])/(?!/)[A-Za-z0-9._~-]+"
+    r"(?:/|(?=$|[^A-Za-z0-9._~-]))"
 )
 _PROFILE_PATH = Path(__file__).resolve().parents[2] / "deploy/kind/v3b2-profile.json"
 _PROFILE_SHA256 = "cc630f343f87f89180a2cfc98baf1d23686e0b39e364569ff579b3e8efa8cee8"
@@ -122,25 +120,6 @@ _HOST_PATH_PATTERNS = (
     re.compile(r"\\\\[^\\/\s]+[\\/][^\\/\s]+"),
     re.compile(r"(?:^|[^a-z0-9])~[\\/]", re.IGNORECASE),
     re.compile(r"\$(?:home|\{home\})|%userprofile%", re.IGNORECASE),
-)
-_FOREIGN_COPY_FIELDS = frozenset(
-    {
-        "cluster_incarnation_uid",
-        "uid",
-        "resource_version",
-        "pod",
-        "arch",
-        "runtime",
-        "value",
-        "rationale",
-        "source_reference",
-        "provenance",
-        "detail",
-        "description",
-    }
-)
-_REVIEWED_FOREIGN_COLLISIONS = frozenset(
-    {"aarch64", "x86_64", "amd64", "arm64", "docker", "containerd"}
 )
 _FOREIGN_ARCHES = frozenset({"aarch64", "x86_64", "amd64", "arm64"})
 _FOREIGN_RUNTIMES = frozenset({"docker", "containerd"})
@@ -623,10 +602,7 @@ def _validate_topology_attestation(
         record = _closed_record("topology object", raw, frozenset({"api_version", "kind", "namespace", "name", "uid", "resource_version"}))
         if (
             type(record["uid"]) is not str
-            or (
-                _KUBERNETES_UID.fullmatch(record["uid"]) is None
-                and _FIXTURE_OBJECT_UID.fullmatch(record["uid"]) is None
-            )
+            or _KUBERNETES_UID.fullmatch(record["uid"]) is None
             or type(record["resource_version"]) is not str
             or _RESOURCE_VERSION.fullmatch(record["resource_version"]) is None
         ):
@@ -664,11 +640,7 @@ def _validate_pod_images(
         item = _closed_record("Pod image identity", raw, fields)
         if (
             type(item["uid"]) is not str
-            or (
-                _KUBERNETES_UID.fullmatch(item["uid"]) is None
-                and _FIXTURE_POD_UID.fullmatch(item["uid"]) is None
-                and _FIXTURE_OBJECT_UID.fullmatch(item["uid"]) is None
-            )
+            or _KUBERNETES_UID.fullmatch(item["uid"]) is None
             or type(item["resource_version"]) is not str
             or _RESOURCE_VERSION.fullmatch(item["resource_version"]) is None
         ):
@@ -994,6 +966,93 @@ def _public_source_attestations(value: object) -> list[dict[str, object]]:
     return result
 
 
+_PUBLIC_KEYS_BY_PATH: Mapping[tuple[str, ...], frozenset[str]] = {
+    (): PUBLIC_MANIFEST_FIELDS,
+    ("content_identities",): _CONTENT_FIELDS,
+    ("content_identities", "calico_images"): frozenset(
+        {"cni", "node", "kube_controllers"}
+    ),
+    ("topology_attestation",): _TOPOLOGY_FIELDS,
+    ("topology_attestation", "objects", "*"): frozenset(
+        {"api_version", "kind", "namespace", "name", "uid", "resource_version"}
+    ),
+    ("topology_attestation", "pod_images", "*"): frozenset(
+        {
+            "image_role", "container_type", "namespace", "pod", "container",
+            "uid", "resource_version", "image", "image_id", "ready",
+        }
+    ),
+    ("topology_attestation", "endpoints", "*"): frozenset(
+        {
+            "source_kind", "source_name", "namespace", "service", "addresses",
+            "port_name", "protocol", "port",
+        }
+    ),
+    ("topology_attestation", "calico_readiness"): frozenset(
+        {"node_desired", "node_ready", "controller_desired", "controller_ready"}
+    ),
+    ("policy_attestation",): frozenset({"edges"}),
+    ("policy_attestation", "edges", "*"): frozenset(
+        {
+            "namespace", "source_roles", "destination_namespace",
+            "destination_roles", "protocol_ports",
+        }
+    ),
+    ("request_results", "*"): _DRIVER_FIELDS | {"target_markers"},
+    ("semantic_joins", "*"): frozenset(
+        {
+            "track", "request_id", "decision", "http_status", "target_markers",
+            "decision_digest_equal", "decision_digest", "envoy_upstream_attempted",
+        }
+    ),
+    ("source_attestations", "*"): frozenset(
+        {"kind", "track", "byte_count", "sha256"}
+    ),
+    ("foreign_profile_attestation",): frozenset({"before", "after", "unchanged"}),
+    ("foreign_profile_attestation", "before", "*"): frozenset(
+        {"pseudonym", "status", "arch", "cpus", "memory", "disk", "runtime"}
+    ),
+    ("foreign_profile_attestation", "after", "*"): frozenset(
+        {"pseudonym", "status", "arch", "cpus", "memory", "disk", "runtime"}
+    ),
+    ("owned_teardown",): frozenset(
+        {"cluster_absent", "profile_absent", "private_active_state_absent"}
+    ),
+}
+_PUBLIC_DYNAMIC_STRING_PATHS = frozenset(
+    {
+        ("topology_attestation", "cluster_incarnation_uid"),
+        ("topology_attestation", "objects", "*", "uid"),
+        ("topology_attestation", "objects", "*", "resource_version"),
+        ("topology_attestation", "pod_images", "*", "pod"),
+        ("topology_attestation", "pod_images", "*", "uid"),
+        ("topology_attestation", "pod_images", "*", "resource_version"),
+    }
+)
+_PUBLIC_REVIEWED_LIST_VALUE_PATHS = frozenset(
+    {
+        ("claim_exclusions", "*"),
+        ("topology_attestation", "namespaces", "*"),
+        ("topology_attestation", "endpoints", "*", "addresses", "*"),
+        ("policy_attestation", "edges", "*", "source_roles", "*"),
+        ("policy_attestation", "edges", "*", "destination_roles", "*"),
+        ("policy_attestation", "edges", "*", "protocol_ports", "*", "*"),
+    }
+)
+
+
+def _known_public_key(path: tuple[str, ...], key: str) -> bool:
+    return key in _PUBLIC_KEYS_BY_PATH.get(path, frozenset())
+
+
+def _closed_public_value_path(path: tuple[str, ...]) -> bool:
+    if path in _PUBLIC_DYNAMIC_STRING_PATHS:
+        return False
+    if path in _PUBLIC_REVIEWED_LIST_VALUE_PATHS:
+        return True
+    return bool(path) and path[-1] != "*" and _known_public_key(path[:-1], path[-1])
+
+
 def validate_public_projection(
     value: object, *, forbidden_names: Sequence[str] = ()
 ) -> None:
@@ -1010,8 +1069,12 @@ def validate_public_projection(
     except UnicodeEncodeError:
         raise PublicBoundaryError("foreign-name boundary contains invalid Unicode") from None
     unique_names = tuple(sorted(set(forbidden_names)))
+    schema_document = (
+        value.get("schema_version") == PUBLIC_MANIFEST_SCHEMA
+        and set(value) == PUBLIC_MANIFEST_FIELDS
+    )
     seen: set[int] = set()
-    def walk(member: object, depth: int, field_name: str | None = None) -> None:
+    def walk(member: object, depth: int, path: tuple[str, ...] = ()) -> None:
         if depth > 32:
             raise PublicBoundaryError("public projection nesting is excessive")
         if type(member) in (dict, list):
@@ -1031,6 +1094,10 @@ def validate_public_projection(
                             pattern.search(key) is not None
                             for pattern in _HOST_PATH_PATTERNS
                         )
+                        or (
+                            (not schema_document or not _known_public_key(path, key))
+                            and any(name in key for name in unique_names)
+                        )
                     )
                 except UnicodeEncodeError:
                     raise PublicBoundaryError(
@@ -1038,10 +1105,10 @@ def validate_public_projection(
                     ) from None
                 if invalid_key:
                     raise PublicBoundaryError("public projection contains a private field name")
-                walk(child, depth + 1, key)
+                walk(child, depth + 1, (*path, key))
         elif type(member) is list:
             for child in member:
-                walk(child, depth + 1, field_name)
+                walk(child, depth + 1, (*path, "*"))
         elif type(member) is str:
             lowered = member.lower()
             if (
@@ -1050,7 +1117,7 @@ def validate_public_projection(
             ) or member.startswith("/") or any(
                 pattern.search(member) is not None
                 for pattern in _HOST_PATH_PATTERNS
-            ):
+            ) or _ABSOLUTE_POSIX_PATH.search(member) is not None:
                 raise PublicBoundaryError("public projection contains private material")
             try:
                 encoded = member.encode("utf-8")
@@ -1060,14 +1127,12 @@ def validate_public_projection(
                 ) from None
             if len(encoded) > 65536:
                 raise PublicBoundaryError("public string exceeds its bound")
-            # Foreign names are compared only against dynamic/free-form
-            # provenance values. Schema keys and reviewed constants are never
-            # rejected merely because a profile happens to share vocabulary.
+            # Unknown structure is sensitive by default. Exemption requires an
+            # exact public-schema path whose value is independently closed;
+            # dynamic runtime provenance remains substring-sensitive.
             for name in unique_names:
                 if (
-                    field_name in _FOREIGN_COPY_FIELDS
-                    and len(name) > 2
-                    and member not in _REVIEWED_FOREIGN_COLLISIONS
+                    (not schema_document or not _closed_public_value_path(path))
                     and name in member
                 ):
                     raise PublicBoundaryError(
