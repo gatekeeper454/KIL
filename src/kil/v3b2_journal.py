@@ -1165,7 +1165,11 @@ def _completed_driver_identities(events: list[dict[str, object]]) -> tuple[tuple
             )
         elif record["event"] == "driver_cancel_complete":
             canceled.add(str(details["namespace"]))
-    return tuple(sorted(identity for namespace, identity in started.items() if namespace not in canceled))
+    return tuple(
+        started[namespace]
+        for _track, namespace in TRACK_NAMESPACES
+        if namespace in started and namespace not in canceled
+    )
 
 
 def _validate_observation(

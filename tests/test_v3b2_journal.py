@@ -584,6 +584,102 @@ class V3B2JournalTest(unittest.TestCase):
             self._append(name, details)
         self.assertTrue(recovery_plan(load_journal(self.path)).publication_allowed)
 
+    def test_three_driver_stranded_recovery_preserves_track_order_through_publication(self) -> None:
+        self._journal()
+        self._ready()
+        drivers: list[dict[str, object]] = []
+        tracks = (
+            ("credential_policy_baseline", "kil-v3-baseline"),
+            ("signed_state_only", "kil-v3-signed"),
+            ("signed_plus_local_reduce", "kil-v3-local-reduce"),
+        )
+        for index, (track, namespace) in enumerate(tracks):
+            driver = self._start_driver(namespace, f"driver-uid-{index}")
+            drivers.append(driver)
+            request = {
+                "track": track,
+                "request_id": "v3b1-central-request",
+                "case_sha256": "f" * 64,
+            }
+            self._append("request_intent", request)
+            if index < 2:
+                self._append("request_result", {**request, "result_sha256": "1" * 64})
+        self._freeze()
+
+        active = [
+            (str(driver["namespace"]), str(driver["pod"]), str(driver["uid"]))
+            for driver in drivers
+        ]
+        proposed_cancels: list[str] = []
+        while active:
+            observation = self._observation(driver_pods=tuple(sorted(active)))
+            proposal = recovery_plan(load_journal(self.path), observation)
+            self.assertFalse(any(command.mutating for command in proposal.commands))
+            self.assertIsNotNone(proposal.next_intent)
+            event, detail_pairs = proposal.next_intent
+            self.assertEqual(event, "driver_cancel_intent")
+            details = dict(detail_pairs)
+            proposed_cancels.append(str(details["namespace"]))
+            self._append(event, details)
+            deletion = recovery_plan(load_journal(self.path), observation)
+            command = next(command for command in deletion.commands if command.mutating)
+            self.assertIn(str(details["uid"]).encode("utf-8"), command.stdin or b"")
+            self._append("driver_cancel_complete", details)
+            active.remove((str(details["namespace"]), str(details["pod"]), str(details["uid"])))
+        self.assertEqual(
+            proposed_cancels,
+            ["kil-v3-baseline", "kil-v3-signed", "kil-v3-local-reduce"],
+        )
+
+        cluster_observation = self._observation(driver_pods=())
+        plan = recovery_plan(load_journal(self.path), cluster_observation)
+        self.assertEqual(plan.next_intent[0], "cluster_delete_intent")
+        self._append(plan.next_intent[0], dict(plan.next_intent[1]))
+        self.assertTrue(any(command.mutating for command in recovery_plan(
+            load_journal(self.path), cluster_observation
+        ).commands))
+        cluster = {"kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig}
+        self._append("cluster_delete_complete", cluster)
+
+        absent_cluster = self._observation(
+            kind_cluster=None,
+            cluster_incarnation_uid=None,
+            node_container_id=None,
+            driver_pods=(),
+        )
+        plan = recovery_plan(load_journal(self.path), absent_cluster)
+        self.assertEqual(plan.next_intent[0], "cluster_absence_proof_intent")
+        self._append(plan.next_intent[0], dict(plan.next_intent[1]))
+        self._append("cluster_absence_proof_complete", dict(plan.next_intent[1]))
+
+        for family in ("profile_stop", "profile_delete"):
+            plan = recovery_plan(load_journal(self.path), absent_cluster)
+            self.assertEqual(plan.next_intent[0], f"{family}_intent")
+            details = dict(plan.next_intent[1])
+            self._append(plan.next_intent[0], details)
+            self.assertTrue(any(command.mutating for command in recovery_plan(
+                load_journal(self.path), absent_cluster
+            ).commands))
+            self._append(f"{family}_complete", details)
+
+        absent_profile = self._observation(
+            colima_profile=None,
+            kind_cluster=None,
+            cluster_incarnation_uid=None,
+            node_container_id=None,
+            driver_pods=(),
+        )
+        plan = recovery_plan(load_journal(self.path), absent_profile)
+        self.assertEqual(plan.next_intent[0], "profile_absence_proof_intent")
+        self._append(plan.next_intent[0], dict(plan.next_intent[1]))
+        self._append("profile_absence_proof_complete", dict(plan.next_intent[1]))
+        comparison = {"unchanged": True, "attestation_sha256": "6" * 64}
+        publication = {"public_commitment_sha256": "7" * 64}
+        for family, details in (("foreign_snapshot_comparison", comparison), ("publication", publication)):
+            self._append(f"{family}_intent", details)
+            self._append(f"{family}_complete", details)
+        self.assertTrue(recovery_plan(load_journal(self.path), absent_profile).publication_allowed)
+
     def test_all_required_event_families_accept_exact_intent_completion_pairs(self) -> None:
         self._journal()
         for name, details in self._canonical_events():
