@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -792,7 +793,6 @@ def _validate_history(events: object) -> None:
                     require(request_claims[-1] in request_results, "prior request is still pending")
             elif family == "evidence_freeze":
                 require(done("readiness"), "evidence freeze requires completed readiness")
-                require(not driver_starts or bool(request_claims), "request-free freeze requires zero driver starts")
             elif family == "driver_cancel":
                 require(done("evidence_freeze"), "driver cancellation requires durable evidence freeze")
                 details = record["details"]
@@ -1153,6 +1153,27 @@ def _evidence_freeze_commands(
     return tuple(commands)
 
 
+def _evidence_freeze_intent(
+    identity: OwnedIdentity, drivers: tuple[tuple[str, str, str], ...]
+) -> tuple[str, tuple[tuple[str, object], ...]]:
+    """Commit the exact immutable source plan before diagnostic collection."""
+    commands = _evidence_freeze_commands(identity, drivers)
+    commitment = {
+        "schema": "kil.v3b2-evidence-freeze-plan.v1",
+        "drivers": [list(driver) for driver in drivers],
+        "commands": [
+            {
+                "argv": list(command.argv),
+                "timeout_s": command.timeout_s,
+                "stdin": None,
+            }
+            for command in commands
+        ],
+    }
+    digest = hashlib.sha256(_canonical_bytes(commitment)).hexdigest()
+    return _recovery_intent("evidence_freeze_intent", {"evidence_sha256": digest})
+
+
 def _completed_driver_identities(events: list[dict[str, object]]) -> tuple[tuple[str, str, str], ...]:
     started: dict[str, tuple[str, str, str]] = {}
     canceled: set[str] = set()
@@ -1269,19 +1290,17 @@ def recovery_plan(
         command = _pending_command(*command_pending[0], identity)
         return RecoveryPlan(()) if command is None else RecoveryPlan((command,))
     if (request_claimed or readiness_complete) and not frozen:
-        if drivers and not request_claimed:
-            return RecoveryPlan(
-                tuple(
-                    _driver_uid_attestation(
-                        identity, {"namespace": item[0], "pod": item[1], "uid": item[2]}
-                    )
-                    for item in drivers
-                )
+        uid_attestations = tuple(
+            _driver_uid_attestation(
+                identity, {"namespace": item[0], "pod": item[1], "uid": item[2]}
             )
+            for item in drivers
+        )
         return RecoveryPlan(
-            _evidence_freeze_commands(identity, drivers),
+            (*uid_attestations, *_evidence_freeze_commands(identity, drivers)),
             requests_to_send=(),
             publication_allowed=False,
+            next_intent=_evidence_freeze_intent(identity, drivers),
         )
     if frozen and drivers:
         next_driver = drivers[0]

@@ -524,7 +524,7 @@ class V3B2JournalTest(unittest.TestCase):
         with self.assertRaisesRegex(JournalError, "duplicated|order"):
             self._append("driver_start_intent", baseline)
 
-    def test_request_free_freeze_is_only_the_zero_driver_path(self) -> None:
+    def test_request_free_freeze_accepts_zero_or_waiting_drivers_and_closes_forward_work(self) -> None:
         self._journal()
         self._ready()
         freeze = {"evidence_sha256": "5" * 64}
@@ -535,8 +535,99 @@ class V3B2JournalTest(unittest.TestCase):
         self._journal()
         self._ready()
         self._start_driver("kil-v3-baseline", "driver-uid")
-        with self.assertRaisesRegex(JournalError, "request|zero|order"):
-            self._append("evidence_freeze_intent", freeze)
+        self._append("evidence_freeze_intent", freeze)
+        with self.assertRaisesRegex(JournalError, "pending|overlap|order"):
+            self._append("driver_start_intent", {"namespace": "kil-v3-signed", "pod": "driver", "uid": "signed"})
+
+    def test_pre_request_driver_recovery_proposes_freeze_and_never_invents_request(self) -> None:
+        self._journal()
+        self._ready()
+        driver = self._start_driver("kil-v3-baseline", "driver-uid")
+        plan = recovery_plan(load_journal(self.path), self._observation(
+            driver_pods=(("kil-v3-baseline", "driver", "driver-uid"),)
+        ))
+        self.assertEqual(plan.requests_to_send, ())
+        self.assertFalse(any(command.mutating for command in plan.commands))
+        self.assertTrue(any("pod/driver" in command.argv for command in plan.commands))
+        self.assertTrue(any("metadata.uid=driver-uid" in command.argv for command in plan.commands))
+        self.assertIsNotNone(plan.next_intent)
+        self.assertEqual(plan.next_intent[0], "evidence_freeze_intent")
+        freeze = dict(plan.next_intent[1])
+        self._append(plan.next_intent[0], freeze)
+        pending = recovery_plan(load_journal(self.path), self._observation(
+            driver_pods=(("kil-v3-baseline", "driver", "driver-uid"),)
+        ))
+        self.assertEqual(pending.requests_to_send, ())
+        self.assertFalse(any(command.mutating for command in pending.commands))
+        self._append("evidence_freeze_complete", freeze)
+        proposal = recovery_plan(load_journal(self.path), self._observation(
+            driver_pods=(("kil-v3-baseline", "driver", "driver-uid"),)
+        ))
+        self.assertEqual(proposal.next_intent[0], "driver_cancel_intent")
+        self.assertEqual(dict(proposal.next_intent[1]), driver)
+        self._append(proposal.next_intent[0], dict(proposal.next_intent[1]))
+        authorized = recovery_plan(load_journal(self.path), self._observation(
+            driver_pods=(("kil-v3-baseline", "driver", "driver-uid"),)
+        ))
+        self.assertTrue(any(command.mutating for command in authorized.commands))
+        self._append("driver_cancel_complete", driver)
+        cluster = {"kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig}
+        profile = {"colima_profile": "kil-v3-lab"}
+        tail = (
+            ("cluster_delete_intent", cluster), ("cluster_delete_complete", cluster),
+            ("cluster_absence_proof_intent", {"kind_cluster": "kil-v3-lab", "node_container_id": NODE_ID}),
+            ("cluster_absence_proof_complete", {"kind_cluster": "kil-v3-lab", "node_container_id": NODE_ID}),
+            ("profile_stop_intent", profile), ("profile_stop_complete", profile),
+            ("profile_delete_intent", profile), ("profile_delete_complete", profile),
+            ("profile_absence_proof_intent", profile), ("profile_absence_proof_complete", profile),
+            ("foreign_snapshot_comparison_intent", {"unchanged": True, "attestation_sha256": "6" * 64}),
+            ("foreign_snapshot_comparison_complete", {"unchanged": True, "attestation_sha256": "6" * 64}),
+            ("publication_intent", {"public_commitment_sha256": "7" * 64}),
+            ("publication_complete", {"public_commitment_sha256": "7" * 64}),
+        )
+        for name, details in tail:
+            self._append(name, details)
+        self.assertTrue(recovery_plan(load_journal(self.path)).publication_allowed)
+
+    def test_pre_request_abandonment_freeze_is_available_at_each_track_boundary(self) -> None:
+        tracks = (
+            ("credential_policy_baseline", "kil-v3-baseline"),
+            ("signed_state_only", "kil-v3-signed"),
+            ("signed_plus_local_reduce", "kil-v3-local-reduce"),
+        )
+        for boundary in range(3):
+            with self.subTest(boundary=boundary):
+                self.path.unlink(missing_ok=True)
+                self._journal()
+                self._ready()
+                observed: list[tuple[str, str, str]] = []
+                for index, (track, namespace) in enumerate(tracks[: boundary + 1]):
+                    uid = f"driver-uid-{index}"
+                    self._start_driver(namespace, uid)
+                    observed.append((namespace, "driver", uid))
+                    if index < boundary:
+                        request = {
+                            "track": track,
+                            "request_id": "v3b1-central-request",
+                            "case_sha256": "f" * 64,
+                        }
+                        self._append("request_intent", request)
+                        self._append("request_result", {**request, "result_sha256": "1" * 64})
+                plan = recovery_plan(
+                    load_journal(self.path), self._observation(driver_pods=tuple(sorted(observed)))
+                )
+                self.assertEqual(plan.requests_to_send, ())
+                self.assertFalse(any(command.mutating for command in plan.commands))
+                self.assertEqual(plan.next_intent[0], "evidence_freeze_intent")
+                self._append(plan.next_intent[0], dict(plan.next_intent[1]))
+                if boundary < 2:
+                    next_namespace = tracks[boundary + 1][1]
+                    with self.assertRaisesRegex(JournalError, "pending|overlap|order"):
+                        self._append("driver_start_intent", {
+                            "namespace": next_namespace,
+                            "pod": "driver",
+                            "uid": "late-driver",
+                        })
 
     def test_stranded_request_freeze_allows_only_journaled_teardown_to_publication(self) -> None:
         self._journal()
