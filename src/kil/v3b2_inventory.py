@@ -43,10 +43,14 @@ _CALICO_PINS = {
         "adf0ac895796d21bca5383bc81c4cd2614be3a4308085b47857d7999f4cc2b1f"
     ),
 }
-_CALICO_CONTAINERS = {
-    "calico-cni": "install-cni",
-    "calico-node": "calico-node",
-    "calico-kube-controllers": "calico-kube-controllers",
+_CALICO_CONTAINER_CONTRACT = {
+    ("calico-cni", "init", "upgrade-ipam"): _CALICO_PINS["calico-cni"],
+    ("calico-cni", "init", "install-cni"): _CALICO_PINS["calico-cni"],
+    ("calico-node", "init", "ebpf-bootstrap"): _CALICO_PINS["calico-node"],
+    ("calico-node", "regular", "calico-node"): _CALICO_PINS["calico-node"],
+    (
+        "calico-kube-controllers", "regular", "calico-kube-controllers",
+    ): _CALICO_PINS["calico-kube-controllers"],
 }
 
 
@@ -115,6 +119,7 @@ class ObjectIdentity:
 @dataclass(frozen=True, slots=True, order=True)
 class PodImageIdentity:
     image_role: str
+    container_type: str
     namespace: str
     pod: str
     container: str
@@ -129,6 +134,10 @@ class PodImageIdentity:
             "workload", *_CALICO_PINS,
         }:
             raise InventoryError("image_role must be an exact reviewed role")
+        if type(self.container_type) is not str or self.container_type not in {
+            "init", "regular",
+        }:
+            raise InventoryError("container_type must be exact init or regular")
         for label in ("namespace", "pod", "container", "uid", "resource_version"):
             _exact_string(label, getattr(self, label))
         _exact_string("image", self.image)
@@ -234,13 +243,22 @@ def _validate_common(record: object) -> None:
     _sorted_records("pod_images", record.pod_images, PodImageIdentity)
     _sorted_records("endpoints", record.endpoints, EndpointIdentity)
     calico = tuple(item for item in record.pod_images if item.image_role != "workload")
-    if tuple(sorted(item.image_role for item in calico)) != tuple(sorted(_CALICO_PINS)):
-        raise InventoryError("Calico image role inventory must contain each exact pin once")
+    actual_calico_contract = tuple(sorted(
+        (item.image_role, item.container_type, item.container) for item in calico
+    ))
+    if actual_calico_contract != tuple(sorted(_CALICO_CONTAINER_CONTRACT)):
+        raise InventoryError("Calico container inventory or multiplicity differs from the manifest")
     for item in calico:
+        key = (item.image_role, item.container_type, item.container)
+        pod_prefix = (
+            "calico-kube-controllers-"
+            if item.image_role == "calico-kube-controllers"
+            else "calico-node-"
+        )
         if (
             item.namespace != "kube-system"
-            or item.container != _CALICO_CONTAINERS[item.image_role]
-            or item.image != _CALICO_PINS[item.image_role]
+            or not item.pod.startswith(pod_prefix)
+            or item.image != _CALICO_CONTAINER_CONTRACT[key]
         ):
             raise InventoryError("Calico image differs from the exact profile pin")
     endpoint_keys = tuple(
@@ -430,7 +448,9 @@ def _parse_pod_image_list(payload: bytes) -> tuple[PodImageIdentity, ...]:
             raise InventoryError("unknown or ambiguous Pod condition")
         ready = condition["status"] == "True"
         seen_containers: set[str] = set()
+        observed_placements: set[tuple[str, str]] = set()
         for field in ("containerStatuses", "initContainerStatuses"):
+            container_type = "regular" if field == "containerStatuses" else "init"
             for raw in _exact_array(field, status[field]):
                 container = _keys(
                     "container status", raw, frozenset({"name", "image", "imageID"})
@@ -440,7 +460,9 @@ def _parse_pod_image_list(payload: bytes) -> tuple[PodImageIdentity, ...]:
                     raise InventoryError("duplicate container status")
                 seen_containers.add(name)
                 role = {
+                    "upgrade-ipam": "calico-cni",
                     "install-cni": "calico-cni",
+                    "ebpf-bootstrap": "calico-node",
                     "calico-node": "calico-node",
                     "calico-kube-controllers": "calico-kube-controllers",
                 }.get(name, "workload")
@@ -453,11 +475,23 @@ def _parse_pod_image_list(payload: bytes) -> tuple[PodImageIdentity, ...]:
                     and role == "workload"
                 ):
                     raise InventoryError("unknown Calico Pod container role")
+                observed_placements.add((container_type, name))
                 records.append(PodImageIdentity(
-                    role, metadata["namespace"], metadata["name"], name,
+                    role, container_type, metadata["namespace"], metadata["name"], name,
                     metadata["uid"], metadata["resourceVersion"],
                     container["image"], container["imageID"], ready,
                 ))
+        if metadata["namespace"] == "kube-system":
+            if metadata["name"].startswith("calico-node-"):
+                expected_placements = {
+                    ("init", "upgrade-ipam"), ("init", "install-cni"),
+                    ("init", "ebpf-bootstrap"), ("regular", "calico-node"),
+                }
+                if observed_placements != expected_placements:
+                    raise InventoryError("Calico node Pod container inventory is not exact")
+            elif metadata["name"].startswith("calico-kube-controllers-"):
+                if observed_placements != {("regular", "calico-kube-controllers")}:
+                    raise InventoryError("Calico controller Pod container inventory is not exact")
     ordered = tuple(sorted(records))
     if len(set(ordered)) != len(ordered):
         raise InventoryError("duplicate Pod image identity")
@@ -590,7 +624,7 @@ def _parse_policy_list(payload: bytes) -> tuple[PolicyEdge, ...]:
 
 def _parse_calico_workload_list(
     payload: bytes, expected_kind: str
-) -> tuple[int, int, tuple[tuple[str, str], ...]]:
+) -> tuple[int, int, tuple[tuple[str, str, str], ...]]:
     if type(expected_kind) is not str or expected_kind not in {"DaemonSet", "Deployment"}:
         raise InventoryError("Calico workload kind is not reviewed")
     items = _decode_list(payload, expected_kind)
@@ -610,30 +644,41 @@ def _parse_calico_workload_list(
         "Calico workload spec", item["spec"],
         frozenset({"containers", "initContainers"}),
     )
-    images: list[tuple[str, str]] = []
+    images: list[tuple[str, str, str]] = []
     for field in ("containers", "initContainers"):
+        container_type = "regular" if field == "containers" else "init"
         for raw_container in _exact_array(field, spec[field]):
             container = _keys(
                 "Calico container", raw_container, frozenset({"name", "image"})
             )
             name = _exact_string("Calico container name", container["name"])
             role = {
+                "upgrade-ipam": "calico-cni",
                 "install-cni": "calico-cni",
+                "ebpf-bootstrap": "calico-node",
                 "calico-node": "calico-node",
                 "calico-kube-controllers": "calico-kube-controllers",
             }.get(name)
-            if role is None or container["image"] != _CALICO_PINS[role]:
+            contract_key = (role, container_type, name)
+            if (
+                role is None
+                or contract_key not in _CALICO_CONTAINER_CONTRACT
+                or container["image"] != _CALICO_CONTAINER_CONTRACT[contract_key]
+            ):
                 raise InventoryError("Calico container image does not match a profile pin")
-            images.append((role, container["image"]))
-    if len(set(role for role, _ in images)) != len(images):
-        raise InventoryError("duplicate Calico image role")
-    expected_roles = (
-        {"calico-cni", "calico-node"}
+            images.append((container_type, name, container["image"]))
+    if len(set((placement, name) for placement, name, _ in images)) != len(images):
+        raise InventoryError("duplicate Calico container identity")
+    expected_containers = (
+        {
+            ("init", "upgrade-ipam"), ("init", "install-cni"),
+            ("init", "ebpf-bootstrap"), ("regular", "calico-node"),
+        }
         if expected_kind == "DaemonSet"
-        else {"calico-kube-controllers"}
+        else {("regular", "calico-kube-controllers")}
     )
-    if {role for role, _ in images} != expected_roles:
-        raise InventoryError("Calico workload omits or adds a required image role")
+    if {(placement, name) for placement, name, _ in images} != expected_containers:
+        raise InventoryError("Calico workload container inventory is not exact")
     status_fields = (
         frozenset({"desiredNumberScheduled", "numberReady"})
         if expected_kind == "DaemonSet"

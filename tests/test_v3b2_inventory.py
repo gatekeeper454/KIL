@@ -55,10 +55,12 @@ def snapshot() -> InventorySnapshot:
         obj("Service", "kil-v3-baseline", "envoy", "service"),
     )))
     images = tuple(sorted((
-        PodImageIdentity("calico-cni", "kube-system", "calico-node-a", "install-cni", "pod-calico", "201", CALICO_CNI, "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1], True),
-        PodImageIdentity("calico-node", "kube-system", "calico-node-a", "calico-node", "pod-calico", "201", CALICO_NODE, "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1], True),
-        PodImageIdentity("calico-kube-controllers", "kube-system", "calico-kube-controllers-a", "calico-kube-controllers", "pod-controller", "202", CALICO_CONTROLLERS, "docker-pullable://quay.io/calico/kube-controllers@sha256:" + CALICO_CONTROLLERS.rsplit(":", 1)[1], True),
-        PodImageIdentity("workload", "kil-v3-baseline", "envoy-a", "envoy", "pod-envoy", "203", KIL_IMAGE, KIL_IMAGE_ID, True),
+        PodImageIdentity("calico-cni", "init", "kube-system", "calico-node-a", "upgrade-ipam", "pod-calico", "201", CALICO_CNI, "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1], True),
+        PodImageIdentity("calico-cni", "init", "kube-system", "calico-node-a", "install-cni", "pod-calico", "201", CALICO_CNI, "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1], True),
+        PodImageIdentity("calico-node", "init", "kube-system", "calico-node-a", "ebpf-bootstrap", "pod-calico", "201", CALICO_NODE, "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1], True),
+        PodImageIdentity("calico-node", "regular", "kube-system", "calico-node-a", "calico-node", "pod-calico", "201", CALICO_NODE, "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1], True),
+        PodImageIdentity("calico-kube-controllers", "regular", "kube-system", "calico-kube-controllers-a", "calico-kube-controllers", "pod-controller", "202", CALICO_CONTROLLERS, "docker-pullable://quay.io/calico/kube-controllers@sha256:" + CALICO_CONTROLLERS.rsplit(":", 1)[1], True),
+        PodImageIdentity("workload", "regular", "kil-v3-baseline", "envoy-a", "envoy", "pod-envoy", "203", KIL_IMAGE, KIL_IMAGE_ID, True),
     )))
     endpoints = (EndpointIdentity("Endpoints", "envoy", "kil-v3-baseline", "envoy", ("10.244.0.10",), "http", "TCP", 8080),)
     return InventorySnapshot(
@@ -262,7 +264,7 @@ class V3B2InventoryTest(unittest.TestCase):
         with self.assertRaises(InventoryError):
             replace(self.snapshot, objects=tuple(reversed(self.snapshot.objects)))
         with self.assertRaises(InventoryError):
-            PodImageIdentity("workload", "n", "p", "c", "u", "r", KIL_IMAGE, KIL_IMAGE_ID, "Unknown")  # type: ignore[arg-type]
+            PodImageIdentity("workload", "regular", "n", "p", "c", "u", "r", KIL_IMAGE, KIL_IMAGE_ID, "Unknown")  # type: ignore[arg-type]
         with self.assertRaises(InventoryError):
             EndpointIdentity("Endpoints", "source", "n", "s", ("10.0.0.1", "10.0.0.1"), "http", "TCP", 80)
         with self.assertRaises(InventoryError):
@@ -275,17 +277,41 @@ class V3B2InventoryTest(unittest.TestCase):
             "status": {
                 "conditions": [{"type": "Ready", "status": "True"}],
                 "containerStatuses": [{"name": "calico-node", "image": CALICO_NODE, "imageID": "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1]}],
-                "initContainerStatuses": [{"name": "install-cni", "image": CALICO_CNI, "imageID": "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1]}],
+                "initContainerStatuses": [
+                    {"name": "upgrade-ipam", "image": CALICO_CNI, "imageID": "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1]},
+                    {"name": "install-cni", "image": CALICO_CNI, "imageID": "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1]},
+                    {"name": "ebpf-bootstrap", "image": CALICO_NODE, "imageID": "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1]},
+                ],
             },
         }
-        parsed = inventory._parse_pod_image_list(raw_list([item]))
-        self.assertEqual(tuple(record.image_role for record in parsed), ("calico-cni", "calico-node"))
+        controller = {
+            "apiVersion": "v1", "kind": "Pod",
+            "metadata": {"namespace": "kube-system", "name": "calico-kube-controllers-a", "uid": "pod-controller", "resourceVersion": "202"},
+            "status": {
+                "conditions": [{"type": "Ready", "status": "True"}],
+                "containerStatuses": [{"name": "calico-kube-controllers", "image": CALICO_CONTROLLERS, "imageID": "docker-pullable://quay.io/calico/kube-controllers@sha256:" + CALICO_CONTROLLERS.rsplit(":", 1)[1]}],
+                "initContainerStatuses": [],
+            },
+        }
+        parsed = inventory._parse_pod_image_list(raw_list([item, controller]))
+        self.assertEqual(
+            {(record.container_type, record.container, record.image_role) for record in parsed},
+            {
+                ("init", "upgrade-ipam", "calico-cni"),
+                ("init", "install-cni", "calico-cni"),
+                ("init", "ebpf-bootstrap", "calico-node"),
+                ("regular", "calico-node", "calico-node"),
+                ("regular", "calico-kube-controllers", "calico-kube-controllers"),
+            },
+        )
         for mutation in (
             {**item, "status": {**item["status"], "conditions": [{"type": "Initialized", "status": "True"}]}},
             {**item, "status": {**item["status"], "conditions": [{"type": "Ready", "status": "Unknown"}]}},
             {**item, "status": {**item["status"], "extra": 1}},
             {**item, "status": {**item["status"], "containerStatuses": item["status"]["containerStatuses"] * 2}},
             {**item, "status": {**item["status"], "containerStatuses": [{"name": "mystery", "image": CALICO_NODE, "imageID": "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1]}]}},
+            {**item, "status": {**item["status"], "initContainerStatuses": item["status"]["initContainerStatuses"][1:]}},
+            {**item, "status": {**item["status"], "containerStatuses": [], "initContainerStatuses": [*item["status"]["initContainerStatuses"], item["status"]["containerStatuses"][0]]}},
         ):
             with self.assertRaises(InventoryError):
                 inventory._parse_pod_image_list(raw_list([mutation]))
@@ -378,7 +404,14 @@ class V3B2InventoryTest(unittest.TestCase):
         daemonset = {
             "apiVersion": "apps/v1", "kind": "DaemonSet",
             "metadata": {"namespace": "kube-system", "name": "calico-node", "uid": "ds-1", "resourceVersion": "6"},
-            "spec": {"containers": [{"name": "calico-node", "image": CALICO_NODE}], "initContainers": [{"name": "install-cni", "image": CALICO_CNI}]},
+            "spec": {
+                "containers": [{"name": "calico-node", "image": CALICO_NODE}],
+                "initContainers": [
+                    {"name": "upgrade-ipam", "image": CALICO_CNI},
+                    {"name": "install-cni", "image": CALICO_CNI},
+                    {"name": "ebpf-bootstrap", "image": CALICO_NODE},
+                ],
+            },
             "status": {"desiredNumberScheduled": 1, "numberReady": 1},
         }
         deployment = {
@@ -387,12 +420,34 @@ class V3B2InventoryTest(unittest.TestCase):
             "spec": {"containers": [{"name": "calico-kube-controllers", "image": CALICO_CONTROLLERS}], "initContainers": []},
             "status": {"replicas": 1, "readyReplicas": 1},
         }
-        self.assertEqual(inventory._parse_calico_workload_list(raw_list([daemonset]), "DaemonSet")[:2], (1, 1))
-        self.assertEqual(inventory._parse_calico_workload_list(raw_list([deployment]), "Deployment")[:2], (1, 1))
+        daemonset_result = inventory._parse_calico_workload_list(
+            raw_list([daemonset]), "DaemonSet",
+        )
+        controller_result = inventory._parse_calico_workload_list(
+            raw_list([deployment]), "Deployment",
+        )
+        self.assertEqual(daemonset_result[:2], (1, 1))
+        self.assertEqual(
+            set(daemonset_result[2]),
+            {
+                ("init", "upgrade-ipam", CALICO_CNI),
+                ("init", "install-cni", CALICO_CNI),
+                ("init", "ebpf-bootstrap", CALICO_NODE),
+                ("regular", "calico-node", CALICO_NODE),
+            },
+        )
+        self.assertEqual(
+            controller_result,
+            (1, 1, (("regular", "calico-kube-controllers", CALICO_CONTROLLERS),)),
+        )
         for mutation in (
             {**daemonset, "status": {"desiredNumberScheduled": True, "numberReady": 1}},
             {**daemonset, "spec": {**daemonset["spec"], "containers": [{"name": "calico-node", "image": "quay.io/calico/node@sha256:" + "e" * 64}]}},
-            {**daemonset, "spec": {**daemonset["spec"], "initContainers": []}},
+            {**daemonset, "spec": {**daemonset["spec"], "initContainers": daemonset["spec"]["initContainers"][1:]}},
+            {**daemonset, "spec": {**daemonset["spec"], "initContainers": [*daemonset["spec"]["initContainers"], daemonset["spec"]["initContainers"][0]]}},
+            {**daemonset, "spec": {**daemonset["spec"], "initContainers": [{"name": "mystery", "image": CALICO_CNI}, *daemonset["spec"]["initContainers"][1:]]}},
+            {**daemonset, "spec": {**daemonset["spec"], "initContainers": [{"name": "install-cni", "image": CALICO_NODE}, daemonset["spec"]["initContainers"][0], daemonset["spec"]["initContainers"][2]]}},
+            {**daemonset, "spec": {**daemonset["spec"], "containers": [], "initContainers": [*daemonset["spec"]["initContainers"], daemonset["spec"]["containers"][0]]}},
             {**deployment, "status": {**deployment["status"], "extra": 1}},
         ):
             kind = mutation["kind"]
@@ -401,13 +456,28 @@ class V3B2InventoryTest(unittest.TestCase):
 
     def test_calico_pin_roles_and_docker_host_cannot_be_mirrored_or_suffix_spoofed(self) -> None:
         arbitrary = tampered(self.snapshot.pod_images[0], image=CALICO_CNI[:-1] + "e")
-        duplicate_role = tampered(
-            self.snapshot.pod_images[1], image_role="calico-cni", image=CALICO_CNI,
+        unexpected_placement = tampered(
+            next(item for item in self.snapshot.pod_images if item.container == "calico-node"),
+            container_type="init",
+        )
+        wrong_pod = tampered(
+            next(
+                item for item in self.snapshot.pod_images
+                if item.container == "calico-kube-controllers"
+            ),
+            pod="calico-node-a",
         )
         for images in (
             tuple(sorted((arbitrary, *self.snapshot.pod_images[1:]))),
             self.snapshot.pod_images[1:],
-            tuple(sorted((duplicate_role, *self.snapshot.pod_images[:1], *self.snapshot.pod_images[2:]))),
+            tuple(sorted(
+                unexpected_placement if item.container == "calico-node" else item
+                for item in self.snapshot.pod_images
+            )),
+            tuple(sorted(
+                wrong_pod if item.container == "calico-kube-controllers" else item
+                for item in self.snapshot.pod_images
+            )),
         ):
             current = tampered(self.snapshot, pod_images=images)
             expected = tampered(self.expected, pod_images=images)
