@@ -6,7 +6,7 @@
 <title>Envoy adapter boundary — Gate V3B</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="adapters/envoy/README.md">
-<meta name="source-sha256" content="754d80457432ff7ba0dd670bb2cdaa9b8a69e956f33a22887e9bc8d36affe501">
+<meta name="source-sha256" content="21fd88b922ed1817125cd8da3ebecc14a6dbc418be151dd1e7a68e619f86e63c">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>adapters/envoy/README.md</code> (<code>754d80457432ff7ba0dd670bb2cdaa9b8a69e956f33a22887e9bc8d36affe501</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>adapters/envoy/README.md</code> (<code>21fd88b922ed1817125cd8da3ebecc14a6dbc418be151dd1e7a68e619f86e63c</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Envoy adapter boundary — Gate V3B</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>adapters/envoy/README.md</code> (<code>754d80457432ff7ba0dd670bb2cdaa9b8a69e956f33a22887e9bc8d36affe501</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>adapters/envoy/README.md</code> (<code>21fd88b922ed1817125cd8da3ebecc14a6dbc418be151dd1e7a68e619f86e63c</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#envoy-adapter-boundary-gate-v3b">Envoy adapter boundary — Gate V3B</a></li><li class="level-2"><a href="#corrected-local-topology">Corrected local topology</a></li><li class="level-2"><a href="#fixed-http-contract">Fixed HTTP contract</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="envoy-adapter-boundary-gate-v3b" href="#envoy-adapter-boundary-gate-v3b">Envoy adapter boundary — Gate V3B</a></li><li class="level-2"><a data-section-id="corrected-local-topology" href="#corrected-local-topology">Corrected local topology</a></li><li class="level-2"><a data-section-id="fixed-http-contract" href="#fixed-http-contract">Fixed HTTP contract</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -69,8 +69,9 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 in front of harmless target workloads. Each authorization service instance
 fixes one track at startup. V3B-2 may reuse the same fixed tracks in a future
 Kind/Calico topology. The historical driver-era request-free lifecycle gate is
-accepted as a lifecycle result, but no central V3B-1 enforcement proof has
-been accepted, promoted, or labeled validated:</p>
+accepted as a lifecycle result. One central V3B-1 proof is now accepted as an
+observed intermediate local-Envoy boundary result, but it is not promoted or
+labeled as Kind/Calico validation:</p>
 <ol>
 <li><code>credential_policy_baseline</code></li>
 <li><code>signed_state_only</code></li>
@@ -126,11 +127,24 @@ synchronized, the first central <code>run</code> executed exactly once and obser
 typed-JSON number/null output, two exact Envoy transport headers in
 authorization records, and one not-yet-visible live ledger. Teardown completed,
 the evidence stayed private and nonpromotable, and no request was retried. The
-producer-side canonical-text and bounded-read correction is locally verified;
-another run remains prohibited until that correction is reviewed, merged
-through public CI, and exactly synchronized. The previously accepted Task 10
+producer-side canonical-text and bounded-read correction was locally verified;
+at that checkpoint another run remained prohibited until review, public CI,
+merge, and exact synchronization. The previously accepted Task 10
 bundle remains historical v2 evidence and does not satisfy the v3 prerequisite
 by itself.</p>
+<p>The correction merged as source
+<code>514e910ea9427e0497c4fe8a1ec279b554e75176</code>. The newly authorized proof ran as
+<code>v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94</code>
+and the offline presenter accepted its observed intermediate local-Envoy
+boundary evidence. Its joined result is <code>permit / permit / deny</code>, HTTP
+<code>200 / 200 / 403</code>, and target markers <code>1 / 1 / 0</code>, with one attempt and no
+retry per driver. All nine authoritative sources are attested; teardown proved
+all 15 containers and six networks absent; pseudonymous foreign-resource arrays
+are exactly equal; and every checksum passes. The bundle remains
+<code>not_promoted</code>. Kind/Calico and NetworkPolicy validation remain future work,
+historical prevention is not established, and performance is not established.
+The controller owns and may start, stop, or delete only the unique
+<code>kil-v3-lab</code> profile; every other Colima profile remains untouched.</p>
 <p>The request cannot select or downgrade the active track. KIL state is a signed,
 short-lived experimental extension envelope that references KTP Trust Proof and
 Kinetic Envelope results; it does not replace either KTP construct. The first

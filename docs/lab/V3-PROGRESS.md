@@ -121,8 +121,8 @@ three clean cancellations, zero driver instructions, zero request intents,
 zero HTTP requests, nine exact empty service sources, all 15 containers and
 six networks absent, and exact equality of its pseudonymous foreign-resource
 arrays. The bundle is intentionally nonpromotable and does not establish an
-enforcement result. The central `run` remains prohibited until this public-safe
-checkpoint passes review, merge, and synchronization.
+enforcement result. At that checkpoint the central `run` remained prohibited
+until the public-safe result passed review, merge, and synchronization.
 
 ### Live status and historical boundary
 
@@ -210,10 +210,35 @@ module, and full 566-test repository gate pass locally. Separate specification
 and quality/security reviews found no unresolved Critical or Important issue;
 the latter tightened copied-ledger reads to a no-follow descriptor with stable
 inode, size, and digest attestation. No driver instruction, request intent,
-HTTP action, or second central `run` occurred while implementing it. A newly
-authorized run remains prohibited until this correction passes public CI,
-merge, and exact synchronization; only then may one new central local-Envoy
+HTTP action, or second central `run` occurred while implementing it. At that
+checkpoint a newly authorized run remained prohibited until public CI, merge,
+and exact synchronization; only afterward could one new central local-Envoy
 proof be attempted, with no retry after request intent.
+
+The correction subsequently merged as source
+`514e910ea9427e0497c4fe8a1ec279b554e75176`. The newly authorized Task 11
+proof ran as
+`v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94`.
+Its live handoff encountered the same Docker copy visibility error after all
+three request states completed, so neither `run` nor `collect` was repeated.
+The mandatory `down` froze the authoritative container sources and produced a
+complete bundle that the offline presenter accepts as an observed intermediate
+local-Envoy boundary result. The joined tuple is `permit / permit / deny`, HTTP
+`200 / 200 / 403`, and target markers `1 / 1 / 0`; every driver has exactly one
+attempt and `retry_observed=false`. All nine sources are attested, all 15 owned
+containers and six networks were absent before publication, the dedicated
+profile was deleted, and the pseudonymous foreign-resource arrays are exactly
+equal. Every checksum passes. The bundle remains `not_promoted`: Kind/Calico
+and NetworkPolicy validation are future work, historical prevention is not
+established, and performance is not established.
+
+The controller owns only the uniquely named `kil-v3-lab` Colima profile. Future
+lifecycle commands may start, stop, or delete only that profile; all other
+profiles belong to other projects and must remain untouched. A separate foreign
+profile appeared after the bundle's bound before/after lifecycle window and
+caused only an optional post-teardown readback to reject its unfamiliar shape;
+KIL did not mutate it, and it does not alter the bundle's already verified exact
+teardown and foreign-snapshot equality.
 
 V3B-1 remains limited to the local Envoy boundary. V3B-2 is the future isolated
 Kind/Calico topology; its NetworkPolicy behavior, cluster-level transport,
@@ -311,16 +336,9 @@ and the complete approved specification is
 
 ## Next gate
 
-The first central attempt failed closed after the intended enforcement tuple
-without a retry. Review, merge through public CI, and exactly synchronize the
-producer-format and bounded-read correction while preserving that failed
-bundle and its private journal. Only afterward start a new synchronized
-`preflight` / `up` lifecycle and execute one newly authorized central
-`run` / `down` proof with no retry after request intent.
-Its prospective acceptance criteria remain `permit / permit / deny`,
-HTTP `200 / 200 / 403`, target markers `1 / 1 / 0`, exact three-driver and
-nine-service-source joins, verified checksums, exact teardown, restored foreign
-runtime, and offline presenter acceptance. V3B-2 and V3C remain later gates;
-all V3A output remains explicitly modeled.
+Preserve the failed and accepted private worktrees for the user's manual offline
+backup. The next experimental gates are the separately designed V3B-2
+Kind/Calico boundary and V3C repetition/performance; neither is implied by this
+result, and all V3A output remains explicitly modeled.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

@@ -4,8 +4,9 @@ V3B-1 implements three independently configured local Envoy `ext_authz` routes
 in front of harmless target workloads. Each authorization service instance
 fixes one track at startup. V3B-2 may reuse the same fixed tracks in a future
 Kind/Calico topology. The historical driver-era request-free lifecycle gate is
-accepted as a lifecycle result, but no central V3B-1 enforcement proof has
-been accepted, promoted, or labeled validated:
+accepted as a lifecycle result. One central V3B-1 proof is now accepted as an
+observed intermediate local-Envoy boundary result, but it is not promoted or
+labeled as Kind/Calico validation:
 
 1. `credential_policy_baseline`
 2. `signed_state_only`
@@ -70,11 +71,25 @@ synchronized, the first central `run` executed exactly once and observed HTTP
 typed-JSON number/null output, two exact Envoy transport headers in
 authorization records, and one not-yet-visible live ledger. Teardown completed,
 the evidence stayed private and nonpromotable, and no request was retried. The
-producer-side canonical-text and bounded-read correction is locally verified;
-another run remains prohibited until that correction is reviewed, merged
-through public CI, and exactly synchronized. The previously accepted Task 10
+producer-side canonical-text and bounded-read correction was locally verified;
+at that checkpoint another run remained prohibited until review, public CI,
+merge, and exact synchronization. The previously accepted Task 10
 bundle remains historical v2 evidence and does not satisfy the v3 prerequisite
 by itself.
+
+The correction merged as source
+`514e910ea9427e0497c4fe8a1ec279b554e75176`. The newly authorized proof ran as
+`v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94`
+and the offline presenter accepted its observed intermediate local-Envoy
+boundary evidence. Its joined result is `permit / permit / deny`, HTTP
+`200 / 200 / 403`, and target markers `1 / 1 / 0`, with one attempt and no
+retry per driver. All nine authoritative sources are attested; teardown proved
+all 15 containers and six networks absent; pseudonymous foreign-resource arrays
+are exactly equal; and every checksum passes. The bundle remains
+`not_promoted`. Kind/Calico and NetworkPolicy validation remain future work,
+historical prevention is not established, and performance is not established.
+The controller owns and may start, stop, or delete only the unique
+`kil-v3-lab` profile; every other Colima profile remains untouched.
 
 The request cannot select or downgrade the active track. KIL state is a signed,
 short-lived experimental extension envelope that references KTP Trust Proof and

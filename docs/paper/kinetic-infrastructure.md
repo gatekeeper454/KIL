@@ -48,11 +48,11 @@ claim of historical prevention. Reported incident facts are **observed**;
 synthetic KTP context and predicted KIL decisions are **modeled**; only behavior
 reproduced in the versioned local lab may be called **validated**.
 
-The current V3B-1 request-driver mechanism has passed static implementation and
-review gates, not live acceptance. The request-free readiness gate and the
-conditional central enforcement proof remain pending. Accordingly, this paper
-reports no current V3B-1 validated result, historical-prevention result, or
-performance result.
+The V3B-1 request-driver mechanism has passed static review, request-free
+readiness, and one central local-Envoy proof. The accepted bundle is an observed
+intermediate local-boundary result, not a promoted Kind/Calico or production
+result. Accordingly, this paper reports no Kind/Calico validation, historical
+prevention, or performance result.
 
 ## 1. Introduction
 
@@ -230,7 +230,8 @@ target or withhold`. The driver is a laboratory transport witness, not KIL
 enforcement, and the present scope is `local_envoy_boundary`. A denial could be
 promoted only after one accepted live run joins the exact driver result, KIL
 decision, Envoy non-forwarding record, and absence of the target invocation
-marker. No such V3B-1 live acceptance is claimed in this edition.
+marker. One such observed intermediate V3B-1 local-boundary result is now bound
+to the immutable run identified below.
 
 Moving the request origin from the host-published client to an in-network
 request driver changes transport and lifecycle mechanics only. It does not
@@ -406,10 +407,10 @@ them before a result can be considered for promotion.
 
 Request-free readiness starts all three attached drivers, reads only readiness
 records, sends no instruction and no HTTP request, and performs three bounded
-cancellations. A later central run uses fresh drivers, persists request intent
-before one instruction per track, and never retries after intent. The driver
-does not evaluate authority; Envoy and its authorization service constitute the
-tested enforcement boundary.
+cancellations. The accepted central run used fresh drivers, persisted request
+intent before one instruction per track, and never retried after intent. The
+driver does not evaluate authority; Envoy and its authorization service
+constitute the tested enforcement boundary.
 
 V3B-2 is a future isolated Kind/Calico rail. Its NetworkPolicy behavior,
 cluster-level transport, failure matrix, and measurements remain unexecuted.
@@ -424,7 +425,7 @@ and measured.
 | V1 — deterministic kernel | Arithmetic boundaries, decay, class isolation, monotonic reduction, coupling, freshness, and non-expansion invariants pass automated tests. |
 | V2 — historical replay | Observed events are cited, synthetic inputs are modeled, modes share action facts, and decision provenance is complete. |
 | V3A — process contract | The modeled three-track authorization, forwarding, harmless target, and evidence joins remain explicit process-level results. |
-| V3B-1 — local Envoy boundary | After request-free readiness passes, one central proof must join exact driver, decision, Envoy, and target records and satisfy exact teardown; this gate is pending. |
+| V3B-1 — local Envoy boundary | The accepted observed intermediate proof joins exact driver, decision, Envoy, and target records and satisfies exact teardown; promotion remains separate. |
 | V3B-2 — future Kind/Calico boundary | NetworkPolicy isolation, cluster transport, failure cases, and measurements require a separate future execution. |
 | V4 — publication promotion | Every `validated` statement points to a passing immutable run bundle; negative and ambiguous results remain visible. |
 
@@ -441,13 +442,20 @@ complete static gate passes 474 tests, including eight documentation tests.
 This establishes implementation and contract evidence only; no Docker, Colima,
 network, or live lab execution is part of that result.
 
-The next gate is one request-free `preflight` / `up` / `readiness` / `down`
-cycle that must prove no instruction or HTTP request, three clean driver
-cancellations, the unchanged nine-service evidence freeze, exact
-15-container/6-network teardown, and foreign-runtime restoration. Only if that
-gate passes may the project attempt exactly one central local-Envoy proof. The
-central proof has no retry after request intent. Until both gates produce
-accepted evidence, all V3B-1 outcome claims remain pending.
+The request-free prerequisite passed, and correction source
+`514e910ea9427e0497c4fe8a1ec279b554e75176` produced central run
+`v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94`.
+The offline presenter accepts it as an observed intermediate local-Envoy
+boundary result. Its exact joins are `permit / permit / deny`, HTTP
+`200 / 200 / 403`, and target markers `1 / 1 / 0`. Each driver made one
+attempt with no retry. All nine authoritative sources are attested, teardown
+proved all 15 owned containers and six networks absent, the pseudonymous
+foreign-resource arrays are exactly equal, and all checksums pass. The
+controller owns and may start, stop, or delete only the unique `kil-v3-lab`
+profile; every other Colima profile belongs to another project and remains
+untouched. The result is `not_promoted`. Kind/Calico and NetworkPolicy
+validation remain future work, historical prevention is not established, and
+performance is not established.
 
 ## 7. Safety, failure, and governance
 

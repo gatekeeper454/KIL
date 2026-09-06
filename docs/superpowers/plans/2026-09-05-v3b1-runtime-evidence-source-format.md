@@ -422,14 +422,14 @@ remote-tracking, and `ls-remote` main equality before any new `up`.
 - Modify: generated `.htm` siblings
 - Modify live only: ignored `artifacts/generated/v3b1-task6-live-status.md`
 
-- [ ] **Step 1: Create a new clean synchronized worktree**
+- [x] **Step 1: Create a new clean synchronized worktree**
 
 After the correction PR merges, create
 `codex/v3b1-central-proof-v3-rerun` from the exact `origin/main` commit. Verify
 `.worktrees/` is ignored, the old failed-run worktree still exists, the new tree
 is clean, and `make validate PYTHON=../../.venv/bin/python` passes.
 
-- [ ] **Step 2: Install/verify tools and execute the lifecycle visibly**
+- [x] **Step 2: Install/verify tools and execute the lifecycle visibly**
 
 Update the ignored live board before every command. Run exactly:
 
@@ -452,7 +452,7 @@ PATH="$PWD/.tools/bin:$PATH" PYTHONPATH=src ../../.venv/bin/python tools/v3b1_lo
 
 Never invoke `run` again.
 
-- [ ] **Step 3: Verify the accepted bundle**
+- [x] **Step 3: Verify the accepted bundle**
 
 Require the exact run ID pattern, V3 public manifest, `run_complete: true`,
 accepted local-boundary class, `permit / permit / deny`, HTTP `200 / 200 / 403`,
@@ -468,7 +468,7 @@ PATH="$PWD/.tools/bin:$PATH" PYTHONPATH=src ../../.venv/bin/python \
 
 Expected: exactly one `accepted presenter .../live.html` line.
 
-- [ ] **Step 4: Stage only the accepted bundle and calibrated documents**
+- [x] **Step 4: Stage only the accepted bundle and calibrated documents**
 
 Validate the run ID from `manifest.json`, then:
 
@@ -481,7 +481,7 @@ mark Task 11 complete, regenerate readers, and inspect `git diff --cached
 --name-only`. Reject any staged sibling run, `.tools/` path, private journal,
 credential, raw profile name, nonce, or host path.
 
-- [ ] **Step 5: Validate, review, publish, and synchronize**
+- [x] **Step 5: Validate, review, publish, and synchronize**
 
 Run bundle checksums, offline view, full `make validate`, the public-boundary
 secret scan, and separate specification and quality/security review passes.

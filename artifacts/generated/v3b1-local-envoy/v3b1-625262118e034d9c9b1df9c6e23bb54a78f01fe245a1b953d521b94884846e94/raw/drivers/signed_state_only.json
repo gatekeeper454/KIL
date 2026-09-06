@@ -1,0 +1,1 @@
+{"attempt_count":1,"connect_monotonic_ns":72955026424,"decision_digest":"337dd91265bcf9e53f97a85c66589caf2e2c25d67e5eb1e01bbbb19a0bfe6aa1","receive_monotonic_ns":73093421999,"response_status":200,"retry_performed":false,"schema_version":"kil.v3b1-driver-result.v1","send_monotonic_ns":73089250241,"status":"complete","track":"signed_state_only"}

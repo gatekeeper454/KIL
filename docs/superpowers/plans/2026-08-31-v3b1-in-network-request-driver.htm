@@ -6,7 +6,7 @@
 <title>V3B-1 In-Network Request Driver Implementation Plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md">
-<meta name="source-sha256" content="658bca28d53d45f148868b5577a6be35df112b98480e4ccc15afd85beb59405b">
+<meta name="source-sha256" content="a1ab8f7e2a4aacfcbb0e2f6d8de007f09476a9e329c4bd5c2ad037f8c03e5c6b">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md</code> (<code>658bca28d53d45f148868b5577a6be35df112b98480e4ccc15afd85beb59405b</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md</code> (<code>a1ab8f7e2a4aacfcbb0e2f6d8de007f09476a9e329c4bd5c2ad037f8c03e5c6b</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">V3B-1 In-Network Request Driver Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md</code> (<code>658bca28d53d45f148868b5577a6be35df112b98480e4ccc15afd85beb59405b</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-08-31-v3b1-in-network-request-driver.md</code> (<code>a1ab8f7e2a4aacfcbb0e2f6d8de007f09476a9e329c4bd5c2ad037f8c03e5c6b</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-1-in-network-request-driver-implementation-plan">V3B-1 In-Network Request Driver Implementation Plan</a></li><li class="level-2"><a href="#execution-constraints">Execution constraints</a></li><li class="level-2"><a href="#file-structure">File structure</a></li><li class="level-3"><a href="#task-1-freeze-legacy-verification-and-add-closed-driver-protocol-contracts">Task 1: Freeze legacy verification and add closed driver protocol contracts</a></li><li class="level-3"><a href="#task-2-implement-the-one-shot-container-side-driver">Task 2: Implement the one-shot container-side driver</a></li><li class="level-3"><a href="#task-3-advance-profile-content-identity-manifest-and-active-state-schemas">Task 3: Advance profile, content identity, manifest, and active-state schemas</a></li><li class="level-3"><a href="#task-4-build-and-attest-the-split-internal-runtime-topology">Task 4: Build and attest the split internal runtime topology</a></li><li class="level-3"><a href="#task-5-add-attached-driver-sessions-and-the-readiness-only-lifecycle">Task 5: Add attached driver sessions and the readiness-only lifecycle</a></li><li class="level-3"><a href="#task-6-replace-direct-host-requests-with-one-shot-driver-instructions">Task 6: Replace direct host requests with one-shot driver instructions</a></li><li class="level-3"><a href="#task-7-bind-exact-driver-results-into-v2-evidence-and-presenter-output">Task 7: Bind exact driver results into v2 evidence and presenter output</a></li><li class="level-3"><a href="#task-8-make-recovery-and-teardown-driver-aware">Task 8: Make recovery and teardown driver-aware</a></li><li class="level-3"><a href="#task-9-unify-documentation-diagrams-lab-status-and-static-verification">Task 9: Unify documentation, diagrams, lab status, and static verification</a></li><li class="level-3"><a href="#task-10-publish-the-correction-and-execute-the-request-free-live-gate">Task 10: Publish the correction and execute the request-free live gate</a></li><li class="level-3"><a href="#task-11-execute-and-publish-one-accepted-local-envoy-proof">Task 11: Execute and publish one accepted local-Envoy proof</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-1-in-network-request-driver-implementation-plan" href="#v3b-1-in-network-request-driver-implementation-plan">V3B-1 In-Network Request Driver Implementation Plan</a></li><li class="level-2"><a data-section-id="execution-constraints" href="#execution-constraints">Execution constraints</a></li><li class="level-2"><a data-section-id="file-structure" href="#file-structure">File structure</a></li><li class="level-3"><a data-section-id="task-1-freeze-legacy-verification-and-add-closed-driver-protocol-contracts" href="#task-1-freeze-legacy-verification-and-add-closed-driver-protocol-contracts">Task 1: Freeze legacy verification and add closed driver protocol contracts</a></li><li class="level-3"><a data-section-id="task-2-implement-the-one-shot-container-side-driver" href="#task-2-implement-the-one-shot-container-side-driver">Task 2: Implement the one-shot container-side driver</a></li><li class="level-3"><a data-section-id="task-3-advance-profile-content-identity-manifest-and-active-state-schemas" href="#task-3-advance-profile-content-identity-manifest-and-active-state-schemas">Task 3: Advance profile, content identity, manifest, and active-state schemas</a></li><li class="level-3"><a data-section-id="task-4-build-and-attest-the-split-internal-runtime-topology" href="#task-4-build-and-attest-the-split-internal-runtime-topology">Task 4: Build and attest the split internal runtime topology</a></li><li class="level-3"><a data-section-id="task-5-add-attached-driver-sessions-and-the-readiness-only-lifecycle" href="#task-5-add-attached-driver-sessions-and-the-readiness-only-lifecycle">Task 5: Add attached driver sessions and the readiness-only lifecycle</a></li><li class="level-3"><a data-section-id="task-6-replace-direct-host-requests-with-one-shot-driver-instructions" href="#task-6-replace-direct-host-requests-with-one-shot-driver-instructions">Task 6: Replace direct host requests with one-shot driver instructions</a></li><li class="level-3"><a data-section-id="task-7-bind-exact-driver-results-into-v2-evidence-and-presenter-output" href="#task-7-bind-exact-driver-results-into-v2-evidence-and-presenter-output">Task 7: Bind exact driver results into v2 evidence and presenter output</a></li><li class="level-3"><a data-section-id="task-8-make-recovery-and-teardown-driver-aware" href="#task-8-make-recovery-and-teardown-driver-aware">Task 8: Make recovery and teardown driver-aware</a></li><li class="level-3"><a data-section-id="task-9-unify-documentation-diagrams-lab-status-and-static-verification" href="#task-9-unify-documentation-diagrams-lab-status-and-static-verification">Task 9: Unify documentation, diagrams, lab status, and static verification</a></li><li class="level-3"><a data-section-id="task-10-publish-the-correction-and-execute-the-request-free-live-gate" href="#task-10-publish-the-correction-and-execute-the-request-free-live-gate">Task 10: Publish the correction and execute the request-free live gate</a></li><li class="level-3"><a data-section-id="task-11-execute-and-publish-one-accepted-local-envoy-proof" href="#task-11-execute-and-publish-one-accepted-local-envoy-proof">Task 11: Execute and publish one accepted local-Envoy proof</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -1050,12 +1050,12 @@ and exactly equal pseudonymous foreign-resource arrays in
 failure-bundle verifier passed. The completed private journal was archived;
 the active state, active journal path, and readiness poison were absent after
 teardown.</p>
-<p>The central <code>run</code> remains prohibited until this public-safe checkpoint passes
-independent review, public CI, merge, and exact synchronization. After that
-publication gate, start a new clean lifecycle with <code>preflight</code> and <code>up</code> from the
-new synchronized public commit before Step 2.</p>
+<p>The central <code>run</code> remained prohibited until this public-safe checkpoint passed
+independent review, public CI, merge, and exact synchronization. That
+publication gate subsequently passed, authorizing one new clean lifecycle from
+the synchronized correction source named below.</p>
 <ul>
-<li>[ ] <strong>Step 2: Invoke <code>run</code> once</strong></li>
+<li>[x] <strong>Step 2: Invoke <code>run</code> once</strong></li>
 </ul>
 <p>Run exactly one:</p>
 <pre><code class="language-bash">PATH=&quot;$PWD/.tools/bin:$PATH&quot; PYTHONPATH=src .venv/bin/python tools/v3b1_local_envoy.py run
@@ -1063,7 +1063,7 @@ new synchronized public commit before Step 2.</p>
 <p>After request intent, do not retry under any circumstance. Whether accepted or
 failed, execute <code>down</code> once and restore foreign state.</p>
 <ul>
-<li>[ ] <strong>Step 3: Verify the accepted proof before staging it</strong></li>
+<li>[x] <strong>Step 3: Verify the accepted proof before staging it</strong></li>
 </ul>
 <p>Require:</p>
 <ul>
@@ -1099,7 +1099,7 @@ resource snapshots for every pre-existing foreign profile;</p>
 <p>offline <code>view --bundle</code> acceptance.</p>
 </li>
 <li>
-<p>[ ] <strong>Step 4: Stage only the exact accepted bundle</strong></p>
+<p>[x] <strong>Step 4: Stage only the exact accepted bundle</strong></p>
 </li>
 </ul>
 <p>Resolve and validate the run ID from the verified manifest, then stage only its
@@ -1117,14 +1117,19 @@ commands run.</p>
 <p>Reject the staging set if it includes any sibling run, private journal,
 downloaded tool, key, credential, or ignored parent directory.</p>
 <ul>
-<li>[ ] <strong>Step 5: Update the unified asset with calibrated claims</strong></li>
+<li>[x] <strong>Step 5: Update the unified asset with calibrated claims</strong></li>
 </ul>
 <p>The paper, README, presenter, progress, and lineage may name the exact run as an
 accepted observed intermediate local-Envoy result. They must still exclude Kind
 cluster validation, NetworkPolicy validation, historical prevention, and
 production performance.</p>
+<p>Correction source <code>514e910ea9427e0497c4fe8a1ec279b554e75176</code> produced accepted
+run <code>v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94</code>.
+The live command was not retried after its post-request copy error; mandatory
+teardown recovered and froze the complete authoritative evidence used by the
+accepted offline bundle.</p>
 <ul>
-<li>[ ] <strong>Step 6: Review, publish, merge, synchronize, and prepare backup</strong></li>
+<li>[x] <strong>Step 6: Review, publish, merge, synchronize, and prepare backup</strong></li>
 </ul>
 <p>Run the full static gate, bundle checksums, offline verifier, secret scan, spec
 review, and quality/security review. Commit, push, pass CI, merge, and

@@ -6,7 +6,7 @@
 <title>Kinetic Infrastructure</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/paper/kinetic-infrastructure.md">
-<meta name="source-sha256" content="36e8213fc78eff7120da1848d477025a5dd1eb54569d0360446b7fb07ec85a24">
+<meta name="source-sha256" content="74b410664d397227b8a8c41dc30407e307b6f9efbaa7d7fa494b97d71968181c">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/paper/kinetic-infrastructure.md</code> (<code>36e8213fc78eff7120da1848d477025a5dd1eb54569d0360446b7fb07ec85a24</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/paper/kinetic-infrastructure.md</code> (<code>74b410664d397227b8a8c41dc30407e307b6f9efbaa7d7fa494b97d71968181c</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Kinetic Infrastructure</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/paper/kinetic-infrastructure.md</code> (<code>36e8213fc78eff7120da1848d477025a5dd1eb54569d0360446b7fb07ec85a24</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/paper/kinetic-infrastructure.md</code> (<code>74b410664d397227b8a8c41dc30407e307b6f9efbaa7d7fa494b97d71968181c</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#kinetic-infrastructure">Kinetic Infrastructure</a></li><li class="level-2"><a href="#ambient-enforcement-for-agent-speed-cybersecurity">Ambient Enforcement for Agent-Speed Cybersecurity</a></li><li class="level-2"><a href="#executive-summary">Executive summary</a></li><li class="level-2"><a href="#1-introduction">1. Introduction</a></li><li class="level-3"><a href="#1-1-the-checkpoint-problem">1.1 The checkpoint problem</a></li><li class="level-3"><a href="#1-2-from-ambient-breach-to-ambient-enforcement">1.2 From ambient breach to ambient enforcement</a></li><li class="level-2"><a href="#2-ktp-foundation-and-kil-extension-boundary">2. KTP foundation and KIL extension boundary</a></li><li class="level-3"><a href="#2-1-non-expansion-invariant">2.1 Non-expansion invariant</a></li><li class="level-2"><a href="#3-hybrid-two-timescale-architecture">3. Hybrid two-timescale architecture</a></li><li class="level-3"><a href="#3-1-authoritative-signed-state-loop">3.1 Authoritative signed-state loop</a></li><li class="level-3"><a href="#3-2-fast-enforcement-loop">3.2 Fast enforcement loop</a></li><li class="level-3"><a href="#3-3-execution-rails">3.3 Execution rails</a></li><li class="level-2"><a href="#4-formal-trust-decay-profile">4. Formal trust-decay profile</a></li><li class="level-3"><a href="#4-1-identity-authority-action-and-trajectory">4.1 Identity, authority, action, and trajectory</a></li><li class="level-3"><a href="#4-2-divergence">4.2 Divergence</a></li><li class="level-3"><a href="#4-3-passive-decay-and-asymmetric-loss">4.3 Passive decay and asymmetric loss</a></li><li class="level-3"><a href="#4-4-class-isolation-coupling-and-declared-change">4.4 Class isolation, coupling, and declared change</a></li><li class="level-3"><a href="#4-5-parameter-status">4.5 Parameter status</a></li><li class="level-2"><a href="#5-worked-counterfactual-the-hugging-face-incident">5. Worked counterfactual: the Hugging Face incident</a></li><li class="level-3"><a href="#5-1-phase-map">5.1 Phase map</a></li><li class="level-3"><a href="#5-2-structural-cutoffs-and-dependency-effects">5.2 Structural cutoffs and dependency effects</a></li><li class="level-2"><a href="#6-validation-lab-and-demo">6. Validation lab and demo</a></li><li class="level-3"><a href="#6-1-control-and-modes">6.1 Control and modes</a></li><li class="level-3"><a href="#6-2-deterministic-and-live-rails">6.2 Deterministic and live rails</a></li><li class="level-3"><a href="#6-3-validation-gates">6.3 Validation gates</a></li><li class="level-3"><a href="#6-4-current-v3b-1-gate-state">6.4 Current V3B-1 gate state</a></li><li class="level-2"><a href="#7-safety-failure-and-governance">7. Safety, failure, and governance</a></li><li class="level-2"><a href="#8-limitations-and-research-agenda">8. Limitations and research agenda</a></li><li class="level-2"><a href="#9-conclusion">9. Conclusion</a></li><li class="level-2"><a href="#references">References</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="kinetic-infrastructure" href="#kinetic-infrastructure">Kinetic Infrastructure</a></li><li class="level-2"><a data-section-id="ambient-enforcement-for-agent-speed-cybersecurity" href="#ambient-enforcement-for-agent-speed-cybersecurity">Ambient Enforcement for Agent-Speed Cybersecurity</a></li><li class="level-2"><a data-section-id="executive-summary" href="#executive-summary">Executive summary</a></li><li class="level-2"><a data-section-id="1-introduction" href="#1-introduction">1. Introduction</a></li><li class="level-3"><a data-section-id="1-1-the-checkpoint-problem" href="#1-1-the-checkpoint-problem">1.1 The checkpoint problem</a></li><li class="level-3"><a data-section-id="1-2-from-ambient-breach-to-ambient-enforcement" href="#1-2-from-ambient-breach-to-ambient-enforcement">1.2 From ambient breach to ambient enforcement</a></li><li class="level-2"><a data-section-id="2-ktp-foundation-and-kil-extension-boundary" href="#2-ktp-foundation-and-kil-extension-boundary">2. KTP foundation and KIL extension boundary</a></li><li class="level-3"><a data-section-id="2-1-non-expansion-invariant" href="#2-1-non-expansion-invariant">2.1 Non-expansion invariant</a></li><li class="level-2"><a data-section-id="3-hybrid-two-timescale-architecture" href="#3-hybrid-two-timescale-architecture">3. Hybrid two-timescale architecture</a></li><li class="level-3"><a data-section-id="3-1-authoritative-signed-state-loop" href="#3-1-authoritative-signed-state-loop">3.1 Authoritative signed-state loop</a></li><li class="level-3"><a data-section-id="3-2-fast-enforcement-loop" href="#3-2-fast-enforcement-loop">3.2 Fast enforcement loop</a></li><li class="level-3"><a data-section-id="3-3-execution-rails" href="#3-3-execution-rails">3.3 Execution rails</a></li><li class="level-2"><a data-section-id="4-formal-trust-decay-profile" href="#4-formal-trust-decay-profile">4. Formal trust-decay profile</a></li><li class="level-3"><a data-section-id="4-1-identity-authority-action-and-trajectory" href="#4-1-identity-authority-action-and-trajectory">4.1 Identity, authority, action, and trajectory</a></li><li class="level-3"><a data-section-id="4-2-divergence" href="#4-2-divergence">4.2 Divergence</a></li><li class="level-3"><a data-section-id="4-3-passive-decay-and-asymmetric-loss" href="#4-3-passive-decay-and-asymmetric-loss">4.3 Passive decay and asymmetric loss</a></li><li class="level-3"><a data-section-id="4-4-class-isolation-coupling-and-declared-change" href="#4-4-class-isolation-coupling-and-declared-change">4.4 Class isolation, coupling, and declared change</a></li><li class="level-3"><a data-section-id="4-5-parameter-status" href="#4-5-parameter-status">4.5 Parameter status</a></li><li class="level-2"><a data-section-id="5-worked-counterfactual-the-hugging-face-incident" href="#5-worked-counterfactual-the-hugging-face-incident">5. Worked counterfactual: the Hugging Face incident</a></li><li class="level-3"><a data-section-id="5-1-phase-map" href="#5-1-phase-map">5.1 Phase map</a></li><li class="level-3"><a data-section-id="5-2-structural-cutoffs-and-dependency-effects" href="#5-2-structural-cutoffs-and-dependency-effects">5.2 Structural cutoffs and dependency effects</a></li><li class="level-2"><a data-section-id="6-validation-lab-and-demo" href="#6-validation-lab-and-demo">6. Validation lab and demo</a></li><li class="level-3"><a data-section-id="6-1-control-and-modes" href="#6-1-control-and-modes">6.1 Control and modes</a></li><li class="level-3"><a data-section-id="6-2-deterministic-and-live-rails" href="#6-2-deterministic-and-live-rails">6.2 Deterministic and live rails</a></li><li class="level-3"><a data-section-id="6-3-validation-gates" href="#6-3-validation-gates">6.3 Validation gates</a></li><li class="level-3"><a data-section-id="6-4-current-v3b-1-gate-state" href="#6-4-current-v3b-1-gate-state">6.4 Current V3B-1 gate state</a></li><li class="level-2"><a data-section-id="7-safety-failure-and-governance" href="#7-safety-failure-and-governance">7. Safety, failure, and governance</a></li><li class="level-2"><a data-section-id="8-limitations-and-research-agenda" href="#8-limitations-and-research-agenda">8. Limitations and research agenda</a></li><li class="level-2"><a data-section-id="9-conclusion" href="#9-conclusion">9. Conclusion</a></li><li class="level-2"><a data-section-id="references" href="#references">References</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -103,11 +103,11 @@ privilege levels, and action sequences. The analysis is a counterfactual, not a
 claim of historical prevention. Reported incident facts are <strong>observed</strong>;
 synthetic KTP context and predicted KIL decisions are <strong>modeled</strong>; only behavior
 reproduced in the versioned local lab may be called <strong>validated</strong>.</p>
-<p>The current V3B-1 request-driver mechanism has passed static implementation and
-review gates, not live acceptance. The request-free readiness gate and the
-conditional central enforcement proof remain pending. Accordingly, this paper
-reports no current V3B-1 validated result, historical-prevention result, or
-performance result.</p>
+<p>The V3B-1 request-driver mechanism has passed static review, request-free
+readiness, and one central local-Envoy proof. The accepted bundle is an observed
+intermediate local-boundary result, not a promoted Kind/Calico or production
+result. Accordingly, this paper reports no Kind/Calico validation, historical
+prevention, or performance result.</p>
 <h2 id="1-introduction">1. Introduction</h2>
 <p>Cybersecurity is currently at an inflection point where reliance on static or
 AI-assisted SOCs (Security Operations Centers) and traditional AI-augmented
@@ -250,7 +250,8 @@ to a driver. The consequential path is <code>driver -&gt; Envoy -&gt; authorizat
 enforcement, and the present scope is <code>local_envoy_boundary</code>. A denial could be
 promoted only after one accepted live run joins the exact driver result, KIL
 decision, Envoy non-forwarding record, and absence of the target invocation
-marker. No such V3B-1 live acceptance is claimed in this edition.</p>
+marker. One such observed intermediate V3B-1 local-boundary result is now bound
+to the immutable run identified below.</p>
 <p>Moving the request origin from the host-published client to an in-network
 request driver changes transport and lifecycle mechanics only. It does not
 change fixed-track authorization semantics: <code>credential_policy_baseline</code> is a
@@ -432,10 +433,10 @@ Envoy, authorization, and target sources, then reconstructs, hashes, and joins
 them before a result can be considered for promotion.</p>
 <p>Request-free readiness starts all three attached drivers, reads only readiness
 records, sends no instruction and no HTTP request, and performs three bounded
-cancellations. A later central run uses fresh drivers, persists request intent
-before one instruction per track, and never retries after intent. The driver
-does not evaluate authority; Envoy and its authorization service constitute the
-tested enforcement boundary.</p>
+cancellations. The accepted central run used fresh drivers, persisted request
+intent before one instruction per track, and never retried after intent. The
+driver does not evaluate authority; Envoy and its authorization service
+constitute the tested enforcement boundary.</p>
 <p>V3B-2 is a future isolated Kind/Calico rail. Its NetworkPolicy behavior,
 cluster-level transport, failure matrix, and measurements remain unexecuted.
 The project will not imply Kubernetes, eBPF, SmartNIC, SDN, historical
@@ -464,7 +465,7 @@ and measured.</p>
 </tr>
 <tr>
 <td>V3B-1 — local Envoy boundary</td>
-<td>After request-free readiness passes, one central proof must join exact driver, decision, Envoy, and target records and satisfy exact teardown; this gate is pending.</td>
+<td>The accepted observed intermediate proof joins exact driver, decision, Envoy, and target records and satisfies exact teardown; promotion remains separate.</td>
 </tr>
 <tr>
 <td>V3B-2 — future Kind/Calico boundary</td>
@@ -486,13 +487,20 @@ implementation checkpoint passed 466 non-runtime tests. The fresh Task 9
 complete static gate passes 474 tests, including eight documentation tests.
 This establishes implementation and contract evidence only; no Docker, Colima,
 network, or live lab execution is part of that result.</p>
-<p>The next gate is one request-free <code>preflight</code> / <code>up</code> / <code>readiness</code> / <code>down</code>
-cycle that must prove no instruction or HTTP request, three clean driver
-cancellations, the unchanged nine-service evidence freeze, exact
-15-container/6-network teardown, and foreign-runtime restoration. Only if that
-gate passes may the project attempt exactly one central local-Envoy proof. The
-central proof has no retry after request intent. Until both gates produce
-accepted evidence, all V3B-1 outcome claims remain pending.</p>
+<p>The request-free prerequisite passed, and correction source
+<code>514e910ea9427e0497c4fe8a1ec279b554e75176</code> produced central run
+<code>v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94</code>.
+The offline presenter accepts it as an observed intermediate local-Envoy
+boundary result. Its exact joins are <code>permit / permit / deny</code>, HTTP
+<code>200 / 200 / 403</code>, and target markers <code>1 / 1 / 0</code>. Each driver made one
+attempt with no retry. All nine authoritative sources are attested, teardown
+proved all 15 owned containers and six networks absent, the pseudonymous
+foreign-resource arrays are exactly equal, and all checksums pass. The
+controller owns and may start, stop, or delete only the unique <code>kil-v3-lab</code>
+profile; every other Colima profile belongs to another project and remains
+untouched. The result is <code>not_promoted</code>. Kind/Calico and NetworkPolicy
+validation remain future work, historical prevention is not established, and
+performance is not established.</p>
 <h2 id="7-safety-failure-and-governance">7. Safety, failure, and governance</h2>
 <p>Incorrect automated reduction can block a legitimate action, so safety behavior
 is part of the security claim. Administrative, privilege-escalation,
