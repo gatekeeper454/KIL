@@ -8,12 +8,18 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import kil.v3b2_evidence as evidence_module
 
 from kil.v3b2_contracts import PRIVATE_MANIFEST_FIELDS, TRACKS
 from kil.v3b2_contracts import V3B2Profile
-from kil.v3b2_manifests import WorkloadIdentity, render_kind_config, render_objects
+from kil.v3b2_manifests import (
+    WorkloadIdentity,
+    expected_object_keys,
+    render_kind_config,
+    render_objects,
+)
 from kil.v3b2_evidence import (
     CLAIM_EXCLUSIONS,
     CapturedSource,
@@ -102,6 +108,41 @@ def private_evidence(*, request_free: bool = False) -> dict[str, object]:
             )
             image["uid"] = bound["uid"]
             image["resource_version"] = bound["resource_version"]
+    expected_topology = {
+        "namespaces": list(inventory.namespaces),
+        "object_keys": [
+            list(item)
+            for item in sorted((
+                *expected_object_keys(PROFILE),
+                ("v1", "Namespace", "", "kube-system"),
+                ("apps/v1", "DaemonSet", "kube-system", "calico-node"),
+                ("apps/v1", "Deployment", "kube-system", "calico-kube-controllers"),
+            ))
+        ],
+        "pod_image_keys": [
+            [item.image_role, item.container_type, item.namespace, item.container]
+            for item in inventory.pod_images
+        ],
+        "endpoint_keys": [
+            [item.namespace, item.service, item.port_name, item.protocol, item.port]
+            for item in inventory.endpoints
+        ],
+        "calico_readiness": {
+            "node_desired": 1, "node_ready": 1,
+            "controller_desired": 1, "controller_ready": 1,
+        },
+    }
+    expected_policy = {
+        "edges": [
+            {
+                **asdict(item),
+                "source_roles": list(item.source_roles),
+                "destination_roles": list(item.destination_roles),
+                "protocol_ports": [list(pair) for pair in item.protocol_ports],
+            }
+            for item in inventory.policy_graph
+        ]
+    }
     return {
         "schema_version": "kil.v3b2-private-manifest.v1",
         "run_id": RUN_ID,
@@ -120,8 +161,8 @@ def private_evidence(*, request_free: bool = False) -> dict[str, object]:
             "kil_image_id": KIL_IMAGE_ID,
             "envoy_image_digest": ENVOY_DIGEST,
         },
-        "expected_topology": {"namespaces": ["kil-v3-baseline", "kil-v3-local-reduce", "kil-v3-signed"]},
-        "expected_policy_graph": {"closed": True},
+        "expected_topology": expected_topology,
+        "expected_policy_graph": expected_policy,
         "request_cases": cases,
         "runtime_identities": {
             "topology_attestation": {
@@ -180,13 +221,65 @@ class V3B2EvidenceTest(unittest.TestCase):
         payload = b'{"partial":true}'
         reader = Reader(payload)
         with tempfile.TemporaryDirectory() as directory:
-            raw = Path(directory) / "private" / "driver.raw"
+            raw = Path(directory).resolve() / "private" / "driver.raw"
             with self.assertRaises(EvidenceError):
                 capture_source(reader, reader.expected, private_diagnostic_path=raw)
             self.assertEqual(raw.read_bytes(), payload)
             diagnostic = json.loads((raw.parent / "driver.raw.diagnostic.json").read_text())
             self.assertEqual(diagnostic["sha256"], sha256(payload).hexdigest())
             self.assertEqual(stat_mode(raw), 0o600)
+
+    def test_private_diagnostic_rejects_invalid_and_symlinked_ancestry(self):
+        payload = b'{"partial":true}'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            real = root / "real"
+            real.mkdir(mode=0o700)
+            alias = root / "alias"
+            alias.symlink_to(real, target_is_directory=True)
+            sentinel = real / "sentinel"
+            sentinel.write_text("preserve")
+            with self.assertRaises(EvidenceError):
+                reader = Reader(payload)
+                capture_source(reader, reader.expected, private_diagnostic_path=alias / "raw")
+            self.assertEqual(sentinel.read_text(), "preserve")
+            self.assertFalse((real / "raw").exists())
+            with self.assertRaises(EvidenceError):
+                reader = Reader(payload)
+                capture_source(reader, reader.expected, private_diagnostic_path="bad")  # type: ignore[arg-type]
+            with self.assertRaises(EvidenceError):
+                evidence_module._persist_private_diagnostic(None, payload)  # type: ignore[arg-type]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            private = root / "private"
+            private.mkdir(mode=0o700)
+            moved = root / "moved"
+            decoy = root / "decoy"
+            decoy.mkdir(mode=0o700)
+            sentinel = decoy / "sentinel"
+            sentinel.write_text("preserve")
+            original_write = evidence_module._write_regular_at
+            calls = 0
+
+            def retarget(directory_fd: int, name: str, data: bytes) -> None:
+                nonlocal calls
+                original_write(directory_fd, name, data)
+                calls += 1
+                if calls == 1:
+                    private.rename(moved)
+                    private.symlink_to(decoy, target_is_directory=True)
+
+            reader = Reader(payload)
+            with patch.object(evidence_module, "_write_regular_at", side_effect=retarget):
+                with self.assertRaises(EvidenceError):
+                    capture_source(
+                        reader,
+                        reader.expected,
+                        private_diagnostic_path=private / "raw",
+                    )
+            self.assertEqual(sentinel.read_text(), "preserve")
+            self.assertFalse((decoy / "raw").exists())
+            self.assertFalse((moved / "raw").exists())
 
     def test_nominal_tuple_and_target_cardinality_are_exact(self):
         bundle = build_public_bundle(private_evidence())
@@ -253,12 +346,21 @@ class V3B2EvidenceTest(unittest.TestCase):
 
     def test_original_foreign_names_are_rejected_anywhere_in_projection(self):
         evidence = private_evidence()
-        for leaked in ("client-a", "prefix client-a suffix"):
+        for leaked in ("client-a", "prefix client-a suffix", "xclient-a", "client-ax"):
             candidate = deepcopy(evidence)
             candidate["runtime_identities"]["topology_attestation"]["objects"][0]["uid"] = leaked  # type: ignore[index]
             with self.subTest(leaked=leaked), self.assertRaises(PublicBoundaryError):
                 build_public_bundle(candidate)
-        validate_public_projection({"value": "client-alpha"}, forbidden_names=("client-a",))
+
+    def test_original_foreign_names_are_rejected_in_keys_and_rendered_artifacts(self):
+        with self.assertRaises(PublicBoundaryError):
+            validate_public_projection({"xclient-ay": "safe"}, forbidden_names=("client-a",))
+        evidence = private_evidence()
+        public = build_public_bundle(evidence)
+        public["result_class"] = "xclient-a"
+        with tempfile.TemporaryDirectory() as directory, self.assertRaises(PublicBoundaryError):
+            with patch.object(evidence_module, "build_public_bundle", return_value=public):
+                publish_bundle(evidence, Path(directory).resolve() / "public")
 
     def test_foreign_profiles_are_keyed_sorted_and_bind_normalized_resources(self):
         evidence = private_evidence()
@@ -267,11 +369,49 @@ class V3B2EvidenceTest(unittest.TestCase):
         self.assertEqual(projected["before"], projected["after"])
         self.assertEqual(projected["before"], sorted(projected["before"], key=lambda item: item["pseudonym"]))
         self.assertNotIn("client-a", json.dumps(projected))
-        changed = deepcopy(evidence)
+        changed = private_evidence(request_free=True)
         changed["runtime_identities"]["foreign_profiles_after"][0]["cpus"] = 9  # type: ignore[index]
         bundle = build_public_bundle(changed)
         self.assertFalse(bundle["foreign_profile_attestation"]["unchanged"])
         self.assertEqual(bundle["result_class"], "diagnostic_foreign_state_mismatch")
+        self.assertEqual(bundle["request_results"], [])
+        self.assertEqual(bundle["semantic_joins"], [])
+        self.assertEqual(bundle["source_attestations"], [])
+        nominal_mismatch = private_evidence()
+        nominal_mismatch["runtime_identities"]["foreign_profiles_after"][0]["cpus"] = 9  # type: ignore[index]
+        with self.assertRaises(EvidenceError):
+            build_public_bundle(nominal_mismatch)
+
+    def test_private_expected_topology_and_policy_are_exact_and_cross_bound(self):
+        for request_free in (False, True):
+            for mutation in ("topology", "policy"):
+                evidence = private_evidence(request_free=request_free)
+                if request_free:
+                    evidence["runtime_identities"]["foreign_profiles_after"][0]["cpus"] = 9  # type: ignore[index]
+                if mutation == "topology":
+                    evidence["expected_topology"]["object_keys"][0][3] = "other"  # type: ignore[index]
+                else:
+                    evidence["expected_policy_graph"]["edges"][0]["destination_roles"] = ["other"]  # type: ignore[index]
+                with self.subTest(request_free=request_free, mutation=mutation), self.assertRaises(EvidenceError):
+                    build_public_bundle(evidence)
+
+    def test_foreign_mismatch_verifier_rejects_repaired_request_evidence(self):
+        evidence = private_evidence(request_free=True)
+        evidence["runtime_identities"]["foreign_profiles_after"][0]["cpus"] = 9  # type: ignore[index]
+        with tempfile.TemporaryDirectory() as directory:
+            published = publish_bundle(evidence, Path(directory).resolve() / "public")
+            manifest_path = published / "manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            digest = "f" * 64
+            manifest["request_results"] = [{
+                "track": TRACKS[0], "request_id": "v3b1-central-request",
+                "attempt": 1, "decision": "permit", "http_status": 200,
+                "decision_digest": digest, "target_markers": 1,
+            }]
+            manifest_path.write_bytes(canonical(manifest))
+            self._repair_commitment_and_sums(published)
+            with self.assertRaises(EvidenceError):
+                verify_bundle(published)
 
     def test_private_manifest_field_set_and_claims_are_exact(self):
         evidence = private_evidence()

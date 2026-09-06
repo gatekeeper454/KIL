@@ -77,6 +77,9 @@ _PROFILE_PATH = Path(__file__).resolve().parents[2] / "deploy/kind/v3b2-profile.
 _PROFILE_SHA256 = "cc630f343f87f89180a2cfc98baf1d23686e0b39e364569ff579b3e8efa8cee8"
 _TOPOLOGY_FIELDS = frozenset({"cluster_incarnation_uid", "node_container_id", "namespaces", "objects", "pod_images", "endpoints", "calico_readiness"})
 _CONTENT_FIELDS = frozenset({"run_id", "profile_sha256", "kind_config_sha256", "objects_manifest_sha256", "calico_manifest_sha256", "kind_node_image", "calico_images", "kil_image_id", "envoy_image_digest"})
+_EXPECTED_TOPOLOGY_FIELDS = frozenset(
+    {"namespaces", "object_keys", "pod_image_keys", "endpoint_keys", "calico_readiness"}
+)
 _PRIVATE_KEYS = (
     "execution_nonce",
     "projection_key",
@@ -226,26 +229,65 @@ def capture_source(
 
 def _persist_private_diagnostic(path: Path, payload: bytes) -> None:
     """Persist malformed source bytes and a closed hash binding in a private area."""
-    target = Path(os.path.abspath(path))
+    if not isinstance(path, Path) or not path.is_absolute() or ".." in path.parts:
+        raise EvidenceError("private diagnostic path must be absolute and normalized")
+    target = path
+    diagnostic = target.with_name(target.name + ".diagnostic.json")
+    parent = _prepare_private_diagnostic_parent(target)
+    parent_before = os.stat(parent, follow_symlinks=False)
+    descriptor = -1
+    temporary_names: list[str] = []
     try:
-        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        if target.parent.is_symlink() or target.exists() or target.is_symlink():
-            raise EvidenceError("private diagnostic destination is unsafe")
-        _write_regular(target, payload)
-        _write_regular(
-            target.with_name(target.name + ".diagnostic.json"),
-            _canonical_bytes(
-                {
-                    "category": "malformed_source_bytes",
-                    "byte_count": len(payload),
-                    "sha256": sha256(payload).hexdigest(),
-                }
-            ),
+        descriptor = os.open(
+            parent,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
         )
+        opened = os.fstat(descriptor)
+        if (opened.st_dev, opened.st_ino) != (parent_before.st_dev, parent_before.st_ino):
+            raise EvidenceError("private diagnostic destination is unsafe")
+        diagnostic_payload = _canonical_bytes(
+            {
+                "category": "malformed_source_bytes",
+                "byte_count": len(payload),
+                "sha256": sha256(payload).hexdigest(),
+            }
+        )
+        token = sha256(os.urandom(32)).hexdigest()
+        raw_temporary = f".{target.name}.{token}.tmp"
+        diagnostic_temporary = f".{diagnostic.name}.{token}.tmp"
+        temporary_names.extend((raw_temporary, diagnostic_temporary))
+        _write_regular_at(descriptor, raw_temporary, payload)
+        _write_regular_at(descriptor, diagnostic_temporary, diagnostic_payload)
+        current = _canonical_directory(parent, "private diagnostic parent")
+        current_identity = os.stat(current, follow_symlinks=False)
+        if (current_identity.st_dev, current_identity.st_ino) != (
+            opened.st_dev,
+            opened.st_ino,
+        ):
+            raise EvidenceError("private diagnostic parent changed during write")
+        os.link(raw_temporary, target.name, src_dir_fd=descriptor, dst_dir_fd=descriptor, follow_symlinks=False)
+        os.link(diagnostic_temporary, diagnostic.name, src_dir_fd=descriptor, dst_dir_fd=descriptor, follow_symlinks=False)
+        for name in temporary_names:
+            os.unlink(name, dir_fd=descriptor)
+        temporary_names.clear()
+        os.fsync(descriptor)
     except EvidenceError:
         raise
-    except OSError:
+    except (OSError, TypeError, ValueError, UnicodeError):
         raise EvidenceError("private diagnostic persistence failed closed") from None
+    finally:
+        if descriptor >= 0:
+            for name in temporary_names:
+                try:
+                    os.unlink(name, dir_fd=descriptor)
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    pass
+            os.close(descriptor)
 
 
 def _closed_record(label: str, value: object, fields: frozenset[str]) -> dict[str, object]:
@@ -679,6 +721,105 @@ def _validate_policy_attestation(value: object) -> dict[str, object]:
     return policy
 
 
+def _trusted_expected_topology(profile: V3B2Profile) -> dict[str, object]:
+    object_keys = sorted((
+        *expected_object_keys(profile),
+        ("v1", "Namespace", "", "kube-system"),
+        ("apps/v1", "DaemonSet", "kube-system", "calico-node"),
+        ("apps/v1", "Deployment", "kube-system", "calico-kube-controllers"),
+    ))
+    pod_image_keys = sorted((
+        ("calico-cni", "init", "kube-system", "install-cni"),
+        ("calico-cni", "init", "kube-system", "upgrade-ipam"),
+        ("calico-node", "init", "kube-system", "ebpf-bootstrap"),
+        ("calico-node", "regular", "kube-system", "calico-node"),
+        ("calico-kube-controllers", "regular", "kube-system", "calico-kube-controllers"),
+        *(("workload", "regular", namespace, role)
+          for namespace in ("kil-v3-baseline", "kil-v3-local-reduce", "kil-v3-signed")
+          for role in ("driver", "envoy", "authz", "target")),
+    ))
+    endpoint_keys = [
+        (namespace, service, "http", "TCP", 8080)
+        for service in ("authz", "envoy", "target")
+        for namespace in ("kil-v3-baseline", "kil-v3-local-reduce", "kil-v3-signed")
+    ]
+    return {
+        "namespaces": [
+            "default", "kil-v3-baseline", "kil-v3-local-reduce",
+            "kil-v3-signed", "kube-node-lease", "kube-public",
+            "kube-system", "local-path-storage",
+        ],
+        "object_keys": [list(item) for item in object_keys],
+        "pod_image_keys": [list(item) for item in pod_image_keys],
+        "endpoint_keys": [list(item) for item in endpoint_keys],
+        "calico_readiness": {
+            "node_desired": 1, "node_ready": 1,
+            "controller_desired": 1, "controller_ready": 1,
+        },
+    }
+
+
+def _trusted_expected_policy(profile: V3B2Profile) -> dict[str, object]:
+    return {
+        "edges": [
+            {
+                "namespace": edge.namespace,
+                "source_roles": list(edge.source_roles),
+                "destination_namespace": edge.destination_namespace,
+                "destination_roles": list(edge.destination_roles),
+                "protocol_ports": [list(pair) for pair in edge.protocol_ports],
+            }
+            for edge in sorted(
+                expected_policy_graph(profile),
+                key=lambda item: (
+                    item.namespace, item.source_roles,
+                    item.destination_namespace, item.destination_roles,
+                    item.protocol_ports,
+                ),
+            )
+        ]
+    }
+
+
+def _validate_private_expectations(
+    expected_topology: object,
+    expected_policy: object,
+    topology: Mapping[str, object],
+    policy: Mapping[str, object],
+) -> None:
+    profile = _trusted_profile()
+    closed_topology = _closed_record(
+        "private expected topology", expected_topology, _EXPECTED_TOPOLOGY_FIELDS
+    )
+    trusted_topology = _trusted_expected_topology(profile)
+    if closed_topology != trusted_topology:
+        raise EvidenceError("private expected topology differs from the trusted contract")
+    runtime_topology = {
+        "namespaces": topology["namespaces"],
+        "object_keys": [
+            [item["api_version"], item["kind"], item["namespace"], item["name"]]
+            for item in topology["objects"]  # type: ignore[union-attr]
+        ],
+        "pod_image_keys": [
+            [item["image_role"], item["container_type"], item["namespace"], item["container"]]
+            for item in topology["pod_images"]  # type: ignore[union-attr]
+        ],
+        "endpoint_keys": [
+            [item["namespace"], item["service"], item["port_name"], item["protocol"], item["port"]]
+            for item in topology["endpoints"]  # type: ignore[union-attr]
+        ],
+        "calico_readiness": topology["calico_readiness"],
+    }
+    if runtime_topology != trusted_topology:
+        raise EvidenceError("runtime topology is detached from the private expectation")
+    closed_policy = _closed_record(
+        "private expected policy graph", expected_policy, frozenset({"edges"})
+    )
+    trusted_policy = _trusted_expected_policy(profile)
+    if closed_policy != trusted_policy or policy != trusted_policy:
+        raise EvidenceError("private and runtime policy graphs differ from the trusted contract")
+
+
 def build_public_bundle(private: object) -> dict[str, object]:
     """Build a closed public projection while totalizing malformed input."""
     try:
@@ -695,27 +836,21 @@ def _build_public_bundle(private: object) -> dict[str, object]:
     assert type(runtime) is dict
     cases = manifest["request_cases"]
     assert type(cases) is list
-    if cases:
-        joins = join_nominal_evidence(manifest)
-        grouped = _records(manifest)
-        drivers = [
-            next(record for record in grouped["driver"] if record["track"] == track)
-            for track in TRACKS
-        ]
-        request_results = [
-            {
-                **driver,
-                "target_markers": joins[index]["target_markers"],
-            }
-            for index, driver in enumerate(drivers)
-        ]
-        result_class = RESULT_CLASS
-    else:
-        if any(_records(manifest).values()):
-            raise EvidenceError("request-free evidence contains application records")
-        joins = []
-        request_results = []
-        result_class = REQUEST_FREE_RESULT_CLASS
+    content = _validate_content_identities(
+        manifest["content_identities"],
+        run_id=manifest["run_id"],
+        profile_sha256=manifest["profile_sha256"],
+    )
+    topology = _validate_topology_attestation(
+        runtime.get("topology_attestation"), content
+    )
+    policy = _validate_policy_attestation(runtime.get("policy_attestation"))
+    _validate_private_expectations(
+        manifest["expected_topology"],
+        manifest["expected_policy_graph"],
+        topology,
+        policy,
+    )
     try:
         key = sha256((str(manifest["execution_nonce"]) + ":foreign-profile-projection").encode("utf-8")).digest()
         foreign = project_foreign_profiles(manifest["foreign_profiles_before"], runtime["foreign_profiles_after"], key)
@@ -733,18 +868,30 @@ def _build_public_bundle(private: object) -> dict[str, object]:
         }
     ):
         raise EvidenceError("owned teardown attestation is invalid")
+    grouped = _records(manifest)
     if not foreign["unchanged"] or not unchanged_context:
+        if cases or any(grouped.values()):
+            raise EvidenceError("foreign mismatch diagnostic contains request evidence")
         result_class = "diagnostic_foreign_state_mismatch"
         joins = []
-    content = _validate_content_identities(
-        manifest["content_identities"],
-        run_id=manifest["run_id"],
-        profile_sha256=manifest["profile_sha256"],
-    )
-    topology = _validate_topology_attestation(
-        runtime.get("topology_attestation"), content
-    )
-    policy = _validate_policy_attestation(runtime.get("policy_attestation"))
+        request_results = []
+    elif cases:
+        joins = join_nominal_evidence(manifest)
+        drivers = [
+            next(record for record in grouped["driver"] if record["track"] == track)
+            for track in TRACKS
+        ]
+        request_results = [
+            {**driver, "target_markers": joins[index]["target_markers"]}
+            for index, driver in enumerate(drivers)
+        ]
+        result_class = RESULT_CLASS
+    else:
+        if any(grouped.values()):
+            raise EvidenceError("request-free evidence contains application records")
+        joins = []
+        request_results = []
+        result_class = REQUEST_FREE_RESULT_CLASS
     public: dict[str, object] = {
         "schema_version": PUBLIC_MANIFEST_SCHEMA,
         "run_id": manifest["run_id"],
@@ -822,6 +969,7 @@ def validate_public_projection(
                         type(key) is not str
                         or len(key.encode("utf-8")) > 4096
                         or any(token in key.lower() for token in _PRIVATE_KEYS)
+                        or any(name in key for name in unique_names)
                     )
                 except UnicodeEncodeError:
                     raise PublicBoundaryError(
@@ -849,10 +997,7 @@ def validate_public_projection(
             if len(encoded) > 65536:
                 raise PublicBoundaryError("public string exceeds its bound")
             for name in unique_names:
-                if member == name or re.search(
-                    rf"(?<![A-Za-z0-9]){re.escape(name)}(?![A-Za-z0-9])",
-                    member,
-                ):
+                if name in member:
                     raise PublicBoundaryError(
                         "public projection contains a foreign profile name"
                     )
@@ -904,6 +1049,26 @@ def _write_regular(path: Path, payload: bytes) -> None:
         os.close(descriptor)
 
 
+def _write_regular_at(directory_fd: int, name: str, payload: bytes) -> None:
+    descriptor = os.open(
+        name,
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+        dir_fd=directory_fd,
+    )
+    try:
+        with os.fdopen(descriptor, "wb", closefd=False) as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+    finally:
+        os.close(descriptor)
+
+
 def _canonical_directory(path: object, label: str) -> Path:
     if not isinstance(path, Path) or not path.is_absolute() or ".." in path.parts:
         raise EvidenceError(f"{label} must be an absolute normalized path")
@@ -936,6 +1101,33 @@ def _prepare_public_parent(path: object) -> Path:
     except OSError:
         raise EvidenceError("public parent cannot be created safely") from None
     return _canonical_directory(path, "public parent")
+
+
+def _prepare_private_diagnostic_parent(target: Path) -> Path:
+    if not target.name or target.name in {".", ".."}:
+        raise EvidenceError("private diagnostic file name is invalid")
+    parent = target.parent
+    if parent.exists() or parent.is_symlink():
+        canonical = _canonical_directory(parent, "private diagnostic parent")
+    else:
+        _canonical_directory(parent.parent, "private diagnostic ancestor")
+        try:
+            parent.mkdir(mode=0o700)
+        except OSError:
+            raise EvidenceError("private diagnostic parent cannot be created safely") from None
+        canonical = _canonical_directory(parent, "private diagnostic parent")
+    mode = os.stat(canonical, follow_symlinks=False).st_mode & 0o777
+    if mode & 0o077:
+        raise EvidenceError("private diagnostic parent permissions are unsafe")
+    diagnostic = target.with_name(target.name + ".diagnostic.json")
+    if (
+        target.exists()
+        or target.is_symlink()
+        or diagnostic.exists()
+        or diagnostic.is_symlink()
+    ):
+        raise EvidenceError("private diagnostic destination is unsafe")
+    return canonical
 
 
 def publish_bundle(private: object, public_parent: Path) -> Path:
@@ -979,10 +1171,7 @@ def _publish_bundle(private: object, public_parent: Path) -> Path:
             except UnicodeDecodeError:
                 raise PublicBoundaryError("public artifact is not UTF-8") from None
             for foreign_name in foreign_names:
-                if text == foreign_name or re.search(
-                    rf"(?<![A-Za-z0-9]){re.escape(foreign_name)}(?![A-Za-z0-9])",
-                    text,
-                ):
+                if foreign_name in text:
                     raise PublicBoundaryError(
                         "public artifact contains a foreign profile name"
                     )
@@ -1257,7 +1446,16 @@ def _verify_v3b2(payloads: Mapping[str, bytes]) -> VerifiedBundle:
         if value.get("global_context_unchanged") is not True or value["foreign_profile_attestation"]["unchanged"] is not True:  # type: ignore[index]
             raise EvidenceError("request-free bundle foreign state is not unchanged")
     elif result_class == "diagnostic_foreign_state_mismatch":
-        if joins or value.get("foreign_profile_attestation", {}).get("unchanged") is not False:  # type: ignore[union-attr]
+        if (
+            requests
+            or joins
+            or value.get("source_attestations") != []
+            or any(parsed[name] for name in (
+                "requests.jsonl", "decisions.jsonl", "envoy.jsonl",
+                "targets.jsonl", "joins.jsonl",
+            ))
+            or value.get("foreign_profile_attestation", {}).get("unchanged") is not False  # type: ignore[union-attr]
+        ):
             raise EvidenceError("foreign mismatch diagnostic is invalid")
     else:
         raise EvidenceError("public result class is invalid")
