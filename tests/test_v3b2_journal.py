@@ -9,6 +9,8 @@ import threading
 import unittest
 from unittest.mock import patch
 
+from kil.v3b2_contracts import TRACKS
+
 from kil.v3b2_journal import (
     Command,
     JournalError,
@@ -18,6 +20,11 @@ from kil.v3b2_journal import (
     append_event,
     create_journal,
     kind_delete_command,
+    kind_create_command,
+    kubectl_apply_command,
+    kubectl_apply_calico_command,
+    kubectl_attach_command,
+    kubectl_quiesce_command,
     load_journal,
     owned_commands,
     recovery_plan,
@@ -58,6 +65,7 @@ class V3B2JournalTest(unittest.TestCase):
             foreign_profiles_before=(("client-project", "Running"),),
             expected_objects=("kil-v3-baseline/driver",),
             owned_identity=self.identity,
+            lifecycle_mode="nominal",
         )
 
     def tearDown(self) -> None:
@@ -283,6 +291,42 @@ class V3B2JournalTest(unittest.TestCase):
         for argv, command_env, mutating in cases:
             with self.subTest(argv=argv), self.assertRaises(JournalError):
                 Command(argv, 30, env=command_env, mutating=mutating)
+
+    def test_controller_command_builders_share_the_closed_journal_boundary(self) -> None:
+        created = kind_create_command(self.identity)
+        self.assertEqual(created.argv[:5], ("kind", "create", "cluster", "--name", "kil-v3-lab"))
+        policy = kubectl_apply_command(self.identity, b'{"apiVersion":"v1","items":[],"kind":"List"}\n')
+        self.assertEqual(policy.argv[-3:], ("apply", "-f", "-"))
+        self.assertTrue(policy.mutating)
+        calico_path = self.private / "calico-v3.32.0.yaml"
+        calico = kubectl_apply_calico_command(self.identity, calico_path)
+        self.assertEqual(calico.argv[-3:], ("apply", "-f", str(calico_path)))
+        instruction = (
+            b'{"body_byte_count":0,"headers":{"authorization":"Bearer synthetic-v3b1-credential",'
+            b'"x-envoy-hedge-on-per-try-timeout":"false","x-envoy-max-retries":"0",'
+            b'"x-kil-decision-digest":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",'
+            b'"x-kil-issuer":"https://attacker.invalid","x-kil-local-evidence":"{\\"divergence\\":\\"0\\"}",'
+            b'"x-kil-mode":"credential_policy_baseline","x-kil-run-id":"v3b1-1111111111111111111111111111111111111111111111111111111111111111",'
+            b'"x-kil-track":"client-selected-track","x-kil-verified-subject":"spiffe://attacker.invalid/workload",'
+            b'"x-request-id":"v3b1-central-request"},"method":"POST","path":"/consequential/admin",'
+            b'"schema_version":"kil.v3b1-driver-instruction.v1","track":"credential_policy_baseline"}\n'
+        )
+        attached = kubectl_attach_command(self.identity, "kil-v3-baseline", instruction)
+        self.assertEqual(attached.argv[-5:], ("attach", "pod/driver", "--namespace", "kil-v3-baseline", "--stdin"))
+        self.assertEqual(attached.stdin, instruction)
+        quiesce = kubectl_quiesce_command(self.identity, "kil-v3-baseline")
+        self.assertEqual(quiesce.argv[-5:], ("scale", "deployment/envoy", "--namespace", "kil-v3-baseline", "--replicas=0"))
+
+    def test_controller_command_grammar_rejects_aliases_overrides_and_unvalidated_input(self) -> None:
+        invalid = (
+            (("kubectl", "--kubeconfig", self.kubeconfig, "apply", "-f", "-", "--context", "other"), b"{}\n"),
+            (("kubectl", "--kubeconfig", self.kubeconfig, "attach", "pod/driver", "-n", "kil-v3-baseline", "--stdin"), b"{}\n"),
+            (("kubectl", "--kubeconfig", self.kubeconfig, "attach", "pod/other", "--namespace", "kil-v3-baseline", "--stdin"), b"{}\n"),
+            (("kubectl", "--kubeconfig", self.kubeconfig, "scale", "deployment/envoy", "--namespace", "kil-v3-baseline", "--replicas=1"), None),
+        )
+        for argv, stdin in invalid:
+            with self.subTest(argv=argv), self.assertRaises(JournalError):
+                Command(argv, 300, stdin=stdin, mutating=True)
 
     def test_command_rejects_every_unreviewed_executable_spelling(self) -> None:
         for executable in ("rm", "sh", "env", "unknown", "/usr/bin/kubectl", "Kubectl"):
@@ -679,6 +723,31 @@ class V3B2JournalTest(unittest.TestCase):
         self._append("evidence_freeze_intent", freeze)
         with self.assertRaisesRegex(JournalError, "pending|overlap|order"):
             self._append("driver_start_intent", {"namespace": "kil-v3-signed", "pod": "driver", "uid": "signed"})
+
+    def test_request_free_mode_starts_and_cancels_all_waiting_drivers_before_quiesce_and_freeze(self) -> None:
+        values = {field: getattr(self.inputs, field) for field in self.inputs.__dataclass_fields__}
+        values["lifecycle_mode"] = "request-free"
+        create_journal(self.path, JournalInputs(**values))
+        self._ready()
+        drivers = (
+            {"namespace": "kil-v3-baseline", "pod": "driver", "uid": "baseline-driver"},
+            {"namespace": "kil-v3-signed", "pod": "driver", "uid": "signed-driver"},
+            {"namespace": "kil-v3-local-reduce", "pod": "driver", "uid": "reduce-driver"},
+        )
+        for driver in drivers:
+            self._append("driver_start_intent", driver)
+            self._append("driver_start_complete", driver)
+        for driver in drivers:
+            self._append("driver_cancel_intent", driver)
+            self._append("driver_cancel_complete", driver)
+        quiesce = {"attestation_sha256": "8" * 64}
+        self._append("envoy_quiesce_intent", quiesce)
+        self._append("envoy_quiesce_complete", quiesce)
+        freeze = {"evidence_sha256": "5" * 64}
+        self._append("evidence_freeze_intent", freeze)
+        self._append("evidence_freeze_complete", freeze)
+        with self.assertRaisesRegex(JournalError, "request-free|mode"):
+            self._append("request_intent", {"track": TRACKS[0], "request_id": "v3b1-central-request", "case_sha256": "f" * 64})
 
     def test_pre_request_driver_recovery_proposes_freeze_and_never_invents_request(self) -> None:
         self._journal()

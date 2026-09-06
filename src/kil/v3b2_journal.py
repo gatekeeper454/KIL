@@ -122,8 +122,17 @@ class Command:
         if type(self.mutating) is not bool:
             raise JournalError("command mutating flag must be an exact boolean")
         environment = dict(self.env)
-        executable = self.argv[0]
-        if executable not in {"colima", "docker", "kind", "kubectl"}:
+        raw_executable = self.argv[0]
+        executable_path = Path(raw_executable)
+        locked_tool = (
+            executable_path.is_absolute()
+            and ".." not in executable_path.parts
+            and len(executable_path.parts) >= 3
+            and executable_path.parts[-3:-1] == (".tools", "bin")
+            and executable_path.name in {"docker", "kind", "kubectl"}
+        )
+        executable = executable_path.name if locked_tool else raw_executable
+        if executable not in {"colima", "docker", "git", "kind", "kubectl", "limactl"}:
             raise JournalError("command executable is outside the closed allowlist")
         def authority_values(flag: str) -> tuple[str, ...]:
             if any(item.startswith(f"{flag}=") for item in self.argv):
@@ -138,7 +147,14 @@ class Command:
         kubeconfigs = authority_values("--kubeconfig")
         if len(profiles) > 1 or len(names) > 1 or len(kubeconfigs) > 1:
             raise JournalError("command authority flags must not be duplicated or overridden")
-        if executable in {"docker", "kind"}:
+        version_argv = {
+            "docker": (raw_executable, "--version"),
+            "kind": (raw_executable, "version"),
+            "kubectl": (raw_executable, "version", "--client", "-o", "json"),
+        }
+        locked_version_read = locked_tool and self.argv == version_argv[executable]
+        global_context_read = executable == "docker" and self.argv == ("docker", "context", "show")
+        if executable in {"docker", "kind"} and not global_context_read and not locked_version_read:
             if tuple(environment) != _ENV_KEYS:
                 raise JournalError("Docker/Kind commands require only both isolated bindings")
             _absolute_path("Docker configuration directory", environment["DOCKER_CONFIG"])
@@ -148,15 +164,19 @@ class Command:
         if executable == "kind" and self.mutating:
             if names != (LAB_IDENTITY,) or len(kubeconfigs) != 1:
                 raise JournalError("mutating Kind command may name only kil-v3-lab")
-        if executable == "kubectl":
+        if executable == "kubectl" and not locked_version_read:
             if len(self.argv) < 3 or self.argv[1] != "--kubeconfig" or kubeconfigs != (self.argv[2],):
                 raise JournalError("kubectl command requires an explicit leading kubeconfig")
             _absolute_path("kubectl kubeconfig", self.argv[2])
         if executable == "colima" and self.mutating:
             if profiles != (LAB_IDENTITY,):
                 raise JournalError("mutating Colima command may name only kil-v3-lab")
-        if executable == "colima":
+        if locked_tool:
+            if not locked_version_read or self.mutating or self.stdin is not None or self.env:
+                raise JournalError("locked tool command is outside the closed version grammar")
+        elif executable == "colima":
             allowed = {
+                ("colima", "version"): False,
                 ("colima", "start", "--profile", LAB_IDENTITY): True,
                 ("colima", "stop", "--profile", LAB_IDENTITY): True,
                 ("colima", "delete", "--profile", LAB_IDENTITY, "--force", "--data"): True,
@@ -167,11 +187,26 @@ class Command:
                 raise JournalError("Colima command is outside the closed argv grammar")
             if self.stdin is not None or self.env:
                 raise JournalError("Colima command carries unreviewed input or environment")
+        elif executable == "limactl":
+            if self.argv != ("limactl", "--version") or self.mutating or self.stdin is not None or self.env:
+                raise JournalError("Lima command is outside the closed version grammar")
         elif executable == "docker":
-            if self.argv != ("docker", "inspect", f"{LAB_IDENTITY}-control-plane") or self.mutating:
+            if self.argv not in {
+                ("docker", "inspect", f"{LAB_IDENTITY}-control-plane"),
+                ("docker", "context", "show"),
+            } or self.mutating:
                 raise JournalError("Docker command is outside the closed argv grammar")
             if self.stdin is not None:
                 raise JournalError("Docker command carries unreviewed input")
+            if global_context_read and self.env:
+                raise JournalError("global Docker context read must not carry isolated authority")
+        elif executable == "git":
+            if self.argv not in {
+                ("git", "rev-parse", "HEAD"),
+                ("git", "rev-parse", "origin/main"),
+                ("git", "status", "--porcelain"),
+            } or self.mutating or self.stdin is not None or self.env:
+                raise JournalError("Git command is outside the closed argv grammar")
         elif executable == "kind":
             if len(kubeconfigs) != 1:
                 raise JournalError("Kind command requires one exact kubeconfig binding")
@@ -224,6 +259,57 @@ class Command:
                     and arguments[3] in _APPLICATION_NAMESPACES
                     and arguments[4:] == ("--limit-bytes=1048576",)
                 )
+            apply_stdin = arguments == ("apply", "-f", "-")
+            if apply_stdin:
+                if self.stdin is None:
+                    raise JournalError("kubectl apply requires exact manifest stdin")
+                try:
+                    manifest = json.loads(self.stdin)
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    raise JournalError("kubectl apply manifest is invalid") from error
+                if (
+                    type(manifest) is not dict
+                    or set(manifest) != {"apiVersion", "items", "kind"}
+                    or manifest.get("apiVersion") != "v1"
+                    or manifest.get("kind") != "List"
+                    or type(manifest.get("items")) is not list
+                    or self.stdin != _canonical_bytes(manifest)
+                ):
+                    raise JournalError("kubectl apply manifest is not a canonical List")
+            apply_calico = (
+                len(arguments) == 3
+                and arguments[0:2] == ("apply", "-f")
+                and Path(arguments[2]).name == "calico-v3.32.0.yaml"
+            )
+            if apply_calico:
+                _absolute_path("Calico manifest", arguments[2])
+                if self.stdin is not None:
+                    raise JournalError("kubectl Calico apply carries unreviewed stdin")
+            attach = (
+                len(arguments) == 5
+                and arguments[0:2] == ("attach", "pod/driver")
+                and arguments[2] == "--namespace"
+                and arguments[3] in _APPLICATION_NAMESPACES
+                and arguments[4:] == ("--stdin",)
+            )
+            if attach:
+                if self.stdin is None:
+                    raise JournalError("kubectl attach requires one canonical instruction")
+                from kil.v3b1_driver_protocol import DriverProtocolError, parse_instruction
+                expected_track = next(
+                    track for track, namespace in TRACK_NAMESPACES if namespace == arguments[3]
+                )
+                try:
+                    parse_instruction(self.stdin, expected_track=expected_track)
+                except DriverProtocolError as error:
+                    raise JournalError("kubectl attach instruction is invalid") from error
+            quiesce = (
+                len(arguments) == 5
+                and arguments[0:2] == ("scale", "deployment/envoy")
+                and arguments[2] == "--namespace"
+                and arguments[3] in _APPLICATION_NAMESPACES
+                and arguments[4] == "--replicas=0"
+            )
             raw_delete = (
                 len(arguments) == 5
                 and arguments[0:2] == ("delete", "--raw")
@@ -254,9 +340,16 @@ class Command:
                 _exact_string("kubectl raw delete UID", preconditions["uid"])
                 if self.stdin != _canonical_bytes(options):
                     raise JournalError("kubectl raw delete DeleteOptions are not canonical")
+            elif apply_stdin or apply_calico or attach or quiesce:
+                if not self.mutating:
+                    raise JournalError("kubectl mutation classification does not match its grammar")
+                if attach is False and apply_stdin is False and self.stdin is not None:
+                    raise JournalError("kubectl mutation carries unreviewed stdin")
+                if quiesce and self.stdin is not None:
+                    raise JournalError("kubectl quiesce carries unreviewed stdin")
             elif not reviewed_read or self.mutating or self.stdin is not None:
                 raise JournalError("kubectl command is outside the closed argv grammar")
-            if raw_delete is not self.mutating:
+            if not (apply_stdin or apply_calico or attach or quiesce) and raw_delete is not self.mutating:
                 raise JournalError("kubectl mutation classification does not match its grammar")
             if self.env:
                 raise JournalError("kubectl command carries an unreviewed environment")
@@ -375,6 +468,7 @@ class JournalInputs:
     foreign_profiles_before: tuple[tuple[str, str], ...]
     expected_objects: tuple[str, ...]
     owned_identity: OwnedIdentity
+    lifecycle_mode: str = "nominal"
 
     def __post_init__(self) -> None:
         if type(self.schema_version) is not str or self.schema_version != JOURNAL_SCHEMA:
@@ -422,6 +516,8 @@ class JournalInputs:
         if type(self.owned_identity) is not OwnedIdentity:
             raise JournalError("owned identity must be an exact OwnedIdentity record")
         self.owned_identity.__post_init__()
+        if type(self.lifecycle_mode) is not str or self.lifecycle_mode not in {"nominal", "request-free"}:
+            raise JournalError("journal lifecycle mode is not reviewed")
 
 
 def _identity_mapping(identity: OwnedIdentity) -> dict[str, object]:
@@ -441,6 +537,7 @@ def _inputs_mapping(inputs: JournalInputs) -> dict[str, object]:
         "global_context_before": inputs.global_context_before,
         "foreign_profiles_before": [list(item) for item in inputs.foreign_profiles_before],
         "expected_objects": list(inputs.expected_objects),
+        "lifecycle_mode": inputs.lifecycle_mode,
         "owned_identity": _identity_mapping(inputs.owned_identity),
         "events": [],
     }
@@ -720,6 +817,7 @@ def _inputs_from_journal(value: Mapping[str, object]) -> JournalInputs:
             foreign_profiles_before=tuple(tuple(item) for item in foreign),  # type: ignore[arg-type]
             expected_objects=tuple(objects),  # type: ignore[arg-type]
             owned_identity=_identity_from_mapping(value["owned_identity"]),
+            lifecycle_mode=value["lifecycle_mode"],  # type: ignore[arg-type]
         )
     except KeyError as error:
         raise JournalError(f"journal is missing field: {error.args[0]}") from error
@@ -740,6 +838,7 @@ _PAIR_DETAILS: dict[str, frozenset[str]] = {
     "calico_apply": frozenset({"manifest_sha256"}),
     "application_apply": frozenset({"manifest_sha256"}),
     "readiness": frozenset({"attestation_sha256"}),
+    "envoy_quiesce": frozenset({"attestation_sha256"}),
     "driver_start": frozenset({"namespace", "pod", "uid"}),
     "driver_cancel": frozenset({"namespace", "pod", "uid"}),
     "evidence_freeze": frozenset({"evidence_sha256"}),
@@ -816,7 +915,7 @@ def _validate_event_details(name: str, details: object) -> tuple[str, str, tuple
     return family, stage, key
 
 
-def _validate_history(events: object) -> None:
+def _validate_history(events: object, lifecycle_mode: str) -> None:
     if type(events) is not list or len(events) > 10_000:
         raise JournalError("journal events must be a bounded exact list")
     states: dict[tuple[str, tuple[object, ...]], tuple[str, dict[str, object]]] = {}
@@ -854,7 +953,7 @@ def _validate_history(events: object) -> None:
                 raise JournalError(message)
             if active is not None:
                 raise JournalError("journal lifecycle has overlapping pending intents")
-            if request_pending and not request_abandoned and family != "evidence_freeze":
+            if request_pending and not request_abandoned and family not in {"envoy_quiesce", "evidence_freeze"}:
                 raise JournalError("request intent is terminal-pending until its result or evidence freeze")
             if request_abandoned and family not in {
                 "driver_cancel",
@@ -885,13 +984,14 @@ def _validate_history(events: object) -> None:
                 expected_namespaces = tuple(namespace for _track, namespace in TRACK_NAMESPACES)
                 require(namespace not in driver_starts, "driver start is duplicated")
                 require(namespace == expected_namespaces[len(driver_starts)], "driver starts are out of fixed order")
-                if driver_starts:
+                if driver_starts and lifecycle_mode == "nominal":
                     prior_track = TRACKS[len(driver_starts) - 1]
                     require(prior_track in request_results, "next-track driver requires prior request result")
             elif family == "request":
                 details = record["details"]
                 assert isinstance(details, dict)
                 track = str(details["track"])
+                require(lifecycle_mode == "nominal", "request-free mode prohibits request events")
                 require(done("readiness") and not done("evidence_freeze"), "request requires readiness before freeze")
                 require(track == TRACKS[len(request_claims)], "requests are out of fixed track order")
                 require(track_namespace[track] in driver_starts, "request lacks a completed bound driver")
@@ -899,8 +999,19 @@ def _validate_history(events: object) -> None:
                     require(request_claims[-1] in request_results, "prior request is still pending")
             elif family == "evidence_freeze":
                 require(done("readiness"), "evidence freeze requires completed readiness")
+                if lifecycle_mode == "request-free" and driver_starts:
+                    require(set(driver_starts) == driver_cancels, "request-free freeze requires all waiting drivers canceled")
+                    require(done("envoy_quiesce"), "request-free freeze requires Envoy quiescence")
+            elif family == "envoy_quiesce":
+                require(done("readiness") and not done("evidence_freeze"), "Envoy quiescence requires readiness before freeze")
+                if lifecycle_mode == "request-free":
+                    require(len(driver_starts) == len(TRACKS), "request-free quiescence requires all waiting drivers")
+                    require(set(driver_starts) == driver_cancels, "request-free quiescence requires waiting-driver cancellation")
             elif family == "driver_cancel":
-                require(done("evidence_freeze"), "driver cancellation requires durable evidence freeze")
+                require(
+                    done("evidence_freeze") or lifecycle_mode == "request-free",
+                    "driver cancellation requires durable evidence freeze",
+                )
                 details = record["details"]
                 assert isinstance(details, dict)
                 namespace = str(details["namespace"])
@@ -978,7 +1089,7 @@ def _validate_journal(value: object) -> None:
     if type(value["phase"]) is not str or not value["phase"]:
         raise JournalError("journal phase is invalid")
     events = value["events"]
-    _validate_history(events)
+    _validate_history(events, inputs.lifecycle_mode)
     assert isinstance(events, list)
     expected_phase = "prepared" if not events else events[-1]["event"]
     if value["phase"] != expected_phase:
@@ -1054,6 +1165,14 @@ def _colima_command(operation: str) -> Command:
     return Command(("colima", operation, "--profile", LAB_IDENTITY, *suffix), 300, mutating=True)
 
 
+def colima_start_command() -> Command:
+    return _colima_command("start")
+
+
+def docker_context_command() -> Command:
+    return Command(("docker", "context", "show"), 60)
+
+
 def kind_delete_command(identity: OwnedIdentity) -> Command:
     _require_complete_identity(identity)
     assert identity.kubeconfig is not None
@@ -1065,7 +1184,7 @@ def kind_delete_command(identity: OwnedIdentity) -> Command:
     )
 
 
-def _kind_create_command(identity: OwnedIdentity) -> Command:
+def kind_create_command(identity: OwnedIdentity) -> Command:
     _require_complete_identity(identity)
     assert identity.kubeconfig is not None
     config = str(Path(identity.kubeconfig).parent / "kind-config.yaml")
@@ -1080,17 +1199,51 @@ def _kind_create_command(identity: OwnedIdentity) -> Command:
     )
 
 
-def _kubectl(identity: OwnedIdentity, *arguments: str, mutating: bool = False) -> Command:
+def kubectl_apply_command(identity: OwnedIdentity, manifest: bytes) -> Command:
+    return _kubectl(identity, "apply", "-f", "-", mutating=True, stdin=manifest)
+
+
+def kubectl_apply_calico_command(identity: OwnedIdentity, path: Path) -> Command:
+    if not isinstance(path, Path):
+        raise JournalError("Calico manifest path must be a Path")
+    return _kubectl(identity, "apply", "-f", str(path), mutating=True)
+
+
+def kubectl_attach_command(identity: OwnedIdentity, namespace: str, instruction: bytes) -> Command:
+    return _kubectl(
+        identity, "attach", "pod/driver", "--namespace", namespace, "--stdin",
+        mutating=True, stdin=instruction,
+    )
+
+
+def kubectl_quiesce_command(identity: OwnedIdentity, namespace: str) -> Command:
+    return _kubectl(
+        identity, "scale", "deployment/envoy", "--namespace", namespace,
+        "--replicas=0", mutating=True,
+    )
+
+
+def _kubectl(
+    identity: OwnedIdentity,
+    *arguments: str,
+    mutating: bool = False,
+    stdin: bytes | None = None,
+) -> Command:
     _require_complete_identity(identity)
     assert identity.kubeconfig is not None
-    return Command(("kubectl", "--kubeconfig", identity.kubeconfig, *arguments), 300, mutating=mutating)
+    return Command(
+        ("kubectl", "--kubeconfig", identity.kubeconfig, *arguments),
+        300,
+        stdin=stdin,
+        mutating=mutating,
+    )
 
 
 def owned_commands(identity: OwnedIdentity) -> tuple[Command, ...]:
     """Return the closed owned mutation vocabulary; never discovery-selected names."""
     return (
         _colima_command("start"),
-        _kind_create_command(identity),
+        kind_create_command(identity),
         kind_delete_command(identity),
         _colima_command("stop"),
         _colima_command("delete"),
@@ -1177,6 +1330,8 @@ def _pending_command(family: str, details: dict[str, object], identity: OwnedIde
     if family == "evidence_freeze":
         return _evidence_freeze_commands(identity, ())[0]
     if family == "readiness":
+        return _kubectl(identity, "get", "pods", "--all-namespaces", "--output", "json")
+    if family == "envoy_quiesce":
         return _kubectl(identity, "get", "pods", "--all-namespaces", "--output", "json")
     if family == "foreign_snapshot_comparison":
         return Command(("colima", "list", "--json"), 60)
@@ -1484,8 +1639,15 @@ __all__ = [
     "RecoveryPlan",
     "RecoveryObservation",
     "append_event",
+    "colima_start_command",
     "create_journal",
+    "docker_context_command",
+    "kind_create_command",
     "kind_delete_command",
+    "kubectl_apply_calico_command",
+    "kubectl_apply_command",
+    "kubectl_attach_command",
+    "kubectl_quiesce_command",
     "load_journal",
     "owned_commands",
     "recovery_plan",

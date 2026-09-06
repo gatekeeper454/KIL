@@ -76,6 +76,7 @@ EXPECTED_JOURNAL_FIELDS = frozenset(
         "global_context_before",
         "foreign_profiles_before",
         "expected_objects",
+        "lifecycle_mode",
         "owned_identity",
         "events",
     }
