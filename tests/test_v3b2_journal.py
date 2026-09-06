@@ -547,6 +547,48 @@ class V3B2JournalTest(unittest.TestCase):
         with self.assertRaisesRegex(JournalError, "absolute"):
             create_journal(Path("relative/journal.json"), self.inputs)
 
+    def test_symlinked_ancestor_and_retarget_are_rejected_for_create_load_and_append(self) -> None:
+        root = Path(self.temporary.name).resolve()
+        first_root = root / "first-root"
+        second_root = root / "second-root"
+        first_private = first_root / "private"
+        second_private = second_root / "private"
+        first_private.mkdir(parents=True, mode=0o700)
+        second_private.mkdir(parents=True, mode=0o700)
+        os.chmod(first_private, 0o700)
+        os.chmod(second_private, 0o700)
+        first_journal = first_private / "journal.json"
+        second_journal = second_private / "journal.json"
+        alias = root / "ancestor-alias"
+        alias.symlink_to(first_root, target_is_directory=True)
+        aliased_journal = alias / "private" / "journal.json"
+
+        with self.assertRaisesRegex(JournalError, "canonical|symlink|ancestor|contain"):
+            create_journal(aliased_journal, self.inputs)
+        self.assertFalse(first_journal.exists())
+
+        original = create_journal(first_journal, self.inputs)
+        original_bytes = first_journal.read_bytes()
+        with self.assertRaisesRegex(JournalError, "canonical|symlink|ancestor|contain"):
+            load_journal(aliased_journal)
+        with self.assertRaisesRegex(JournalError, "canonical|symlink|ancestor|contain"):
+            append_event(aliased_journal, "profile_start_intent", {"colima_profile": "kil-v3-lab"})
+        self.assertEqual(load_journal(first_journal), original)
+        self.assertEqual(first_journal.read_bytes(), original_bytes)
+
+        alias.unlink()
+        alias.symlink_to(second_root, target_is_directory=True)
+        with self.assertRaisesRegex(JournalError, "canonical|symlink|ancestor|contain"):
+            append_event(aliased_journal, "profile_start_intent", {"colima_profile": "kil-v3-lab"})
+        self.assertEqual(first_journal.read_bytes(), original_bytes)
+        self.assertFalse(second_journal.exists())
+
+    def test_non_directory_ancestor_is_rejected(self) -> None:
+        blocker = Path(self.temporary.name).resolve() / "not-a-directory"
+        blocker.write_text("block", encoding="utf-8")
+        with self.assertRaises(JournalError):
+            create_journal(blocker / "private" / "journal.json", self.inputs)
+
     def test_append_is_atomic_sequenced_and_revalidates_history(self) -> None:
         self._journal()
         value = self._append("profile_start_intent", {"colima_profile": "kil-v3-lab"})

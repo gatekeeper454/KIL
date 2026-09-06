@@ -491,6 +491,27 @@ def _validate_json_budget(value: object, *, depth: int = 0) -> int:
     return count
 
 
+def _require_canonical_directory_ancestry(directory: Path) -> Path:
+    try:
+        resolved = directory.resolve(strict=True)
+    except OSError as error:
+        raise JournalError(f"journal directory ancestry is unavailable: {error}") from error
+    if directory != resolved or str(directory) != str(resolved):
+        raise JournalError("journal directory ancestry must be a canonical path without symlinks")
+    current = Path(directory.anchor)
+    for component in directory.parts[1:]:
+        current /= component
+        try:
+            inspected = os.stat(current, follow_symlinks=False)
+        except OSError as error:
+            raise JournalError(f"journal directory ancestor is unavailable: {error}") from error
+        if stat.S_ISLNK(inspected.st_mode):
+            raise JournalError("journal directory ancestry must not contain symlinks")
+        if not stat.S_ISDIR(inspected.st_mode):
+            raise JournalError("journal directory ancestry must contain only directories")
+    return resolved
+
+
 def _private_location(path: Path, *, create_parent: bool) -> tuple[Path, Path]:
     if not isinstance(path, Path) or not path.is_absolute() or ".." in path.parts:
         raise JournalError("journal path must be an absolute normalized path")
@@ -498,10 +519,12 @@ def _private_location(path: Path, *, create_parent: bool) -> tuple[Path, Path]:
     if path.name in {"", ".", ".."} or private == path or path.parent.parent == path.parent:
         raise JournalError("journal must be a direct child of a private root")
     if create_parent and not private.exists():
+        _require_canonical_directory_ancestry(private.parent)
         try:
             private.mkdir(mode=0o700)
         except OSError as error:
             raise JournalError(f"cannot create private journal root: {error}") from error
+    resolved_private = _require_canonical_directory_ancestry(private)
     try:
         inspected = os.stat(private, follow_symlinks=False)
     except OSError as error:
@@ -512,9 +535,9 @@ def _private_location(path: Path, *, create_parent: bool) -> tuple[Path, Path]:
         raise JournalError("private journal root must have mode 0700")
     if inspected.st_uid != os.geteuid():
         raise JournalError("private journal root must be owned by the current user")
-    resolved_private = private.resolve(strict=True)
-    if path.parent.resolve(strict=True) != resolved_private:
-        raise JournalError("journal is not contained by its private root")
+    if private != resolved_private or path != resolved_private / path.name:
+        raise JournalError("journal path must be canonical and contained by its private root")
+    _require_canonical_directory_ancestry(private)
     return path, resolved_private
 
 
