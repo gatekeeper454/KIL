@@ -306,6 +306,25 @@ class V3B2InventoryTest(unittest.TestCase):
         first = inventory._parse_endpoint_list(raw_list([endpoints]), "Endpoints")
         second = inventory._parse_endpoint_list(raw_list([slices]), "EndpointSlice")
         self.assertEqual(first[0].addresses, second[0].addresses)
+        multi_port = {
+            **endpoints,
+            "subsets": [{
+                **endpoints["subsets"][0],
+                "ports": [
+                    {"name": "http", "protocol": "TCP", "port": 8080},
+                    {"name": "metrics", "protocol": "TCP", "port": 9090},
+                ],
+            }],
+        }
+        same_source = inventory._parse_endpoint_list(
+            raw_list([multi_port]), "Endpoints",
+        )
+        same_source_snapshot = tampered(self.snapshot, endpoints=same_source)
+        same_source_expected = tampered(self.expected, endpoints=same_source)
+        self.assertEqual(
+            validate_inventory(same_source_snapshot, same_source_expected).endpoints,
+            same_source,
+        )
         ambiguous = tampered(self.snapshot, endpoints=tuple(sorted((*first, *second))))
         mirrored = ExpectedInventory(
             self.expected.cluster_incarnation_uid, self.expected.node_container_id,
@@ -319,6 +338,19 @@ class V3B2InventoryTest(unittest.TestCase):
         bad_slice = {**slices, "endpoints": [{"addresses": ["10.244.0.10"], "conditions": {"ready": True, "serving": True}}]}
         with self.assertRaises(InventoryError):
             inventory._parse_endpoint_list(raw_list([bad_slice]), "EndpointSlice")
+        different_port_slice = {
+            **slices,
+            "ports": [{"name": "metrics", "protocol": "TCP", "port": 9090}],
+        }
+        different_source = inventory._parse_endpoint_list(
+            raw_list([different_port_slice]), "EndpointSlice",
+        )
+        mixed = tampered(
+            self.snapshot, endpoints=tuple(sorted((*first, *different_source))),
+        )
+        mixed_expected = tampered(self.expected, endpoints=mixed.endpoints)
+        with self.assertRaisesRegex(InventoryError, "ambiguous"):
+            validate_inventory(mixed, mixed_expected)
 
     def test_raw_policy_projection_rejects_selector_direction_peer_and_port_ambiguity(self) -> None:
         item = {
@@ -381,11 +413,20 @@ class V3B2InventoryTest(unittest.TestCase):
             expected = tampered(self.expected, pod_images=images)
             with self.assertRaises(InventoryError):
                 validate_inventory(current, expected)
-        spoofed = "unix:///Users/test/project/.colima/kil-v3-lab/docker.sock"
-        current = tampered(self.snapshot, docker_host=spoofed)
-        expected = tampered(self.expected, docker_host=spoofed)
-        with self.assertRaisesRegex(InventoryError, "kil-v3-lab"):
-            validate_inventory(current, expected)
+        for spoofed in (
+            "unix:///Users/test/project/.colima/kil-v3-lab/docker.sock",
+            "unix:///Users/../.colima/kil-v3-lab/docker.sock",
+            "unix:///Users/./.colima/kil-v3-lab/docker.sock",
+            "unix:///Users/%2e%2e/.colima/kil-v3-lab/docker.sock",
+            "unix:///Users/test//.colima/kil-v3-lab/docker.sock",
+            "unix:////Users/test/.colima/kil-v3-lab/docker.sock",
+            "unix:///Users/-/.colima/kil-v3-lab/docker.sock",
+        ):
+            current = tampered(self.snapshot, docker_host=spoofed)
+            expected = tampered(self.expected, docker_host=spoofed)
+            with self.subTest(spoofed=spoofed):
+                with self.assertRaisesRegex(InventoryError, "kil-v3-lab"):
+                    validate_inventory(current, expected)
 
 
 if __name__ == "__main__":

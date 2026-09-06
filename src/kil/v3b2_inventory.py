@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+from pathlib import PurePosixPath
 import re
 
 from .canonical import canonical_json
@@ -27,9 +28,7 @@ _ALLOWED_NAMESPACES = (
     "kube-system",
     "local-path-storage",
 )
-_DOCKER_HOST = re.compile(
-    r"unix:///Users/[A-Za-z0-9._-]+/\.colima/kil-v3-lab/docker\.sock"
-)
+_USERNAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,62}")
 _CALICO_PINS = {
     "calico-cni": (
         "quay.io/calico/cni@sha256:"
@@ -216,9 +215,16 @@ def _validate_common(record: object) -> None:
     _exact_string("cluster_incarnation_uid", record.cluster_incarnation_uid)
     if type(record.node_container_id) is not str or _NODE_ID.fullmatch(record.node_container_id) is None:
         raise InventoryError("Kind node container ID must be 64 lowercase hexadecimal characters")
+    if type(record.docker_host) is not str or not record.docker_host.startswith("unix://"):
+        raise InventoryError("Docker host must be explicitly bound to kil-v3-lab")
+    socket_text = record.docker_host.removeprefix("unix://")
+    socket_path = PurePosixPath(socket_text)
     if (
-        type(record.docker_host) is not str
-        or _DOCKER_HOST.fullmatch(record.docker_host) is None
+        str(socket_path) != socket_text
+        or len(socket_path.parts) != 6
+        or socket_path.parts[0:2] != ("/", "Users")
+        or _USERNAME.fullmatch(socket_path.parts[2]) is None
+        or socket_path.parts[3:] != (".colima", "kil-v3-lab", "docker.sock")
     ):
         raise InventoryError("Docker host must be explicitly bound to kil-v3-lab")
     _exact_string_tuple("namespaces", record.namespaces)
@@ -243,6 +249,13 @@ def _validate_common(record: object) -> None:
     )
     if len(set(endpoint_keys)) != len(endpoint_keys):
         raise InventoryError("ambiguous Endpoints/EndpointSlice source for Service port")
+    source_kinds: dict[tuple[str, str], set[str]] = {}
+    for item in record.endpoints:
+        source_kinds.setdefault((item.namespace, item.service), set()).add(
+            item.source_kind
+        )
+    if any(len(kinds) != 1 for kinds in source_kinds.values()):
+        raise InventoryError("ambiguous mixed Endpoints and EndpointSlice Service sources")
     _sorted_records("policy_graph", record.policy_graph, PolicyEdge)
     if record.policy_graph != _EXPECTED_POLICY_GRAPH:
         raise InventoryError("policy_graph differs from the exact twelve-edge contract")
