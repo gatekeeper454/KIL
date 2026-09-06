@@ -725,20 +725,20 @@ class V3B2EvidenceTest(unittest.TestCase):
                 self.assertEqual((parent / "sentinel").read_text(), "preserve")
                 self.assertFalse((parent / RUN_ID).exists())
 
-    def test_post_rename_quarantine_never_moves_a_raced_replacement(self):
+    def test_post_rename_failure_never_moves_a_raced_replacement(self):
         with tempfile.TemporaryDirectory() as directory:
             parent = Path(directory).resolve() / "public"
             parent.mkdir(mode=0o700)
             detached = parent / "detached-owned"
             destination = parent / RUN_ID
-            original_verify = evidence_module._verify_v3b2
+            original_anchor = evidence_module._assert_anchor_path
             calls = 0
 
-            def replace_after_rename(payloads):
+            def replace_after_final_check(path, identity, label):
                 nonlocal calls
-                result = original_verify(payloads)
+                result = original_anchor(path, identity, label)
                 calls += 1
-                if calls == 2:
+                if calls == 3:
                     destination.rename(detached)
                     destination.mkdir(mode=0o700)
                     (destination / "sentinel").write_text("preserve")
@@ -747,12 +747,40 @@ class V3B2EvidenceTest(unittest.TestCase):
 
             with patch.object(
                 evidence_module,
-                "_verify_v3b2",
-                side_effect=replace_after_rename,
+                "_assert_anchor_path",
+                side_effect=replace_after_final_check,
             ), self.assertRaises(EvidenceError):
                 publish_bundle(private_evidence(), parent)
             self.assertEqual((destination / "sentinel").read_text(), "preserve")
             self.assertTrue((detached / "manifest.json").is_file())
+            self.assertEqual(
+                [entry for entry in parent.iterdir() if ".failed-" in entry.name],
+                [],
+            )
+
+    def test_post_rename_semantic_failure_leaves_owned_bundle_for_recovery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory).resolve() / "public"
+            parent.mkdir(mode=0o700)
+            destination = parent / RUN_ID
+            original_verify = evidence_module._verify_v3b2
+            calls = 0
+
+            def fail_after_rename(payloads):
+                nonlocal calls
+                result = original_verify(payloads)
+                calls += 1
+                if calls == 2:
+                    raise EvidenceError("force post-rename semantic failure")
+                return result
+
+            with patch.object(
+                evidence_module,
+                "_verify_v3b2",
+                side_effect=fail_after_rename,
+            ), self.assertRaises(EvidenceError):
+                publish_bundle(private_evidence(), parent)
+            self.assertTrue((destination / "manifest.json").is_file())
             self.assertEqual(
                 [entry for entry in parent.iterdir() if ".failed-" in entry.name],
                 [],

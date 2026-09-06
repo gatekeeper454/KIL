@@ -1296,20 +1296,12 @@ def _publish_bundle(private: object, public_parent: Path) -> Path:
         _assert_anchor_path(parent, parent_identity, "public parent")
         return destination
     except EvidenceError:
-        if renamed:
-            _quarantine_failed_publication_at(
-                parent_fd,
-                run_id,
-                staging_identity,
-            )
+        # After publication no portable rename primitive can condition its
+        # source on the inode we own.  Leave the destination name untouched:
+        # the absent completion event makes recovery/manual inspection safe,
+        # while cleanup here could move a raced replacement.
         raise
     except (OSError, ValueError, TypeError, UnicodeError):
-        if renamed:
-            _quarantine_failed_publication_at(
-                parent_fd,
-                run_id,
-                staging_identity,
-            )
         raise EvidenceError("atomic publication failed closed") from None
     finally:
         if staging_fd >= 0:
@@ -1317,65 +1309,6 @@ def _publish_bundle(private: object, public_parent: Path) -> Path:
                 _cleanup_staging_directory(parent_fd, staging_fd, staging_name)
             os.close(staging_fd)
         os.close(parent_fd)
-
-
-def _quarantine_failed_publication_at(
-    parent_fd: int,
-    run_id: str,
-    published_identity: tuple[int, int, int, int],
-) -> None:
-    """Quarantine only the exact directory inode published by this call."""
-    descriptor = -1
-    try:
-        try:
-            inspected = os.stat(run_id, dir_fd=parent_fd, follow_symlinks=False)
-            if (
-                not stat.S_ISDIR(inspected.st_mode)
-                or _directory_identity(inspected) != published_identity
-            ):
-                return
-            descriptor = _open_child_directory(
-                parent_fd,
-                run_id,
-                "failed publication",
-            )
-            if _directory_identity(os.fstat(descriptor)) != published_identity:
-                return
-        except (EvidenceError, OSError):
-            return
-        for counter in range(10_000):
-            quarantine = f".{run_id}.failed-{counter}"
-            if not _entry_exists(parent_fd, quarantine):
-                current = os.stat(
-                    run_id,
-                    dir_fd=parent_fd,
-                    follow_symlinks=False,
-                )
-                if _directory_identity(current) != published_identity:
-                    return
-                _rename_directory_exclusive(
-                    parent_fd,
-                    run_id,
-                    parent_fd,
-                    quarantine,
-                )
-                quarantined = os.stat(
-                    quarantine,
-                    dir_fd=parent_fd,
-                    follow_symlinks=False,
-                )
-                if _directory_identity(quarantined) != published_identity:
-                    raise EvidenceError(
-                        "failed publication quarantine identity changed"
-                    )
-                os.fsync(parent_fd)
-                return
-    except (EvidenceError, OSError):
-        raise EvidenceError("failed publication quarantine failed closed") from None
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-    raise EvidenceError("failed publication quarantine namespace is exhausted")
 
 
 def _read_tree_fd(
