@@ -341,7 +341,7 @@ class V3B2JournalTest(unittest.TestCase):
             self._journal()
         self.assertLess(order.index("fchmod"), order.index("fsync"))
 
-    def test_recovery_requires_external_observation_before_any_delete(self) -> None:
+    def test_recovery_requires_journaled_intent_and_external_observation_before_delete(self) -> None:
         fresh = self._journal()
         self.assertFalse(any(command.mutating for command in recovery_plan(fresh).commands))
         self.path.unlink()
@@ -350,8 +350,12 @@ class V3B2JournalTest(unittest.TestCase):
         without = recovery_plan(load_journal(self.path))
         self.assertTrue(without.commands)
         self.assertFalse(any(command.mutating for command in without.commands))
+        self.assertEqual(without.next_intent[0], "cluster_delete_intent")
         matching = recovery_plan(load_journal(self.path), self._observation())
-        self.assertTrue(any(command.argv[:3] == ("kind", "delete", "cluster") for command in matching.commands))
+        self.assertFalse(any(command.mutating for command in matching.commands))
+        self._append("cluster_delete_intent", dict(matching.next_intent[1]))
+        authorized = recovery_plan(load_journal(self.path), self._observation())
+        self.assertTrue(any(command.argv[:3] == ("kind", "delete", "cluster") for command in authorized.commands))
         with self.assertRaisesRegex(JournalError, "manual_recovery_required"):
             recovery_plan(load_journal(self.path), self._observation(node_container_id="9" * 64))
 
@@ -364,10 +368,13 @@ class V3B2JournalTest(unittest.TestCase):
         self.assertFalse(plan.commands[0].mutating)
         self.assertEqual(plan.commands[0].argv[:2], ("docker", "inspect"))
 
-    def test_request_free_recovery_also_freezes_before_observation_gated_cancel(self) -> None:
+    def test_completed_request_recovery_also_freezes_before_observation_gated_cancel(self) -> None:
         self._journal()
         self._ready()
         driver = self._start_driver("kil-v3-baseline", "driver-uid")
+        request = {"track": "credential_policy_baseline", "request_id": "v3b1-central-request", "case_sha256": "f" * 64}
+        self._append("request_intent", request)
+        self._append("request_result", {**request, "result_sha256": "1" * 64})
         freeze = {"evidence_sha256": "5" * 64}
         pending = self._append("evidence_freeze_intent", freeze)
         pending_plan = recovery_plan(pending)
@@ -382,7 +389,10 @@ class V3B2JournalTest(unittest.TestCase):
             driver_pods=((str(driver["namespace"]), str(driver["pod"]), str(driver["uid"])),)
         )
         gated = recovery_plan(load_journal(self.path), observed)
-        self.assertTrue(any("delete" in command.argv for command in gated.commands))
+        self.assertFalse(any(command.mutating for command in gated.commands))
+        self._append("driver_cancel_intent", dict(gated.next_intent[1]))
+        authorized = recovery_plan(load_journal(self.path), observed)
+        self.assertTrue(any("delete" in command.argv for command in authorized.commands))
 
     def test_ready_request_free_recovery_freezes_even_when_no_driver_was_started(self) -> None:
         self._journal()
@@ -493,6 +503,87 @@ class V3B2JournalTest(unittest.TestCase):
             self._append("request_intent", details)
             self._append("request_result", {**details, "result_sha256": "1" * 64})
 
+    def test_next_track_driver_requires_prior_track_request_result(self) -> None:
+        self._journal()
+        self._ready()
+        baseline = self._start_driver("kil-v3-baseline", "baseline-driver")
+        signed = {"namespace": "kil-v3-signed", "pod": "driver", "uid": "signed-driver"}
+        with self.assertRaisesRegex(JournalError, "track|request|order"):
+            self._append("driver_start_intent", signed)
+        request = {
+            "track": "credential_policy_baseline",
+            "request_id": "v3b1-central-request",
+            "case_sha256": "f" * 64,
+        }
+        self._append("request_intent", request)
+        with self.assertRaisesRegex(JournalError, "pending|terminal|order"):
+            self._append("driver_start_intent", signed)
+        self._append("request_result", {**request, "result_sha256": "1" * 64})
+        self._append("driver_start_intent", signed)
+        self._append("driver_start_complete", signed)
+        with self.assertRaisesRegex(JournalError, "duplicated|order"):
+            self._append("driver_start_intent", baseline)
+
+    def test_request_free_freeze_is_only_the_zero_driver_path(self) -> None:
+        self._journal()
+        self._ready()
+        freeze = {"evidence_sha256": "5" * 64}
+        self._append("evidence_freeze_intent", freeze)
+        self._append("evidence_freeze_complete", freeze)
+
+        self.path.unlink()
+        self._journal()
+        self._ready()
+        self._start_driver("kil-v3-baseline", "driver-uid")
+        with self.assertRaisesRegex(JournalError, "request|zero|order"):
+            self._append("evidence_freeze_intent", freeze)
+
+    def test_stranded_request_freeze_allows_only_journaled_teardown_to_publication(self) -> None:
+        self._journal()
+        self._ready()
+        driver = self._start_driver("kil-v3-baseline", "driver-uid")
+        request = {
+            "track": "credential_policy_baseline",
+            "request_id": "v3b1-central-request",
+            "case_sha256": "f" * 64,
+        }
+        self._append("request_intent", request)
+        self._freeze()
+
+        initial = recovery_plan(load_journal(self.path), self._observation(
+            driver_pods=(("kil-v3-baseline", "driver", "driver-uid"),)
+        ))
+        self.assertFalse(any(command.mutating for command in initial.commands))
+        self.assertEqual(initial.next_intent[0], "driver_cancel_intent")
+        self.assertEqual(dict(initial.next_intent[1]), driver)
+
+        self._append("driver_cancel_intent", driver)
+        pending = recovery_plan(load_journal(self.path), self._observation(
+            driver_pods=(("kil-v3-baseline", "driver", "driver-uid"),)
+        ))
+        deletion = next(command for command in pending.commands if command.mutating)
+        self.assertIn("--raw", deletion.argv)
+        self.assertIn(b'"uid":"driver-uid"', deletion.stdin or b"")
+        self._append("driver_cancel_complete", driver)
+
+        cluster = {"kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig}
+        profile = {"colima_profile": "kil-v3-lab"}
+        tail = (
+            ("cluster_delete_intent", cluster), ("cluster_delete_complete", cluster),
+            ("cluster_absence_proof_intent", {"kind_cluster": "kil-v3-lab", "node_container_id": NODE_ID}),
+            ("cluster_absence_proof_complete", {"kind_cluster": "kil-v3-lab", "node_container_id": NODE_ID}),
+            ("profile_stop_intent", profile), ("profile_stop_complete", profile),
+            ("profile_delete_intent", profile), ("profile_delete_complete", profile),
+            ("profile_absence_proof_intent", profile), ("profile_absence_proof_complete", profile),
+            ("foreign_snapshot_comparison_intent", {"unchanged": True, "attestation_sha256": "6" * 64}),
+            ("foreign_snapshot_comparison_complete", {"unchanged": True, "attestation_sha256": "6" * 64}),
+            ("publication_intent", {"public_commitment_sha256": "7" * 64}),
+            ("publication_complete", {"public_commitment_sha256": "7" * 64}),
+        )
+        for name, details in tail:
+            self._append(name, details)
+        self.assertTrue(recovery_plan(load_journal(self.path)).publication_allowed)
+
     def test_all_required_event_families_accept_exact_intent_completion_pairs(self) -> None:
         self._journal()
         for name, details in self._canonical_events():
@@ -567,7 +658,10 @@ class V3B2JournalTest(unittest.TestCase):
         self.assertFalse(any(command.mutating for command in frozen.commands))
         observed = self._observation(driver_pods=(("kil-v3-baseline", "driver", "driver-uid"),))
         gated = recovery_plan(load_journal(self.path), observed)
-        deletion = next(command for command in gated.commands if "delete" in command.argv)
+        self.assertFalse(any(command.mutating for command in gated.commands))
+        self._append("driver_cancel_intent", dict(gated.next_intent[1]))
+        authorized = recovery_plan(load_journal(self.path), observed)
+        deletion = next(command for command in authorized.commands if "delete" in command.argv)
         self.assertIn("--raw", deletion.argv)
         self.assertIn("/api/v1/namespaces/kil-v3-baseline/pods/driver", deletion.argv)
         self.assertEqual(

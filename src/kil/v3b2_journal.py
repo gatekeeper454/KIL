@@ -276,6 +276,7 @@ class RecoveryPlan:
     commands: tuple[Command, ...]
     requests_to_send: tuple[Command, ...] = ()
     publication_allowed: bool = False
+    next_intent: tuple[str, tuple[tuple[str, object], ...]] | None = None
 
     def __post_init__(self) -> None:
         if type(self.commands) is not tuple or any(type(item) is not Command for item in self.commands):
@@ -286,6 +287,22 @@ class RecoveryPlan:
             raise JournalError("recovery request commands must contain exact Command records")
         if type(self.publication_allowed) is not bool:
             raise JournalError("publication_allowed must be an exact boolean")
+        if self.next_intent is not None:
+            if (
+                type(self.next_intent) is not tuple
+                or len(self.next_intent) != 2
+                or type(self.next_intent[0]) is not str
+                or type(self.next_intent[1]) is not tuple
+            ):
+                raise JournalError("recovery next intent must be an exact immutable record")
+            pairs = self.next_intent[1]
+            if any(type(pair) is not tuple or len(pair) != 2 or type(pair[0]) is not str for pair in pairs):
+                raise JournalError("recovery next intent details are invalid")
+            if len({pair[0] for pair in pairs}) != len(pairs):
+                raise JournalError("recovery next intent details are duplicated")
+            family, stage, _key = _validate_event_details(self.next_intent[0], dict(pairs))
+            if stage != "intent" or not family:
+                raise JournalError("recovery next event must be a reviewed intent")
 
 
 @dataclass(frozen=True, slots=True)
@@ -723,14 +740,26 @@ def _validate_history(events: object) -> None:
         state_key = (family, key)
         prior = states.get(state_key)
         request_pending = bool(request_claims and request_claims[-1] not in request_results)
+        request_abandoned = request_pending and done("evidence_freeze")
         if stage == "intent":
             if prior is not None:
                 message = "request already claimed" if family == "request" else f"{family} intent is duplicated or already pending"
                 raise JournalError(message)
             if active is not None:
                 raise JournalError("journal lifecycle has overlapping pending intents")
-            if request_pending and family != "evidence_freeze":
+            if request_pending and not request_abandoned and family != "evidence_freeze":
                 raise JournalError("request intent is terminal-pending until its result or evidence freeze")
+            if request_abandoned and family not in {
+                "driver_cancel",
+                "cluster_delete",
+                "cluster_absence_proof",
+                "profile_stop",
+                "profile_delete",
+                "profile_absence_proof",
+                "foreign_snapshot_comparison",
+                "publication",
+            }:
+                raise JournalError("abandoned request permits only ordered teardown and publication")
             if family == "profile_start":
                 require(sequence == 1, "profile start must be first")
             elif family == "cluster_create":
@@ -749,6 +778,9 @@ def _validate_history(events: object) -> None:
                 expected_namespaces = tuple(namespace for _track, namespace in TRACK_NAMESPACES)
                 require(namespace not in driver_starts, "driver start is duplicated")
                 require(namespace == expected_namespaces[len(driver_starts)], "driver starts are out of fixed order")
+                if driver_starts:
+                    prior_track = TRACKS[len(driver_starts) - 1]
+                    require(prior_track in request_results, "next-track driver requires prior request result")
             elif family == "request":
                 details = record["details"]
                 assert isinstance(details, dict)
@@ -760,6 +792,7 @@ def _validate_history(events: object) -> None:
                     require(request_claims[-1] in request_results, "prior request is still pending")
             elif family == "evidence_freeze":
                 require(done("readiness"), "evidence freeze requires completed readiness")
+                require(not driver_starts or bool(request_claims), "request-free freeze requires zero driver starts")
             elif family == "driver_cancel":
                 require(done("evidence_freeze"), "driver cancellation requires durable evidence freeze")
                 details = record["details"]
@@ -768,6 +801,12 @@ def _validate_history(events: object) -> None:
                 require(namespace in driver_starts, "driver cancellation lacks a started driver")
                 require(driver_starts[namespace] == (namespace, str(details["pod"]), str(details["uid"])), "driver cancellation UID does not match start")
                 require(namespace not in driver_cancels, "driver cancellation is duplicated")
+                remaining = [
+                    candidate
+                    for _track, candidate in TRACK_NAMESPACES
+                    if candidate in driver_starts and candidate not in driver_cancels
+                ]
+                require(bool(remaining) and namespace == remaining[0], "driver cancellations are out of fixed order")
             elif family == "cluster_delete":
                 require(done("cluster_create"), "cluster deletion requires completed creation")
                 require(set(driver_starts) == driver_cancels, "cluster deletion requires all drivers canceled")
@@ -1169,6 +1208,14 @@ def _validate_observation(
     return observation
 
 
+def _recovery_intent(
+    event: str, details: Mapping[str, object]
+) -> tuple[str, tuple[tuple[str, object], ...]]:
+    frozen_details = tuple(sorted(details.items()))
+    _validate_event_details(event, dict(frozen_details))
+    return event, frozen_details
+
+
 def recovery_plan(
     journal: Mapping[str, object], observation: RecoveryObservation | None = None
 ) -> RecoveryPlan:
@@ -1197,47 +1244,90 @@ def recovery_plan(
             raise JournalError("manual_recovery_required: multiple owned mutations are pending")
         if command_pending[0][0] == "evidence_freeze":
             return RecoveryPlan(_evidence_freeze_commands(identity, drivers))
+        family, details = command_pending[0]
+        if family == "driver_cancel":
+            if observed is None:
+                return RecoveryPlan((_driver_uid_attestation(identity, details),))
+            expected = (str(details["namespace"]), str(details["pod"]), str(details["uid"]))
+            if expected not in set(observed.driver_pods):
+                return RecoveryPlan((_driver_uid_attestation(identity, details),))
+            return RecoveryPlan((_driver_delete(identity, details),))
+        if family == "cluster_delete":
+            if observed is None or observed.kind_cluster is None:
+                return RecoveryPlan((_docker_inspect_node(identity),))
+            return RecoveryPlan((kind_delete_command(identity),))
+        if family in {"profile_stop", "profile_delete"}:
+            status = Command(("colima", "status", "--profile", LAB_IDENTITY), 60)
+            if observed is None or observed.colima_profile is None:
+                return RecoveryPlan((status,))
+            operation = "stop" if family == "profile_stop" else "delete"
+            return RecoveryPlan((_colima_command(operation),))
         command = _pending_command(*command_pending[0], identity)
         return RecoveryPlan(()) if command is None else RecoveryPlan((command,))
     if (request_claimed or readiness_complete) and not frozen:
+        if drivers and not request_claimed:
+            return RecoveryPlan(
+                tuple(
+                    _driver_uid_attestation(
+                        identity, {"namespace": item[0], "pod": item[1], "uid": item[2]}
+                    )
+                    for item in drivers
+                )
+            )
         return RecoveryPlan(
             _evidence_freeze_commands(identity, drivers),
             requests_to_send=(),
             publication_allowed=False,
         )
-    if frozen and drivers and observed is None:
+    if frozen and drivers:
+        next_driver = drivers[0]
+        details = {"namespace": next_driver[0], "pod": next_driver[1], "uid": next_driver[2]}
         return RecoveryPlan(
-            tuple(_driver_uid_attestation(identity, {"namespace": item[0], "pod": item[1], "uid": item[2]}) for item in drivers),
+            tuple(
+                _driver_uid_attestation(
+                    identity, {"namespace": item[0], "pod": item[1], "uid": item[2]}
+                )
+                for item in drivers
+            ),
             requests_to_send=(),
             publication_allowed=False,
+            next_intent=_recovery_intent("driver_cancel_intent", details),
         )
-    if frozen and drivers:
-        assert observed is not None
-        observed_set = set(observed.driver_pods)
-        commands: list[Command] = []
-        for item in drivers:
-            if item not in observed_set:
-                continue
-            details = {"namespace": item[0], "pod": item[1], "uid": item[2]}
-            commands.append(_driver_delete(identity, details))
-        return RecoveryPlan(tuple(commands), requests_to_send=(), publication_allowed=False)
     completed = {record["event"] for record in typed_events}
     if not typed_events:
         return RecoveryPlan((Command(("colima", "status", "--profile", LAB_IDENTITY), 60),))
     if "cluster_create_complete" in completed and "cluster_delete_complete" not in completed:
-        if observed is None or observed.kind_cluster is None:
-            return RecoveryPlan(_cluster_attestations(identity))
-        return RecoveryPlan((*_cluster_attestations(identity), kind_delete_command(identity)))
+        details = {"kind_cluster": LAB_IDENTITY, "kubeconfig": identity.kubeconfig}
+        return RecoveryPlan(
+            _cluster_attestations(identity),
+            next_intent=_recovery_intent("cluster_delete_intent", details),
+        )
+    if "cluster_delete_complete" in completed and "cluster_absence_proof_complete" not in completed:
+        details = {"kind_cluster": LAB_IDENTITY, "node_container_id": identity.node_container_id}
+        return RecoveryPlan(
+            (_docker_inspect_node(identity),),
+            next_intent=_recovery_intent("cluster_absence_proof_intent", details),
+        )
     if "profile_start_complete" in completed and "profile_stop_complete" not in completed:
         status = Command(("colima", "status", "--profile", LAB_IDENTITY), 60)
-        if observed is None or observed.colima_profile is None:
-            return RecoveryPlan((status,))
-        return RecoveryPlan((status, _colima_command("stop")))
+        return RecoveryPlan(
+            (status,),
+            next_intent=_recovery_intent("profile_stop_intent", {"colima_profile": LAB_IDENTITY}),
+        )
     if "profile_stop_complete" in completed and "profile_delete_complete" not in completed:
         status = Command(("colima", "status", "--profile", LAB_IDENTITY), 60)
-        if observed is None or observed.colima_profile is None:
-            return RecoveryPlan((status,))
-        return RecoveryPlan((status, _colima_command("delete")))
+        return RecoveryPlan(
+            (status,),
+            next_intent=_recovery_intent("profile_delete_intent", {"colima_profile": LAB_IDENTITY}),
+        )
+    if "profile_delete_complete" in completed and "profile_absence_proof_complete" not in completed:
+        status = Command(("colima", "status", "--profile", LAB_IDENTITY), 60)
+        return RecoveryPlan(
+            (status,),
+            next_intent=_recovery_intent("profile_absence_proof_intent", {"colima_profile": LAB_IDENTITY}),
+        )
+    if "profile_absence_proof_complete" in completed and "foreign_snapshot_comparison_complete" not in completed:
+        return RecoveryPlan((Command(("colima", "list", "--json"), 60),))
     publication_allowed = {
         "cluster_absence_proof_complete",
         "profile_absence_proof_complete",
