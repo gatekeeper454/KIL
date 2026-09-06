@@ -6,7 +6,7 @@
 <title>V3B-1 Runtime Evidence Source-Format Implementation Plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md">
-<meta name="source-sha256" content="79eaa2d9588cce973ea9d3426f5d13ce8a75d55d03478e92f6c4a618d52ce801">
+<meta name="source-sha256" content="d67e6fe4c2ab012f34b22a0a94c8c80a8da9fbfb8e615d101c5f34d1385a7875">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md</code> (<code>79eaa2d9588cce973ea9d3426f5d13ce8a75d55d03478e92f6c4a618d52ce801</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md</code> (<code>d67e6fe4c2ab012f34b22a0a94c8c80a8da9fbfb8e615d101c5f34d1385a7875</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">V3B-1 Runtime Evidence Source-Format Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md</code> (<code>79eaa2d9588cce973ea9d3426f5d13ce8a75d55d03478e92f6c4a618d52ce801</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md</code> (<code>d67e6fe4c2ab012f34b22a0a94c8c80a8da9fbfb8e615d101c5f34d1385a7875</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-1-runtime-evidence-source-format-implementation-plan">V3B-1 Runtime Evidence Source-Format Implementation Plan</a></li><li class="level-2"><a href="#file-map">File map</a></li><li class="level-3"><a href="#task-1-classify-exact-envoy-transport-headers">Task 1: Classify exact Envoy transport headers</a></li><li class="level-3"><a href="#task-2-emit-canonical-envoy-json-text-at-the-producer">Task 2: Emit canonical Envoy JSON text at the producer</a></li><li class="level-3"><a href="#task-3-bound-live-ledger-availability-without-retrying-requests">Task 3: Bound live ledger availability without retrying requests</a></li><li class="level-3"><a href="#task-4-document-and-publish-the-correction">Task 4: Document and publish the correction</a></li><li class="level-3"><a href="#task-5-execute-and-publish-the-newly-authorized-proof">Task 5: Execute and publish the newly authorized proof</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-1-runtime-evidence-source-format-implementation-plan" href="#v3b-1-runtime-evidence-source-format-implementation-plan">V3B-1 Runtime Evidence Source-Format Implementation Plan</a></li><li class="level-2"><a data-section-id="file-map" href="#file-map">File map</a></li><li class="level-3"><a data-section-id="task-1-classify-exact-envoy-transport-headers" href="#task-1-classify-exact-envoy-transport-headers">Task 1: Classify exact Envoy transport headers</a></li><li class="level-3"><a data-section-id="task-2-emit-canonical-envoy-json-text-at-the-producer" href="#task-2-emit-canonical-envoy-json-text-at-the-producer">Task 2: Emit canonical Envoy JSON text at the producer</a></li><li class="level-3"><a data-section-id="task-3-bound-live-ledger-availability-without-retrying-requests" href="#task-3-bound-live-ledger-availability-without-retrying-requests">Task 3: Bound live ledger availability without retrying requests</a></li><li class="level-3"><a data-section-id="task-4-document-and-publish-the-correction" href="#task-4-document-and-publish-the-correction">Task 4: Document and publish the correction</a></li><li class="level-3"><a data-section-id="task-5-execute-and-publish-the-newly-authorized-proof" href="#task-5-execute-and-publish-the-newly-authorized-proof">Task 5: Execute and publish the newly authorized proof</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -96,7 +96,7 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <p>Modify: <code>src/kil/ext_authz_http.py</code></p>
 </li>
 <li>
-<p>[ ] <strong>Step 1: Write the failing transport-metadata test</strong></p>
+<p>[x] <strong>Step 1: Write the failing transport-metadata test</strong></p>
 </li>
 </ul>
 <p>Add this test to <code>ExtAuthzHttpTest</code>:</p>
@@ -121,7 +121,7 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
     )
 </code></pre>
 <ul>
-<li>[ ] <strong>Step 2: Verify RED</strong></li>
+<li>[x] <strong>Step 2: Verify RED</strong></li>
 </ul>
 <p>Run:</p>
 <pre><code class="language-bash">PYTHONPATH=src ../../.venv/bin/python -m unittest \
@@ -130,7 +130,7 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <p>Expected: FAIL because both <code>x-envoy-*</code> names are currently included in
 <code>untrusted_header_names</code>.</p>
 <ul>
-<li>[ ] <strong>Step 3: Implement the exact transport classification</strong></li>
+<li>[x] <strong>Step 3: Implement the exact transport classification</strong></li>
 </ul>
 <p>Change the constant to this literal closed set:</p>
 <pre><code class="language-python">_IGNORED_TRANSPORT_HEADERS = frozenset(
@@ -144,14 +144,14 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 </code></pre>
 <p>Do not add an <code>x-envoy-</code> prefix rule or change <code>_TRUSTED_HEADERS</code>.</p>
 <ul>
-<li>[ ] <strong>Step 4: Verify GREEN and the authorization module</strong></li>
+<li>[x] <strong>Step 4: Verify GREEN and the authorization module</strong></li>
 </ul>
 <p>Run:</p>
 <pre><code class="language-bash">PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_ext_authz_http -v
 </code></pre>
 <p>Expected: all authorization HTTP tests PASS.</p>
 <ul>
-<li>[ ] <strong>Step 5: Commit</strong></li>
+<li>[x] <strong>Step 5: Commit</strong></li>
 </ul>
 <pre><code class="language-bash">git add src/kil/ext_authz_http.py tests/test_ext_authz_http.py
 git commit -m &quot;fix: classify Envoy transport headers&quot;
@@ -166,7 +166,7 @@ git commit -m &quot;fix: classify Envoy transport headers&quot;
 <p>Modify: <code>src/kil/v3b_envoy.py</code></p>
 </li>
 <li>
-<p>[ ] <strong>Step 1: Replace the typed-JSON expectation with a failing text-format test</strong></p>
+<p>[x] <strong>Step 1: Replace the typed-JSON expectation with a failing text-format test</strong></p>
 </li>
 </ul>
 <p>Update the stdout access-log assertion to require:</p>
@@ -193,14 +193,14 @@ self.assertNotIn(&quot;json_format&quot;, access_log[&quot;typed_config&quot;][&
 <p>Import <code>json</code> in the test module. Update the digest-evidence test to read and
 parse <code>text_format_source.inline_string</code> instead of <code>json_format</code>.</p>
 <ul>
-<li>[ ] <strong>Step 2: Verify RED</strong></li>
+<li>[x] <strong>Step 2: Verify RED</strong></li>
 </ul>
 <p>Run:</p>
 <pre><code class="language-bash">PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b_envoy -v
 </code></pre>
 <p>Expected: FAIL because the renderer still produces <code>json_format</code>.</p>
 <ul>
-<li>[ ] <strong>Step 3: Implement the canonical inline source</strong></li>
+<li>[x] <strong>Step 3: Implement the canonical inline source</strong></li>
 </ul>
 <p>In <code>render_envoy_config</code>, build the fixed record and replace <code>json_format</code>:</p>
 <pre><code class="language-python">access_record = {
@@ -224,7 +224,7 @@ parse <code>text_format_source.inline_string</code> instead of <code>json_format
 },
 </code></pre>
 <ul>
-<li>[ ] <strong>Step 4: Verify GREEN and closed configuration</strong></li>
+<li>[x] <strong>Step 4: Verify GREEN and closed configuration</strong></li>
 </ul>
 <p>Run:</p>
 <pre><code class="language-bash">PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b_envoy -v
@@ -232,7 +232,7 @@ parse <code>text_format_source.inline_string</code> instead of <code>json_format
 <p>Expected: all tests PASS, the rendered config contains one inline JSON
 line, and secret-bearing formatter fields remain absent.</p>
 <ul>
-<li>[ ] <strong>Step 5: Commit</strong></li>
+<li>[x] <strong>Step 5: Commit</strong></li>
 </ul>
 <pre><code class="language-bash">git add src/kil/v3b_envoy.py tests/test_v3b_envoy.py tests/test_v3b1_local_envoy.py
 git commit -m &quot;fix: emit canonical Envoy evidence records&quot;
@@ -247,7 +247,7 @@ git commit -m &quot;fix: emit canonical Envoy evidence records&quot;
 <p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
 </li>
 <li>
-<p>[ ] <strong>Step 1: Write failing availability and timeout tests</strong></p>
+<p>[x] <strong>Step 1: Write failing availability and timeout tests</strong></p>
 </li>
 </ul>
 <p>Add a focused <code>LiveLedgerCopyTest</code> using an injected runner, monotonic clock,
@@ -277,7 +277,7 @@ commands. Add table-driven tests that return nonregular, oversized, copied-size
 mismatch, and copied-digest mismatch observations and require immediate failure
 without another probe.</p>
 <ul>
-<li>[ ] <strong>Step 2: Verify RED</strong></li>
+<li>[x] <strong>Step 2: Verify RED</strong></li>
 </ul>
 <p>Run:</p>
 <pre><code class="language-bash">PYTHONPATH=src ../../.venv/bin/python -m unittest \
@@ -285,7 +285,7 @@ without another probe.</p>
 </code></pre>
 <p>Expected: FAIL because <code>_copy_live_ledger</code> and injected <code>sleep</code> do not exist.</p>
 <ul>
-<li>[ ] <strong>Step 3: Add bounded constants and injected sleep</strong></li>
+<li>[x] <strong>Step 3: Add bounded constants and injected sleep</strong></li>
 </ul>
 <p>Add:</p>
 <pre><code class="language-python">_EVIDENCE_READ_DEADLINE_NS = 5_000_000_000
@@ -298,7 +298,7 @@ _EVIDENCE_READ_POLL_S = 0.05
 <pre><code class="language-python">self.sleep = time.sleep if sleep is None else sleep
 </code></pre>
 <ul>
-<li>[ ] <strong>Step 4: Implement <code>_copy_live_ledger</code></strong></li>
+<li>[x] <strong>Step 4: Implement <code>_copy_live_ledger</code></strong></li>
 </ul>
 <p>Implement a private controller method with this contract:</p>
 <pre><code class="language-python">def _copy_live_ledger(
@@ -318,7 +318,7 @@ to the remaining budget, reject oversize before copy, perform one exact
 and compare copied byte count and SHA-256 with the probe. Any copy or integrity
 failure is terminal; remove or quarantine a partial destination before raising.</p>
 <ul>
-<li>[ ] <strong>Step 5: Route live collection through the helper</strong></li>
+<li>[x] <strong>Step 5: Route live collection through the helper</strong></li>
 </ul>
 <p>In <code>_copy_sources</code>, replace both direct ledger <code>docker cp</code> blocks with:</p>
 <pre><code class="language-python">decision_bytes = self._copy_live_ledger(
@@ -335,7 +335,7 @@ target_bytes = self._copy_live_ledger(
 <p>Parse <code>decision_bytes</code> and <code>target_bytes</code> directly. Do not add any call to
 driver startup, instruction writing, <code>run</code>, HTTP, or request-state mutation.</p>
 <ul>
-<li>[ ] <strong>Step 6: Verify GREEN and request sequencing</strong></li>
+<li>[x] <strong>Step 6: Verify GREEN and request sequencing</strong></li>
 </ul>
 <p>Run:</p>
 <pre><code class="language-bash">PYTHONPATH=src ../../.venv/bin/python -m unittest \
@@ -345,7 +345,7 @@ driver startup, instruction writing, <code>run</code>, HTTP, or request-state mu
 <p>Expected: all tests PASS; timeout is bounded; exactly one request intent and
 instruction remain enforced per track.</p>
 <ul>
-<li>[ ] <strong>Step 7: Commit</strong></li>
+<li>[x] <strong>Step 7: Commit</strong></li>
 </ul>
 <pre><code class="language-bash">git add tools/v3b1_local_envoy.py tests/test_v3b1_local_envoy.py
 git commit -m &quot;fix: bound V3B-1 live evidence reads&quot;
@@ -372,7 +372,7 @@ git commit -m &quot;fix: bound V3B-1 live evidence reads&quot;
 <p>Modify: generated <code>.htm</code> siblings</p>
 </li>
 <li>
-<p>[ ] <strong>Step 1: Run focused tests and update status</strong></p>
+<p>[x] <strong>Step 1: Run focused tests and update status</strong></p>
 </li>
 </ul>
 <p>Run:</p>
@@ -385,7 +385,7 @@ git commit -m &quot;fix: bound V3B-1 live evidence reads&quot;
 <code>Implemented; publication pending</code>, and document that the failed bundle remains
 nonpromotable and no second request occurred during implementation.</p>
 <ul>
-<li>[ ] <strong>Step 2: Regenerate readers and run the full gate</strong></li>
+<li>[x] <strong>Step 2: Regenerate readers and run the full gate</strong></li>
 </ul>
 <pre><code class="language-bash">../../.venv/bin/python tools/render_markdown.py
 make validate PYTHON=../../.venv/bin/python
@@ -393,7 +393,7 @@ make validate PYTHON=../../.venv/bin/python
 <p>Expected: all tests PASS, all generated readers verify, and <code>git diff --check</code>
 emits no error.</p>
 <ul>
-<li>[ ] <strong>Step 3: Run the public-boundary secret scan</strong></li>
+<li>[x] <strong>Step 3: Run the public-boundary secret scan</strong></li>
 </ul>
 <p>Run the repository's existing V3B-1 forbidden-token/public-boundary tests and:</p>
 <pre><code class="language-bash">git diff --cached --name-only
@@ -405,7 +405,7 @@ git grep -n -I -E 'Bearer |eyJ|/Users/|execution_nonce' -- \
 <p>Expected: only explicitly documented forbidden-token names, if any; no secret
 value, private host path, raw foreign-profile name, or nonce value.</p>
 <ul>
-<li>[ ] <strong>Step 4: Review the exact diff</strong></li>
+<li>[x] <strong>Step 4: Review the exact diff</strong></li>
 </ul>
 <p>Because agent delegation is disabled for this session, perform two separate
 fresh-context local review passes: specification compliance, then quality and

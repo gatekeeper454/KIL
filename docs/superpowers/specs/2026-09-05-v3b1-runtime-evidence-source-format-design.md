@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-05
 
-**Status:** Approved design; implementation pending
+**Status:** Implemented and locally verified; publication pending
 
 **Scope:** V3B-1 local-Envoy evidence production and collection only
 

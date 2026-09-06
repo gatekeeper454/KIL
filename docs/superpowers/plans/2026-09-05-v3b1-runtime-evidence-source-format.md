@@ -31,7 +31,7 @@
 - Modify: `tests/test_ext_authz_http.py`
 - Modify: `src/kil/ext_authz_http.py`
 
-- [ ] **Step 1: Write the failing transport-metadata test**
+- [x] **Step 1: Write the failing transport-metadata test**
 
 Add this test to `ExtAuthzHttpTest`:
 
@@ -57,7 +57,7 @@ def test_envoy_transport_headers_are_ignored_but_arbitrary_headers_are_not(self)
     )
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -69,7 +69,7 @@ PYTHONPATH=src ../../.venv/bin/python -m unittest \
 Expected: FAIL because both `x-envoy-*` names are currently included in
 `untrusted_header_names`.
 
-- [ ] **Step 3: Implement the exact transport classification**
+- [x] **Step 3: Implement the exact transport classification**
 
 Change the constant to this literal closed set:
 
@@ -86,7 +86,7 @@ _IGNORED_TRANSPORT_HEADERS = frozenset(
 
 Do not add an `x-envoy-` prefix rule or change `_TRUSTED_HEADERS`.
 
-- [ ] **Step 4: Verify GREEN and the authorization module**
+- [x] **Step 4: Verify GREEN and the authorization module**
 
 Run:
 
@@ -96,7 +96,7 @@ PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_ext_authz_http -v
 
 Expected: all authorization HTTP tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/kil/ext_authz_http.py tests/test_ext_authz_http.py
@@ -110,7 +110,7 @@ git commit -m "fix: classify Envoy transport headers"
 - Modify: `tests/test_v3b_envoy.py`
 - Modify: `src/kil/v3b_envoy.py`
 
-- [ ] **Step 1: Replace the typed-JSON expectation with a failing text-format test**
+- [x] **Step 1: Replace the typed-JSON expectation with a failing text-format test**
 
 Update the stdout access-log assertion to require:
 
@@ -139,7 +139,7 @@ self.assertNotIn("json_format", access_log["typed_config"]["log_format"])
 Import `json` in the test module. Update the digest-evidence test to read and
 parse `text_format_source.inline_string` instead of `json_format`.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -149,7 +149,7 @@ PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b_envoy -v
 
 Expected: FAIL because the renderer still produces `json_format`.
 
-- [ ] **Step 3: Implement the canonical inline source**
+- [x] **Step 3: Implement the canonical inline source**
 
 In `render_envoy_config`, build the fixed record and replace `json_format`:
 
@@ -178,7 +178,7 @@ Set the logger field exactly:
 },
 ```
 
-- [ ] **Step 4: Verify GREEN and closed configuration**
+- [x] **Step 4: Verify GREEN and closed configuration**
 
 Run:
 
@@ -189,7 +189,7 @@ PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b_envoy -v
 Expected: all tests PASS, the rendered config contains one inline JSON
 line, and secret-bearing formatter fields remain absent.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/kil/v3b_envoy.py tests/test_v3b_envoy.py tests/test_v3b1_local_envoy.py
@@ -203,7 +203,7 @@ git commit -m "fix: emit canonical Envoy evidence records"
 - Modify: `tests/test_v3b1_local_envoy.py`
 - Modify: `tools/v3b1_local_envoy.py`
 
-- [ ] **Step 1: Write failing availability and timeout tests**
+- [x] **Step 1: Write failing availability and timeout tests**
 
 Add a focused `LiveLedgerCopyTest` using an injected runner, monotonic clock,
 and sleeper. The success test must return a missing closed `_LEDGER_PROBE`
@@ -236,7 +236,7 @@ commands. Add table-driven tests that return nonregular, oversized, copied-size
 mismatch, and copied-digest mismatch observations and require immediate failure
 without another probe.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -247,7 +247,7 @@ PYTHONPATH=src ../../.venv/bin/python -m unittest \
 
 Expected: FAIL because `_copy_live_ledger` and injected `sleep` do not exist.
 
-- [ ] **Step 3: Add bounded constants and injected sleep**
+- [x] **Step 3: Add bounded constants and injected sleep**
 
 Add:
 
@@ -268,7 +268,7 @@ and bind:
 self.sleep = time.sleep if sleep is None else sleep
 ```
 
-- [ ] **Step 4: Implement `_copy_live_ledger`**
+- [x] **Step 4: Implement `_copy_live_ledger`**
 
 Implement a private controller method with this contract:
 
@@ -291,7 +291,7 @@ to the remaining budget, reject oversize before copy, perform one exact
 and compare copied byte count and SHA-256 with the probe. Any copy or integrity
 failure is terminal; remove or quarantine a partial destination before raising.
 
-- [ ] **Step 5: Route live collection through the helper**
+- [x] **Step 5: Route live collection through the helper**
 
 In `_copy_sources`, replace both direct ledger `docker cp` blocks with:
 
@@ -311,7 +311,7 @@ target_bytes = self._copy_live_ledger(
 Parse `decision_bytes` and `target_bytes` directly. Do not add any call to
 driver startup, instruction writing, `run`, HTTP, or request-state mutation.
 
-- [ ] **Step 6: Verify GREEN and request sequencing**
+- [x] **Step 6: Verify GREEN and request sequencing**
 
 Run:
 
@@ -324,7 +324,7 @@ PYTHONPATH=src ../../.venv/bin/python -m unittest \
 Expected: all tests PASS; timeout is bounded; exactly one request intent and
 instruction remain enforced per track.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add tools/v3b1_local_envoy.py tests/test_v3b1_local_envoy.py
@@ -342,7 +342,7 @@ git commit -m "fix: bound V3B-1 live evidence reads"
 - Modify: `docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md`
 - Modify: generated `.htm` siblings
 
-- [ ] **Step 1: Run focused tests and update status**
+- [x] **Step 1: Run focused tests and update status**
 
 Run:
 
@@ -357,7 +357,7 @@ Expected: PASS. Then mark Tasks 1–3 complete, set the design status to
 `Implemented; publication pending`, and document that the failed bundle remains
 nonpromotable and no second request occurred during implementation.
 
-- [ ] **Step 2: Regenerate readers and run the full gate**
+- [x] **Step 2: Regenerate readers and run the full gate**
 
 ```bash
 ../../.venv/bin/python tools/render_markdown.py
@@ -367,7 +367,7 @@ make validate PYTHON=../../.venv/bin/python
 Expected: all tests PASS, all generated readers verify, and `git diff --check`
 emits no error.
 
-- [ ] **Step 3: Run the public-boundary secret scan**
+- [x] **Step 3: Run the public-boundary secret scan**
 
 Run the repository's existing V3B-1 forbidden-token/public-boundary tests and:
 
@@ -382,7 +382,7 @@ git grep -n -I -E 'Bearer |eyJ|/Users/|execution_nonce' -- \
 Expected: only explicitly documented forbidden-token names, if any; no secret
 value, private host path, raw foreign-profile name, or nonce value.
 
-- [ ] **Step 4: Review the exact diff**
+- [x] **Step 4: Review the exact diff**
 
 Because agent delegation is disabled for this session, perform two separate
 fresh-context local review passes: specification compliance, then quality and

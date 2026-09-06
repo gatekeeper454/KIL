@@ -190,12 +190,30 @@ exact resource tuple was not durably bound before and after. Every published
 checksum passed. The bound public-safe facts are recorded in
 [`V3B1-TASK10-REQUEST-FREE-GATE.md`](V3B1-TASK10-REQUEST-FREE-GATE.md).
 
-The central `run` was not executed. The historical Task 10 record and the V3
-snapshot implementation are merged and synchronized, and the fresh V3
-request-free gate above passed locally. The central `run` remains prohibited
-until the new public-safe checkpoint itself passes independent review, public
-CI, merge, and exact synchronization. Only then may exactly one central
-local-Envoy proof be attempted. No retry is allowed after request intent.
+The historical Task 10 record and V3 snapshot implementation merged and
+synchronized, and the fresh V3 request-free gate above passed locally. The
+first central `run` was then invoked exactly once from synchronized source. It
+observed HTTP `200 / 200 / 403`, target markers `1 / 1 / 0`, and one completed
+request per track with no retry, but evidence collection failed closed. Frozen
+sources identified two fixed Envoy transport headers in authorization records,
+typed-JSON number/null access-log values instead of the closed string/sentinel
+shape, and one immediate ledger-availability failure. `down` removed all 15
+containers and six networks, verified exact foreign-resource equality, and
+published only integrity-checked nonpromotable failure evidence. The failed
+bundle and private sources remain ignored and immutable.
+
+The correction classifies only the two exact transport headers, emits one
+canonical JSON text line at the Envoy producer, and bounds read-only ledger
+probe/copy stabilization to one shared five-second deadline with byte-count and
+SHA-256 equality. Its focused 52-test gate, complete 257-test controller
+module, and full 566-test repository gate pass locally. Separate specification
+and quality/security reviews found no unresolved Critical or Important issue;
+the latter tightened copied-ledger reads to a no-follow descriptor with stable
+inode, size, and digest attestation. No driver instruction, request intent,
+HTTP action, or second central `run` occurred while implementing it. A newly
+authorized run remains prohibited until this correction passes public CI,
+merge, and exact synchronization; only then may one new central local-Envoy
+proof be attempted, with no retry after request intent.
 
 V3B-1 remains limited to the local Envoy boundary. V3B-2 is the future isolated
 Kind/Calico topology; its NetworkPolicy behavior, cluster-level transport,
@@ -293,12 +311,12 @@ and the complete approved specification is
 
 ## Next gate
 
-The fresh request-free v3 lifecycle passed from public `main` with exact
-before/after foreign-resource equality. Review, merge, and synchronize its
-public-safe checkpoint while keeping the nonpromotable bundle and private
-journal ignored. The central `run` remains prohibited through that publication
-gate. Only afterward start a new synchronized `preflight` / `up` lifecycle and
-execute one central `run` / `down` proof with no retry after request intent.
+The first central attempt failed closed after the intended enforcement tuple
+without a retry. Review, merge through public CI, and exactly synchronize the
+producer-format and bounded-read correction while preserving that failed
+bundle and its private journal. Only afterward start a new synchronized
+`preflight` / `up` lifecycle and execute one newly authorized central
+`run` / `down` proof with no retry after request intent.
 Its prospective acceptance criteria remain `permit / permit / deny`,
 HTTP `200 / 200 / 403`, target markers `1 / 1 / 0`, exact three-driver and
 nine-service-source joins, verified checksums, exact teardown, restored foreign

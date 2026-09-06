@@ -64,10 +64,17 @@ Its `kil.v3b1-public-manifest.v3` records three readiness completions, three
 clean cancellations, zero driver instructions, zero request intents, zero HTTP
 requests, exact teardown of 15 containers and six networks, and exact equality
 of the pseudonymous foreign-resource arrays. The result is request-free and
-nonpromotable, not an enforcement result. The central `run` remains prohibited
-until this public-safe checkpoint passes independent review, merge, and
-synchronization. The previously accepted Task 10 bundle remains historical v2
-evidence and does not satisfy the v3 prerequisite by itself.
+nonpromotable, not an enforcement result. After this prerequisite merged and
+synchronized, the first central `run` executed exactly once and observed HTTP
+`200 / 200 / 403` with target markers `1 / 1 / 0`. Collection rejected Envoy
+typed-JSON number/null output, two exact Envoy transport headers in
+authorization records, and one not-yet-visible live ledger. Teardown completed,
+the evidence stayed private and nonpromotable, and no request was retried. The
+producer-side canonical-text and bounded-read correction is locally verified;
+another run remains prohibited until that correction is reviewed, merged
+through public CI, and exactly synchronized. The previously accepted Task 10
+bundle remains historical v2 evidence and does not satisfy the v3 prerequisite
+by itself.
 
 The request cannot select or downgrade the active track. KIL state is a signed,
 short-lived experimental extension envelope that references KTP Trust Proof and
