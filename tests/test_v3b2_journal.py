@@ -139,7 +139,7 @@ class V3B2JournalTest(unittest.TestCase):
     def _observation(self, **changes: object) -> RecoveryObservation:
         values = {
             "docker_host": self.identity.docker_host,
-            "colima_profile_present": True,
+            "colima_profile": "kil-v3-lab",
             "kind_cluster": "kil-v3-lab",
             "cluster_incarnation_uid": CLUSTER_UID,
             "node_container_id": NODE_ID,
@@ -512,6 +512,7 @@ class V3B2JournalTest(unittest.TestCase):
             ("cluster_incarnation_uid", "foreign-uid"),
             ("node_container_id", "9" * 64),
             ("docker_host", "unix:///foreign/docker.sock"),
+            ("colima_profile", "foreign"),
         )
         for field, replacement in mutations:
             changes = {field: replacement}

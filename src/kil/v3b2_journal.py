@@ -188,7 +188,7 @@ class RecoveryObservation:
     """External read-only identity observation used only to gate recovery actions."""
 
     docker_host: str | None
-    colima_profile_present: bool
+    colima_profile: str | None
     kind_cluster: str | None
     cluster_incarnation_uid: str | None
     node_container_id: str | None
@@ -199,8 +199,8 @@ class RecoveryObservation:
             endpoint = _exact_string("observed Docker endpoint", self.docker_host)
             if not endpoint.startswith("unix:///"):
                 raise JournalError("observed Docker endpoint must be an explicit Unix socket")
-        if type(self.colima_profile_present) is not bool:
-            raise JournalError("observed profile presence must be an exact boolean")
+        if self.colima_profile is not None and type(self.colima_profile) is not str:
+            raise JournalError("observed Colima profile must be an exact string or null")
         if self.kind_cluster is not None and type(self.kind_cluster) is not str:
             raise JournalError("observed Kind cluster must be an exact string or null")
         if self.cluster_incarnation_uid is not None:
@@ -1014,12 +1014,14 @@ def _validate_observation(
     observation.__post_init__()
     endpoint_absent_after_owned_teardown = (
         observation.docker_host is None
-        and not observation.colima_profile_present
+        and observation.colima_profile is None
         and observation.kind_cluster is None
     )
     if observation.docker_host != identity.docker_host and not endpoint_absent_after_owned_teardown:
         raise JournalError("manual_recovery_required: observed Docker endpoint mismatch")
-    if not observation.colima_profile_present and observation.kind_cluster is not None:
+    if observation.colima_profile not in {None, identity.colima_profile}:
+        raise JournalError("manual_recovery_required: observed Colima profile mismatch")
+    if observation.colima_profile is None and observation.kind_cluster is not None:
         raise JournalError("manual_recovery_required: cluster cannot outlive its owned profile")
     if observation.kind_cluster is not None:
         if observation.kind_cluster != identity.kind_cluster:
@@ -1101,12 +1103,12 @@ def recovery_plan(
         return RecoveryPlan((*_cluster_attestations(identity), kind_delete_command(identity)))
     if "profile_start_complete" in completed and "profile_stop_complete" not in completed:
         status = Command(("colima", "status", "--profile", LAB_IDENTITY), 60)
-        if observed is None or not observed.colima_profile_present:
+        if observed is None or observed.colima_profile is None:
             return RecoveryPlan((status,))
         return RecoveryPlan((status, _colima_command("stop")))
     if "profile_stop_complete" in completed and "profile_delete_complete" not in completed:
         status = Command(("colima", "status", "--profile", LAB_IDENTITY), 60)
-        if observed is None or not observed.colima_profile_present:
+        if observed is None or observed.colima_profile is None:
             return RecoveryPlan((status,))
         return RecoveryPlan((status, _colima_command("delete")))
     publication_allowed = {
