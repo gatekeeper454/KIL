@@ -354,6 +354,59 @@ class V3B2EvidenceTest(unittest.TestCase):
             self.assertFalse((unit / "diagnostic.json").exists())
             self.assertEqual({entry.name for entry in private.iterdir()}, {unit.name})
 
+    def test_private_diagnostic_rejects_detached_parent_after_rename(self):
+        payload = b'{"partial":true}'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            private = root / "private"
+            private.mkdir(mode=0o700)
+            moved = root / "moved-private"
+            unit = private / "diagnostic-unit"
+            original = evidence_module._rename_directory_exclusive
+
+            def detach_after_rename(
+                source_fd: int,
+                source: str,
+                destination_fd: int,
+                destination: str,
+            ) -> None:
+                original(source_fd, source, destination_fd, destination)
+                private.rename(moved)
+                private.mkdir(mode=0o700)
+
+            with patch.object(
+                evidence_module,
+                "_rename_directory_exclusive",
+                side_effect=detach_after_rename,
+            ), self.assertRaises(EvidenceError):
+                evidence_module._persist_private_diagnostic(unit, payload)
+            self.assertFalse(unit.exists())
+            self.assertEqual((moved / unit.name / "raw.bin").read_bytes(), payload)
+
+    def test_private_diagnostic_reverifies_content_after_rename(self):
+        payload = b'{"partial":true}'
+        with tempfile.TemporaryDirectory() as directory:
+            private = Path(directory).resolve() / "private"
+            private.mkdir(mode=0o700)
+            unit = private / "diagnostic-unit"
+            original = evidence_module._rename_directory_exclusive
+
+            def alter_after_rename(
+                source_fd: int,
+                source: str,
+                destination_fd: int,
+                destination: str,
+            ) -> None:
+                original(source_fd, source, destination_fd, destination)
+                (unit / "raw.bin").write_bytes(b"changed")
+
+            with patch.object(
+                evidence_module,
+                "_rename_directory_exclusive",
+                side_effect=alter_after_rename,
+            ), self.assertRaises(EvidenceError):
+                evidence_module._persist_private_diagnostic(unit, payload)
+
     def test_source_adapter_exceptions_are_sanitized_but_process_control_propagates(self):
         identity = SourceIdentity("x", "u", "1", "c", 0, sha256(b"").hexdigest())
 
@@ -671,6 +724,71 @@ class V3B2EvidenceTest(unittest.TestCase):
                     publish_bundle(private_evidence(), parent)
                 self.assertEqual((parent / "sentinel").read_text(), "preserve")
                 self.assertFalse((parent / RUN_ID).exists())
+
+    def test_post_rename_quarantine_never_moves_a_raced_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory).resolve() / "public"
+            parent.mkdir(mode=0o700)
+            detached = parent / "detached-owned"
+            destination = parent / RUN_ID
+            original_verify = evidence_module._verify_v3b2
+            calls = 0
+
+            def replace_after_rename(payloads):
+                nonlocal calls
+                result = original_verify(payloads)
+                calls += 1
+                if calls == 2:
+                    destination.rename(detached)
+                    destination.mkdir(mode=0o700)
+                    (destination / "sentinel").write_text("preserve")
+                    raise EvidenceError("force post-rename failure")
+                return result
+
+            with patch.object(
+                evidence_module,
+                "_verify_v3b2",
+                side_effect=replace_after_rename,
+            ), self.assertRaises(EvidenceError):
+                publish_bundle(private_evidence(), parent)
+            self.assertEqual((destination / "sentinel").read_text(), "preserve")
+            self.assertTrue((detached / "manifest.json").is_file())
+            self.assertEqual(
+                [entry for entry in parent.iterdir() if ".failed-" in entry.name],
+                [],
+            )
+
+    def test_publication_rejects_a_parent_detached_after_rename(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            parent = root / "public"
+            parent.mkdir(mode=0o700)
+            moved = root / "moved-public"
+            original = evidence_module._rename_directory_exclusive
+            calls = 0
+
+            def detach_parent(
+                source_fd: int,
+                source: str,
+                destination_fd: int,
+                destination: str,
+            ) -> None:
+                nonlocal calls
+                original(source_fd, source, destination_fd, destination)
+                calls += 1
+                if calls == 1:
+                    parent.rename(moved)
+                    parent.mkdir(mode=0o700)
+                    (parent / "sentinel").write_text("preserve")
+
+            with patch.object(
+                evidence_module,
+                "_rename_directory_exclusive",
+                side_effect=detach_parent,
+            ), self.assertRaises(EvidenceError):
+                publish_bundle(private_evidence(), parent)
+            self.assertEqual((parent / "sentinel").read_text(), "preserve")
+            self.assertFalse((parent / RUN_ID).exists())
 
     def test_public_apis_totalize_malformed_types_and_unicode(self):
         identity = SourceIdentity("x", "u", "1", "c", 0, sha256(b"").hexdigest())

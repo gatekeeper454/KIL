@@ -255,6 +255,16 @@ def _persist_private_diagnostic(path: Path, payload: bytes) -> None:
         _assert_anchor_path(parent, parent_identity, "private diagnostic parent")
         _rename_directory_exclusive(parent_fd, staging_name, parent_fd, path.name)
         renamed = True
+        persisted = _read_tree_fd(
+            staging_fd,
+            {"raw.bin", "diagnostic.json"},
+        )
+        if persisted != {
+            "raw.bin": payload,
+            "diagnostic.json": diagnostic_payload,
+        }:
+            raise EvidenceError("private diagnostic unit content changed")
+        os.fsync(staging_fd)
         published = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
         staged = os.fstat(staging_fd)
         if _directory_identity(published) != _directory_identity(staged):
@@ -264,6 +274,12 @@ def _persist_private_diagnostic(path: Path, payload: bytes) -> None:
             os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
         ) != _directory_identity(staged):
             raise EvidenceError("private diagnostic unit was replaced after publication")
+        _assert_anchor_path(parent, parent_identity, "private diagnostic parent")
+        _assert_anchor_path(
+            path,
+            _directory_identity(staged),
+            "private diagnostic unit",
+        )
     except EvidenceError:
         raise
     except (OSError, TypeError, ValueError, UnicodeError):
@@ -1281,11 +1297,19 @@ def _publish_bundle(private: object, public_parent: Path) -> Path:
         return destination
     except EvidenceError:
         if renamed:
-            _quarantine_failed_publication_at(parent_fd, run_id)
+            _quarantine_failed_publication_at(
+                parent_fd,
+                run_id,
+                staging_identity,
+            )
         raise
     except (OSError, ValueError, TypeError, UnicodeError):
         if renamed:
-            _quarantine_failed_publication_at(parent_fd, run_id)
+            _quarantine_failed_publication_at(
+                parent_fd,
+                run_id,
+                staging_identity,
+            )
         raise EvidenceError("atomic publication failed closed") from None
     finally:
         if staging_fd >= 0:
@@ -1295,21 +1319,62 @@ def _publish_bundle(private: object, public_parent: Path) -> Path:
         os.close(parent_fd)
 
 
-def _quarantine_failed_publication_at(parent_fd: int, run_id: str) -> None:
+def _quarantine_failed_publication_at(
+    parent_fd: int,
+    run_id: str,
+    published_identity: tuple[int, int, int, int],
+) -> None:
+    """Quarantine only the exact directory inode published by this call."""
+    descriptor = -1
     try:
+        try:
+            inspected = os.stat(run_id, dir_fd=parent_fd, follow_symlinks=False)
+            if (
+                not stat.S_ISDIR(inspected.st_mode)
+                or _directory_identity(inspected) != published_identity
+            ):
+                return
+            descriptor = _open_child_directory(
+                parent_fd,
+                run_id,
+                "failed publication",
+            )
+            if _directory_identity(os.fstat(descriptor)) != published_identity:
+                return
+        except (EvidenceError, OSError):
+            return
         for counter in range(10_000):
             quarantine = f".{run_id}.failed-{counter}"
             if not _entry_exists(parent_fd, quarantine):
-                os.rename(
+                current = os.stat(
                     run_id,
-                    quarantine,
-                    src_dir_fd=parent_fd,
-                    dst_dir_fd=parent_fd,
+                    dir_fd=parent_fd,
+                    follow_symlinks=False,
                 )
+                if _directory_identity(current) != published_identity:
+                    return
+                _rename_directory_exclusive(
+                    parent_fd,
+                    run_id,
+                    parent_fd,
+                    quarantine,
+                )
+                quarantined = os.stat(
+                    quarantine,
+                    dir_fd=parent_fd,
+                    follow_symlinks=False,
+                )
+                if _directory_identity(quarantined) != published_identity:
+                    raise EvidenceError(
+                        "failed publication quarantine identity changed"
+                    )
                 os.fsync(parent_fd)
                 return
     except (EvidenceError, OSError):
         raise EvidenceError("failed publication quarantine failed closed") from None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
     raise EvidenceError("failed publication quarantine namespace is exhausted")
 
 
