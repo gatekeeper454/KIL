@@ -19,8 +19,23 @@ from kil.v3b2_contracts import (
     PUBLIC_MANIFEST_FIELDS,
     PUBLIC_MANIFEST_SCHEMA,
     TRACKS,
+    SchemaError,
     dispatch_schema,
     require_closed_object,
+    V3B2Profile,
+)
+from kil.v3b2_inventory import (
+    EndpointIdentity,
+    ObjectIdentity,
+    PodImageIdentity,
+    PolicyEdge,
+)
+from kil.v3b2_manifests import (
+    WorkloadIdentity,
+    expected_object_keys,
+    expected_policy_graph,
+    render_kind_config,
+    render_objects,
 )
 
 
@@ -57,6 +72,11 @@ _MAX_FILE_BYTES = 8 * 1024 * 1024
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 _HEX40 = re.compile(r"[0-9a-f]{40}")
 _SAFE_RUN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+_V3B2_RUN = re.compile(r"v3b2-[0-9a-f]{64}")
+_PROFILE_PATH = Path(__file__).resolve().parents[2] / "deploy/kind/v3b2-profile.json"
+_PROFILE_SHA256 = "cc630f343f87f89180a2cfc98baf1d23686e0b39e364569ff579b3e8efa8cee8"
+_TOPOLOGY_FIELDS = frozenset({"cluster_incarnation_uid", "node_container_id", "namespaces", "objects", "pod_images", "endpoints", "calico_readiness"})
+_CONTENT_FIELDS = frozenset({"run_id", "profile_sha256", "kind_config_sha256", "objects_manifest_sha256", "calico_manifest_sha256", "kind_node_image", "calico_images", "kil_image_id", "envoy_image_digest"})
 _PRIVATE_KEYS = (
     "execution_nonce",
     "projection_key",
@@ -106,7 +126,11 @@ class SourceIdentity:
             ("resource version", self.resource_version),
             ("container ID", self.container_id),
         ):
-            if type(value) is not str or not value or len(value.encode("utf-8")) > 4096:
+            try:
+                invalid = type(value) is not str or not value or len(value.encode("utf-8")) > 4096
+            except UnicodeEncodeError:
+                raise EvidenceError(f"source {label} contains invalid Unicode") from None
+            if invalid:
                 raise EvidenceError(f"source {label} must be an exact bounded string")
         if type(self.byte_count) is not int or self.byte_count < 0 or self.byte_count > _MAX_SOURCE_BYTES:
             raise EvidenceError("source byte count is outside the closed bound")
@@ -122,6 +146,11 @@ class CapturedSource:
     def __post_init__(self) -> None:
         if type(self.identity) is not SourceIdentity or type(self.payload) is not bytes:
             raise EvidenceError("captured source types are not exact")
+        if (
+            len(self.payload) != self.identity.byte_count
+            or sha256(self.payload).hexdigest() != self.identity.sha256
+        ):
+            raise EvidenceError("captured source bytes do not match their identity")
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,8 +165,12 @@ class VerifiedBundle:
         if type(self.schema_family) is not str or self.schema_family not in {"v3b1", "v3b2-run"}:
             raise EvidenceError("verified schema family is invalid")
         for value in (self.run_id, self.result_class, self.promotion_status):
-            if type(value) is not str:
-                raise EvidenceError("verified bundle contains an invalid string")
+            try:
+                invalid = type(value) is not str or not value or len(value.encode("utf-8")) > 4096
+            except UnicodeEncodeError:
+                raise EvidenceError("verified bundle contains invalid Unicode") from None
+            if invalid:
+                raise EvidenceError("verified bundle contains an invalid bounded string")
         if type(self.public_commitment) is not str or _HEX64.fullmatch(self.public_commitment) is None:
             raise EvidenceError("verified public commitment is invalid")
 
@@ -170,7 +203,7 @@ def capture_source(
         before = reader.identity()
         payload = reader.read(maximum)
         after = reader.identity()
-    except Exception:
+    except (AttributeError, OSError, TypeError, ValueError, UnicodeError):
         raise EvidenceError("source capture failed closed") from None
     if type(before) is not SourceIdentity or type(after) is not SourceIdentity or type(payload) is not bytes:
         raise EvidenceError("source reader returned an invalid exact type")
@@ -218,7 +251,7 @@ def _persist_private_diagnostic(path: Path, payload: bytes) -> None:
 def _closed_record(label: str, value: object, fields: frozenset[str]) -> dict[str, object]:
     try:
         return require_closed_object(label, value, fields)
-    except Exception:
+    except SchemaError:
         raise EvidenceError(f"{label} fields are not closed") from None
 
 
@@ -377,12 +410,29 @@ def _foreign_records(value: object) -> list[dict[str, object]]:
         name = record["name"]
         if type(name) is not str or not name or name == "kil-v3-lab" or name in names:
             raise EvidenceError("foreign profile identity is ambiguous")
+        try:
+            if len(name.encode("utf-8")) > 4096:
+                raise EvidenceError("foreign profile identity exceeds its bound")
+        except UnicodeEncodeError:
+            raise EvidenceError("foreign profile identity contains invalid Unicode") from None
         if type(record["status"]) is not str or record["status"] not in {"Running", "Stopped"}:
             raise EvidenceError("foreign profile status is invalid")
         if any(type(record[field]) is not int or record[field] < 0 for field in ("cpus", "memory", "disk")):
             raise EvidenceError("foreign profile resource is invalid")
-        if any(type(record[field]) is not str or not record[field] for field in ("arch", "runtime")):
-            raise EvidenceError("foreign profile resource text is invalid")
+        for field in ("arch", "runtime"):
+            text = record[field]
+            try:
+                invalid_text = (
+                    type(text) is not str
+                    or not text
+                    or len(text.encode("utf-8")) > 4096
+                )
+            except UnicodeEncodeError:
+                raise EvidenceError(
+                    "foreign profile resource text contains invalid Unicode"
+                ) from None
+            if invalid_text:
+                raise EvidenceError("foreign profile resource text is invalid")
         names.add(name)
         normalized.append(dict(record))
     return sorted(normalized, key=lambda item: str(item["name"]))
@@ -417,7 +467,229 @@ def _public_commitment(manifest: Mapping[str, object], artifacts: Mapping[str, b
     return sha256(_canonical_bytes(value)).hexdigest()
 
 
+def _trusted_profile() -> V3B2Profile:
+    try:
+        payload = _PROFILE_PATH.read_bytes()
+        if sha256(payload).hexdigest() != _PROFILE_SHA256:
+            raise EvidenceError("approved V3B-2 profile identity is unavailable")
+        return V3B2Profile.load(_PROFILE_PATH)
+    except EvidenceError:
+        raise
+    except (OSError, ValueError, TypeError, UnicodeError):
+        raise EvidenceError("approved V3B-2 profile identity is unavailable") from None
+
+
+def _validate_content_identities(
+    value: object, *, run_id: object, profile_sha256: object
+) -> dict[str, object]:
+    content = _closed_record("content identities", value, _CONTENT_FIELDS)
+    profile = _trusted_profile()
+    for name in _CONTENT_FIELDS:
+        if name != "calico_images" and type(content[name]) is not str:
+            raise EvidenceError("content identity scalar types are invalid")
+    if (
+        type(run_id) is not str
+        or _V3B2_RUN.fullmatch(run_id) is None
+        or content["run_id"] != run_id
+        or profile_sha256 != _PROFILE_SHA256
+        or content["profile_sha256"] != profile_sha256
+        or content["kind_config_sha256"] != sha256(render_kind_config(profile)).hexdigest()
+        or content["calico_manifest_sha256"] != profile.calico_manifest_sha256
+        or content["kind_node_image"] != profile.kind_node_image
+    ):
+        raise EvidenceError("content identities do not bind the approved profile and run")
+    expected_calico = {name: image for name, image in profile.calico_images}
+    if type(content["calico_images"]) is not dict or content["calico_images"] != expected_calico:
+        raise EvidenceError("content identities do not bind the approved Calico images")
+    try:
+        workload = WorkloadIdentity(
+            content["run_id"],
+            content["kil_image_id"],
+            content["envoy_image_digest"],
+        )
+    except (TypeError, ValueError):
+        raise EvidenceError("content workload identities are invalid") from None
+    if content["objects_manifest_sha256"] != sha256(render_objects(profile, workload)).hexdigest():
+        raise EvidenceError("application manifest identity does not bind the approved run")
+    return content
+
+
+def _validate_topology_attestation(
+    value: object, content: Mapping[str, object]
+) -> dict[str, object]:
+    topology = _closed_record("topology attestation", value, _TOPOLOGY_FIELDS)
+    if (
+        type(topology["cluster_incarnation_uid"]) is not str
+        or not topology["cluster_incarnation_uid"]
+        or type(topology["node_container_id"]) is not str
+        or _HEX64.fullmatch(topology["node_container_id"]) is None
+    ):
+        raise EvidenceError("cluster incarnation or node identity is invalid")
+    profile = _trusted_profile()
+    expected_namespaces = (
+        "default",
+        "kil-v3-baseline",
+        "kil-v3-local-reduce",
+        "kil-v3-signed",
+        "kube-node-lease",
+        "kube-public",
+        "kube-system",
+        "local-path-storage",
+    )
+    if type(topology["namespaces"]) is not list or tuple(topology["namespaces"]) != expected_namespaces or any(type(item) is not str for item in topology["namespaces"]):
+        raise EvidenceError("topology namespace inventory is not exact")
+    if type(topology["objects"]) is not list or len(topology["objects"]) != 63:
+        raise EvidenceError("topology object inventory cardinality is invalid")
+    objects: list[ObjectIdentity] = []
+    for raw in topology["objects"]:
+        record = _closed_record("topology object", raw, frozenset({"api_version", "kind", "namespace", "name", "uid", "resource_version"}))
+        try:
+            objects.append(ObjectIdentity(**record))
+        except (TypeError, ValueError):
+            raise EvidenceError("topology object identity is invalid") from None
+    expected_keys = tuple(sorted((*expected_object_keys(profile), ("v1", "Namespace", "", "kube-system"), ("apps/v1", "DaemonSet", "kube-system", "calico-node"), ("apps/v1", "Deployment", "kube-system", "calico-kube-controllers"))))
+    keys = tuple((item.api_version, item.kind, item.namespace, item.name) for item in objects)
+    if tuple(sorted(objects)) != tuple(objects) or len(set(objects)) != len(objects) or keys != expected_keys:
+        raise EvidenceError("topology object keys or ordering differ from the fixed inventory")
+    system_namespace = next(item for item in objects if (item.api_version, item.kind, item.namespace, item.name) == ("v1", "Namespace", "", "kube-system"))
+    if system_namespace.uid != topology["cluster_incarnation_uid"]:
+        raise EvidenceError("cluster incarnation UID is not bound to kube-system")
+    _validate_pod_images(topology["pod_images"], content, profile, objects)
+    _validate_endpoints(topology["endpoints"])
+    readiness = _closed_record("Calico readiness", topology["calico_readiness"], frozenset({"node_desired", "node_ready", "controller_desired", "controller_ready"}))
+    if any(type(readiness[name]) is not int or readiness[name] != 1 for name in readiness):
+        raise EvidenceError("Calico readiness inventory is not exactly one ready node and controller")
+    return topology
+
+
+def _validate_pod_images(
+    value: object,
+    content: Mapping[str, object],
+    profile: V3B2Profile,
+    objects: Sequence[ObjectIdentity],
+) -> None:
+    if type(value) is not list or len(value) != 17:
+        raise EvidenceError("Pod image inventory cardinality is invalid")
+    records: list[PodImageIdentity] = []
+    fields = frozenset({"image_role", "container_type", "namespace", "pod", "container", "uid", "resource_version", "image", "image_id", "ready"})
+    for raw in value:
+        item = _closed_record("Pod image identity", raw, fields)
+        try:
+            records.append(PodImageIdentity(**item))
+        except (TypeError, ValueError):
+            raise EvidenceError("Pod image identity is invalid") from None
+    if tuple(sorted(records)) != tuple(records) or len(set(records)) != len(records) or any(item.ready is not True for item in records):
+        raise EvidenceError("Pod image identities are not unique, sorted, and ready")
+    calico_pins = {"calico-cni": dict(profile.calico_images)["cni"], "calico-node": dict(profile.calico_images)["node"], "calico-kube-controllers": dict(profile.calico_images)["kube_controllers"]}
+    expected_calico = {("calico-cni", "init", "install-cni"), ("calico-cni", "init", "upgrade-ipam"), ("calico-node", "init", "ebpf-bootstrap"), ("calico-node", "regular", "calico-node"), ("calico-kube-controllers", "regular", "calico-kube-controllers")}
+    calico = [item for item in records if item.image_role != "workload"]
+    if {(item.image_role, item.container_type, item.container) for item in calico} != expected_calico or any(item.namespace != "kube-system" or item.image != calico_pins[item.image_role] for item in calico):
+        raise EvidenceError("Calico Pod image identities differ from approved pins")
+    if any(
+        not item.pod.startswith(
+            "calico-kube-controllers-"
+            if item.image_role == "calico-kube-controllers"
+            else "calico-node-"
+        )
+        for item in calico
+    ):
+        raise EvidenceError("Calico Pod names differ from the fixed workload families")
+    workload = [item for item in records if item.image_role == "workload"]
+    expected_workloads = {(namespace, role) for namespace in ("kil-v3-baseline", "kil-v3-local-reduce", "kil-v3-signed") for role in ("driver", "envoy", "authz", "target")}
+    if {(item.namespace, item.container) for item in workload} != expected_workloads:
+        raise EvidenceError("workload Pod image placements are not exact")
+    kil_digest = str(content["kil_image_id"]).removeprefix("sha256:")
+    expected_kil = "kil.local/kil-v3b2:sha256-" + kil_digest
+    if any(item.image != (content["envoy_image_digest"] if item.container == "envoy" else expected_kil) for item in workload):
+        raise EvidenceError("workload Pod image identities differ from content identities")
+    for item in workload:
+        valid_pod = (
+            item.pod == "driver"
+            if item.container == "driver"
+            else re.fullmatch(
+                rf"{re.escape(item.container)}-"
+                r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?",
+                item.pod,
+            )
+            is not None
+        )
+        if not valid_pod:
+            raise EvidenceError("workload Pod name is outside the fixed inventory")
+        if item.container == "driver":
+            bound = next(
+                record
+                for record in objects
+                if record.kind == "Pod"
+                and record.namespace == item.namespace
+                and record.name == "driver"
+            )
+            if (item.uid, item.resource_version) != (bound.uid, bound.resource_version):
+                raise EvidenceError("driver Pod image identity is detached from its object UID")
+
+
+def _validate_endpoints(value: object) -> None:
+    if type(value) is not list or len(value) != 9:
+        raise EvidenceError("endpoint inventory cardinality is invalid")
+    records: list[EndpointIdentity] = []
+    fields = frozenset({"source_kind", "source_name", "namespace", "service", "addresses", "port_name", "protocol", "port"})
+    for raw in value:
+        item = _closed_record("endpoint identity", raw, fields)
+        if type(item["addresses"]) is not list:
+            raise EvidenceError("endpoint addresses are not an exact array")
+        converted = dict(item)
+        converted["addresses"] = tuple(item["addresses"])
+        try:
+            records.append(EndpointIdentity(**converted))
+        except (TypeError, ValueError):
+            raise EvidenceError("endpoint identity is invalid") from None
+    expected = {(namespace, service, "http", "TCP", 8080) for namespace in ("kil-v3-baseline", "kil-v3-local-reduce", "kil-v3-signed") for service in ("envoy", "authz", "target")}
+    keys = {(item.namespace, item.service, item.port_name, item.protocol, item.port) for item in records}
+    if tuple(sorted(records)) != tuple(records) or len(set(records)) != len(records) or keys != expected:
+        raise EvidenceError("endpoint identities or ordering differ from the fixed inventory")
+    if any(item.source_kind != "Endpoints" or item.source_name != item.service for item in records):
+        raise EvidenceError("endpoint source identity is not exact")
+    from ipaddress import IPv4Address, IPv4Network
+    network = IPv4Network("10.244.0.0/16")
+    try:
+        if any(IPv4Address(address) not in network for item in records for address in item.addresses):
+            raise EvidenceError("endpoint address is outside the fixed Pod CIDR")
+    except ValueError:
+        raise EvidenceError("endpoint address is invalid") from None
+
+
+def _validate_policy_attestation(value: object) -> dict[str, object]:
+    policy = _closed_record("policy attestation", value, frozenset({"edges"}))
+    if type(policy["edges"]) is not list or len(policy["edges"]) != 12:
+        raise EvidenceError("policy graph cardinality is invalid")
+    edges: list[PolicyEdge] = []
+    fields = frozenset({"namespace", "source_roles", "destination_namespace", "destination_roles", "protocol_ports"})
+    for raw in policy["edges"]:
+        item = _closed_record("policy edge", raw, fields)
+        if type(item["source_roles"]) is not list or type(item["destination_roles"]) is not list or type(item["protocol_ports"]) is not list:
+            raise EvidenceError("policy edge array types are invalid")
+        try:
+            edge = PolicyEdge(item["namespace"], tuple(item["source_roles"]), item["destination_namespace"], tuple(item["destination_roles"]), tuple(tuple(pair) if type(pair) is list else pair for pair in item["protocol_ports"]))
+        except (TypeError, ValueError):
+            raise EvidenceError("policy edge is invalid") from None
+        edges.append(edge)
+    profile = _trusted_profile()
+    expected = tuple(sorted(PolicyEdge(item.namespace, item.source_roles, item.destination_namespace, item.destination_roles, item.protocol_ports) for item in expected_policy_graph(profile)))
+    if tuple(edges) != expected:
+        raise EvidenceError("policy graph differs from the exact twelve approved edges")
+    return policy
+
+
 def build_public_bundle(private: object) -> dict[str, object]:
+    """Build a closed public projection while totalizing malformed input."""
+    try:
+        return _build_public_bundle(private)
+    except EvidenceError:
+        raise
+    except (KeyError, IndexError, TypeError, ValueError, UnicodeError, RecursionError):
+        raise EvidenceError("private evidence is malformed") from None
+
+
+def _build_public_bundle(private: object) -> dict[str, object]:
     manifest = _private_manifest(private)
     runtime = manifest["runtime_identities"]
     assert type(runtime) is dict
@@ -464,6 +736,15 @@ def build_public_bundle(private: object) -> dict[str, object]:
     if not foreign["unchanged"] or not unchanged_context:
         result_class = "diagnostic_foreign_state_mismatch"
         joins = []
+    content = _validate_content_identities(
+        manifest["content_identities"],
+        run_id=manifest["run_id"],
+        profile_sha256=manifest["profile_sha256"],
+    )
+    topology = _validate_topology_attestation(
+        runtime.get("topology_attestation"), content
+    )
+    policy = _validate_policy_attestation(runtime.get("policy_attestation"))
     public: dict[str, object] = {
         "schema_version": PUBLIC_MANIFEST_SCHEMA,
         "run_id": manifest["run_id"],
@@ -472,9 +753,9 @@ def build_public_bundle(private: object) -> dict[str, object]:
         "evidence_scope": "kind_calico_boundary",
         "result_class": result_class,
         "promotion_status": PROMOTION_STATUS,
-        "content_identities": manifest["content_identities"],
-        "topology_attestation": runtime.get("topology_attestation"),
-        "policy_attestation": runtime.get("policy_attestation"),
+        "content_identities": content,
+        "topology_attestation": topology,
+        "policy_attestation": policy,
         "request_results": request_results,
         "semantic_joins": joins,
         "source_attestations": _public_source_attestations(manifest["source_attestations"]),
@@ -484,7 +765,17 @@ def build_public_bundle(private: object) -> dict[str, object]:
         "claim_exclusions": list(CLAIM_EXCLUSIONS),
         "public_commitment_sha256": "",
     }
-    validate_public_projection(public)
+    before_names = tuple(
+        record["name"]
+        for record in _foreign_records(manifest["foreign_profiles_before"])
+    )
+    after_names = tuple(
+        record["name"]
+        for record in _foreign_records(runtime["foreign_profiles_after"])
+    )
+    validate_public_projection(
+        public, forbidden_names=(*before_names, *after_names)
+    )
     return public
 
 
@@ -499,8 +790,22 @@ def _public_source_attestations(value: object) -> list[dict[str, object]]:
     return result
 
 
-def validate_public_projection(value: object) -> None:
+def validate_public_projection(
+    value: object, *, forbidden_names: Sequence[str] = ()
+) -> None:
     """Reject secret-shaped field names and values at any nesting depth."""
+    if type(value) is not dict:
+        raise PublicBoundaryError("public projection must be an exact object")
+    if type(forbidden_names) not in (tuple, list) or any(
+        type(name) is not str or not name for name in forbidden_names
+    ):
+        raise PublicBoundaryError("foreign-name boundary is invalid")
+    try:
+        if any(len(name.encode("utf-8")) > 4096 for name in forbidden_names):
+            raise PublicBoundaryError("foreign-name boundary exceeds its bound")
+    except UnicodeEncodeError:
+        raise PublicBoundaryError("foreign-name boundary contains invalid Unicode") from None
+    unique_names = tuple(sorted(set(forbidden_names)))
     seen: set[int] = set()
     def walk(member: object, depth: int) -> None:
         if depth > 32:
@@ -512,7 +817,17 @@ def validate_public_projection(value: object) -> None:
             seen.add(identity)
         if type(member) is dict:
             for key, child in member.items():
-                if type(key) is not str or any(token in key.lower() for token in _PRIVATE_KEYS):
+                try:
+                    invalid_key = (
+                        type(key) is not str
+                        or len(key.encode("utf-8")) > 4096
+                        or any(token in key.lower() for token in _PRIVATE_KEYS)
+                    )
+                except UnicodeEncodeError:
+                    raise PublicBoundaryError(
+                        "public field name contains invalid Unicode"
+                    ) from None
+                if invalid_key:
                     raise PublicBoundaryError("public projection contains a private field name")
                 walk(child, depth + 1)
         elif type(member) is list:
@@ -525,9 +840,23 @@ def validate_public_projection(value: object) -> None:
                 and any(token in lowered for token in _PRIVATE_TEXT)
             ) or member.startswith("/"):
                 raise PublicBoundaryError("public projection contains private material")
-            if len(member.encode("utf-8")) > 65536:
+            try:
+                encoded = member.encode("utf-8")
+            except UnicodeEncodeError:
+                raise PublicBoundaryError(
+                    "public string contains invalid Unicode"
+                ) from None
+            if len(encoded) > 65536:
                 raise PublicBoundaryError("public string exceeds its bound")
-        elif type(member) not in (int, bool, type(None), float):
+            for name in unique_names:
+                if member == name or re.search(
+                    rf"(?<![A-Za-z0-9]){re.escape(name)}(?![A-Za-z0-9])",
+                    member,
+                ):
+                    raise PublicBoundaryError(
+                        "public projection contains a foreign profile name"
+                    )
+        elif type(member) not in (int, bool, type(None)):
             raise PublicBoundaryError("public projection contains a non-JSON exact type")
     walk(value, 0)
 
@@ -575,23 +904,88 @@ def _write_regular(path: Path, payload: bytes) -> None:
         os.close(descriptor)
 
 
+def _canonical_directory(path: object, label: str) -> Path:
+    if not isinstance(path, Path) or not path.is_absolute() or ".." in path.parts:
+        raise EvidenceError(f"{label} must be an absolute normalized path")
+    try:
+        resolved = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        raise EvidenceError(f"{label} ancestry is unavailable") from None
+    if path != resolved or str(path) != str(resolved):
+        raise EvidenceError(f"{label} ancestry must not contain symlinks")
+    current = Path(path.anchor)
+    for component in path.parts[1:]:
+        current /= component
+        try:
+            inspected = os.stat(current, follow_symlinks=False)
+        except OSError:
+            raise EvidenceError(f"{label} ancestry is unavailable") from None
+        if stat.S_ISLNK(inspected.st_mode) or not stat.S_ISDIR(inspected.st_mode):
+            raise EvidenceError(f"{label} ancestry must contain only directories")
+    return path
+
+
+def _prepare_public_parent(path: object) -> Path:
+    if not isinstance(path, Path) or not path.is_absolute() or ".." in path.parts:
+        raise EvidenceError("public parent must be an absolute normalized path")
+    if path.exists() or path.is_symlink():
+        return _canonical_directory(path, "public parent")
+    _canonical_directory(path.parent, "public parent ancestor")
+    try:
+        path.mkdir(mode=0o700)
+    except OSError:
+        raise EvidenceError("public parent cannot be created safely") from None
+    return _canonical_directory(path, "public parent")
+
+
 def publish_bundle(private: object, public_parent: Path) -> Path:
     """Build privately, verify semantically, then publish with one rename."""
+    try:
+        return _publish_bundle(private, public_parent)
+    except EvidenceError:
+        raise
+    except (OSError, TypeError, ValueError, UnicodeError, RuntimeError):
+        raise EvidenceError("publication inputs are invalid") from None
+
+
+def _publish_bundle(private: object, public_parent: Path) -> Path:
     public = build_public_bundle(private)
+    parent = _prepare_public_parent(public_parent)
     run_id = str(public["run_id"])
-    parent = Path(os.path.abspath(public_parent))
-    if parent.is_symlink():
-        raise EvidenceError("public parent is unsafe")
-    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if not parent.is_dir():
-        raise EvidenceError("public parent is unsafe")
+    private_manifest = _private_manifest(private)
+    runtime = private_manifest["runtime_identities"]
+    assert type(runtime) is dict
+    foreign_names = tuple(
+        record["name"]
+        for record in (
+            *_foreign_records(private_manifest["foreign_profiles_before"]),
+            *_foreign_records(runtime["foreign_profiles_after"]),
+        )
+    )
     destination = parent / run_id
     if destination.exists() or destination.is_symlink():
         raise EvidenceError("public destination clobber is forbidden")
     staging = Path(tempfile.mkdtemp(prefix=f".{run_id}.private-", dir=parent))
     os.chmod(staging, 0o700)
+    _canonical_directory(staging, "private publication staging")
+    parent_before = os.stat(parent, follow_symlinks=False)
+    staging_before = os.stat(staging, follow_symlinks=False)
+    renamed = False
     try:
         artifacts = _artifacts(public)
+        for name, payload in artifacts.items():
+            try:
+                text = payload.decode("utf-8", errors="strict")
+            except UnicodeDecodeError:
+                raise PublicBoundaryError("public artifact is not UTF-8") from None
+            for foreign_name in foreign_names:
+                if text == foreign_name or re.search(
+                    rf"(?<![A-Za-z0-9]){re.escape(foreign_name)}(?![A-Za-z0-9])",
+                    text,
+                ):
+                    raise PublicBoundaryError(
+                        "public artifact contains a foreign profile name"
+                    )
         public["public_commitment_sha256"] = _public_commitment(public, artifacts)
         validate_public_projection(public)
         payloads = {"manifest.json": _canonical_bytes(public), **artifacts}
@@ -603,16 +997,62 @@ def publish_bundle(private: object, public_parent: Path) -> Path:
         try: os.fsync(directory_fd)
         finally: os.close(directory_fd)
         verify_bundle(staging)
+        _canonical_directory(parent, "public parent")
+        _canonical_directory(staging, "private publication staging")
+        current_parent = os.stat(parent, follow_symlinks=False)
+        if (parent_before.st_dev, parent_before.st_ino) != (
+            current_parent.st_dev,
+            current_parent.st_ino,
+        ):
+            raise EvidenceError("public parent changed before publication")
         os.rename(staging, destination)
+        renamed = True
+        _canonical_directory(destination, "published bundle")
+        published_identity = os.stat(destination, follow_symlinks=False)
+        if (staging_before.st_dev, staging_before.st_ino) != (
+            published_identity.st_dev,
+            published_identity.st_ino,
+        ):
+            raise EvidenceError("published directory identity changed during rename")
         parent_fd = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         try: os.fsync(parent_fd)
         finally: os.close(parent_fd)
         verify_bundle(destination)
         return destination
     except EvidenceError:
+        if renamed:
+            _quarantine_failed_publication(parent, destination, run_id)
         raise
-    except (OSError, ValueError, TypeError, UnicodeError) as error:
+    except (OSError, ValueError, TypeError, UnicodeError):
+        if renamed:
+            _quarantine_failed_publication(parent, destination, run_id)
         raise EvidenceError("atomic publication failed closed") from None
+
+
+def _quarantine_failed_publication(
+    parent: Path, destination: Path, run_id: str
+) -> None:
+    try:
+        _canonical_directory(parent, "public parent")
+        if destination.is_symlink() or not destination.is_dir():
+            raise EvidenceError("failed publication cannot be quarantined safely")
+        for counter in range(10_000):
+            quarantine = parent / f".{run_id}.failed-{counter}"
+            if not quarantine.exists() and not quarantine.is_symlink():
+                os.rename(destination, quarantine)
+                descriptor = os.open(
+                    parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                )
+                try:
+                    os.fsync(descriptor)
+                finally:
+                    os.close(descriptor)
+                return
+    except EvidenceError:
+        raise
+    except OSError:
+        raise EvidenceError("failed publication quarantine failed closed") from None
+    raise EvidenceError("failed publication quarantine namespace is exhausted")
 
 
 def _read_tree(bundle: Path, expected: set[str], before_completion: Callable[[], None] | None = None) -> dict[str, bytes]:
@@ -759,10 +1199,26 @@ def _verify_v3b2(payloads: Mapping[str, bytes]) -> VerifiedBundle:
     if value.get("schema_version") != PUBLIC_MANIFEST_SCHEMA:
         raise EvidenceError("V3B-2 public schema is invalid")
     validate_public_projection(value)
+    if (
+        type(value.get("run_id")) is not str
+        or _V3B2_RUN.fullmatch(value["run_id"]) is None
+        or type(value.get("source_commit")) is not str
+        or _HEX40.fullmatch(value["source_commit"]) is None
+        or type(value.get("profile_sha256")) is not str
+        or _HEX64.fullmatch(value["profile_sha256"]) is None
+    ):
+        raise EvidenceError("V3B-2 public run or source identity is invalid")
     if value.get("promotion_status") != PROMOTION_STATUS or value.get("claim_exclusions") != list(CLAIM_EXCLUSIONS) or value.get("evidence_scope") != "kind_calico_boundary":
         raise EvidenceError("V3B-2 claim boundary is invalid")
     if type(value.get("content_identities")) is not dict or type(value.get("topology_attestation")) is not dict or type(value.get("policy_attestation")) is not dict:
         raise EvidenceError("V3B-2 public attestations have invalid exact types")
+    content = _validate_content_identities(
+        value["content_identities"],
+        run_id=value.get("run_id"),
+        profile_sha256=value.get("profile_sha256"),
+    )
+    _validate_topology_attestation(value["topology_attestation"], content)
+    _validate_policy_attestation(value["policy_attestation"])
     teardown = value.get("owned_teardown")
     if type(teardown) is not dict or any(type(teardown.get(name)) is not bool for name in ("cluster_absent", "profile_absent", "private_active_state_absent")) or teardown != {
         "cluster_absent": True,
@@ -911,9 +1367,13 @@ def _verify_nominal_public_records(
             or raw_request != {key: request[key] for key in _DRIVER_FIELDS}
             or decision.get("decision") != decision_name
             or request.get("decision") != decision_name
+            or join.get("decision") != decision_name
             or request.get("http_status") != status
+            or join.get("http_status") != status
+            or join.get("target_markers") != marker_count
             or proxy.get("upstream_status") != (status if attempted else None)
             or proxy.get("upstream_attempted") is not attempted
+            or join.get("envoy_upstream_attempted") is not attempted
             or join.get("decision_digest_equal") is not True
             or join.get("decision_digest") != digest
             or raw_request.get("decision_digest") != digest
@@ -928,7 +1388,7 @@ def _verify_nominal_public_records(
             or any(type(target.get("marker")) is not int or target.get("marker") != number + 1 for number, target in enumerate(track_targets))
         ):
             raise EvidenceError("public nominal semantic join is invalid")
-    if any(target.get("track") not in TRACKS for target in targets):
+    if len(targets) != 2 or any(target.get("track") not in TRACKS for target in targets):
         raise EvidenceError("public target evidence is cross-track")
 
 
@@ -943,12 +1403,12 @@ def verify_bundle(path: Path, *, before_completion: Callable[[], None] | None = 
 
 
 def _verify_bundle(path: Path, *, before_completion: Callable[[], None] | None = None) -> VerifiedBundle:
-    bundle = Path(os.path.abspath(path))
+    bundle = _canonical_directory(path, "evidence bundle")
     manifest = _parse_json(_read_manifest_only(bundle), "public manifest")
     schema = manifest.get("schema_version")
     try:
         family = dispatch_schema(manifest)
-    except Exception:
+    except SchemaError:
         raise EvidenceError("bundle schema dispatch failed closed") from None
     if schema == PUBLIC_MANIFEST_SCHEMA:
         expected = set(PUBLIC_FILES)
@@ -958,6 +1418,7 @@ def _verify_bundle(path: Path, *, before_completion: Callable[[], None] | None =
     if type(schema) is str and schema.startswith("kil.v3b1-public-manifest.") and family == schema:
         try:
             from tools.v3b1_local_envoy import (
+                ControllerError,
                 _verify_failure_presenter_bundle,
                 verify_presenter_bundle,
             )
@@ -969,7 +1430,7 @@ def _verify_bundle(path: Path, *, before_completion: Callable[[], None] | None =
                 verifier(bundle, before_completion=before_completion)
                 accepted = True
                 break
-            except Exception:
+            except (ControllerError, OSError):
                 continue
         if not accepted:
             raise EvidenceError("V3B-1 bundle failed its independent verifier")

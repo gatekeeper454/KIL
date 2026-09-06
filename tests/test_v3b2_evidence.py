@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import FrozenInstanceError
+from dataclasses import asdict, FrozenInstanceError
 from hashlib import sha256
 import json
 import os
@@ -9,9 +9,14 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import kil.v3b2_evidence as evidence_module
+
 from kil.v3b2_contracts import PRIVATE_MANIFEST_FIELDS, TRACKS
+from kil.v3b2_contracts import V3B2Profile
+from kil.v3b2_manifests import WorkloadIdentity, render_kind_config, render_objects
 from kil.v3b2_evidence import (
     CLAIM_EXCLUSIONS,
+    CapturedSource,
     EvidenceError,
     PublicBoundaryError,
     SourceIdentity,
@@ -28,6 +33,11 @@ from kil.v3b2_evidence import (
 
 HEX_A = "a" * 64
 HEX_B = "b" * 64
+ROOT = Path(__file__).resolve().parents[1]
+PROFILE = V3B2Profile.load(ROOT / "deploy/kind/v3b2-profile.json")
+RUN_ID = "v3b2-" + "1" * 64
+KIL_IMAGE_ID = "sha256:" + "d" * 64
+ENVOY_DIGEST = "docker.io/envoyproxy/envoy@sha256:" + "e" * 64
 
 
 def canonical(value: object) -> bytes:
@@ -54,6 +64,11 @@ class Reader:
 
 
 def private_evidence(*, request_free: bool = False) -> dict[str, object]:
+    from tests.test_v3b2_inventory import snapshot
+
+    inventory = snapshot()
+    workload = WorkloadIdentity(RUN_ID, KIL_IMAGE_ID, ENVOY_DIGEST)
+    profile_sha = sha256((ROOT / "deploy/kind/v3b2-profile.json").read_bytes()).hexdigest()
     cases = []
     attestations: list[dict[str, object]] = []
     expected = (("permit", 200, 1), ("permit", 200, 1), ("deny", 403, 0))
@@ -74,20 +89,69 @@ def private_evidence(*, request_free: bool = False) -> dict[str, object]:
         {"name": "client-a", "status": "Running", "arch": "aarch64", "cpus": 2, "memory": 4, "disk": 20, "runtime": "docker"},
         {"name": "client-b", "status": "Stopped", "arch": "aarch64", "cpus": 4, "memory": 8, "disk": 40, "runtime": "containerd"},
     ]
+    object_rows = [asdict(item) for item in inventory.objects]
+    image_rows = [asdict(item) for item in inventory.pod_images]
+    for image in image_rows:
+        if image["image_role"] == "workload" and image["container"] == "driver":
+            bound = next(
+                item
+                for item in object_rows
+                if item["kind"] == "Pod"
+                and item["namespace"] == image["namespace"]
+                and item["name"] == "driver"
+            )
+            image["uid"] = bound["uid"]
+            image["resource_version"] = bound["resource_version"]
     return {
         "schema_version": "kil.v3b2-private-manifest.v1",
-        "run_id": "run-v3b2-001",
-        "execution_nonce": "e" * 64,
+        "run_id": RUN_ID,
+        "execution_nonce": "9" * 64,
         "source_commit": "c" * 40,
-        "profile_sha256": HEX_B,
+        "profile_sha256": profile_sha,
         "tool_identities": {"kind": "0.32.0"},
-        "content_identities": {"calico_manifest_sha256": HEX_A},
+        "content_identities": {
+            "run_id": RUN_ID,
+            "profile_sha256": profile_sha,
+            "kind_config_sha256": sha256(render_kind_config(PROFILE)).hexdigest(),
+            "objects_manifest_sha256": sha256(render_objects(PROFILE, workload)).hexdigest(),
+            "calico_manifest_sha256": PROFILE.calico_manifest_sha256,
+            "kind_node_image": PROFILE.kind_node_image,
+            "calico_images": {name: image for name, image in PROFILE.calico_images},
+            "kil_image_id": KIL_IMAGE_ID,
+            "envoy_image_digest": ENVOY_DIGEST,
+        },
         "expected_topology": {"namespaces": ["kil-v3-baseline", "kil-v3-local-reduce", "kil-v3-signed"]},
         "expected_policy_graph": {"closed": True},
         "request_cases": cases,
         "runtime_identities": {
-            "topology_attestation": {"closed": True},
-            "policy_attestation": {"closed": True},
+            "topology_attestation": {
+                "cluster_incarnation_uid": inventory.cluster_incarnation_uid,
+                "node_container_id": inventory.node_container_id,
+                "namespaces": list(inventory.namespaces),
+                "objects": object_rows,
+                "pod_images": image_rows,
+                "endpoints": [
+                    {**asdict(item), "addresses": list(item.addresses)}
+                    for item in inventory.endpoints
+                ],
+                "calico_readiness": {
+                    "node_desired": inventory.calico_node_desired,
+                    "node_ready": inventory.calico_node_ready,
+                    "controller_desired": inventory.calico_controller_desired,
+                    "controller_ready": inventory.calico_controller_ready,
+                },
+            },
+            "policy_attestation": {
+                "edges": [
+                    {
+                        **asdict(item),
+                        "source_roles": list(item.source_roles),
+                        "destination_roles": list(item.destination_roles),
+                        "protocol_ports": [list(pair) for pair in item.protocol_ports],
+                    }
+                    for item in inventory.policy_graph
+                ]
+            },
             "foreign_profiles_after": deepcopy(before),
             "global_context_after": "personal",
             "owned_teardown": {"cluster_absent": True, "profile_absent": True, "private_active_state_absent": True},
@@ -187,6 +251,15 @@ class V3B2EvidenceTest(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(PublicBoundaryError):
                 validate_public_projection(candidate)
 
+    def test_original_foreign_names_are_rejected_anywhere_in_projection(self):
+        evidence = private_evidence()
+        for leaked in ("client-a", "prefix client-a suffix"):
+            candidate = deepcopy(evidence)
+            candidate["runtime_identities"]["topology_attestation"]["objects"][0]["uid"] = leaked  # type: ignore[index]
+            with self.subTest(leaked=leaked), self.assertRaises(PublicBoundaryError):
+                build_public_bundle(candidate)
+        validate_public_projection({"value": "client-alpha"}, forbidden_names=("client-a",))
+
     def test_foreign_profiles_are_keyed_sorted_and_bind_normalized_resources(self):
         evidence = private_evidence()
         projected = project_foreign_profiles(evidence["foreign_profiles_before"], evidence["runtime_identities"]["foreign_profiles_after"], b"private-key")  # type: ignore[index]
@@ -205,11 +278,11 @@ class V3B2EvidenceTest(unittest.TestCase):
         self.assertEqual(set(evidence), PRIVATE_MANIFEST_FIELDS)
         bundle = build_public_bundle(evidence)
         self.assertEqual(tuple(bundle["claim_exclusions"]), CLAIM_EXCLUSIONS)
-        self.assertNotIn("e" * 64, json.dumps(bundle))
+        self.assertNotIn("9" * 64, json.dumps(bundle))
 
     def test_publication_and_verifier_reject_tree_and_semantic_tampering(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             published = publish_bundle(private_evidence(), root / "public")
             verified = verify_bundle(published)
             self.assertIsInstance(verified, VerifiedBundle)
@@ -223,7 +296,7 @@ class V3B2EvidenceTest(unittest.TestCase):
 
     def test_verifier_rejects_replacement_after_semantic_validation(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             published = publish_bundle(private_evidence(), root / "public")
             victim = published / "summary.md"
             def replace() -> None:
@@ -237,7 +310,7 @@ class V3B2EvidenceTest(unittest.TestCase):
 
     def test_wrong_order_duplicate_checksum_and_repaired_hash_drift_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             published = publish_bundle(private_evidence(), root / "public")
             requests = (published / "requests.jsonl").read_bytes().splitlines()
             (published / "requests.jsonl").chmod(0o600)
@@ -246,7 +319,123 @@ class V3B2EvidenceTest(unittest.TestCase):
             with self.assertRaises(EvidenceError):
                 verify_bundle(published)
 
-            published = publish_bundle(private_evidence(), root / "public2")
+    def test_repaired_join_and_inventory_semantic_drift_are_rejected(self):
+        mutations = (
+            "join_decision",
+            "join_status",
+            "join_markers",
+            "join_upstream",
+            "join_digest",
+            "extra_object",
+            "cluster_uid",
+            "endpoint",
+            "readiness",
+            "policy",
+            "image",
+            "pod_name",
+            "pin",
+            "run",
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                published = publish_bundle(private_evidence(), root / "public")
+                manifest_path = published / "manifest.json"
+                manifest = json.loads(manifest_path.read_text())
+                if mutation == "join_decision":
+                    manifest["semantic_joins"][0]["decision"] = "deny"
+                elif mutation == "join_status":
+                    manifest["semantic_joins"][0]["http_status"] = 418
+                elif mutation == "join_markers":
+                    manifest["semantic_joins"][0]["target_markers"] = 0
+                elif mutation == "join_upstream":
+                    manifest["semantic_joins"][0]["envoy_upstream_attempted"] = False
+                elif mutation == "join_digest":
+                    manifest["semantic_joins"][0]["decision_digest"] = "f" * 64
+                elif mutation == "extra_object":
+                    manifest["topology_attestation"]["objects"].append(deepcopy(manifest["topology_attestation"]["objects"][0]))
+                elif mutation == "cluster_uid":
+                    manifest["topology_attestation"]["cluster_incarnation_uid"] = "wrong"
+                elif mutation == "endpoint":
+                    manifest["topology_attestation"]["endpoints"][0]["service"] = "other"
+                elif mutation == "readiness":
+                    manifest["topology_attestation"]["calico_readiness"]["node_ready"] = 0
+                elif mutation == "policy":
+                    manifest["policy_attestation"]["edges"][0]["destination_roles"] = ["target"]
+                elif mutation == "image":
+                    manifest["topology_attestation"]["pod_images"][0]["image"] = ENVOY_DIGEST
+                elif mutation == "pod_name":
+                    for item in manifest["topology_attestation"]["pod_images"]:
+                        if item["image_role"] == "calico-cni":
+                            item["pod"] = "controller-z"
+                elif mutation == "pin":
+                    manifest["content_identities"]["calico_manifest_sha256"] = "f" * 64
+                else:
+                    manifest["content_identities"]["run_id"] = "v3b2-" + "2" * 64
+                manifest_path.chmod(0o600)
+                manifest_path.write_bytes(canonical(manifest))
+                self._repair_commitment_and_sums(published)
+                with self.assertRaises(EvidenceError):
+                    verify_bundle(published)
+
+    def test_symlink_ancestry_is_rejected_for_publish_and_verify(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            real = root / "real"
+            real.mkdir()
+            alias = root / "alias"
+            alias.symlink_to(real, target_is_directory=True)
+            sentinel = real / "sentinel"
+            sentinel.write_text("preserve")
+            with self.assertRaises(EvidenceError):
+                publish_bundle(private_evidence(), alias / "public")
+            self.assertEqual(sentinel.read_text(), "preserve")
+            published = publish_bundle(private_evidence(), real / "public")
+            with self.assertRaises(EvidenceError):
+                verify_bundle(alias / "public" / published.name)
+            self.assertEqual(sentinel.read_text(), "preserve")
+
+    def test_public_apis_totalize_malformed_types_and_unicode(self):
+        identity = SourceIdentity("x", "u", "1", "c", 0, sha256(b"").hexdigest())
+        with self.assertRaises(EvidenceError):
+            SourceIdentity("bad\ud800", "uid", "1", "cid", 0, sha256(b"").hexdigest())
+        with self.assertRaises(EvidenceError):
+            CapturedSource(identity, b"different")
+        with self.assertRaises(EvidenceError):
+            VerifiedBundle("v3b2-run", "bad\ud800", "result", "not_promoted", HEX_A)
+        with self.assertRaises(EvidenceError):
+            capture_source(object(), SourceIdentity("x", "u", "1", "c", 0, sha256(b"").hexdigest()))  # type: ignore[arg-type]
+        with self.assertRaises(EvidenceError):
+            build_public_bundle(None)
+        with self.assertRaises(PublicBoundaryError):
+            validate_public_projection(None)
+        with self.assertRaises(PublicBoundaryError):
+            validate_public_projection({"value": "bad\ud800"})
+        with self.assertRaises(PublicBoundaryError):
+            validate_public_projection({"bad\ud800": "value"})
+        with self.assertRaises(PublicBoundaryError):
+            validate_public_projection({"value": 1.0})
+        with self.assertRaises(EvidenceError):
+            project_foreign_profiles(
+                [{"name": "bad\ud800", "status": "Running", "arch": "a", "cpus": 1, "memory": 1, "disk": 1, "runtime": "docker"}],
+                [],
+                b"key",
+            )
+        with self.assertRaises(EvidenceError):
+            project_foreign_profiles(
+                [{"name": "foreign", "status": "Running", "arch": "bad\ud800", "cpus": 1, "memory": 1, "disk": 1, "runtime": "docker"}],
+                [],
+                b"key",
+            )
+        with self.assertRaises(EvidenceError):
+            publish_bundle(private_evidence(), None)  # type: ignore[arg-type]
+        with self.assertRaises(EvidenceError):
+            verify_bundle(None)  # type: ignore[arg-type]
+
+    def test_duplicate_checksum_entry_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            published = publish_bundle(private_evidence(), root / "public")
             sums = published / "SHA256SUMS"
             sums.chmod(0o600)
             sums.write_bytes(sums.read_bytes() + sums.read_bytes().splitlines(keepends=True)[0])
@@ -257,7 +446,7 @@ class V3B2EvidenceTest(unittest.TestCase):
         mutations = ("missing", "symlink", "malformed", "oversized")
         for mutation in mutations:
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
+                root = Path(directory).resolve()
                 published = publish_bundle(private_evidence(), root / "public")
                 target = published / "requests.jsonl"
                 target.chmod(0o600)
@@ -274,7 +463,7 @@ class V3B2EvidenceTest(unittest.TestCase):
 
     def test_v3b1_and_v3b2_dispatch_are_independent_and_hybrid_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             v3b2 = publish_bundle(private_evidence(), root / "public")
             self.assertEqual(verify_bundle(v3b2).schema_family, "v3b2-run")
             from tests.test_v3b1_local_envoy import published_presenter_bundle
@@ -296,6 +485,19 @@ class V3B2EvidenceTest(unittest.TestCase):
         sums = bundle / "SHA256SUMS"
         sums.chmod(0o600)
         sums.write_text("".join(lines), encoding="ascii")
+
+    @staticmethod
+    def _repair_commitment_and_sums(bundle: Path) -> None:
+        manifest_path = bundle / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        artifacts = evidence_module._artifacts(manifest)
+        for name, payload in artifacts.items():
+            path = bundle / name
+            path.chmod(0o600)
+            path.write_bytes(payload)
+        manifest["public_commitment_sha256"] = evidence_module._public_commitment(manifest, artifacts)
+        manifest_path.write_bytes(canonical(manifest))
+        V3B2EvidenceTest._rewrite_sums(bundle)
 
 
 if __name__ == "__main__":
