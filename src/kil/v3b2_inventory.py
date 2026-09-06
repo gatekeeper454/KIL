@@ -27,6 +27,28 @@ _ALLOWED_NAMESPACES = (
     "kube-system",
     "local-path-storage",
 )
+_DOCKER_HOST = re.compile(
+    r"unix:///Users/[A-Za-z0-9._-]+/\.colima/kil-v3-lab/docker\.sock"
+)
+_CALICO_PINS = {
+    "calico-cni": (
+        "quay.io/calico/cni@sha256:"
+        "1cfc6aa9c4dad3575fdf36b78185fd7d68bcd4acc95778f8342be4fb6a851a14"
+    ),
+    "calico-node": (
+        "quay.io/calico/node@sha256:"
+        "f4fafd8ba641d96c5a91b01e5a519117d77d55dee789a3562ba3ad4aa125b36a"
+    ),
+    "calico-kube-controllers": (
+        "quay.io/calico/kube-controllers@sha256:"
+        "adf0ac895796d21bca5383bc81c4cd2614be3a4308085b47857d7999f4cc2b1f"
+    ),
+}
+_CALICO_CONTAINERS = {
+    "calico-cni": "install-cni",
+    "calico-node": "calico-node",
+    "calico-kube-controllers": "calico-kube-controllers",
+}
 
 
 def _closed_policy_graph() -> tuple[PolicyEdge, ...]:
@@ -93,6 +115,7 @@ class ObjectIdentity:
 
 @dataclass(frozen=True, slots=True, order=True)
 class PodImageIdentity:
+    image_role: str
     namespace: str
     pod: str
     container: str
@@ -103,6 +126,10 @@ class PodImageIdentity:
     ready: bool
 
     def __post_init__(self) -> None:
+        if type(self.image_role) is not str or self.image_role not in {
+            "workload", *_CALICO_PINS,
+        }:
+            raise InventoryError("image_role must be an exact reviewed role")
         for label in ("namespace", "pod", "container", "uid", "resource_version"):
             _exact_string(label, getattr(self, label))
         _exact_string("image", self.image)
@@ -113,12 +140,16 @@ class PodImageIdentity:
             raise InventoryError("image must be an immutable digest or KIL content reference")
         if type(self.image_id) is not str or _IMAGE_ID.fullmatch(self.image_id) is None:
             raise InventoryError("imageID must be an immutable realized digest identity")
+        if self.image.rsplit(":", 1)[-1].removeprefix("sha256-") != self.image_id.rsplit(":", 1)[-1]:
+            raise InventoryError("requested and realized image digests differ")
         if type(self.ready) is not bool:
             raise InventoryError("ready condition must be an exact boolean")
 
 
 @dataclass(frozen=True, slots=True, order=True)
 class EndpointIdentity:
+    source_kind: str
+    source_name: str
     namespace: str
     service: str
     addresses: tuple[str, ...]
@@ -127,6 +158,11 @@ class EndpointIdentity:
     port: int
 
     def __post_init__(self) -> None:
+        if type(self.source_kind) is not str or self.source_kind not in {
+            "Endpoints", "EndpointSlice",
+        }:
+            raise InventoryError("endpoint source_kind is not reviewed")
+        _exact_string("endpoint source_name", self.source_name)
         _exact_string("endpoint namespace", self.namespace)
         _exact_string("endpoint service", self.service)
         _exact_string_tuple("endpoint addresses", self.addresses)
@@ -182,8 +218,7 @@ def _validate_common(record: object) -> None:
         raise InventoryError("Kind node container ID must be 64 lowercase hexadecimal characters")
     if (
         type(record.docker_host) is not str
-        or not record.docker_host.startswith("unix:///")
-        or not record.docker_host.endswith("/.colima/kil-v3-lab/docker.sock")
+        or _DOCKER_HOST.fullmatch(record.docker_host) is None
     ):
         raise InventoryError("Docker host must be explicitly bound to kil-v3-lab")
     _exact_string_tuple("namespaces", record.namespaces)
@@ -192,6 +227,22 @@ def _validate_common(record: object) -> None:
     _sorted_records("objects", record.objects, ObjectIdentity)
     _sorted_records("pod_images", record.pod_images, PodImageIdentity)
     _sorted_records("endpoints", record.endpoints, EndpointIdentity)
+    calico = tuple(item for item in record.pod_images if item.image_role != "workload")
+    if tuple(sorted(item.image_role for item in calico)) != tuple(sorted(_CALICO_PINS)):
+        raise InventoryError("Calico image role inventory must contain each exact pin once")
+    for item in calico:
+        if (
+            item.namespace != "kube-system"
+            or item.container != _CALICO_CONTAINERS[item.image_role]
+            or item.image != _CALICO_PINS[item.image_role]
+        ):
+            raise InventoryError("Calico image differs from the exact profile pin")
+    endpoint_keys = tuple(
+        (item.namespace, item.service, item.port_name, item.protocol, item.port)
+        for item in record.endpoints
+    )
+    if len(set(endpoint_keys)) != len(endpoint_keys):
+        raise InventoryError("ambiguous Endpoints/EndpointSlice source for Service port")
     _sorted_records("policy_graph", record.policy_graph, PolicyEdge)
     if record.policy_graph != _EXPECTED_POLICY_GRAPH:
         raise InventoryError("policy_graph differs from the exact twelve-edge contract")
@@ -283,6 +334,309 @@ def _keys(label: str, value: object, expected: frozenset[str]) -> dict[str, obje
     return value
 
 
+def _decode_list(payload: bytes, expected_kind: str) -> list[dict[str, object]]:
+    if type(payload) is not bytes or len(payload) > _MAX_KUBECTL_BYTES:
+        raise InventoryError("kubectl response must be bytes of at most 8 MiB")
+    _exact_string("expected_kind", expected_kind)
+    try:
+        value = json.loads(
+            payload.decode("utf-8", errors="strict"), object_pairs_hook=_closed_object
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise InventoryError(f"invalid kubectl JSON: {error}") from error
+    envelope = _keys(
+        "Kubernetes List envelope", value,
+        frozenset({"apiVersion", "kind", "metadata", "items"}),
+    )
+    if envelope["apiVersion"] != "v1" or envelope["kind"] != "List":
+        raise InventoryError("kubectl response is not an exact Kubernetes List envelope")
+    metadata = _keys("List metadata", envelope["metadata"], frozenset({"resourceVersion"}))
+    _exact_string("List resourceVersion", metadata["resourceVersion"], empty=True)
+    if type(envelope["items"]) is not list:
+        raise InventoryError("List items must be an exact JSON array")
+    if payload != (canonical_json(value) + "\n").encode("utf-8"):
+        raise InventoryError("kubectl response must be canonical JSON followed by one newline")
+    items = envelope["items"]
+    identities: set[tuple[str, str, str, str]] = set()
+    for value_item in items:
+        if type(value_item) is not dict:
+            raise InventoryError("List item must be an exact JSON object")
+        metadata_value = value_item.get("metadata")
+        if type(metadata_value) is not dict:
+            raise InventoryError("List item metadata must be an exact JSON object")
+        identity = (
+            value_item.get("apiVersion"), value_item.get("kind"),
+            metadata_value.get("namespace"), metadata_value.get("name"),
+        )
+        if any(type(part) is not str for part in identity):
+            raise InventoryError("List item identity fields must be exact strings")
+        if value_item["kind"] != expected_kind:
+            raise InventoryError("List item kind differs from expected_kind")
+        if identity in identities:
+            raise InventoryError("Kubernetes List contains duplicate object identities")
+        identities.add(identity)
+    return items
+
+
+def _runtime_metadata(value: object, *, labels: bool = False) -> dict[str, object]:
+    fields = {"namespace", "name", "uid", "resourceVersion"}
+    if labels:
+        fields.add("labels")
+    metadata = _keys("runtime metadata", value, frozenset(fields))
+    for name in ("namespace", "name", "uid", "resourceVersion"):
+        _exact_string(f"metadata {name}", metadata[name])
+    return metadata
+
+
+def _exact_array(label: str, value: object) -> list[object]:
+    if type(value) is not list:
+        raise InventoryError(f"{label} must be an exact JSON array")
+    return value
+
+
+def _parse_pod_image_list(payload: bytes) -> tuple[PodImageIdentity, ...]:
+    records: list[PodImageIdentity] = []
+    for item in _decode_list(payload, "Pod"):
+        closed = _keys(
+            "Pod", item, frozenset({"apiVersion", "kind", "metadata", "status"})
+        )
+        if closed["apiVersion"] != "v1":
+            raise InventoryError("Pod apiVersion is not v1")
+        metadata = _runtime_metadata(closed["metadata"])
+        status = _keys(
+            "Pod status", closed["status"],
+            frozenset({"conditions", "containerStatuses", "initContainerStatuses"}),
+        )
+        conditions = _exact_array("Pod conditions", status["conditions"])
+        if len(conditions) != 1:
+            raise InventoryError("Pod must have exactly one projected Ready condition")
+        condition = _keys(
+            "Pod condition", conditions[0], frozenset({"type", "status"})
+        )
+        if condition["type"] != "Ready" or condition["status"] not in {"True", "False"}:
+            raise InventoryError("unknown or ambiguous Pod condition")
+        ready = condition["status"] == "True"
+        seen_containers: set[str] = set()
+        for field in ("containerStatuses", "initContainerStatuses"):
+            for raw in _exact_array(field, status[field]):
+                container = _keys(
+                    "container status", raw, frozenset({"name", "image", "imageID"})
+                )
+                name = _exact_string("container name", container["name"])
+                if name in seen_containers:
+                    raise InventoryError("duplicate container status")
+                seen_containers.add(name)
+                role = {
+                    "install-cni": "calico-cni",
+                    "calico-node": "calico-node",
+                    "calico-kube-controllers": "calico-kube-controllers",
+                }.get(name, "workload")
+                if (
+                    metadata["namespace"] == "kube-system"
+                    and (
+                        metadata["name"].startswith("calico-node-")
+                        or metadata["name"].startswith("calico-kube-controllers-")
+                    )
+                    and role == "workload"
+                ):
+                    raise InventoryError("unknown Calico Pod container role")
+                records.append(PodImageIdentity(
+                    role, metadata["namespace"], metadata["name"], name,
+                    metadata["uid"], metadata["resourceVersion"],
+                    container["image"], container["imageID"], ready,
+                ))
+    ordered = tuple(sorted(records))
+    if len(set(ordered)) != len(ordered):
+        raise InventoryError("duplicate Pod image identity")
+    return ordered
+
+
+def _parse_endpoint_list(
+    payload: bytes, expected_kind: str
+) -> tuple[EndpointIdentity, ...]:
+    if type(expected_kind) is not str or expected_kind not in {"Endpoints", "EndpointSlice"}:
+        raise InventoryError("endpoint source kind is not reviewed")
+    records: list[EndpointIdentity] = []
+    for item in _decode_list(payload, expected_kind):
+        if expected_kind == "Endpoints":
+            closed = _keys(
+                "Endpoints", item,
+                frozenset({"apiVersion", "kind", "metadata", "subsets"}),
+            )
+            if closed["apiVersion"] != "v1":
+                raise InventoryError("Endpoints apiVersion is not v1")
+            metadata = _runtime_metadata(closed["metadata"])
+            subsets = _exact_array("Endpoints subsets", closed["subsets"])
+            if len(subsets) != 1:
+                raise InventoryError("ambiguous Endpoints subsets")
+            subset = _keys(
+                "Endpoints subset", subsets[0], frozenset({"addresses", "ports"})
+            )
+            addresses = tuple(sorted(
+                _exact_string(
+                    "endpoint address",
+                    _keys("endpoint address", address, frozenset({"ip"}))["ip"],
+                )
+                for address in _exact_array("endpoint addresses", subset["addresses"])
+            ))
+            ports = _exact_array("endpoint ports", subset["ports"])
+            service = metadata["name"]
+        else:
+            closed = _keys(
+                "EndpointSlice", item,
+                frozenset({
+                    "apiVersion", "kind", "metadata", "addressType", "endpoints", "ports",
+                }),
+            )
+            if closed["apiVersion"] != "discovery.k8s.io/v1" or closed["addressType"] != "IPv4":
+                raise InventoryError("EndpointSlice apiVersion or addressType is not reviewed")
+            metadata = _runtime_metadata(closed["metadata"], labels=True)
+            labels = _keys(
+                "EndpointSlice labels", metadata["labels"],
+                frozenset({"kubernetes.io/service-name"}),
+            )
+            service = _exact_string(
+                "EndpointSlice service label", labels["kubernetes.io/service-name"]
+            )
+            address_values: list[str] = []
+            for endpoint in _exact_array("EndpointSlice endpoints", closed["endpoints"]):
+                endpoint_value = _keys(
+                    "EndpointSlice endpoint", endpoint,
+                    frozenset({"addresses", "conditions"}),
+                )
+                condition = _keys(
+                    "EndpointSlice conditions", endpoint_value["conditions"],
+                    frozenset({"ready"}),
+                )
+                if type(condition["ready"]) is not bool or condition["ready"] is not True:
+                    raise InventoryError("EndpointSlice has unknown or unready condition")
+                address_values.extend(
+                    _exact_string("EndpointSlice address", address)
+                    for address in _exact_array("EndpointSlice addresses", endpoint_value["addresses"])
+                )
+            addresses = tuple(sorted(address_values))
+            ports = _exact_array("EndpointSlice ports", closed["ports"])
+        if not addresses or len(set(addresses)) != len(addresses):
+            raise InventoryError("endpoint addresses are empty or ambiguous")
+        for raw_port in ports:
+            port = _keys(
+                "endpoint port", raw_port, frozenset({"name", "protocol", "port"})
+            )
+            records.append(EndpointIdentity(
+                expected_kind, metadata["name"], metadata["namespace"], service,
+                addresses, port["name"], port["protocol"], port["port"],
+            ))
+    ordered = tuple(sorted(records))
+    keys = tuple(
+        (item.namespace, item.service, item.port_name, item.protocol, item.port)
+        for item in ordered
+    )
+    if len(set(keys)) != len(keys):
+        raise InventoryError("ambiguous endpoint sources or Service ports")
+    return ordered
+
+
+def _parse_policy_list(payload: bytes) -> tuple[PolicyEdge, ...]:
+    records: list[PolicyEdge] = []
+    for item in _decode_list(payload, "NetworkPolicy"):
+        closed = _keys(
+            "NetworkPolicy", item,
+            frozenset({"apiVersion", "kind", "metadata", "spec"}),
+        )
+        if closed["apiVersion"] != "networking.k8s.io/v1":
+            raise InventoryError("NetworkPolicy apiVersion is not reviewed")
+        metadata = _runtime_metadata(closed["metadata"])
+        spec = _keys(
+            "policy projection", closed["spec"],
+            frozenset({"sourceRoles", "direction", "peers", "ports"}),
+        )
+        if spec["direction"] != "Egress":
+            raise InventoryError("policy direction projection must be exact Egress")
+        source_roles = tuple(_exact_array("sourceRoles", spec["sourceRoles"]))
+        peers = _exact_array("policy peers", spec["peers"])
+        if len(peers) != 1:
+            raise InventoryError("policy peer projection is ambiguous")
+        peer = _keys("policy peer", peers[0], frozenset({"namespace", "roles"}))
+        destination_roles = tuple(_exact_array("destination roles", peer["roles"]))
+        protocol_ports: list[tuple[str, int]] = []
+        for raw_port in _exact_array("policy ports", spec["ports"]):
+            port = _keys("policy port", raw_port, frozenset({"protocol", "port"}))
+            protocol_ports.append((port["protocol"], port["port"]))
+        edge = PolicyEdge(
+            metadata["namespace"], source_roles, peer["namespace"],
+            destination_roles, tuple(sorted(protocol_ports)),
+        )
+        if edge not in _EXPECTED_POLICY_GRAPH:
+            raise InventoryError("policy selector, peer, direction, or port is not reviewed")
+        records.append(edge)
+    ordered = tuple(sorted(records))
+    if len(set(ordered)) != len(ordered):
+        raise InventoryError("duplicate policy edge")
+    return ordered
+
+
+def _parse_calico_workload_list(
+    payload: bytes, expected_kind: str
+) -> tuple[int, int, tuple[tuple[str, str], ...]]:
+    if type(expected_kind) is not str or expected_kind not in {"DaemonSet", "Deployment"}:
+        raise InventoryError("Calico workload kind is not reviewed")
+    items = _decode_list(payload, expected_kind)
+    if len(items) != 1:
+        raise InventoryError("Calico workload inventory must contain exactly one object")
+    item = _keys(
+        "Calico workload", items[0],
+        frozenset({"apiVersion", "kind", "metadata", "spec", "status"}),
+    )
+    if item["apiVersion"] != "apps/v1":
+        raise InventoryError("Calico workload apiVersion is not apps/v1")
+    metadata = _runtime_metadata(item["metadata"])
+    expected_name = "calico-node" if expected_kind == "DaemonSet" else "calico-kube-controllers"
+    if metadata["namespace"] != "kube-system" or metadata["name"] != expected_name:
+        raise InventoryError("Calico workload identity is not reviewed")
+    spec = _keys(
+        "Calico workload spec", item["spec"],
+        frozenset({"containers", "initContainers"}),
+    )
+    images: list[tuple[str, str]] = []
+    for field in ("containers", "initContainers"):
+        for raw_container in _exact_array(field, spec[field]):
+            container = _keys(
+                "Calico container", raw_container, frozenset({"name", "image"})
+            )
+            name = _exact_string("Calico container name", container["name"])
+            role = {
+                "install-cni": "calico-cni",
+                "calico-node": "calico-node",
+                "calico-kube-controllers": "calico-kube-controllers",
+            }.get(name)
+            if role is None or container["image"] != _CALICO_PINS[role]:
+                raise InventoryError("Calico container image does not match a profile pin")
+            images.append((role, container["image"]))
+    if len(set(role for role, _ in images)) != len(images):
+        raise InventoryError("duplicate Calico image role")
+    expected_roles = (
+        {"calico-cni", "calico-node"}
+        if expected_kind == "DaemonSet"
+        else {"calico-kube-controllers"}
+    )
+    if {role for role, _ in images} != expected_roles:
+        raise InventoryError("Calico workload omits or adds a required image role")
+    status_fields = (
+        frozenset({"desiredNumberScheduled", "numberReady"})
+        if expected_kind == "DaemonSet"
+        else frozenset({"replicas", "readyReplicas"})
+    )
+    status = _keys("Calico workload status", item["status"], status_fields)
+    if expected_kind == "DaemonSet":
+        desired_name, ready_name = "desiredNumberScheduled", "numberReady"
+    else:
+        desired_name, ready_name = "replicas", "readyReplicas"
+    desired, ready = status[desired_name], status[ready_name]
+    if type(desired) is not int or type(ready) is not int or desired < 0 or ready < 0:
+        raise InventoryError("Calico readiness counts must be exact nonnegative integers")
+    return desired, ready, tuple(sorted(images))
+
+
 def parse_kubectl_list(payload: bytes, expected_kind: str) -> tuple[ObjectIdentity, ...]:
     """Parse one bounded canonical projection of a Kubernetes List."""
 
@@ -356,8 +710,8 @@ def validate_inventory(
     )
     if len(kube_system) != 1 or kube_system[0].uid != current.cluster_incarnation_uid:
         raise InventoryError("kube-system namespace UID does not bind the cluster incarnation")
-    if current.calico_node_desired < 1 or current.calico_node_ready != current.calico_node_desired:
-        raise InventoryError("Calico node DaemonSet is not fully ready")
+    if current.calico_node_desired != 1 or current.calico_node_ready != 1:
+        raise InventoryError("Calico node DaemonSet is not exactly one ready node")
     if current.calico_controller_desired != 1 or current.calico_controller_ready != 1:
         raise InventoryError("Calico kube-controllers Deployment is not exactly one ready replica")
     for field in (

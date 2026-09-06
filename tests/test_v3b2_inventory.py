@@ -4,6 +4,7 @@ import json
 import unittest
 
 from kil.canonical import canonical_json
+import kil.v3b2_inventory as inventory
 from kil.v3b2_inventory import (
     EndpointIdentity,
     ExpectedInventory,
@@ -21,8 +22,9 @@ from kil.v3b2_inventory import (
 KUBE_SYSTEM_UID = "11111111-1111-4111-8111-111111111111"
 NODE_ID = "a" * 64
 DOCKER_HOST = "unix:///Users/test/.colima/kil-v3-lab/docker.sock"
-CALICO_NODE = "quay.io/calico/node@sha256:" + "b" * 64
-CALICO_CONTROLLERS = "quay.io/calico/kube-controllers@sha256:" + "c" * 64
+CALICO_CNI = "quay.io/calico/cni@sha256:1cfc6aa9c4dad3575fdf36b78185fd7d68bcd4acc95778f8342be4fb6a851a14"
+CALICO_NODE = "quay.io/calico/node@sha256:f4fafd8ba641d96c5a91b01e5a519117d77d55dee789a3562ba3ad4aa125b36a"
+CALICO_CONTROLLERS = "quay.io/calico/kube-controllers@sha256:adf0ac895796d21bca5383bc81c4cd2614be3a4308085b47857d7999f4cc2b1f"
 KIL_IMAGE = "kil.local/kil-v3b2:sha256-" + "d" * 64
 KIL_IMAGE_ID = "docker-pullable://kil.local/kil-v3b2@sha256:" + "d" * 64
 
@@ -53,11 +55,12 @@ def snapshot() -> InventorySnapshot:
         obj("Service", "kil-v3-baseline", "envoy", "service"),
     )))
     images = tuple(sorted((
-        PodImageIdentity("kube-system", "calico-node-a", "calico-node", "pod-calico", "201", CALICO_NODE, "docker-pullable://quay.io/calico/node@sha256:" + "b" * 64, True),
-        PodImageIdentity("kube-system", "calico-kube-controllers-a", "calico-kube-controllers", "pod-controller", "202", CALICO_CONTROLLERS, "docker-pullable://quay.io/calico/kube-controllers@sha256:" + "c" * 64, True),
-        PodImageIdentity("kil-v3-baseline", "envoy-a", "envoy", "pod-envoy", "203", KIL_IMAGE, KIL_IMAGE_ID, True),
+        PodImageIdentity("calico-cni", "kube-system", "calico-node-a", "install-cni", "pod-calico", "201", CALICO_CNI, "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1], True),
+        PodImageIdentity("calico-node", "kube-system", "calico-node-a", "calico-node", "pod-calico", "201", CALICO_NODE, "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1], True),
+        PodImageIdentity("calico-kube-controllers", "kube-system", "calico-kube-controllers-a", "calico-kube-controllers", "pod-controller", "202", CALICO_CONTROLLERS, "docker-pullable://quay.io/calico/kube-controllers@sha256:" + CALICO_CONTROLLERS.rsplit(":", 1)[1], True),
+        PodImageIdentity("workload", "kil-v3-baseline", "envoy-a", "envoy", "pod-envoy", "203", KIL_IMAGE, KIL_IMAGE_ID, True),
     )))
-    endpoints = (EndpointIdentity("kil-v3-baseline", "envoy", ("10.244.0.10",), "http", "TCP", 8080),)
+    endpoints = (EndpointIdentity("Endpoints", "envoy", "kil-v3-baseline", "envoy", ("10.244.0.10",), "http", "TCP", 8080),)
     return InventorySnapshot(
         KUBE_SYSTEM_UID,
         NODE_ID,
@@ -79,6 +82,13 @@ def tampered(record, **changes):
     for name, value in changes.items():
         object.__setattr__(changed, name, value)
     return changed
+
+
+def raw_list(items: list[dict]) -> bytes:
+    return (canonical_json({
+        "apiVersion": "v1", "kind": "List",
+        "metadata": {"resourceVersion": ""}, "items": items,
+    }) + "\n").encode()
 
 
 class StrSubclass(str):
@@ -124,9 +134,9 @@ class V3B2InventoryTest(unittest.TestCase):
                 with self.assertRaises((FrozenInstanceError, AttributeError, TypeError)):
                     record.extra = "no"  # type: ignore[attr-defined]
         with self.assertRaises(InventoryError):
-            EndpointIdentity("n", "s", TupleSubclass(("10.0.0.1",)), "http", "TCP", 80)
+            EndpointIdentity("Endpoints", "source", "n", "s", TupleSubclass(("10.0.0.1",)), "http", "TCP", 80)
         with self.assertRaises(InventoryError):
-            EndpointIdentity("n", "s", ("10.0.0.1",), "http", "TCP", True)
+            EndpointIdentity("Endpoints", "source", "n", "s", ("10.0.0.1",), "http", "TCP", True)
         with self.assertRaises(InventoryError):
             ObjectIdentity(StrSubclass("v1"), "Pod", "n", "p", "u", "r")
 
@@ -162,7 +172,7 @@ class V3B2InventoryTest(unittest.TestCase):
             tampered(self.snapshot, namespaces=tuple(sorted((*self.snapshot.namespaces, "foreign-in-cluster")))),
             replace(self.snapshot, objects=tuple(sorted((*self.snapshot.objects, obj("Deployment", "kil-v3-baseline", "extra", "x"))))),
             replace(self.snapshot, objects=tuple(sorted((*self.snapshot.objects, obj("Service", "kil-v3-signed", "public", "y"))))),
-            replace(self.snapshot, endpoints=(*self.snapshot.endpoints, EndpointIdentity("kil-v3-signed", "public", ("10.244.0.20",), "http", "TCP", 8080))),
+            replace(self.snapshot, endpoints=(*self.snapshot.endpoints, EndpointIdentity("Endpoints", "public", "kil-v3-signed", "public", ("10.244.0.20",), "http", "TCP", 8080))),
             tampered(
                 self.snapshot,
                 policy_graph=tuple(sorted((
@@ -183,11 +193,13 @@ class V3B2InventoryTest(unittest.TestCase):
         after = self.snapshot
         changed_object = replace(after.objects[1], uid="changed")
         changed_rv = replace(after.objects[1], resource_version="changed")
-        changed_image = replace(after.pod_images[0], image_id=after.pod_images[0].image_id[:-1] + "a")
+        changed_image = tampered(
+            after.pod_images[0], image_id=after.pod_images[0].image_id[:-1] + "a",
+        )
         for mutated in (
             replace(after, objects=tuple(sorted((after.objects[0], changed_object, after.objects[2])))),
             replace(after, objects=tuple(sorted((after.objects[0], changed_rv, after.objects[2])))),
-            replace(after, pod_images=tuple(sorted((changed_image, *after.pod_images[1:])))),
+            tampered(after, pod_images=tuple(sorted((changed_image, *after.pod_images[1:])))),
         ):
             with self.assertRaises(InventoryError):
                 stable_source(self.snapshot, mutated)
@@ -207,17 +219,21 @@ class V3B2InventoryTest(unittest.TestCase):
 
     def test_rejects_calico_count_or_pinned_image_drift_and_mutable_image_ids(self) -> None:
         mutable = tampered(self.snapshot.pod_images[0], image="quay.io/calico/node:v3.32.0")
-        wrong = replace(self.snapshot.pod_images[0], image=CALICO_NODE[:-1] + "e")
+        wrong = tampered(self.snapshot.pod_images[0], image=CALICO_NODE[:-1] + "e")
         no_digest_id = tampered(self.snapshot.pod_images[0], image_id="sha256:" + "b" * 64)
         for mutated in (
             replace(self.snapshot, calico_node_desired=2),
             replace(self.snapshot, calico_controller_desired=2, calico_controller_ready=2),
             tampered(self.snapshot, pod_images=tuple(sorted((mutable, *self.snapshot.pod_images[1:])))),
-            replace(self.snapshot, pod_images=tuple(sorted((wrong, *self.snapshot.pod_images[1:])))),
+            tampered(self.snapshot, pod_images=tuple(sorted((wrong, *self.snapshot.pod_images[1:])))),
             tampered(self.snapshot, pod_images=tuple(sorted((no_digest_id, *self.snapshot.pod_images[1:])))),
         ):
             with self.assertRaises(InventoryError):
                 validate_inventory(mutated, self.expected)
+        two_nodes = replace(self.snapshot, calico_node_desired=2, calico_node_ready=2)
+        mirrored = replace(self.expected, calico_node_desired=2, calico_node_ready=2)
+        with self.assertRaisesRegex(InventoryError, "Calico"):
+            validate_inventory(two_nodes, mirrored)
 
     def test_policy_graph_is_exact_twelve_edges_including_three_dns_edges(self) -> None:
         graph = self.snapshot.policy_graph
@@ -246,11 +262,130 @@ class V3B2InventoryTest(unittest.TestCase):
         with self.assertRaises(InventoryError):
             replace(self.snapshot, objects=tuple(reversed(self.snapshot.objects)))
         with self.assertRaises(InventoryError):
-            PodImageIdentity("n", "p", "c", "u", "r", KIL_IMAGE, KIL_IMAGE_ID, "Unknown")  # type: ignore[arg-type]
+            PodImageIdentity("workload", "n", "p", "c", "u", "r", KIL_IMAGE, KIL_IMAGE_ID, "Unknown")  # type: ignore[arg-type]
         with self.assertRaises(InventoryError):
-            EndpointIdentity("n", "s", ("10.0.0.1", "10.0.0.1"), "http", "TCP", 80)
+            EndpointIdentity("Endpoints", "source", "n", "s", ("10.0.0.1", "10.0.0.1"), "http", "TCP", 80)
         with self.assertRaises(InventoryError):
-            EndpointIdentity("n", "s", ("10.0.0.2", "10.0.0.1"), "http", "TCP", 80)
+            EndpointIdentity("Endpoints", "source", "n", "s", ("10.0.0.2", "10.0.0.1"), "http", "TCP", 80)
+
+    def test_raw_pod_projection_closes_conditions_and_container_image_identity(self) -> None:
+        item = {
+            "apiVersion": "v1", "kind": "Pod",
+            "metadata": {"namespace": "kube-system", "name": "calico-node-a", "uid": "pod-calico", "resourceVersion": "201"},
+            "status": {
+                "conditions": [{"type": "Ready", "status": "True"}],
+                "containerStatuses": [{"name": "calico-node", "image": CALICO_NODE, "imageID": "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1]}],
+                "initContainerStatuses": [{"name": "install-cni", "image": CALICO_CNI, "imageID": "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1]}],
+            },
+        }
+        parsed = inventory._parse_pod_image_list(raw_list([item]))
+        self.assertEqual(tuple(record.image_role for record in parsed), ("calico-cni", "calico-node"))
+        for mutation in (
+            {**item, "status": {**item["status"], "conditions": [{"type": "Initialized", "status": "True"}]}},
+            {**item, "status": {**item["status"], "conditions": [{"type": "Ready", "status": "Unknown"}]}},
+            {**item, "status": {**item["status"], "extra": 1}},
+            {**item, "status": {**item["status"], "containerStatuses": item["status"]["containerStatuses"] * 2}},
+            {**item, "status": {**item["status"], "containerStatuses": [{"name": "mystery", "image": CALICO_NODE, "imageID": "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1]}]}},
+        ):
+            with self.assertRaises(InventoryError):
+                inventory._parse_pod_image_list(raw_list([mutation]))
+
+    def test_raw_endpoints_and_slices_reject_unknown_conditions_and_ambiguity(self) -> None:
+        endpoints = {
+            "apiVersion": "v1", "kind": "Endpoints",
+            "metadata": {"namespace": "kil-v3-baseline", "name": "envoy", "uid": "ep-1", "resourceVersion": "3"},
+            "subsets": [{"addresses": [{"ip": "10.244.0.10"}], "ports": [{"name": "http", "protocol": "TCP", "port": 8080}]}],
+        }
+        slices = {
+            "apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSlice",
+            "metadata": {"namespace": "kil-v3-baseline", "name": "envoy-a", "uid": "slice-1", "resourceVersion": "4", "labels": {"kubernetes.io/service-name": "envoy"}},
+            "addressType": "IPv4",
+            "endpoints": [{"addresses": ["10.244.0.10"], "conditions": {"ready": True}}],
+            "ports": [{"name": "http", "protocol": "TCP", "port": 8080}],
+        }
+        first = inventory._parse_endpoint_list(raw_list([endpoints]), "Endpoints")
+        second = inventory._parse_endpoint_list(raw_list([slices]), "EndpointSlice")
+        self.assertEqual(first[0].addresses, second[0].addresses)
+        ambiguous = tampered(self.snapshot, endpoints=tuple(sorted((*first, *second))))
+        mirrored = ExpectedInventory(
+            self.expected.cluster_incarnation_uid, self.expected.node_container_id,
+            self.expected.docker_host, self.expected.namespaces, self.expected.objects,
+            self.expected.pod_images, self.expected.endpoints, self.expected.policy_graph,
+            1, 1, 1, 1,
+        )
+        object.__setattr__(mirrored, "endpoints", ambiguous.endpoints)
+        with self.assertRaisesRegex(InventoryError, "ambiguous"):
+            validate_inventory(ambiguous, mirrored)
+        bad_slice = {**slices, "endpoints": [{"addresses": ["10.244.0.10"], "conditions": {"ready": True, "serving": True}}]}
+        with self.assertRaises(InventoryError):
+            inventory._parse_endpoint_list(raw_list([bad_slice]), "EndpointSlice")
+
+    def test_raw_policy_projection_rejects_selector_direction_peer_and_port_ambiguity(self) -> None:
+        item = {
+            "apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy",
+            "metadata": {"namespace": "kil-v3-baseline", "name": "driver-envoy", "uid": "np-1", "resourceVersion": "5"},
+            "spec": {
+                "sourceRoles": ["driver"], "direction": "Egress",
+                "peers": [{"namespace": "kil-v3-baseline", "roles": ["envoy"]}],
+                "ports": [{"protocol": "TCP", "port": 8080}],
+            },
+        }
+        self.assertEqual(len(inventory._parse_policy_list(raw_list([item]))), 1)
+        mutations = (
+            {**item, "spec": {**item["spec"], "sourceRoles": []}},
+            {**item, "spec": {**item["spec"], "direction": "Ingress"}},
+            {**item, "spec": {**item["spec"], "peers": item["spec"]["peers"] * 2}},
+            {**item, "spec": {**item["spec"], "ports": [{"protocol": "SCTP", "port": 8080}]}},
+            {**item, "spec": {**item["spec"], "ports": [{"protocol": "TCP", "port": True}]}},
+        )
+        for mutation in mutations:
+            with self.assertRaises(InventoryError):
+                inventory._parse_policy_list(raw_list([mutation]))
+
+    def test_raw_calico_workloads_close_status_and_bind_all_three_pins(self) -> None:
+        daemonset = {
+            "apiVersion": "apps/v1", "kind": "DaemonSet",
+            "metadata": {"namespace": "kube-system", "name": "calico-node", "uid": "ds-1", "resourceVersion": "6"},
+            "spec": {"containers": [{"name": "calico-node", "image": CALICO_NODE}], "initContainers": [{"name": "install-cni", "image": CALICO_CNI}]},
+            "status": {"desiredNumberScheduled": 1, "numberReady": 1},
+        }
+        deployment = {
+            "apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": {"namespace": "kube-system", "name": "calico-kube-controllers", "uid": "dep-1", "resourceVersion": "7"},
+            "spec": {"containers": [{"name": "calico-kube-controllers", "image": CALICO_CONTROLLERS}], "initContainers": []},
+            "status": {"replicas": 1, "readyReplicas": 1},
+        }
+        self.assertEqual(inventory._parse_calico_workload_list(raw_list([daemonset]), "DaemonSet")[:2], (1, 1))
+        self.assertEqual(inventory._parse_calico_workload_list(raw_list([deployment]), "Deployment")[:2], (1, 1))
+        for mutation in (
+            {**daemonset, "status": {"desiredNumberScheduled": True, "numberReady": 1}},
+            {**daemonset, "spec": {**daemonset["spec"], "containers": [{"name": "calico-node", "image": "quay.io/calico/node@sha256:" + "e" * 64}]}},
+            {**daemonset, "spec": {**daemonset["spec"], "initContainers": []}},
+            {**deployment, "status": {**deployment["status"], "extra": 1}},
+        ):
+            kind = mutation["kind"]
+            with self.assertRaises(InventoryError):
+                inventory._parse_calico_workload_list(raw_list([mutation]), kind)
+
+    def test_calico_pin_roles_and_docker_host_cannot_be_mirrored_or_suffix_spoofed(self) -> None:
+        arbitrary = tampered(self.snapshot.pod_images[0], image=CALICO_CNI[:-1] + "e")
+        duplicate_role = tampered(
+            self.snapshot.pod_images[1], image_role="calico-cni", image=CALICO_CNI,
+        )
+        for images in (
+            tuple(sorted((arbitrary, *self.snapshot.pod_images[1:]))),
+            self.snapshot.pod_images[1:],
+            tuple(sorted((duplicate_role, *self.snapshot.pod_images[:1], *self.snapshot.pod_images[2:]))),
+        ):
+            current = tampered(self.snapshot, pod_images=images)
+            expected = tampered(self.expected, pod_images=images)
+            with self.assertRaises(InventoryError):
+                validate_inventory(current, expected)
+        spoofed = "unix:///Users/test/project/.colima/kil-v3-lab/docker.sock"
+        current = tampered(self.snapshot, docker_host=spoofed)
+        expected = tampered(self.expected, docker_host=spoofed)
+        with self.assertRaisesRegex(InventoryError, "kil-v3-lab"):
+            validate_inventory(current, expected)
 
 
 if __name__ == "__main__":
