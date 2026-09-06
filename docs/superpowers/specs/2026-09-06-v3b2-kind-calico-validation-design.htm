@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V3B-2 Kind/Calico Cluster Validation Design</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/specs/2026-09-06-v3b2-kind-calico-validation-design.md">
+<meta name="source-sha256" content="bfcd6bab34e6cab2063c8f68a29658f495a2926a46798c7695b11778c6cc93c7">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-09-06-v3b2-kind-calico-validation-design.md</code> (<code>bfcd6bab34e6cab2063c8f68a29658f495a2926a46798c7695b11778c6cc93c7</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">V3B-2 Kind/Calico Cluster Validation Design</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-09-06-v3b2-kind-calico-validation-design.md</code> (<code>bfcd6bab34e6cab2063c8f68a29658f495a2926a46798c7695b11778c6cc93c7</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-2-kind-calico-cluster-validation-design">V3B-2 Kind/Calico Cluster Validation Design</a></li><li class="level-2"><a href="#1-decision-and-purpose">1. Decision and purpose</a></li><li class="level-2"><a href="#2-scope-and-non-goals">2. Scope and non-goals</a></li><li class="level-2"><a href="#3-environment-and-ownership-boundary">3. Environment and ownership boundary</a></li><li class="level-2"><a href="#4-cluster-topology">4. Cluster topology</a></li><li class="level-2"><a href="#5-networkpolicy-contract">5. NetworkPolicy contract</a></li><li class="level-2"><a href="#6-consequential-request-flow">6. Consequential request flow</a></li><li class="level-2"><a href="#7-v3b-2a-evidence-contract">7. V3B-2a evidence contract</a></li><li class="level-2"><a href="#8-v3b-2a-acceptance-and-claims">8. V3B-2a acceptance and claims</a></li><li class="level-2"><a href="#9-v3b-2b-failure-matrix">9. V3B-2b failure matrix</a></li><li class="level-3"><a href="#9-1-policy-isolation-probes">9.1 Policy-isolation probes</a></li><li class="level-3"><a href="#9-2-state-and-authority-failures">9.2 State and authority failures</a></li><li class="level-3"><a href="#9-3-availability-and-evidence-failures">9.3 Availability and evidence failures</a></li><li class="level-2"><a href="#10-failure-and-recovery-behavior">10. Failure and recovery behavior</a></li><li class="level-2"><a href="#11-teardown-and-publication-order">11. Teardown and publication order</a></li><li class="level-2"><a href="#12-test-strategy-and-implementation-gates">12. Test strategy and implementation gates</a></li><li class="level-2"><a href="#13-v3b-2b-campaign-acceptance">13. V3B-2b campaign acceptance</a></li><li class="level-2"><a href="#14-relationship-to-v3c">14. Relationship to V3C</a></li><li class="level-2"><a href="#15-design-acceptance-summary">15. Design acceptance summary</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-2-kind-calico-cluster-validation-design" href="#v3b-2-kind-calico-cluster-validation-design">V3B-2 Kind/Calico Cluster Validation Design</a></li><li class="level-2"><a data-section-id="1-decision-and-purpose" href="#1-decision-and-purpose">1. Decision and purpose</a></li><li class="level-2"><a data-section-id="2-scope-and-non-goals" href="#2-scope-and-non-goals">2. Scope and non-goals</a></li><li class="level-2"><a data-section-id="3-environment-and-ownership-boundary" href="#3-environment-and-ownership-boundary">3. Environment and ownership boundary</a></li><li class="level-2"><a data-section-id="4-cluster-topology" href="#4-cluster-topology">4. Cluster topology</a></li><li class="level-2"><a data-section-id="5-networkpolicy-contract" href="#5-networkpolicy-contract">5. NetworkPolicy contract</a></li><li class="level-2"><a data-section-id="6-consequential-request-flow" href="#6-consequential-request-flow">6. Consequential request flow</a></li><li class="level-2"><a data-section-id="7-v3b-2a-evidence-contract" href="#7-v3b-2a-evidence-contract">7. V3B-2a evidence contract</a></li><li class="level-2"><a data-section-id="8-v3b-2a-acceptance-and-claims" href="#8-v3b-2a-acceptance-and-claims">8. V3B-2a acceptance and claims</a></li><li class="level-2"><a data-section-id="9-v3b-2b-failure-matrix" href="#9-v3b-2b-failure-matrix">9. V3B-2b failure matrix</a></li><li class="level-3"><a data-section-id="9-1-policy-isolation-probes" href="#9-1-policy-isolation-probes">9.1 Policy-isolation probes</a></li><li class="level-3"><a data-section-id="9-2-state-and-authority-failures" href="#9-2-state-and-authority-failures">9.2 State and authority failures</a></li><li class="level-3"><a data-section-id="9-3-availability-and-evidence-failures" href="#9-3-availability-and-evidence-failures">9.3 Availability and evidence failures</a></li><li class="level-2"><a data-section-id="10-failure-and-recovery-behavior" href="#10-failure-and-recovery-behavior">10. Failure and recovery behavior</a></li><li class="level-2"><a data-section-id="11-teardown-and-publication-order" href="#11-teardown-and-publication-order">11. Teardown and publication order</a></li><li class="level-2"><a data-section-id="12-test-strategy-and-implementation-gates" href="#12-test-strategy-and-implementation-gates">12. Test strategy and implementation gates</a></li><li class="level-2"><a data-section-id="13-v3b-2b-campaign-acceptance" href="#13-v3b-2b-campaign-acceptance">13. V3B-2b campaign acceptance</a></li><li class="level-2"><a data-section-id="14-relationship-to-v3c" href="#14-relationship-to-v3c">14. Relationship to V3C</a></li><li class="level-2"><a data-section-id="15-design-acceptance-summary" href="#15-design-acceptance-summary">15. Design acceptance summary</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="v3b-2-kind-calico-cluster-validation-design">V3B-2 Kind/Calico Cluster Validation Design</h1>
+<p><strong>Date:</strong> 2026-09-06</p>
+<p><strong>Status:</strong> Approved in collaborative design review; implementation not started</p>
+<p><strong>Depends on:</strong> accepted V3B-1 public proof at
+<code>fd3ce6bb24f5c63644c07cfe1e34b244f02ff617</code></p>
+<p><strong>Next phase:</strong> V3C repetition and performance measurement, only after V3B-2
+passes</p>
+<h2 id="1-decision-and-purpose">1. Decision and purpose</h2>
+<p>V3B-2 moves the accepted V3B-1 semantic workload from a local Docker/Envoy
+boundary into one isolated, single-node Kind cluster using Calico NetworkPolicy.
+It preserves the three fixed comparison tracks and the in-network one-shot
+request driver while adding Kubernetes object identity, namespace isolation,
+policy enforcement, and exact cluster teardown to the evidence chain.</p>
+<p>V3B-2 is split into two ordered sub-gates:</p>
+<ol>
+<li><strong>V3B-2a nominal parity</strong> proves that the exact <code>permit / permit / deny</code>, HTTP
+<code>200 / 200 / 403</code>, and target-marker <code>1 / 1 / 0</code> workload traverses the
+intended Kind/Calico topology once without retry.</li>
+<li><strong>V3B-2b failure matrix</strong> starts from a fresh reviewed lifecycle and exercises
+the closed policy, identity, state, availability, and evidence-failure suite.</li>
+</ol>
+<p>V3B-2a must be accepted and publicly synchronized before V3B-2b may execute.
+V3B-2b must pass before V3C may repeat or measure the cluster workload.</p>
+<h2 id="2-scope-and-non-goals">2. Scope and non-goals</h2>
+<p>V3B-2 establishes only a local single-node Kind/Calico laboratory boundary. It
+does not establish:</p>
+<ul>
+<li>production Kubernetes readiness, capacity, availability, or performance;</li>
+<li>multi-node, multi-host, cloud, or service-mesh behavior;</li>
+<li>historical prevention of the Hugging Face incident;</li>
+<li>accuracy of modeled local features for an undisclosed historical event;</li>
+<li>repeated reliability or latency distributions, which belong to V3C; or</li>
+<li>authority beyond the KTP v2.0.0 references and KIL extension boundary already
+approved for V3A and V3B-1.</li>
+</ul>
+<p>The first approved V3 design described controller-to-Envoy localhost port
+forwards. The later accepted V3B-1 in-network request-driver design supersedes
+that consequential path. V3B-2 uses <code>kubectl</code> only as a control and evidence
+channel; the host never originates the consequential HTTP request.</p>
+<h2 id="3-environment-and-ownership-boundary">3. Environment and ownership boundary</h2>
+<p>The implementation reuses the resolved profile in
+<code>deploy/kind/v3b-profile.json</code>:</p>
+<ul>
+<li>Colima 0.10.3 on Lima 2.2.0;</li>
+<li>Docker CLI 29.7.2;</li>
+<li>Kind 0.32.0;</li>
+<li><code>kindest/node:v1.36.1</code> at the already pinned official digest;</li>
+<li>kubectl 1.36.3;</li>
+<li>Envoy 1.39.1 resolved to an immutable registry digest;</li>
+<li>Calico 3.32.0 from a vendored, checksummed manifest; and</li>
+<li>the content-identified KIL service image built from the reviewed source.</li>
+</ul>
+<p>The implementation must version the current profile contract rather than
+silently reinterpret its <code>local_envoy_boundary</code> scope. The V3B-2 profile adds
+the Kind configuration, fixed CIDRs, vendored Calico identity, closed system
+namespace inventory, and <code>kind_calico_boundary</code> evidence scope. V3B-1 profile
+and verifier dispatch remain independently readable.</p>
+<p>KIL owns exactly one Colima profile and one Kind cluster, both named
+<code>kil-v3-lab</code>. The controller may start, stop, or delete only that exact profile
+and may create or delete only that exact cluster through journal-bound commands.
+Every other Colima profile, Docker context, Kind cluster, and Kubernetes context
+is foreign state and must remain untouched.</p>
+<p>Before any mutation, preflight must:</p>
+<ol>
+<li>prove source is the exact reviewed, merged, synchronized public <code>main</code>;</li>
+<li>verify locked tool bytes and version outputs;</li>
+<li>prove <code>kil-v3-lab</code> is absent;</li>
+<li>capture the closed foreign-profile inventory and global Docker context;</li>
+<li>allow closed, well-formed foreign profiles to remain running or stopped,
+while refusing ambiguous inventory and never attempting to change them;</li>
+<li>verify the node, Envoy, KIL, and Calico content identities; and</li>
+<li>create the private lifecycle journal before the first owned mutation.</li>
+</ol>
+<h2 id="4-cluster-topology">4. Cluster topology</h2>
+<p>The topology is one single-node Kind cluster with these application namespaces:</p>
+<ul>
+<li><code>kil-v3-baseline</code>;</li>
+<li><code>kil-v3-signed</code>; and</li>
+<li><code>kil-v3-local-reduce</code>.</li>
+</ul>
+<p>Each namespace contains exactly one fixed-track instance of:</p>
+<ul>
+<li>a waiting, readiness-capable one-shot request-driver Pod created fresh for
+each nominal run, failure case, or request-free readiness gate;</li>
+<li>an Envoy gateway Service and workload;</li>
+<li>an authorization Service and workload;</li>
+<li>a harmless target Service and workload;</li>
+<li>immutable ConfigMaps containing only approved public lab configuration;</li>
+<li>dedicated ServiceAccounts; and</li>
+<li>append-only decision and target ledgers on bounded ephemeral volumes.</li>
+</ul>
+<p>The workload reuses the V3B-1 application and Envoy bytes. Kubernetes manifests
+fix the track at deployment; request data cannot select or downgrade the track.
+Every workload is non-root, drops Linux capabilities, disables privilege
+escalation, uses a read-only root filesystem where compatible, has bounded
+ephemeral storage and resources, and has no host mount, host network, host PID,
+privileged mode, NodePort, LoadBalancer, or public host binding.</p>
+<p>The Kind configuration disables its default CNI and fixes the Pod and Service
+CIDRs before cluster creation. The controller installs only the vendored Calico
+manifest whose bytes and image references match the reviewed content identity,
+then waits for the closed Calico and node readiness inventory before applying
+application namespaces or recording request intent.</p>
+<h2 id="5-networkpolicy-contract">5. NetworkPolicy contract</h2>
+<p>Default-deny ingress and egress policies must exist in all three application
+namespaces before any application workload becomes ready. Explicit policy edges
+permit only:</p>
+<ol>
+<li>request driver to the same-track Envoy Service on TCP 8080;</li>
+<li>Envoy to the same-track authorization Service on TCP 8080;</li>
+<li>Envoy to the same-track target Service on TCP 8080; and</li>
+<li>the minimum same-cluster DNS path required for fixed Service discovery.</li>
+</ol>
+<p>There is no cross-track application traffic. Drivers cannot reach targets or
+authorization services directly. Authorization services cannot reach targets.
+Targets initiate no application traffic. No application Service is public.</p>
+<p>Policies select exact namespace and workload labels. The controller persists a
+canonical expected policy graph and a closed allowlist for Kind, Kubernetes,
+Calico, and application namespaces. It rejects extra application namespaces,
+workloads, Services, endpoints, ServiceAccounts, policy edges, or selector
+ambiguity, and rejects system inventory outside that reviewed allowlist. Calico
+node readiness, CNI identity, and applied policy inventory are attested before a
+request intent can be recorded.</p>
+<p>V3B-2a proves the closed policy inventory and the allowed nominal paths.
+V3B-2b supplies the negative probes required to claim observed NetworkPolicy
+blocking behavior.</p>
+<h2 id="6-consequential-request-flow">6. Consequential request flow</h2>
+<p>For each track, the host controller:</p>
+<ol>
+<li>attests aggregate workload and policy readiness;</li>
+<li>starts a fresh one-shot driver through an exact <code>kubectl</code> operation;</li>
+<li>reads its canonical readiness record;</li>
+<li>persists a durable case and request intent in the private journal;</li>
+<li>sends exactly one canonical instruction through <code>kubectl attach</code> stdin;</li>
+<li>reads exactly one canonical terminal driver result; and</li>
+<li>never retries after request intent, regardless of the observed outcome.</li>
+</ol>
+<p>The consequential data path is entirely in cluster:</p>
+<p><code>driver -&gt; Envoy -&gt; authorization -&gt; target or withhold</code>.</p>
+<p>The controller never sends the HTTP request itself. It supplies control,
+captures Kubernetes identity, freezes evidence, and performs exact teardown.</p>
+<p>The implementation keeps a thin CLI separate from focused units for profile
+and schema validation, manifest rendering, policy-graph validation, Kubernetes
+inventory, lifecycle journaling/recovery, evidence collection, semantic joins,
+public projection, and offline verification. Kubernetes and Colima commands are
+constructed from closed typed records; no component accepts arbitrary command
+fragments, current-context authority, or discovery-selected deletion targets.</p>
+<h2 id="7-v3b-2a-evidence-contract">7. V3B-2a evidence contract</h2>
+<p>The private manifest and journal bind, before mutation or request as applicable:</p>
+<ul>
+<li>source commit, execution nonce, run identity, and phase;</li>
+<li>locked tool hashes and versions;</li>
+<li>Colima profile and Kind cluster configuration digests;</li>
+<li>node image, Calico manifest, Envoy image, and KIL image digests;</li>
+<li>the before-mutation foreign-profile snapshot and Docker context;</li>
+<li>the expected namespaces, workloads, Services, ServiceAccounts, ConfigMaps,
+volumes, labels, policy graph, and request cases;</li>
+<li>the Kind cluster configuration and node-container identity, the
+<code>kube-system</code> namespace UID as the cluster-incarnation binding, and exact node,
+application-namespace, Pod, container, and Kubernetes object UIDs;</li>
+<li>realized image IDs, readiness state, Service endpoints, and policy inventory;</li>
+<li>one driver readiness/result pair and one request intent per track; and</li>
+<li>authoritative driver, authorization, Envoy, target, Kubernetes, and policy
+source locations.</li>
+</ul>
+<p>Evidence collection must use bounded, no-follow reads where the host filesystem
+is involved, closed canonical JSON, exact byte counts and SHA-256 digests, and
+stable Kubernetes UID/resourceVersion or container identity checks before and
+after each source read. Missing, replaced, duplicated, noncanonical, oversized,
+or ambiguous evidence invalidates the affected run.</p>
+<p>The public manifest exposes only safe, run-scoped identities. Foreign profile
+names, host paths, execution nonces, credentials, signed state, private journal
+content, and raw control-plane secrets are excluded. Foreign resources appear
+only through pseudonymous before/after attestations.</p>
+<p>V3B-2 uses <code>kil.v3b2-profile.v1</code>, <code>kil.v3b2-journal.v1</code>,
+<code>kil.v3b2-private-manifest.v1</code>, <code>kil.v3b2-public-manifest.v1</code>, and
+<code>kil.v3b2-campaign.v1</code>. The offline verifier dispatches V3B-1, V3B-2 run, and
+V3B-2 campaign schemas explicitly and rejects hybrid field sets. The
+implementation plan must enumerate each closed field set and its validator
+before runtime code is written.</p>
+<h2 id="8-v3b-2a-acceptance-and-claims">8. V3B-2a acceptance and claims</h2>
+<p>V3B-2a is accepted only when:</p>
+<ol>
+<li>every pinned identity and canonical manifest matches the reviewed contract;</li>
+<li>all three namespaces and every object have exact name/UID/digest bindings;</li>
+<li>Calico and the closed deny-first policy inventory are ready before requests;</li>
+<li>each track has exactly one request attempt and no retry;</li>
+<li>the joined result is <code>permit / permit / deny</code>, HTTP <code>200 / 200 / 403</code>, and
+target markers <code>1 / 1 / 0</code>;</li>
+<li>each permit joins one driver result, one KIL decision, an Envoy upstream
+response, and exactly one target marker with equal decision digests;</li>
+<li>the denial joins one driver result, one KIL denial, Envoy no-upstream
+evidence, and zero target markers;</li>
+<li>all Kubernetes, policy, source, and semantic joins are complete and valid;</li>
+<li>exact owned teardown completes before publication;</li>
+<li>before/after foreign-profile snapshots and Docker context are unchanged;</li>
+<li>every <code>SHA256SUMS</code> entry verifies; and</li>
+<li>the offline presenter rederives and accepts the bundle.</li>
+</ol>
+<p>The proposed public bundle class is
+<code>intermediate_provisional_kind_calico_nominal</code> with
+<code>promotion_status=not_promoted</code>. It may be described as an accepted observed
+intermediate Kind/Calico nominal-parity result. It may not be described as the
+complete V3B-2 validation result, complete NetworkPolicy validation, repeated
+reliability, performance, production validation, or historical prevention.</p>
+<h2 id="9-v3b-2b-failure-matrix">9. V3B-2b failure matrix</h2>
+<p>V3B-2b begins only at the exact reviewed public source that incorporates
+V3B-2a. It is a closed campaign of immutable run bundles, not an assumption that
+every case can safely share one cluster. Each run starts from a clean lifecycle,
+uses the same topology and evidence contract, and binds unique request/case
+identities from this ordered case set.</p>
+<h3 id="9-1-policy-isolation-probes">9.1 Policy-isolation probes</h3>
+<ul>
+<li>cross-track driver to another track's Envoy is blocked;</li>
+<li>driver to same-track target bypass is blocked;</li>
+<li>unauthorized workload identity to authorization service is blocked;</li>
+<li>no cross-track Envoy, authorization, or target record appears; and</li>
+<li>no public Service or host-originated consequential path exists.</li>
+</ul>
+<p>Each network denial requires the exact probe identity and destination, a closed
+terminal connection result, the attested policy graph and Calico readiness, and
+absence of a corresponding destination application record. An HTTP status alone
+is not NetworkPolicy evidence.</p>
+<h3 id="9-2-state-and-authority-failures">9.2 State and authority failures</h3>
+<ul>
+<li>absent and malformed state;</li>
+<li>incorrectly signed, expired, and not-yet-valid state;</li>
+<li>revoked and replayed state;</li>
+<li>wrong audience, subject, class, and action;</li>
+<li>immutable veto and KTP envelope violation;</li>
+<li>declared rare action; and</li>
+<li>attempted local authority increase.</li>
+</ul>
+<h3 id="9-3-availability-and-evidence-failures">9.3 Availability and evidence failures</h3>
+<ul>
+<li>cold start and insufficient history;</li>
+<li>stale local evidence;</li>
+<li>false reduction and signed-state recovery;</li>
+<li>authorization timeout or unavailability;</li>
+<li>collector loss; and</li>
+<li>target-ledger conflict.</li>
+</ul>
+<p>Expected permit, policy denial, fail-closed denial, or terminal nonpromotable
+outcome is fixed per case before execution. The implementation plan must map
+every case to an exact fixture and evidence join; it may not add live cases by
+discovery.</p>
+<p>Non-poisoning cases in the same approved group may run in one fresh cluster in
+fixed order. A normal completed case may advance to the next unopened case. Any
+topology poison, unexpected request result, evidence ambiguity, or recovery
+anomaly terminates that run; its remaining cases remain <code>not_attempted</code>.</p>
+<p>An unopened campaign case may later execute only in a new clean lifecycle with
+a new run identity. This is continuation of the closed campaign, not retry of
+the terminal case. Collector-loss, target-ledger-conflict, and any other case
+whose expected behavior poisons evidence or topology execute in their own fresh
+lifecycle. A canonical campaign index binds the reviewed case list to exactly
+one terminal public bundle per case, records expected diagnostic failure bundles
+as nonpromotable, and refuses duplicates or omitted cases.</p>
+<h2 id="10-failure-and-recovery-behavior">10. Failure and recovery behavior</h2>
+<p>Before request intent, setup failure may produce only diagnostic evidence and
+exact owned teardown. It does not authorize a consequential request. A later
+attempt requires a fresh lifecycle and new run identity from an otherwise valid
+reviewed source.</p>
+<p>After case or request intent:</p>
+<ul>
+<li>the consequential request is never replayed;</li>
+<li>the case is never retried in that run;</li>
+<li>uncommanded drivers or probes are canceled without instruction;</li>
+<li>raw malformed or partial evidence is preserved privately and hash-bound;</li>
+<li>the public result remains nonpromotable unless every required join is valid;
+and</li>
+<li>mandatory evidence freeze and exact teardown continue.</li>
+</ul>
+<p>Recovery authority is limited to bounded source reads and idempotent actions on
+exact names, UIDs, container IDs, cluster identity, and profile identity already
+committed to the private journal. Discovery-based deletion, wildcard deletion,
+current-context deletion, foreign-resource repair, and foreign-profile mutation
+are prohibited.</p>
+<p>If owned teardown cannot prove the exact Kind cluster and <code>kil-v3-lab</code> profile
+absent, the lifecycle remains active and publication cannot claim complete
+teardown. If foreign state differs, KIL records a sanitized mismatch and does
+not attempt restoration.</p>
+<h2 id="11-teardown-and-publication-order">11. Teardown and publication order</h2>
+<p>The controller must:</p>
+<ol>
+<li>stop or cancel every journal-bound driver/probe without replay;</li>
+<li>quiesce Envoy before freezing authorization and target sources;</li>
+<li>freeze all required application, Kubernetes, policy, and driver evidence;</li>
+<li>verify frozen identities and construct semantic joins;</li>
+<li>delete only the exact journal-bound <code>kil-v3-lab</code> Kind cluster;</li>
+<li>verify the cluster absent;</li>
+<li>stop/delete only the exact <code>kil-v3-lab</code> Colima profile;</li>
+<li>verify the profile and every owned state path absent;</li>
+<li>capture and compare the foreign-resource after snapshot; and</li>
+<li>atomically publish the complete or calibrated failure bundle.</li>
+</ol>
+<p>No result is publicly presentable before exact owned teardown and foreign-state
+comparison complete.</p>
+<h2 id="12-test-strategy-and-implementation-gates">12. Test strategy and implementation gates</h2>
+<p>Implementation is test-first and ordered:</p>
+<ol>
+<li><strong>Pure contracts:</strong> closed schemas, canonical manifest rendering, profile and
+cluster identities, object inventory, policy graph, case matrix, and public
+projection.</li>
+<li><strong>Controller state machine:</strong> fake-runner command sequences, intent ordering,
+no replay, crash boundaries, bounded evidence collection, recovery authority,
+exact teardown, foreign noninterference, and proof that every Colima command
+names only <code>kil-v3-lab</code>.</li>
+<li><strong>Static workload security:</strong> namespace and label closure, deny-first policy,
+non-root/read-only settings, resource bounds, no host mounts, and no public
+ports.</li>
+<li><strong>Existing semantic components:</strong> V3B-1 driver, authorization, Envoy, target,
+canonical evidence, and offline verifier compatibility remain green.</li>
+<li><strong>Request-free live gate:</strong> after code review, public CI, merge, and exact main
+synchronization, create a fresh cluster, prove readiness and policy inventory,
+send zero driver instructions and zero HTTP requests, freeze empty sources,
+and tear down exactly.</li>
+<li><strong>V3B-2a live gate:</strong> only after the request-free gate is published and
+synchronized, execute one newly authorized nominal lifecycle with no retry.</li>
+<li><strong>V3B-2b live gate:</strong> only after V3B-2a is published and synchronized, execute
+the closed failure campaign through its required clean lifecycles.</li>
+</ol>
+<p>Every code or runtime publication requires focused tests, full repository
+validation, generated-reader verification, public-boundary scanning, separate
+specification and quality/security reviews, public CI, merge, and exact local /
+remote main equality.</p>
+<h2 id="13-v3b-2b-campaign-acceptance">13. V3B-2b campaign acceptance</h2>
+<p>The V3B-2b campaign is complete only when its canonical index:</p>
+<ul>
+<li>covers every reviewed case exactly once;</li>
+<li>binds each case to its assigned run, source, fixture, expected outcome, and
+verified public bundle digest;</li>
+<li>proves every normal permit, policy denial, and fail-closed denial through its
+required semantic and policy joins;</li>
+<li>preserves expected collector/evidence failure bundles as explicitly
+nonpromotable diagnostics rather than relabeling them successful evidence;</li>
+<li>records no retry for any case or request identity;</li>
+<li>proves exact teardown and foreign noninterference for every lifecycle; and</li>
+<li>passes checksums, offline verification, claim-language review, public CI, and
+exact main synchronization.</li>
+</ul>
+<p>The campaign may support a calibrated complete V3B-2 cluster-boundary claim only
+for the behaviors whose evidence joins are complete. Expected diagnostic-failure
+cases prove the controller failed closed; they do not become positive
+enforcement evidence. The immutable V3B-2 campaign remains <code>not_promoted</code>;
+V3C may later publish a separate promotion index only if its independent
+repetition and measurement requirements pass.</p>
+<h2 id="14-relationship-to-v3c">14. Relationship to V3C</h2>
+<p>V3C starts only after V3B-2b produces an accepted complete campaign index with
+the calibrated evidence limits above. It will define the thirty-repeat
+functional protocol and the warm-up and measured latency protocol against the
+accepted V3B-2 topology. V3C must have a separate design and implementation plan
+and may not silently broaden V3B-2 claims.</p>
+<h2 id="15-design-acceptance-summary">15. Design acceptance summary</h2>
+<p>The approved design choices are:</p>
+<ul>
+<li>V3B-2 before V3C;</li>
+<li>V3B-2a nominal parity before V3B-2b failure matrix;</li>
+<li>one KIL-owned Colima profile and Kind cluster named <code>kil-v3-lab</code>;</li>
+<li>one cluster with three isolated fixed-track namespaces;</li>
+<li>in-cluster one-shot drivers and no host-originated consequential HTTP;</li>
+<li>deny-first Calico NetworkPolicy and a closed policy graph;</li>
+<li>exact Kubernetes plus V3B-1 semantic evidence joins;</li>
+<li>no retry after durable request intent;</li>
+<li>recovery limited to journal-bound KIL resources; and</li>
+<li>exact teardown and foreign noninterference before publication.</li>
+</ul>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>
