@@ -111,6 +111,20 @@ def render_envoy_config(
             ]
         },
     }
+    access_record = {
+        "run_id": "%REQ(X-KIL-RUN-ID)%",
+        "request_id": "%REQ(X-REQUEST-ID)%",
+        "track": track.value,
+        "response_code": "%RESPONSE_CODE%",
+        "upstream_host": "%UPSTREAM_HOST%",
+        "upstream_service_time": (
+            "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%"
+        ),
+        "decision_digest": (
+            "%DYNAMIC_METADATA(envoy.filters.http.ext_authz:"
+            "x-kil-decision-digest)%"
+        ),
+    }
     connection_manager = {
         "@type": (
             "type.googleapis.com/"
@@ -156,20 +170,8 @@ def render_envoy_config(
                         "StdoutAccessLog"
                     ),
                     "log_format": {
-                        "json_format": {
-                            "run_id": "%REQ(X-KIL-RUN-ID)%",
-                            "request_id": "%REQ(X-REQUEST-ID)%",
-                            "track": track.value,
-                            "response_code": "%RESPONSE_CODE%",
-                            "upstream_host": "%UPSTREAM_HOST%",
-                            "upstream_service_time": (
-                                "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%"
-                            ),
-                            "decision_digest": (
-                                "%DYNAMIC_METADATA("
-                                "envoy.filters.http.ext_authz:"
-                                "x-kil-decision-digest)%"
-                            ),
+                        "text_format_source": {
+                            "inline_string": canonical_json(access_record) + "\n"
                         }
                     },
                 },
