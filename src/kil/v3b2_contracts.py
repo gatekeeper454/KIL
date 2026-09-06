@@ -282,6 +282,32 @@ def _validate_exact_scalars(values: Mapping[str, object]) -> None:
             raise SchemaError(f"{name} must be exactly {expected}")
 
 
+def _require_exact_string_tuple(
+    label: str, value: object, expected: tuple[str, ...]
+) -> None:
+    if type(value) is not tuple or any(type(member) is not str for member in value):
+        raise SchemaError(f"{label} must contain only exact strings in an exact tuple")
+    if value != expected:
+        raise SchemaError(f"{label} must be the exact immutable approved sequence")
+
+
+def _require_exact_image_tuple(value: object) -> None:
+    if type(value) is not tuple:
+        raise SchemaError("calico_images must be an exact tuple")
+    for entry in value:
+        if (
+            type(entry) is not tuple
+            or len(entry) != 2
+            or type(entry[0]) is not str
+            or type(entry[1]) is not str
+        ):
+            raise SchemaError(
+                "calico_images entries must be exact two-string tuple pairs"
+            )
+    if value != _CALICO_IMAGES:
+        raise SchemaError("calico_images must be the exact immutable image tuple")
+
+
 @dataclass(frozen=True, slots=True)
 class V3B2Profile:
     schema_version: str
@@ -313,25 +339,15 @@ class V3B2Profile:
         _validate_exact_scalars(
             {name: getattr(self, name) for name in _EXACT_SCALARS}
         )
-        if (
-            type(self.calico_images) is not tuple
-            or self.calico_images != _CALICO_IMAGES
-        ):
-            raise SchemaError("calico_images must be the exact immutable image tuple")
-        if (
-            type(self.system_namespaces) is not tuple
-            or self.system_namespaces != _SYSTEM_NAMESPACES
-        ):
-            raise SchemaError(
-                "system_namespaces must be the exact immutable approved sequence"
-            )
-        if (
-            type(self.application_namespaces) is not tuple
-            or self.application_namespaces != APPLICATION_NAMESPACES
-        ):
-            raise SchemaError(
-                "application_namespaces must be the exact immutable approved sequence"
-            )
+        _require_exact_image_tuple(self.calico_images)
+        _require_exact_string_tuple(
+            "system_namespaces", self.system_namespaces, _SYSTEM_NAMESPACES
+        )
+        _require_exact_string_tuple(
+            "application_namespaces",
+            self.application_namespaces,
+            APPLICATION_NAMESPACES,
+        )
 
     @classmethod
     def load(cls, path: Path) -> V3B2Profile:

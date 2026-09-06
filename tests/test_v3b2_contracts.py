@@ -210,6 +210,22 @@ def valid_constructor_values() -> dict[str, object]:
     return values
 
 
+class MutableEqualityImpostor:
+    def __init__(self) -> None:
+        self.mutable_state: list[str] = []
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+
+class TupleSubclass(tuple[object, ...]):
+    pass
+
+
+class StringSubclass(str):
+    pass
+
+
 class V3B2ProfileTests(unittest.TestCase):
     def test_profile_document_matches_an_independent_full_literal_oracle(self) -> None:
         self.assertEqual(valid_profile(), EXPECTED_PROFILE_DOCUMENT)
@@ -378,6 +394,108 @@ class V3B2ProfileTests(unittest.TestCase):
         values["calico_images"] = tuple(images)
         with self.assertRaises(SchemaError):
             V3B2Profile(**values)  # type: ignore[arg-type]
+
+    def test_direct_construction_rejects_equality_impostors_and_subclasses(
+        self,
+    ) -> None:
+        base = valid_constructor_values()
+        system_namespaces = base["system_namespaces"]
+        application_namespaces = base["application_namespaces"]
+        calico_images = base["calico_images"]
+        assert isinstance(system_namespaces, tuple)
+        assert isinstance(application_namespaces, tuple)
+        assert isinstance(calico_images, tuple)
+        first_pair = calico_images[0]
+        assert isinstance(first_pair, tuple)
+
+        cases = (
+            (
+                "system-member-impostor",
+                "system_namespaces",
+                (MutableEqualityImpostor(), *system_namespaces[1:]),
+            ),
+            (
+                "application-member-impostor",
+                "application_namespaces",
+                (MutableEqualityImpostor(), *application_namespaces[1:]),
+            ),
+            (
+                "system-member-string-subclass",
+                "system_namespaces",
+                (StringSubclass(system_namespaces[0]), *system_namespaces[1:]),
+            ),
+            (
+                "application-member-string-subclass",
+                "application_namespaces",
+                (
+                    StringSubclass(application_namespaces[0]),
+                    *application_namespaces[1:],
+                ),
+            ),
+            (
+                "calico-entry-impostor",
+                "calico_images",
+                (MutableEqualityImpostor(), *calico_images[1:]),
+            ),
+            (
+                "calico-pair-subclass",
+                "calico_images",
+                (TupleSubclass(first_pair), *calico_images[1:]),
+            ),
+            (
+                "calico-key-impostor",
+                "calico_images",
+                (
+                    (MutableEqualityImpostor(), first_pair[1]),
+                    *calico_images[1:],
+                ),
+            ),
+            (
+                "calico-value-impostor",
+                "calico_images",
+                (
+                    (first_pair[0], MutableEqualityImpostor()),
+                    *calico_images[1:],
+                ),
+            ),
+            (
+                "calico-key-string-subclass",
+                "calico_images",
+                (
+                    (StringSubclass(first_pair[0]), first_pair[1]),
+                    *calico_images[1:],
+                ),
+            ),
+            (
+                "calico-value-string-subclass",
+                "calico_images",
+                (
+                    (first_pair[0], StringSubclass(first_pair[1])),
+                    *calico_images[1:],
+                ),
+            ),
+            (
+                "system-outer-tuple-subclass",
+                "system_namespaces",
+                TupleSubclass(system_namespaces),
+            ),
+            (
+                "application-outer-tuple-subclass",
+                "application_namespaces",
+                TupleSubclass(application_namespaces),
+            ),
+            (
+                "calico-outer-tuple-subclass",
+                "calico_images",
+                TupleSubclass(calico_images),
+            ),
+        )
+        for label, name, replacement in cases:
+            with self.subTest(label=label):
+                values = valid_constructor_values()
+                values[name] = replacement
+                with self.assertRaises(SchemaError):
+                    V3B2Profile(**values)  # type: ignore[arg-type]
 
     def test_rejects_unknown_missing_and_cross_generation_fields(self) -> None:
         for label, mutation in (
