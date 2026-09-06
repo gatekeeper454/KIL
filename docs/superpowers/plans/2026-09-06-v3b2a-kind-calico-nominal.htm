@@ -6,7 +6,7 @@
 <title>V3B-2a Kind/Calico Nominal Validation Implementation Plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-06-v3b2a-kind-calico-nominal.md">
-<meta name="source-sha256" content="aea0ebcc65db436dc80cc2c465d72a3cc8dd45e37b52b6f15c45896be94c2491">
+<meta name="source-sha256" content="3ecc5d8c2f3b0e85f20f02ad1c32bc6090110607882bb58b8d72bcb67aec9c8d">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-06-v3b2a-kind-calico-nominal.md</code> (<code>aea0ebcc65db436dc80cc2c465d72a3cc8dd45e37b52b6f15c45896be94c2491</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-06-v3b2a-kind-calico-nominal.md</code> (<code>3ecc5d8c2f3b0e85f20f02ad1c32bc6090110607882bb58b8d72bcb67aec9c8d</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">V3B-2a Kind/Calico Nominal Validation Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-06-v3b2a-kind-calico-nominal.md</code> (<code>aea0ebcc65db436dc80cc2c465d72a3cc8dd45e37b52b6f15c45896be94c2491</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-06-v3b2a-kind-calico-nominal.md</code> (<code>3ecc5d8c2f3b0e85f20f02ad1c32bc6090110607882bb58b8d72bcb67aec9c8d</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-2a-kind-calico-nominal-validation-implementation-plan">V3B-2a Kind/Calico Nominal Validation Implementation Plan</a></li><li class="level-2"><a href="#scope-split-and-hard-gates">Scope split and hard gates</a></li><li class="level-2"><a href="#resolved-calico-content-identity">Resolved Calico content identity</a></li><li class="level-2"><a href="#closed-schema-inventory">Closed schema inventory</a></li><li class="level-2"><a href="#file-map">File map</a></li><li class="level-3"><a href="#task-1-pin-and-validate-the-v3b-2-profile-and-calico-bytes">Task 1: Pin and validate the V3B-2 profile and Calico bytes</a></li><li class="level-3"><a href="#task-2-render-the-exact-kind-and-application-object-set">Task 2: Render the exact Kind and application object set</a></li><li class="level-3"><a href="#task-3-validate-kubernetes-calico-endpoint-and-policy-inventory">Task 3: Validate Kubernetes, Calico, endpoint, and policy inventory</a></li><li class="level-3"><a href="#task-4-implement-journal-bound-commands-intent-ordering-and-recovery">Task 4: Implement journal-bound commands, intent ordering, and recovery</a></li><li class="level-3"><a href="#task-5-build-bounded-evidence-semantic-joins-and-offline-verification">Task 5: Build bounded evidence, semantic joins, and offline verification</a></li><li class="level-3"><a href="#task-6-compose-the-request-free-and-nominal-controller">Task 6: Compose the request-free and nominal controller</a></li><li class="level-3"><a href="#task-7-wire-documentation-make-targets-and-static-acceptance">Task 7: Wire documentation, Make targets, and static acceptance</a></li><li class="level-3"><a href="#task-8-complete-review-public-ci-merge-and-exact-synchronization">Task 8: Complete review, public CI, merge, and exact synchronization</a></li><li class="level-3"><a href="#task-9-execute-and-publish-the-request-free-lifecycle">Task 9: Execute and publish the request-free lifecycle</a></li><li class="level-3"><a href="#task-10-execute-and-publish-the-one-shot-nominal-lifecycle">Task 10: Execute and publish the one-shot nominal lifecycle</a></li><li class="level-2"><a href="#plan-self-review-record">Plan self-review record</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-2a-kind-calico-nominal-validation-implementation-plan" href="#v3b-2a-kind-calico-nominal-validation-implementation-plan">V3B-2a Kind/Calico Nominal Validation Implementation Plan</a></li><li class="level-2"><a data-section-id="scope-split-and-hard-gates" href="#scope-split-and-hard-gates">Scope split and hard gates</a></li><li class="level-2"><a data-section-id="resolved-calico-content-identity" href="#resolved-calico-content-identity">Resolved Calico content identity</a></li><li class="level-2"><a data-section-id="closed-schema-inventory" href="#closed-schema-inventory">Closed schema inventory</a></li><li class="level-2"><a data-section-id="file-map" href="#file-map">File map</a></li><li class="level-3"><a data-section-id="task-1-pin-and-validate-the-v3b-2-profile-and-calico-bytes" href="#task-1-pin-and-validate-the-v3b-2-profile-and-calico-bytes">Task 1: Pin and validate the V3B-2 profile and Calico bytes</a></li><li class="level-3"><a data-section-id="task-2-render-the-exact-kind-and-application-object-set" href="#task-2-render-the-exact-kind-and-application-object-set">Task 2: Render the exact Kind and application object set</a></li><li class="level-3"><a data-section-id="task-3-validate-kubernetes-calico-endpoint-and-policy-inventory" href="#task-3-validate-kubernetes-calico-endpoint-and-policy-inventory">Task 3: Validate Kubernetes, Calico, endpoint, and policy inventory</a></li><li class="level-3"><a data-section-id="task-4-implement-journal-bound-commands-intent-ordering-and-recovery" href="#task-4-implement-journal-bound-commands-intent-ordering-and-recovery">Task 4: Implement journal-bound commands, intent ordering, and recovery</a></li><li class="level-3"><a data-section-id="task-5-build-bounded-evidence-semantic-joins-and-offline-verification" href="#task-5-build-bounded-evidence-semantic-joins-and-offline-verification">Task 5: Build bounded evidence, semantic joins, and offline verification</a></li><li class="level-3"><a data-section-id="task-6-compose-the-request-free-and-nominal-controller" href="#task-6-compose-the-request-free-and-nominal-controller">Task 6: Compose the request-free and nominal controller</a></li><li class="level-3"><a data-section-id="task-7-wire-documentation-make-targets-and-static-acceptance" href="#task-7-wire-documentation-make-targets-and-static-acceptance">Task 7: Wire documentation, Make targets, and static acceptance</a></li><li class="level-3"><a data-section-id="task-8-complete-review-public-ci-merge-and-exact-synchronization" href="#task-8-complete-review-public-ci-merge-and-exact-synchronization">Task 8: Complete review, public CI, merge, and exact synchronization</a></li><li class="level-3"><a data-section-id="task-9-execute-and-publish-the-request-free-lifecycle" href="#task-9-execute-and-publish-the-request-free-lifecycle">Task 9: Execute and publish the request-free lifecycle</a></li><li class="level-3"><a data-section-id="task-10-execute-and-publish-the-one-shot-nominal-lifecycle" href="#task-10-execute-and-publish-the-one-shot-nominal-lifecycle">Task 10: Execute and publish the one-shot nominal lifecycle</a></li><li class="level-2"><a data-section-id="plan-self-review-record" href="#plan-self-review-record">Plan self-review record</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -426,8 +426,8 @@ class V3B2ManifestTest(unittest.TestCase):
         self.assertNotIn(&quot;extraPortMappings&quot;, config)
 
     def test_application_object_set_is_exact_and_canonical(self):
-        first = render_objects(self.profile, self.content)
-        second = render_objects(self.profile, self.content)
+        first = render_objects(self.profile, self.workload)
+        second = render_objects(self.profile, self.workload)
         self.assertEqual(first, second)
         objects = json.loads(first)
         self.assertEqual(objects[&quot;apiVersion&quot;], &quot;v1&quot;)
@@ -435,7 +435,7 @@ class V3B2ManifestTest(unittest.TestCase):
         self.assertEqual(len(objects[&quot;items&quot;]), 60)
 
     def test_every_namespace_is_default_deny_before_workloads(self):
-        objects = json.loads(render_objects(self.profile, self.content))[&quot;items&quot;]
+        objects = json.loads(render_objects(self.profile, self.workload))[&quot;items&quot;]
         for namespace in self.profile.application_namespaces:
             policies = [item for item in objects if item[&quot;kind&quot;] == &quot;NetworkPolicy&quot; and item[&quot;metadata&quot;][&quot;namespace&quot;] == namespace]
             self.assertEqual({item[&quot;metadata&quot;][&quot;name&quot;] for item in policies}, {&quot;default-deny&quot;, &quot;allow-dns&quot;, &quot;allow-driver-egress-envoy&quot;, &quot;allow-envoy-ingress-egress&quot;, &quot;allow-backends-ingress-envoy&quot;})
@@ -453,9 +453,10 @@ class V3B2ManifestTest(unittest.TestCase):
                 self.assertIn(&quot;requests&quot;, container[&quot;resources&quot;])
                 self.assertIn(&quot;limits&quot;, container[&quot;resources&quot;])
 </code></pre>
-<p>Define <code>self.profile</code>, <code>self.content</code>, and <code>self.workload_templates</code> in
-<code>setUp()</code> by loading the fixed profile, using immutable synthetic KIL and Envoy
-digests, and selecting each Deployment/Pod template from the rendered list.</p>
+<p>Define <code>self.profile</code>, <code>self.workload</code>, and <code>self.workload_templates</code> in
+<code>setUp()</code> by loading the fixed profile, using a syntactically valid synthetic
+V3B-2 run ID, immutable synthetic KIL image ID and Envoy digest, and selecting
+each Deployment/Pod template from the rendered list.</p>
 <ul>
 <li>[ ] <strong>Step 2: Run the focused tests and verify RED</strong></li>
 </ul>
@@ -466,12 +467,13 @@ digests, and selecting each Deployment/Pod template from the rendered list.</p>
 <li>[ ] <strong>Step 3: Implement canonical renderers and fixed object names</strong></li>
 </ul>
 <p>Define this input record and expose only <code>render_kind_config(profile)</code>,
-<code>render_objects(profile, images)</code>, <code>expected_object_keys(profile)</code>, and
+<code>render_objects(profile, workload)</code>, <code>expected_object_keys(profile)</code>, and
 <code>expected_policy_graph(profile)</code> as public construction functions:</p>
 <pre><code class="language-python">@dataclass(frozen=True, slots=True)
-class ContentImages:
-    kil: str
-    envoy: str
+class WorkloadIdentity:
+    run_id: str
+    kil_image_id: str
+    envoy_image_digest: str
 </code></pre>
 <p>The 60 application objects are exactly 3 Namespaces, 12 ServiceAccounts, 9
 ConfigMaps, 9 Services, 9 Deployments, 3 waiting driver Pods, and 15
@@ -481,6 +483,17 @@ only. ConfigMaps contain only canonical public JSON and Envoy configuration;
 Secrets are absent. Each fixed-track namespace uses labels
 <code>kil.dev/managed=v3b2</code> and <code>kil.dev/track</code> equal to its literal member of
 <code>TRACKS</code>.</p>
+<p><code>WorkloadIdentity</code> accepts a <code>v3b2-</code> plus 64-lowercase-hex run ID, a
+<code>sha256:</code> plus 64-lowercase-hex KIL image ID, and an Envoy repository digest.
+The renderer derives the KIL Pod reference by concatenating
+<code>kil.local/kil-v3b2:sha256-</code> with the image ID's 64 lowercase hexadecimal
+characters and fixes
+<code>imagePullPolicy: Never</code>; the controller must import that exact content and
+later attest the realized <code>imageID</code>. The target ConfigMap binds <code>run_id</code>.
+Authorization ConfigMaps reuse the reviewed fixed-track V3B-1 public keys and
+fixture shape; signed state remains in the one-shot private driver instruction,
+not a ConfigMap. Envoy ConfigMaps are rendered through <code>kil.v3b_envoy</code> using the
+same-namespace <code>authz</code> and <code>target</code> Service DNS names.</p>
 <p>The five policies per namespace are grouped by the workloads they select so
 Kubernetes' additive ingress/egress semantics do not broaden an edge:</p>
 <ol>
@@ -514,7 +527,7 @@ selector is permitted.</p>
 ):
     with self.subTest(reason=reason):
         with self.assertRaisesRegex(ManifestError, reason):
-            validate_rendered_objects(mutated_objects(mutation), self.profile, self.content)
+            validate_rendered_objects(mutated_objects(mutation), self.profile, self.workload)
 </code></pre>
 <ul>
 <li>[ ] <strong>Step 5: Verify GREEN and commit</strong></li>
@@ -1318,7 +1331,7 @@ live gates all forbid resending after durable request intent.</li>
 foreign profiles; every mutation is exact-name checked; before/after mismatch
 is sanitized and never repaired.</li>
 <li><strong>Type consistency:</strong> <code>V3B2Profile</code>, <code>Command</code>, <code>OwnedIdentity</code>,
-<code>RecoveryPlan</code>, <code>ContentImages</code>, <code>ObjectIdentity</code>, <code>InventoryAttestation</code>,
+<code>RecoveryPlan</code>, <code>WorkloadIdentity</code>, <code>ObjectIdentity</code>, <code>InventoryAttestation</code>,
 <code>SourceIdentity</code>, and <code>V3B2Controller</code> retain the same names and roles in all
 tasks.</li>
 <li><strong>Placeholder scan:</strong> Runtime values are either literal, derived by named

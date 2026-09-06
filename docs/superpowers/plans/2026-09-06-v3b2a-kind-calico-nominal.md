@@ -356,8 +356,8 @@ class V3B2ManifestTest(unittest.TestCase):
         self.assertNotIn("extraPortMappings", config)
 
     def test_application_object_set_is_exact_and_canonical(self):
-        first = render_objects(self.profile, self.content)
-        second = render_objects(self.profile, self.content)
+        first = render_objects(self.profile, self.workload)
+        second = render_objects(self.profile, self.workload)
         self.assertEqual(first, second)
         objects = json.loads(first)
         self.assertEqual(objects["apiVersion"], "v1")
@@ -365,7 +365,7 @@ class V3B2ManifestTest(unittest.TestCase):
         self.assertEqual(len(objects["items"]), 60)
 
     def test_every_namespace_is_default_deny_before_workloads(self):
-        objects = json.loads(render_objects(self.profile, self.content))["items"]
+        objects = json.loads(render_objects(self.profile, self.workload))["items"]
         for namespace in self.profile.application_namespaces:
             policies = [item for item in objects if item["kind"] == "NetworkPolicy" and item["metadata"]["namespace"] == namespace]
             self.assertEqual({item["metadata"]["name"] for item in policies}, {"default-deny", "allow-dns", "allow-driver-egress-envoy", "allow-envoy-ingress-egress", "allow-backends-ingress-envoy"})
@@ -384,9 +384,10 @@ class V3B2ManifestTest(unittest.TestCase):
                 self.assertIn("limits", container["resources"])
 ```
 
-Define `self.profile`, `self.content`, and `self.workload_templates` in
-`setUp()` by loading the fixed profile, using immutable synthetic KIL and Envoy
-digests, and selecting each Deployment/Pod template from the rendered list.
+Define `self.profile`, `self.workload`, and `self.workload_templates` in
+`setUp()` by loading the fixed profile, using a syntactically valid synthetic
+V3B-2 run ID, immutable synthetic KIL image ID and Envoy digest, and selecting
+each Deployment/Pod template from the rendered list.
 
 - [ ] **Step 2: Run the focused tests and verify RED**
 
@@ -399,14 +400,15 @@ Expected: import failure because `kil.v3b2_manifests` does not exist.
 - [ ] **Step 3: Implement canonical renderers and fixed object names**
 
 Define this input record and expose only `render_kind_config(profile)`,
-`render_objects(profile, images)`, `expected_object_keys(profile)`, and
+`render_objects(profile, workload)`, `expected_object_keys(profile)`, and
 `expected_policy_graph(profile)` as public construction functions:
 
 ```python
 @dataclass(frozen=True, slots=True)
-class ContentImages:
-    kil: str
-    envoy: str
+class WorkloadIdentity:
+    run_id: str
+    kil_image_id: str
+    envoy_image_digest: str
 ```
 
 The 60 application objects are exactly 3 Namespaces, 12 ServiceAccounts, 9
@@ -417,6 +419,18 @@ only. ConfigMaps contain only canonical public JSON and Envoy configuration;
 Secrets are absent. Each fixed-track namespace uses labels
 `kil.dev/managed=v3b2` and `kil.dev/track` equal to its literal member of
 `TRACKS`.
+
+`WorkloadIdentity` accepts a `v3b2-` plus 64-lowercase-hex run ID, a
+`sha256:` plus 64-lowercase-hex KIL image ID, and an Envoy repository digest.
+The renderer derives the KIL Pod reference by concatenating
+`kil.local/kil-v3b2:sha256-` with the image ID's 64 lowercase hexadecimal
+characters and fixes
+`imagePullPolicy: Never`; the controller must import that exact content and
+later attest the realized `imageID`. The target ConfigMap binds `run_id`.
+Authorization ConfigMaps reuse the reviewed fixed-track V3B-1 public keys and
+fixture shape; signed state remains in the one-shot private driver instruction,
+not a ConfigMap. Envoy ConfigMaps are rendered through `kil.v3b_envoy` using the
+same-namespace `authz` and `target` Service DNS names.
 
 The five policies per namespace are grouped by the workloads they select so
 Kubernetes' additive ingress/egress semantics do not broaden an edge:
@@ -453,7 +467,7 @@ for mutation, reason in (
 ):
     with self.subTest(reason=reason):
         with self.assertRaisesRegex(ManifestError, reason):
-            validate_rendered_objects(mutated_objects(mutation), self.profile, self.content)
+            validate_rendered_objects(mutated_objects(mutation), self.profile, self.workload)
 ```
 
 - [ ] **Step 5: Verify GREEN and commit**
@@ -1228,7 +1242,7 @@ remains closed until that campaign is accepted.
   foreign profiles; every mutation is exact-name checked; before/after mismatch
   is sanitized and never repaired.
 - **Type consistency:** `V3B2Profile`, `Command`, `OwnedIdentity`,
-  `RecoveryPlan`, `ContentImages`, `ObjectIdentity`, `InventoryAttestation`,
+  `RecoveryPlan`, `WorkloadIdentity`, `ObjectIdentity`, `InventoryAttestation`,
   `SourceIdentity`, and `V3B2Controller` retain the same names and roles in all
   tasks.
 - **Placeholder scan:** Runtime values are either literal, derived by named
