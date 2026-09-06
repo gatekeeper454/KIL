@@ -994,7 +994,7 @@ The live command was not retried after its post-request copy error; mandatory
 teardown recovered and froze the complete authoritative evidence used by the
 accepted offline bundle.
 
-- [ ] **Step 6: Review, publish, merge, synchronize, and prepare backup**
+- [x] **Step 6: Review, publish, merge, synchronize, and prepare backup**
 
 Run the full static gate, bundle checksums, offline verifier, secret scan, spec
 review, and quality/security review. Commit, push, pass CI, merge, and

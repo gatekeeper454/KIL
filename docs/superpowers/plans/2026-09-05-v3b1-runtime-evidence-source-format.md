@@ -481,7 +481,7 @@ mark Task 11 complete, regenerate readers, and inspect `git diff --cached
 --name-only`. Reject any staged sibling run, `.tools/` path, private journal,
 credential, raw profile name, nonce, or host path.
 
-- [ ] **Step 5: Validate, review, publish, and synchronize**
+- [x] **Step 5: Validate, review, publish, and synchronize**
 
 Run bundle checksums, offline view, full `make validate`, the public-boundary
 secret scan, and separate specification and quality/security review passes.

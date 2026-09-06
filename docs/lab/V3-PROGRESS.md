@@ -336,12 +336,9 @@ and the complete approved specification is
 
 ## Next gate
 
-Publish the accepted observed intermediate V3B-1 local-Envoy bundle through
-public review and CI, merge it, and synchronize local `main` exactly. Preserve
-the failed and accepted private worktrees until the user supplies the offline
-backup destination and retention policy. The next experimental gates are the
-separately designed V3B-2 Kind/Calico boundary and V3C repetition/performance;
-neither is implied by this result, and all V3A output remains explicitly
-modeled.
+Preserve the failed and accepted private worktrees for the user's manual offline
+backup. The next experimental gates are the separately designed V3B-2
+Kind/Calico boundary and V3C repetition/performance; neither is implied by this
+result, and all V3A output remains explicitly modeled.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
