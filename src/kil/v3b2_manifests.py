@@ -301,7 +301,9 @@ def _pod_spec(role: str, track: str, image: str, command: list[str], config_name
         },
         "volumeMounts": mounts,
     }
-    if role != "driver":
+    if role == "driver":
+        container.update({"stdin": True, "stdinOnce": True, "tty": False})
+    else:
         container["ports"] = [{"containerPort": 8080, "name": "http", "protocol": "TCP"}]
     return {
         "serviceAccountName": role,
@@ -312,6 +314,7 @@ def _pod_spec(role: str, track: str, image: str, command: list[str], config_name
             "runAsNonRoot": True,
             "runAsUser": 65532,
             "runAsGroup": 65532,
+            "fsGroup": 65532,
             "seccompProfile": {"type": "RuntimeDefault"},
         },
         "containers": [container],

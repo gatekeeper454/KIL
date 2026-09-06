@@ -311,7 +311,7 @@ class V3B2ManifestTest(unittest.TestCase):
                 self.assertEqual(pod["restartPolicy"], "Never" if role == "driver" else "Always")
                 for forbidden in ("hostNetwork", "hostPID", "hostIPC"):
                     self.assertNotIn(forbidden, pod)
-                self.assertEqual(pod["securityContext"], {"runAsNonRoot": True, "runAsUser": 65532, "runAsGroup": 65532, "seccompProfile": {"type": "RuntimeDefault"}})
+                self.assertEqual(pod["securityContext"], {"runAsNonRoot": True, "runAsUser": 65532, "runAsGroup": 65532, "fsGroup": 65532, "seccompProfile": {"type": "RuntimeDefault"}})
                 container = pod["containers"][0]
                 self.assertEqual(container["image"], ENVOY_IMAGE if role == "envoy" else derived_image)
                 self.assertEqual(container["imagePullPolicy"], "Never")
@@ -327,6 +327,14 @@ class V3B2ManifestTest(unittest.TestCase):
                 config_mounts = [mount for mount in container["volumeMounts"] if mount["name"] == "config"]
                 if config_mounts:
                     self.assertIs(config_mounts[0]["readOnly"], True)
+
+    def test_driver_has_exact_retained_stdin_contract(self) -> None:
+        value = decoded()
+        for _, namespace in TRACK_NAMESPACES:
+            container = object_named(value, namespace, "Pod", "driver")["spec"]["containers"][0]
+            self.assertIs(container.get("stdin"), True)
+            self.assertIs(container.get("stdinOnce"), True)
+            self.assertIs(container.get("tty"), False)
 
     def test_commands_and_public_configmaps_are_exact_and_safe(self) -> None:
         value = decoded()
@@ -409,6 +417,11 @@ class V3B2ManifestTest(unittest.TestCase):
         mutate("security", lambda v: driver(v)["spec"]["containers"][0]["securityContext"].__setitem__("allowPrivilegeEscalation", True))
         mutate("resources", lambda v: driver(v)["spec"]["containers"][0]["resources"]["limits"].__setitem__("memory", "1Gi"))
         mutate("volume bounds", lambda v: driver(v)["spec"]["volumes"][0]["emptyDir"].__setitem__("sizeLimit", "1Gi"))
+        mutate("stdin", lambda v: driver(v)["spec"]["containers"][0].__setitem__("stdin", False))
+        mutate("stdinOnce", lambda v: driver(v)["spec"]["containers"][0].__setitem__("stdinOnce", False))
+        mutate("tty", lambda v: driver(v)["spec"]["containers"][0].__setitem__("tty", True))
+        mutate("missing fsGroup", lambda v: driver(v)["spec"]["securityContext"].pop("fsGroup", None))
+        mutate("changed fsGroup", lambda v: driver(v)["spec"]["securityContext"].__setitem__("fsGroup", 0))
         mutate("replicas", lambda v: deployment(v)["spec"].__setitem__("replicas", 2))
         mutate("selector", lambda v: deployment(v)["spec"]["selector"]["matchLabels"].__setitem__("kil.dev/track", "signed_state_only"))
         mutate("cross track", lambda v: driver(v)["metadata"]["labels"].__setitem__("kil.dev/track", "signed_state_only"))
