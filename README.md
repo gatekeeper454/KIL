@@ -67,11 +67,24 @@ result. After that prerequisite merged and synchronized, the first central
 `200 / 200 / 403` and target-marker `1 / 1 / 0` tuple, but evidence collection
 failed closed on producer-shape and ledger-availability incompatibilities; the
 result remains private and nonpromotable, and no request was retried. The
-source-format correction is implemented and locally verified, but a new live
-attempt remains prohibited until the correction passes review, public CI,
+source-format correction was implemented and locally verified; at that
+checkpoint a new live attempt remained prohibited until review, public CI,
 merge, and exact synchronization. Existing v1 and v2 bundles remain
 independently verifiable. Kind/Calico validation (V3B-2), repetition, and
 performance promotion (V3C) remain future work.
+
+The correction merged as source
+`514e910ea9427e0497c4fe8a1ec279b554e75176`. Its newly authorized Task 11
+proof is run
+`v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94`,
+an accepted observed intermediate local-Envoy boundary result. It records
+`permit / permit / deny`, HTTP `200 / 200 / 403`, and target markers
+`1 / 1 / 0`, with one request attempt per track and no retry. Teardown froze
+and joined all nine authoritative sources, proved all 15 owned containers and
+six networks absent, and bound exactly equal pseudonymous foreign-resource
+arrays. Checksums and offline presenter verification pass. The bundle remains
+`not_promoted`; Kind/Calico and NetworkPolicy validation are future work,
+historical prevention is not established, and performance is not established.
 
 Historical pre-driver records remain available for provenance. The rejected
 nine-service/three-network smoke ran from public source
@@ -195,10 +208,10 @@ bundle and never instructs the controller to mutate a foreign profile. The
 offline verifier explicitly dispatches v1, historical driver-era v2, and v3
 without accepting mixed schemas. The fresh request-free v3 lifecycle passed
 from reviewed, merged, synchronized public `main` with exact foreign-resource
-equality and zero HTTP requests. The central `run` remains prohibited pending
-review, merge, and synchronization of that public-safe checkpoint; the central
-enforcement gate remains pending. V3B-2 Kind/Calico validation remains a later
-gate.
+equality and zero HTTP requests, and the accepted central result is identified
+above. The controller owns and may start, stop, or delete only the unique
+`kil-v3-lab` profile; it does not mutate other projects' Colima profiles. V3B-2
+Kind/Calico validation remains a later gate.
 
 ## Historical replay
 

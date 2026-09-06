@@ -928,12 +928,12 @@ failure-bundle verifier passed. The completed private journal was archived;
 the active state, active journal path, and readiness poison were absent after
 teardown.
 
-The central `run` remains prohibited until this public-safe checkpoint passes
-independent review, public CI, merge, and exact synchronization. After that
-publication gate, start a new clean lifecycle with `preflight` and `up` from the
-new synchronized public commit before Step 2.
+The central `run` remained prohibited until this public-safe checkpoint passed
+independent review, public CI, merge, and exact synchronization. That
+publication gate subsequently passed, authorizing one new clean lifecycle from
+the synchronized correction source named below.
 
-- [ ] **Step 2: Invoke `run` once**
+- [x] **Step 2: Invoke `run` once**
 
 Run exactly one:
 
@@ -944,7 +944,7 @@ PATH="$PWD/.tools/bin:$PATH" PYTHONPATH=src .venv/bin/python tools/v3b1_local_en
 After request intent, do not retry under any circumstance. Whether accepted or
 failed, execute `down` once and restore foreign state.
 
-- [ ] **Step 3: Verify the accepted proof before staging it**
+- [x] **Step 3: Verify the accepted proof before staging it**
 
 Require:
 
@@ -960,7 +960,7 @@ Require:
 - all `SHA256SUMS` entries valid; and
 - offline `view --bundle` acceptance.
 
-- [ ] **Step 4: Stage only the exact accepted bundle**
+- [x] **Step 4: Stage only the exact accepted bundle**
 
 Resolve and validate the run ID from the verified manifest, then stage only its
 explicit directory:
@@ -981,12 +981,18 @@ commands run.
 Reject the staging set if it includes any sibling run, private journal,
 downloaded tool, key, credential, or ignored parent directory.
 
-- [ ] **Step 5: Update the unified asset with calibrated claims**
+- [x] **Step 5: Update the unified asset with calibrated claims**
 
 The paper, README, presenter, progress, and lineage may name the exact run as an
 accepted observed intermediate local-Envoy result. They must still exclude Kind
 cluster validation, NetworkPolicy validation, historical prevention, and
 production performance.
+
+Correction source `514e910ea9427e0497c4fe8a1ec279b554e75176` produced accepted
+run `v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94`.
+The live command was not retried after its post-request copy error; mandatory
+teardown recovered and froze the complete authoritative evidence used by the
+accepted offline bundle.
 
 - [ ] **Step 6: Review, publish, merge, synchronize, and prepare backup**
 

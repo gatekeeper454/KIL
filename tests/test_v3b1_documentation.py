@@ -27,6 +27,10 @@ LEGACY_PLAN = (
 )
 LINEAGE = ROOT / "docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md"
 LIVE_BOARD = ROOT / "artifacts/generated/v3b1-task6-live-status.md"
+CENTRAL_RUN_ID = (
+    "v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94"
+)
+CENTRAL_BUNDLE = ROOT / "artifacts/generated/v3b1-local-envoy" / CENTRAL_RUN_ID
 
 REQUEST_DRIVER_DESIGN = "2026-08-31-v3b1-in-network-request-driver-design.md"
 REQUEST_DRIVER_PLAN = "2026-08-31-v3b1-in-network-request-driver.md"
@@ -106,6 +110,30 @@ class _PassiveHTMLParser(HTMLParser):
 
 
 class V3B1DocumentationTest(unittest.TestCase):
+    def test_accepted_central_proof_is_bound_and_claim_limited(self):
+        source_commit = "514e910ea9427e0497c4fe8a1ec279b554e75176"
+        for path in (README, ENVOY_README, V3_PROGRESS, PAPER):
+            with self.subTest(path=path.relative_to(ROOT)):
+                value = normalized(path.read_text(encoding="utf-8")).lower()
+                self.assertIn(CENTRAL_RUN_ID, value)
+                self.assertIn(source_commit, value)
+                self.assertIn("permit / permit / deny", value)
+                self.assertIn("200 / 200 / 403", value)
+                self.assertIn("1 / 1 / 0", value)
+                self.assertRegex(value, r"local[-_ ]envoy boundary")
+                self.assertIn("kil-v3-lab", value)
+                self.assertRegex(value, r"does not mutate|remain[s]? untouched")
+                self.assertRegex(value, r"kind(?:/|\s*\+\s*)calico[^.]{0,160}(?:future|pending|not)")
+                self.assertRegex(value, r"historical prevention[^.]{0,120}(?:not|no|exclude)")
+                self.assertRegex(value, r"performance[^.]{0,120}(?:not|no|exclude|future)")
+
+        manifest = CENTRAL_BUNDLE / "manifest.json"
+        self.assertTrue(manifest.is_file())
+        manifest_value = manifest.read_text(encoding="utf-8")
+        self.assertIn('"run_complete":true', manifest_value)
+        self.assertIn('"bundle_class":"intermediate_provisional_local_boundary"', manifest_value)
+        self.assertIn('"unchanged":true', manifest_value)
+
     def test_v3_foreign_snapshot_prerequisite_and_next_gate_are_current(self):
         for path in (README, ENVOY_README, V3_PROGRESS):
             with self.subTest(path=path.relative_to(ROOT)):
@@ -116,10 +144,8 @@ class V3B1DocumentationTest(unittest.TestCase):
                     value,
                     r"before/after[^.]{0,180}foreign[^.]{0,180}(?:exact|equality)",
                 )
-                self.assertRegex(
-                    value,
-                    r"(?:run|attempt)[^.]{0,180}prohibited",
-                )
+                self.assertIn(CENTRAL_RUN_ID, value)
+                self.assertIn("accepted", value)
                 self.assertRegex(
                     value,
                     r"fresh request-free[^.]{0,180}v3",
@@ -161,7 +187,10 @@ class V3B1DocumentationTest(unittest.TestCase):
                     r"foreign[^.]{0,180}(?:exact equality|exactly equal|unchanged)",
                 )
                 self.assertRegex(value, r"zero[^.]{0,120}(?:http|requests?)")
-                self.assertRegex(value, r"(?:run|attempt)[^.]{0,180}prohibited")
+
+        for path in (README, ENVOY_README, V3_PROGRESS):
+            with self.subTest(accepted_path=path.relative_to(ROOT)):
+                self.assertIn(CENTRAL_RUN_ID, path.read_text(encoding="utf-8"))
 
         gate_text = TASK10_GATE.read_text(encoding="utf-8")
         self.assertIn(public_commitment, gate_text)
@@ -219,10 +248,13 @@ class V3B1DocumentationTest(unittest.TestCase):
                 self.assertRegex(value, r"15[^.]{0,80}containers")
                 self.assertRegex(value, r"six[^.]{0,80}networks")
                 self.assertRegex(value, r"zero[^.]{0,120}(?:http|requests?)")
-                self.assertRegex(
-                    value,
-                    r"central `?run`?[^.]{0,120}(?:not executed|prohibited)",
-                )
+                if path == TASK10_GATE:
+                    self.assertRegex(
+                        value,
+                        r"central `?run`?[^.]{0,120}(?:not executed|prohibited)",
+                    )
+                else:
+                    self.assertIn(CENTRAL_RUN_ID, value)
 
         gate_text = TASK10_GATE.read_text(encoding="utf-8")
         gate_value = normalized(gate_text).lower()
@@ -293,10 +325,8 @@ class V3B1DocumentationTest(unittest.TestCase):
             task11_value,
             r"verif(?:y|ier)[^.]{0,160}(?:exact equality|exactly equal)",
         )
-        self.assertRegex(
-            task11_value,
-            r"central `?run`?[^.]{0,160}prohibited",
-        )
+        self.assertIn(CENTRAL_RUN_ID, task11_value)
+        self.assertIn("- [x] **step 5:", task11_value)
 
     def test_founder_byline_and_approved_opening_are_preserved(self):
         text = PAPER.read_text(encoding="utf-8")
@@ -405,7 +435,7 @@ class V3B1DocumentationTest(unittest.TestCase):
             paper_text,
         )
 
-    def test_v3b1_current_scope_and_v3b2_future_scope_remain_pending(self):
+    def test_v3b1_current_scope_and_v3b2_future_scope_remain_distinct(self):
         for path in (README, V3_PROGRESS, PAPER, HYBRID_INLINE, HYBRID_STANDALONE):
             with self.subTest(path=path.relative_to(ROOT)):
                 value = normalized(path.read_text(encoding="utf-8"))
@@ -416,7 +446,7 @@ class V3B1DocumentationTest(unittest.TestCase):
                 self.assertRegex(lowered, r"kind(?:/|\s*\+\s*)calico")
                 self.assertRegex(
                     lowered,
-                    r"pending|immediate live gate|no live acceptance|has (?:not|yet)",
+                    r"pending|future|not[_ ]promoted|has (?:not|yet)",
                 )
 
         corpus = normalized(

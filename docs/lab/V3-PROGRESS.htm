@@ -6,7 +6,7 @@
 <title>Gate V3 implementation progress</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/lab/V3-PROGRESS.md">
-<meta name="source-sha256" content="089cb21887059017a5f80763277512dc1884134b4c40417ab6a45989a9fa2829">
+<meta name="source-sha256" content="1b539fd8bbc4cf9531a94c76f320b2ec56f08ba5084bebd35dd7e61030e4f300">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>089cb21887059017a5f80763277512dc1884134b4c40417ab6a45989a9fa2829</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>1b539fd8bbc4cf9531a94c76f320b2ec56f08ba5084bebd35dd7e61030e4f300</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Gate V3 implementation progress</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>089cb21887059017a5f80763277512dc1884134b4c40417ab6a45989a9fa2829</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>1b539fd8bbc4cf9531a94c76f320b2ec56f08ba5084bebd35dd7e61030e4f300</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#gate-v3-implementation-progress">Gate V3 implementation progress</a></li><li class="level-2"><a href="#v3a-status">V3A status</a></li><li class="level-2"><a href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a href="#v3b-1-current-status">V3B-1 current status</a></li><li class="level-3"><a href="#implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</a></li><li class="level-3"><a href="#request-and-evidence-contracts">Request and evidence contracts</a></li><li class="level-3"><a href="#live-status-and-historical-boundary">Live status and historical boundary</a></li><li class="level-3"><a href="#historical-pre-driver-topology-records">Historical pre-driver topology records</a></li><li class="level-2"><a href="#architecture">Architecture</a></li><li class="level-2"><a href="#next-gate">Next gate</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="gate-v3-implementation-progress" href="#gate-v3-implementation-progress">Gate V3 implementation progress</a></li><li class="level-2"><a data-section-id="v3a-status" href="#v3a-status">V3A status</a></li><li class="level-2"><a data-section-id="evidence-boundary" href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a data-section-id="v3b-1-current-status" href="#v3b-1-current-status">V3B-1 current status</a></li><li class="level-3"><a data-section-id="implemented-topology-and-traffic-boundary" href="#implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</a></li><li class="level-3"><a data-section-id="request-and-evidence-contracts" href="#request-and-evidence-contracts">Request and evidence contracts</a></li><li class="level-3"><a data-section-id="live-status-and-historical-boundary" href="#live-status-and-historical-boundary">Live status and historical boundary</a></li><li class="level-3"><a data-section-id="historical-pre-driver-topology-records" href="#historical-pre-driver-topology-records">Historical pre-driver topology records</a></li><li class="level-2"><a data-section-id="architecture" href="#architecture">Architecture</a></li><li class="level-2"><a data-section-id="next-gate" href="#next-gate">Next gate</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -171,8 +171,8 @@ three clean cancellations, zero driver instructions, zero request intents,
 zero HTTP requests, nine exact empty service sources, all 15 containers and
 six networks absent, and exact equality of its pseudonymous foreign-resource
 arrays. The bundle is intentionally nonpromotable and does not establish an
-enforcement result. The central <code>run</code> remains prohibited until this public-safe
-checkpoint passes review, merge, and synchronization.</p>
+enforcement result. At that checkpoint the central <code>run</code> remained prohibited
+until the public-safe result passed review, merge, and synchronization.</p>
 <h3 id="live-status-and-historical-boundary">Live status and historical boundary</h3>
 <p>The corrected request-driver topology now has accepted Task 10 request-free
 lifecycle evidence at the local Envoy boundary. Earlier V3B-1 host-published
@@ -253,10 +253,33 @@ module, and full 566-test repository gate pass locally. Separate specification
 and quality/security reviews found no unresolved Critical or Important issue;
 the latter tightened copied-ledger reads to a no-follow descriptor with stable
 inode, size, and digest attestation. No driver instruction, request intent,
-HTTP action, or second central <code>run</code> occurred while implementing it. A newly
-authorized run remains prohibited until this correction passes public CI,
-merge, and exact synchronization; only then may one new central local-Envoy
+HTTP action, or second central <code>run</code> occurred while implementing it. At that
+checkpoint a newly authorized run remained prohibited until public CI, merge,
+and exact synchronization; only afterward could one new central local-Envoy
 proof be attempted, with no retry after request intent.</p>
+<p>The correction subsequently merged as source
+<code>514e910ea9427e0497c4fe8a1ec279b554e75176</code>. The newly authorized Task 11
+proof ran as
+<code>v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94</code>.
+Its live handoff encountered the same Docker copy visibility error after all
+three request states completed, so neither <code>run</code> nor <code>collect</code> was repeated.
+The mandatory <code>down</code> froze the authoritative container sources and produced a
+complete bundle that the offline presenter accepts as an observed intermediate
+local-Envoy boundary result. The joined tuple is <code>permit / permit / deny</code>, HTTP
+<code>200 / 200 / 403</code>, and target markers <code>1 / 1 / 0</code>; every driver has exactly one
+attempt and <code>retry_observed=false</code>. All nine sources are attested, all 15 owned
+containers and six networks were absent before publication, the dedicated
+profile was deleted, and the pseudonymous foreign-resource arrays are exactly
+equal. Every checksum passes. The bundle remains <code>not_promoted</code>: Kind/Calico
+and NetworkPolicy validation are future work, historical prevention is not
+established, and performance is not established.</p>
+<p>The controller owns only the uniquely named <code>kil-v3-lab</code> Colima profile. Future
+lifecycle commands may start, stop, or delete only that profile; all other
+profiles belong to other projects and must remain untouched. A separate foreign
+profile appeared after the bundle's bound before/after lifecycle window and
+caused only an optional post-teardown readback to reject its unfamiliar shape;
+KIL did not mutate it, and it does not alter the bundle's already verified exact
+teardown and foreign-snapshot equality.</p>
 <p>V3B-1 remains limited to the local Envoy boundary. V3B-2 is the future isolated
 Kind/Calico topology; its NetworkPolicy behavior, cluster-level transport,
 failure matrix, and measurements are unexecuted. V3C repetition and performance
@@ -340,17 +363,13 @@ central enforcement gate.</p>
 and the complete approved specification is
 <a href="../superpowers/specs/2026-08-29-v3-envoy-live-validation-design.htm"><code>docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md</code></a>.</p>
 <h2 id="next-gate">Next gate</h2>
-<p>The first central attempt failed closed after the intended enforcement tuple
-without a retry. Review, merge through public CI, and exactly synchronize the
-producer-format and bounded-read correction while preserving that failed
-bundle and its private journal. Only afterward start a new synchronized
-<code>preflight</code> / <code>up</code> lifecycle and execute one newly authorized central
-<code>run</code> / <code>down</code> proof with no retry after request intent.
-Its prospective acceptance criteria remain <code>permit / permit / deny</code>,
-HTTP <code>200 / 200 / 403</code>, target markers <code>1 / 1 / 0</code>, exact three-driver and
-nine-service-source joins, verified checksums, exact teardown, restored foreign
-runtime, and offline presenter acceptance. V3B-2 and V3C remain later gates;
-all V3A output remains explicitly modeled.</p>
+<p>Publish the accepted observed intermediate V3B-1 local-Envoy bundle through
+public review and CI, merge it, and synchronize local <code>main</code> exactly. Preserve
+the failed and accepted private worktrees until the user supplies the offline
+backup destination and retention policy. The next experimental gates are the
+separately designed V3B-2 Kind/Calico boundary and V3C repetition/performance;
+neither is implied by this result, and all V3A output remains explicitly
+modeled.</p>
 <p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
 </article></main>
 </div></div>
