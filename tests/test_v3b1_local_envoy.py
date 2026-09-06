@@ -1016,6 +1016,166 @@ class FakeRunner:
         return CommandResult(0, "", "")
 
 
+class LiveLedgerCopyTest(unittest.TestCase):
+    class Runner(FakeRunner):
+        def __init__(self, observations, copied_payload=b""):
+            super().__init__()
+            self.observations = list(observations)
+            self.copied_payload = copied_payload
+            self.copy_count = 0
+
+        def run(self, argv, **kwargs):
+            command = list(argv)
+            self.calls.append(
+                (
+                    command,
+                    kwargs.get("cwd"),
+                    kwargs.get("input_text"),
+                    kwargs.get("env"),
+                    kwargs.get("timeout_s", 30),
+                )
+            )
+            command_text = " ".join(command)
+            for forbidden in (" driver ", " run ", " curl ", " wget "):
+                if forbidden in f" {command_text} ":
+                    raise AssertionError(f"request command is forbidden: {command}")
+            docker_arguments = command[5:]
+            if docker_arguments[0] == "exec":
+                return CommandResult(0, self.observations.pop(0), "")
+            if docker_arguments[0] == "cp":
+                self.copy_count += 1
+                Path(docker_arguments[-1]).write_bytes(self.copied_payload)
+                return CommandResult(0, "", "")
+            raise AssertionError(f"unexpected command: {command}")
+
+    def controller(self, directory, runner, *, monotonic_ns, sleep):
+        root = Path(directory) / "repo"
+        profile = root / "deploy/kind/v3b-profile.json"
+        profile.parent.mkdir(parents=True)
+        profile.write_bytes((ROOT / "deploy/kind/v3b-profile.json").read_bytes())
+        (root / ".tools/v3b1-docker-config").mkdir(parents=True)
+        return LocalEnvoyController(
+            root,
+            runner,
+            home=Path(directory) / "home",
+            monotonic_ns=monotonic_ns,
+            sleep=sleep,
+        )
+
+    @staticmethod
+    def observation(*, payload=None, regular=True, byte_count=None, digest=None):
+        if payload is None and regular:
+            value = {
+                "exists": False,
+                "regular_file": False,
+                "byte_count": None,
+                "sha256": None,
+            }
+        elif not regular:
+            value = {
+                "exists": True,
+                "regular_file": False,
+                "byte_count": None,
+                "sha256": None,
+            }
+        else:
+            value = {
+                "exists": True,
+                "regular_file": True,
+                "byte_count": len(payload) if byte_count is None else byte_count,
+                "sha256": sha256(payload).hexdigest() if digest is None else digest,
+            }
+        return canonical_json(value) + "\n"
+
+    def test_missing_ledger_is_polled_then_copied_once_without_a_request(self):
+        payload = (canonical_json({"track": "signed_state_only"}) + "\n").encode()
+        now = [0]
+
+        def sleep(seconds):
+            now[0] += int(seconds * 1_000_000_000)
+
+        runner = self.Runner(
+            [self.observation(), self.observation(payload=payload)],
+            copied_payload=payload,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            controller = self.controller(
+                directory, runner, monotonic_ns=lambda: now[0], sleep=sleep
+            )
+            destination = controller.root / "raw/decisions.jsonl"
+            destination.parent.mkdir(parents=True)
+
+            copied = controller._copy_live_ledger(
+                container_id=HEX_A,
+                source_path="/evidence/decisions.jsonl",
+                destination=destination,
+            )
+
+        self.assertEqual(copied, payload)
+        self.assertEqual(runner.copy_count, 1)
+        self.assertEqual(len(runner.calls), 3)
+
+    def test_missing_ledger_stops_at_one_shared_deadline_without_copy(self):
+        now = [0]
+
+        def sleep(seconds):
+            now[0] += int(seconds * 1_000_000_000)
+
+        runner = self.Runner([self.observation()] * 101)
+        with tempfile.TemporaryDirectory() as directory:
+            controller = self.controller(
+                directory, runner, monotonic_ns=lambda: now[0], sleep=sleep
+            )
+            destination = controller.root / "raw/decisions.jsonl"
+            destination.parent.mkdir(parents=True)
+            with self.assertRaisesRegex(
+                ControllerError, "live ledger availability deadline exceeded"
+            ):
+                controller._copy_live_ledger(
+                    container_id=HEX_A,
+                    source_path="/evidence/decisions.jsonl",
+                    destination=destination,
+                )
+
+        self.assertEqual(runner.copy_count, 0)
+        self.assertLessEqual(now[0], 5_000_000_000)
+
+    def test_invalid_or_changed_ledger_fails_without_another_probe(self):
+        payload = b"record\n"
+        cases = {
+            "regular file": (self.observation(payload=payload, regular=False), payload),
+            "closed size": (
+                self.observation(payload=payload, byte_count=128 * 1024 + 2),
+                payload,
+            ),
+            "byte count": (self.observation(payload=payload), payload + b"x"),
+            "SHA-256": (
+                self.observation(payload=payload),
+                b"Record\n",
+            ),
+        }
+        for expected, (observation, copied_payload) in cases.items():
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as directory:
+                runner = self.Runner([observation], copied_payload=copied_payload)
+                controller = self.controller(
+                    directory,
+                    runner,
+                    monotonic_ns=lambda: 0,
+                    sleep=lambda seconds: None,
+                )
+                destination = controller.root / "raw/decisions.jsonl"
+                destination.parent.mkdir(parents=True)
+                with self.assertRaisesRegex(ControllerError, expected):
+                    controller._copy_live_ledger(
+                        container_id=HEX_A,
+                        source_path="/evidence/decisions.jsonl",
+                        destination=destination,
+                    )
+                self.assertEqual(
+                    sum(call[0][5] == "exec" for call in runner.calls), 1
+                )
+
+
 class _DriverStateRunner(FakeRunner):
     STATE_FORMAT = "{{.Id}} {{.State.Running}} {{.State.Status}}"
 

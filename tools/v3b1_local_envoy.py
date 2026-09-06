@@ -151,6 +151,8 @@ RETRY_CONTROL_HEADERS = {
 }
 _READINESS_DEADLINE_NS = 30_000_000_000
 _DRIVER_CLEANUP_DEADLINE_NS = 5_000_000_000
+_EVIDENCE_READ_DEADLINE_NS = 5_000_000_000
+_EVIDENCE_READ_POLL_S = 0.05
 _DRIVER_STATE_FORMAT = "{{.Id}} {{.State.Running}} {{.State.Status}}"
 _DRIVER_READINESS_FAILURE_CATEGORIES = {
     "clock_failure",
@@ -9909,6 +9911,7 @@ class LocalEnvoyController:
         tool_verifier: Callable[[], object] | None = None,
         driver_process_factory: DriverProcessFactory | None = None,
         monotonic_ns: Callable[[], int] | None = None,
+        sleep: Callable[[float], None] | None = None,
         publication_fault: Callable[[str, Path], None] | None = None,
     ) -> None:
         self.root = root.resolve()
@@ -9935,6 +9938,7 @@ class LocalEnvoyController:
         self.port_probe = port_probe
         self.tool_verifier = tool_verifier or self._verify_tool_lock
         self.monotonic_ns = time.monotonic_ns if monotonic_ns is None else monotonic_ns
+        self.sleep = time.sleep if sleep is None else sleep
         self.publication_fault = publication_fault
         self.command_env = {
             "HOME": str(self.home),
@@ -13416,6 +13420,82 @@ class LocalEnvoyController:
             self._stop_and_attest_container(item, manifest)
         return freeze
 
+    def _copy_live_ledger(
+        self,
+        *,
+        container_id: str,
+        source_path: str,
+        destination: Path,
+    ) -> bytes:
+        """Copy one exact live ledger under a shared monotonic deadline."""
+        _require_sha256("live ledger container ID", container_id)
+        if source_path not in frozenset(_LEDGER_PATH.values()):
+            raise ControllerError("live ledger source path is not allowed")
+        _require_contained(destination, self.root, "live ledger destination")
+        if destination.exists() or destination.is_symlink():
+            raise ControllerError("live ledger destination already exists")
+
+        deadline_ns = self.monotonic_ns() + _EVIDENCE_READ_DEADLINE_NS
+
+        def remaining_seconds() -> float:
+            remaining_ns = deadline_ns - self.monotonic_ns()
+            if remaining_ns <= 0:
+                raise ControllerError(
+                    "live ledger availability deadline exceeded"
+                )
+            return remaining_ns / 1_000_000_000
+
+        while True:
+            probe = self._execute(
+                self.docker_command(
+                    "exec",
+                    container_id,
+                    "/usr/local/bin/python",
+                    "-c",
+                    _LEDGER_PROBE,
+                    source_path,
+                ),
+                timeout_s=remaining_seconds(),
+                docker=True,
+            )
+            present, source_count, source_sha = self._parse_probe_observation(
+                probe.stdout
+            )
+            if present:
+                break
+            pause_s = min(_EVIDENCE_READ_POLL_S, remaining_seconds())
+            self.sleep(pause_s)
+
+        assert source_count is not None and source_sha is not None
+        if source_count > _MAX_LEDGER_EXPORT_BYTES:
+            raise ControllerError("live ledger exceeds the closed size bound")
+        try:
+            self._execute(
+                self.docker_command(
+                    "cp", f"{container_id}:{source_path}", str(destination)
+                ),
+                timeout_s=remaining_seconds(),
+                docker=True,
+            )
+            source_stat = destination.lstat()
+            if destination.is_symlink() or not stat.S_ISREG(source_stat.st_mode):
+                raise ControllerError(
+                    "Docker copy did not produce a regular file"
+                )
+            if source_stat.st_size != source_count:
+                raise ControllerError("live ledger copied byte count changed")
+            copied = destination.read_bytes()
+            if len(copied) != source_count:
+                raise ControllerError("live ledger copied byte count changed")
+            if _digest_bytes(copied) != source_sha:
+                raise ControllerError("live ledger copied SHA-256 changed")
+            os.chmod(destination, 0o400)
+            return copied
+        except (ControllerError, OSError, UnicodeError):
+            if destination.is_symlink() or destination.exists():
+                destination.unlink(missing_ok=True)
+            raise
+
     def _copy_sources(
         self,
         state: Mapping[str, object],
@@ -13448,23 +13528,15 @@ class LocalEnvoyController:
             authz = object_by_role_track[("authz", track.value)]
             target = object_by_role_track[("target", track.value)]
             proxy = object_by_role_track[("envoy", track.value)]
-            self._execute(
-                self.docker_command(
-                    "cp",
-                    f"{authz['id']}:/evidence/decisions.jsonl",
-                    str(decision_path),
-                ),
-                timeout_s=60,
-                docker=True,
+            decision_bytes = self._copy_live_ledger(
+                container_id=str(authz["id"]),
+                source_path="/evidence/decisions.jsonl",
+                destination=decision_path,
             )
-            self._execute(
-                self.docker_command(
-                    "cp",
-                    f"{target['id']}:/evidence/targets.jsonl",
-                    str(target_path),
-                ),
-                timeout_s=60,
-                docker=True,
+            target_bytes = self._copy_live_ledger(
+                container_id=str(target["id"]),
+                source_path="/evidence/targets.jsonl",
+                destination=target_path,
             )
             logs = self._execute(
                 self.docker_command("logs", str(proxy["id"])),
@@ -13472,7 +13544,7 @@ class LocalEnvoyController:
                 docker=True,
             )
             _write_file(envoy_path, logs.stdout.encode("utf-8"), 0o444)
-            raw_decisions[track] = decision_path.read_bytes()
+            raw_decisions[track] = decision_bytes
             decisions = _parse_jsonl_bytes(
                 raw_decisions[track],
                 f"decisions {track.value}",
@@ -13484,7 +13556,7 @@ class LocalEnvoyController:
             ) or any(item["track"] != track.value for item in decisions):
                 raise ControllerError("authz source cardinality/track is invalid")
             targets = _parse_jsonl_bytes(
-                target_path.read_bytes(),
+                target_bytes,
                 f"targets {track.value}",
                 _target_closed,
                 allow_empty=True,
