@@ -275,6 +275,13 @@ def _read_bounded_regular_file(path: Path) -> bytes:
             os.close(descriptor)
 
 
+def _validate_exact_scalars(values: Mapping[str, object]) -> None:
+    for name, expected in _EXACT_SCALARS.items():
+        actual = values[name]
+        if type(actual) is not str or actual != expected:
+            raise SchemaError(f"{name} must be exactly {expected}")
+
+
 @dataclass(frozen=True, slots=True)
 class V3B2Profile:
     schema_version: str
@@ -302,6 +309,30 @@ class V3B2Profile:
     application_namespaces: tuple[str, ...]
     evidence_scope: str
 
+    def __post_init__(self) -> None:
+        _validate_exact_scalars(
+            {name: getattr(self, name) for name in _EXACT_SCALARS}
+        )
+        if (
+            type(self.calico_images) is not tuple
+            or self.calico_images != _CALICO_IMAGES
+        ):
+            raise SchemaError("calico_images must be the exact immutable image tuple")
+        if (
+            type(self.system_namespaces) is not tuple
+            or self.system_namespaces != _SYSTEM_NAMESPACES
+        ):
+            raise SchemaError(
+                "system_namespaces must be the exact immutable approved sequence"
+            )
+        if (
+            type(self.application_namespaces) is not tuple
+            or self.application_namespaces != APPLICATION_NAMESPACES
+        ):
+            raise SchemaError(
+                "application_namespaces must be the exact immutable approved sequence"
+            )
+
     @classmethod
     def load(cls, path: Path) -> V3B2Profile:
         try:
@@ -314,11 +345,7 @@ class V3B2Profile:
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, object]) -> V3B2Profile:
         value = require_closed_object("V3B-2 profile", mapping, PROFILE_FIELDS)
-
-        for name, expected in _EXACT_SCALARS.items():
-            actual = value[name]
-            if type(actual) is not str or actual != expected:
-                raise SchemaError(f"{name} must be exactly {expected}")
+        _validate_exact_scalars(value)
 
         system_namespaces = value["system_namespaces"]
         application_namespaces = value["application_namespaces"]

@@ -135,13 +135,85 @@ EXPECTED_CAMPAIGN_FIELDS = frozenset(
         "public_commitment_sha256",
     }
 )
+EXPECTED_PROFILE_DOCUMENT = {
+    "schema_version": "kil.v3b2-profile.v1",
+    "host_os": "darwin",
+    "host_arch": "arm64",
+    "colima_version": "0.10.3",
+    "colima_profile": "kil-v3-lab",
+    "lima_version": "2.2.0",
+    "docker_cli_version": "29.7.2",
+    "kind_version": "0.32.0",
+    "kubernetes_version": "1.36.1",
+    "kind_node_image": (
+        "kindest/node:v1.36.1@sha256:"
+        "3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"
+    ),
+    "kubectl_version": "1.36.3",
+    "envoy_image": "docker.io/envoyproxy/envoy:v1.39.1",
+    "calico_version": "3.32.0",
+    "calico_upstream_url": (
+        "https://raw.githubusercontent.com/projectcalico/calico/"
+        "v3.32.0/manifests/calico.yaml"
+    ),
+    "calico_upstream_sha256": (
+        "bccabc607685551db918f66da724893eca3e69a50c5a3e3077029b02dbab8d35"
+    ),
+    "calico_manifest_path": "deploy/kind/calico-v3.32.0.yaml",
+    "calico_manifest_sha256": (
+        "ac5ab7451dda57cfbf47d584ee901b896b1a9ff388d95b6f01b59f1e1130fdfa"
+    ),
+    "calico_images": {
+        "cni": (
+            "quay.io/calico/cni@sha256:"
+            "1cfc6aa9c4dad3575fdf36b78185fd7d68bcd4acc95778f8342be4fb6a851a14"
+        ),
+        "node": (
+            "quay.io/calico/node@sha256:"
+            "f4fafd8ba641d96c5a91b01e5a519117d77d55dee789a3562ba3ad4aa125b36a"
+        ),
+        "kube_controllers": (
+            "quay.io/calico/kube-controllers@sha256:"
+            "adf0ac895796d21bca5383bc81c4cd2614be3a4308085b47857d7999f4cc2b1f"
+        ),
+    },
+    "cluster_name": "kil-v3-lab",
+    "pod_subnet": "10.244.0.0/16",
+    "service_subnet": "10.96.0.0/16",
+    "system_namespaces": [
+        "default",
+        "kube-node-lease",
+        "kube-public",
+        "kube-system",
+        "local-path-storage",
+    ],
+    "application_namespaces": [
+        "kil-v3-baseline",
+        "kil-v3-signed",
+        "kil-v3-local-reduce",
+    ],
+    "evidence_scope": "kind_calico_boundary",
+}
 
 
 def valid_profile() -> dict[str, object]:
     return json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
 
 
+def valid_constructor_values() -> dict[str, object]:
+    values = copy.deepcopy(EXPECTED_PROFILE_DOCUMENT)
+    images = values["calico_images"]
+    assert isinstance(images, dict)
+    values["calico_images"] = tuple(images.items())
+    values["system_namespaces"] = tuple(values["system_namespaces"])
+    values["application_namespaces"] = tuple(values["application_namespaces"])
+    return values
+
+
 class V3B2ProfileTests(unittest.TestCase):
+    def test_profile_document_matches_an_independent_full_literal_oracle(self) -> None:
+        self.assertEqual(valid_profile(), EXPECTED_PROFILE_DOCUMENT)
+
     def test_public_constants_and_profile_field_closure(self) -> None:
         self.assertEqual(LAB_IDENTITY, "kil-v3-lab")
         self.assertEqual(
@@ -249,6 +321,64 @@ class V3B2ProfileTests(unittest.TestCase):
             profile.cluster_name = "changed"  # type: ignore[misc]
         self.assertFalse(hasattr(profile, "__dict__"))
 
+    def test_valid_direct_construction_is_deeply_immutable(self) -> None:
+        profile = V3B2Profile(**valid_constructor_values())  # type: ignore[arg-type]
+        self.assertEqual(profile.application_namespaces, APPLICATION_NAMESPACES)
+        self.assertIsInstance(profile.calico_images, tuple)
+        self.assertTrue(all(isinstance(item, tuple) for item in profile.calico_images))
+        with self.assertRaises(TypeError):
+            profile.calico_images[0][0] = "changed"  # type: ignore[index]
+
+    def test_direct_construction_rejects_noncanonical_values(self) -> None:
+        cases = (
+            ("foreign-colima", "colima_profile", "foreign"),
+            ("foreign-cluster", "cluster_name", "foreign"),
+            ("wrong-scalar-type", "host_arch", 64),
+            ("mutable-node-image", "kind_node_image", "kindest/node:v1.36.1"),
+            (
+                "reordered-app-namespaces",
+                "application_namespaces",
+                (
+                    "kil-v3-signed",
+                    "kil-v3-baseline",
+                    "kil-v3-local-reduce",
+                ),
+            ),
+            (
+                "wrong-system-namespaces",
+                "system_namespaces",
+                ("default", "kube-system"),
+            ),
+            (
+                "list-app-namespaces",
+                "application_namespaces",
+                list(APPLICATION_NAMESPACES),
+            ),
+            (
+                "list-system-namespaces",
+                "system_namespaces",
+                list(EXPECTED_PROFILE_DOCUMENT["system_namespaces"]),
+            ),
+            (
+                "dict-images",
+                "calico_images",
+                copy.deepcopy(EXPECTED_PROFILE_DOCUMENT["calico_images"]),
+            ),
+        )
+        for label, name, replacement in cases:
+            with self.subTest(label=label):
+                values = valid_constructor_values()
+                values[name] = replacement
+                with self.assertRaises(SchemaError):
+                    V3B2Profile(**values)  # type: ignore[arg-type]
+
+        values = valid_constructor_values()
+        images = list(values["calico_images"])
+        images[0] = ("cni", "quay.io/calico/cni:v3.32.0")
+        values["calico_images"] = tuple(images)
+        with self.assertRaises(SchemaError):
+            V3B2Profile(**values)  # type: ignore[arg-type]
+
     def test_rejects_unknown_missing_and_cross_generation_fields(self) -> None:
         for label, mutation in (
             ("unknown", lambda value: value.update(extra="no")),
@@ -343,12 +473,26 @@ class V3B2ProfileTests(unittest.TestCase):
             )
             symlink = root / "link.json"
             symlink.symlink_to(target)
-            oversized = root / "oversized.json"
-            oversized.write_bytes(b" " * (64 * 1024 + 1))
-            for path in (symlink, oversized, root):
+            for path in (symlink, root):
                 with self.subTest(path=path.name):
                     with self.assertRaises(SchemaError):
                         V3B2Profile.load(path)
+
+    def test_load_accepts_exactly_64_kib_but_rejects_one_byte_more(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            at_limit = root / "at-limit.json"
+            at_limit.write_bytes(b" " * (64 * 1024 - 1) + b"[")
+            self.assertEqual(at_limit.stat().st_size, 64 * 1024)
+            with self.assertRaises(SchemaError) as malformed:
+                V3B2Profile.load(at_limit)
+            self.assertIn("cannot decode", str(malformed.exception))
+            self.assertNotIn("exceeds 64 KiB", str(malformed.exception))
+
+            oversized = root / "oversized.json"
+            oversized.write_bytes(b" " * (64 * 1024 + 1))
+            with self.assertRaisesRegex(SchemaError, "exceeds 64 KiB"):
+                V3B2Profile.load(oversized)
 
     def test_load_rejects_path_replacement_between_inspection_and_open(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
