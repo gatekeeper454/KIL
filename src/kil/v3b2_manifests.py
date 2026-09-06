@@ -438,6 +438,69 @@ def _require_plain_json(value: object) -> None:
     raise ManifestError("decoded payload must contain only exact JSON value types")
 
 
+def _path_text(path: tuple[str, ...]) -> str:
+    return ".".join(path) if path else "payload"
+
+
+def _selector_context(path: tuple[str, ...]) -> str:
+    return "selector mismatch: " if any("Selector" in part for part in path) else ""
+
+
+def _first_mismatch(
+    expected: object,
+    actual: object,
+    path: tuple[str, ...] = (),
+) -> str | None:
+    if type(expected) is not type(actual):
+        return f"{_selector_context(path)}wrong JSON type at {_path_text(path)}"
+    if type(expected) is dict:
+        expected_mapping = expected
+        actual_mapping = actual
+        missing = sorted(set(expected_mapping) - set(actual_mapping))
+        if missing:
+            return (
+                f"{_selector_context(path)}missing field {missing[0]} "
+                f"at {_path_text(path)}"
+            )
+        extra = sorted(set(actual_mapping) - set(expected_mapping))
+        if extra:
+            return (
+                f"{_selector_context(path)}unexpected field {extra[0]} "
+                f"at {_path_text(path)}"
+            )
+        for key in sorted(expected_mapping):
+            mismatch = _first_mismatch(
+                expected_mapping[key],
+                actual_mapping[key],
+                (*path, key),
+            )
+            if mismatch is not None:
+                return mismatch
+        return None
+    if type(expected) is list:
+        expected_items = expected
+        actual_items = actual
+        if len(expected_items) != len(actual_items):
+            return f"wrong list length at {_path_text(path)}"
+        for index, (expected_item, actual_item) in enumerate(
+            zip(expected_items, actual_items, strict=True)
+        ):
+            mismatch = _first_mismatch(
+                expected_item,
+                actual_item,
+                (*path, str(index)),
+            )
+            if mismatch is not None:
+                return mismatch
+        return None
+    if expected != actual:
+        return (
+            f"{_selector_context(path)}expected {expected!r} "
+            f"at {_path_text(path)}"
+        )
+    return None
+
+
 def validate_rendered_objects(payload: bytes | dict[str, object], profile: V3B2Profile, workload: WorkloadIdentity) -> None:
     """Reject anything other than the exact canonical object structure for the inputs."""
     expected = render_objects(profile, workload)
@@ -450,7 +513,10 @@ def validate_rendered_objects(payload: bytes | dict[str, object], profile: V3B2P
         raise ManifestError("payload must be canonical bytes or an exact decoded dictionary")
     _require_plain_json(payload)
     if canonical_json(payload) != canonical_json(expected_value):
-        raise ManifestError("decoded payload is not the exact rendered object structure")
+        detail = _first_mismatch(expected_value, payload)
+        raise ManifestError(
+            detail or "decoded payload is not the exact rendered object structure"
+        )
 
 
 __all__ = (

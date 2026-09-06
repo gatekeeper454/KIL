@@ -438,6 +438,30 @@ class V3B2ManifestTest(unittest.TestCase):
                 with self.assertRaises(ManifestError):
                     validate_rendered_objects(value, profile(), workload())
 
+    def test_validator_identifies_reviewed_adversarial_mutations(self) -> None:
+        cases = []
+
+        value = decoded()
+        object_named(value, "kil-v3-baseline", "Service", "envoy")["spec"]["type"] = "NodePort"
+        cases.append(("ClusterIP", value))
+
+        value = decoded()
+        object_named(value, "kil-v3-baseline", "Deployment", "envoy")["spec"]["template"]["spec"]["hostNetwork"] = True
+        cases.append(("hostNetwork", value))
+
+        value = decoded()
+        object_named(value, "kil-v3-baseline", "Deployment", "envoy")["spec"]["template"]["spec"]["containers"][0]["securityContext"]["privileged"] = True
+        cases.append(("privileged", value))
+
+        value = decoded()
+        object_named(value, "kil-v3-baseline", "NetworkPolicy", "allow-driver-egress-envoy")["spec"]["podSelector"] = {}
+        cases.append(("selector", value))
+
+        for token, value in cases:
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ManifestError, token):
+                    validate_rendered_objects(value, profile(), workload())
+
 
 if __name__ == "__main__":
     unittest.main()
