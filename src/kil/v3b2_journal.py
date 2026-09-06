@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, fields
+import fcntl
 import hashlib
 import json
 import os
@@ -41,7 +43,13 @@ class JournalError(ValueError):
 
 
 def _exact_string(label: str, value: object, *, maximum: int = 4096) -> str:
-    if type(value) is not str or not value or len(value.encode("utf-8")) > maximum:
+    if type(value) is not str or not value:
+        raise JournalError(f"{label} must be an exact bounded nonempty string")
+    try:
+        encoded = value.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise JournalError(f"{label} contains invalid Unicode") from error
+    if len(encoded) > maximum:
         raise JournalError(f"{label} must be an exact bounded nonempty string")
     return value
 
@@ -75,7 +83,11 @@ class Command:
             raise JournalError("command argv exceeds its argument bound")
         if any(type(value) is not str or not value for value in self.argv):
             raise JournalError("command argv values must be exact nonempty strings")
-        if any(len(value.encode("utf-8")) > 65536 for value in self.argv):
+        try:
+            oversized_argv = any(len(value.encode("utf-8")) > 65536 for value in self.argv)
+        except UnicodeEncodeError as error:
+            raise JournalError("command argv contains invalid Unicode") from error
+        if oversized_argv:
             raise JournalError("command argument exceeds its byte bound")
         if type(self.timeout_s) is not int or self.timeout_s <= 0 or self.timeout_s > 900:
             raise JournalError("command timeout must be an exact bounded positive integer")
@@ -98,7 +110,11 @@ class Command:
                 or not pair[1]
             ):
                 raise JournalError("command env contains an invalid binding")
-            if len(pair[0].encode("utf-8")) > 256 or len(pair[1].encode("utf-8")) > 65536:
+            try:
+                oversized_binding = len(pair[0].encode("utf-8")) > 256 or len(pair[1].encode("utf-8")) > 65536
+            except UnicodeEncodeError as error:
+                raise JournalError("command env binding contains invalid Unicode") from error
+            if oversized_binding:
                 raise JournalError("command env binding exceeds its byte bound")
             keys.append(pair[0])
         if len(keys) != len(set(keys)) or tuple(sorted(self.env)) != self.env:
@@ -107,6 +123,8 @@ class Command:
             raise JournalError("command mutating flag must be an exact boolean")
         environment = dict(self.env)
         executable = self.argv[0]
+        if executable not in {"colima", "docker", "kind", "kubectl"}:
+            raise JournalError("command executable is outside the closed allowlist")
         def authority_values(flag: str) -> tuple[str, ...]:
             if any(item.startswith(f"{flag}=") for item in self.argv):
                 raise JournalError(f"alternate {flag} syntax is prohibited")
@@ -430,7 +448,10 @@ def _inputs_mapping(inputs: JournalInputs) -> dict[str, object]:
 
 
 def _canonical_bytes(value: object) -> bytes:
-    return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode("utf-8")
+    try:
+        return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode("utf-8")
+    except (UnicodeError, TypeError, ValueError, RecursionError) as error:
+        raise JournalError("canonical journal value is not closed UTF-8 JSON") from error
 
 
 def _duplicate_rejecting_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -448,7 +469,11 @@ def _validate_json_budget(value: object, *, depth: int = 0) -> int:
     if value is None or type(value) in {bool, int}:
         return 1
     if type(value) is str:
-        if len(value.encode("utf-8")) > _MAX_STRING_BYTES:
+        try:
+            encoded = value.encode("utf-8")
+        except UnicodeEncodeError as error:
+            raise JournalError("journal string contains invalid Unicode") from error
+        if len(encoded) > _MAX_STRING_BYTES:
             raise JournalError("journal string exceeds its bound")
         return 1
     if type(value) is list:
@@ -486,6 +511,8 @@ def _private_location(path: Path, *, create_parent: bool) -> tuple[Path, Path]:
         raise JournalError("private journal root must be a non-symlink directory")
     if stat.S_IMODE(inspected.st_mode) != 0o700:
         raise JournalError("private journal root must have mode 0700")
+    if inspected.st_uid != os.geteuid():
+        raise JournalError("private journal root must be owned by the current user")
     resolved_private = private.resolve(strict=True)
     if path.parent.resolve(strict=True) != resolved_private:
         raise JournalError("journal is not contained by its private root")
@@ -498,6 +525,62 @@ def _fsync_parent(parent: Path) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
+
+
+@contextmanager
+def _journal_append_lock(path: Path):
+    """Serialize the full append transaction on a stable private lock inode."""
+    journal, private = _private_location(path, create_parent=False)
+    lock = private / f".{journal.name}.lock"
+    flags = os.O_RDWR | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor: int | None = None
+    created = False
+    locked = False
+    try:
+        try:
+            descriptor = os.open(lock, flags | os.O_CREAT | os.O_EXCL, 0o600)
+            created = True
+            os.fchmod(descriptor, 0o600)
+            os.fsync(descriptor)
+            _fsync_parent(private)
+        except FileExistsError:
+            descriptor = os.open(lock, flags)
+        current = os.fstat(descriptor)
+        named = os.stat(lock, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(current.st_mode)
+            or stat.S_ISLNK(named.st_mode)
+            or (current.st_dev, current.st_ino) != (named.st_dev, named.st_ino)
+            or current.st_nlink != 1
+            or stat.S_IMODE(current.st_mode) != 0o600
+            or current.st_uid != os.geteuid()
+        ):
+            raise JournalError("journal lock must be an owned 0600 single-link regular file")
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        locked = True
+        after = os.stat(lock, follow_symlinks=False)
+        if stat.S_ISLNK(after.st_mode) or (after.st_dev, after.st_ino) != (current.st_dev, current.st_ino):
+            raise JournalError("journal lock identity changed during acquisition")
+        yield
+    except JournalError:
+        raise
+    except OSError as error:
+        operation = "create" if created else "acquire"
+        raise JournalError(f"cannot {operation} journal lock safely: {error}") from error
+    finally:
+        release_error: OSError | None = None
+        if descriptor is not None:
+            if locked:
+                try:
+                    fcntl.flock(descriptor, fcntl.LOCK_UN)
+                except OSError as error:
+                    release_error = error
+            try:
+                os.close(descriptor)
+            except OSError as error:
+                release_error = release_error or error
+        if release_error is not None:
+            raise JournalError(f"cannot release journal lock safely: {release_error}") from release_error
 
 
 def create_journal(path: Path, inputs: JournalInputs) -> dict[str, object]:
@@ -721,6 +804,7 @@ def _validate_history(events: object) -> None:
     driver_cancels: set[str] = set()
     request_claims: list[str] = []
     request_results: set[str] = set()
+    foreign_comparison_unchanged: bool | None = None
     track_namespace = dict(TRACK_NAMESPACES)
 
     def done(family: str) -> bool:
@@ -824,6 +908,7 @@ def _validate_history(events: object) -> None:
                 require(done("profile_absence_proof"), "foreign comparison requires owned absence")
             elif family == "publication":
                 require(done("foreign_snapshot_comparison"), "publication requires foreign comparison")
+                require(foreign_comparison_unchanged is True, "promotable publication requires unchanged foreign resources")
             states[state_key] = ("pending", record["details"])
             if family == "request":
                 details = record["details"]
@@ -860,6 +945,8 @@ def _validate_history(events: object) -> None:
             )
         elif family == "driver_cancel":
             driver_cancels.add(str(completion["namespace"]))
+        elif family == "foreign_snapshot_comparison":
+            foreign_comparison_unchanged = completion["unchanged"]
 
 
 def _validate_journal(value: object) -> None:
@@ -908,15 +995,16 @@ def append_event(path: Path, event: str, details: Mapping[str, object]) -> dict[
         raise JournalError("event name must be an exact string")
     if type(details) is not dict:
         raise JournalError("event details must be an exact dict")
-    value = load_journal(path)
-    events = value["events"]
-    assert isinstance(events, list)
-    record = {"sequence": len(events) + 1, "event": event, "details": dict(details)}
-    candidate = {**value, "phase": event, "events": [*events, record]}
-    _validate_json_budget(candidate)
-    _validate_journal(candidate)
-    _replace_journal(path, candidate)
-    return candidate
+    with _journal_append_lock(path):
+        value = load_journal(path)
+        events = value["events"]
+        assert isinstance(events, list)
+        record = {"sequence": len(events) + 1, "event": event, "details": dict(details)}
+        candidate = {**value, "phase": event, "events": [*events, record]}
+        _validate_json_budget(candidate)
+        _validate_journal(candidate)
+        _replace_journal(path, candidate)
+        return candidate
 
 
 def _docker_environment(identity: OwnedIdentity) -> tuple[tuple[str, str], ...]:
@@ -1351,7 +1439,13 @@ def recovery_plan(
         )
     if "profile_absence_proof_complete" in completed and "foreign_snapshot_comparison_complete" not in completed:
         return RecoveryPlan((Command(("colima", "list", "--json"), 60),))
-    publication_allowed = {
+    comparison_unchanged = any(
+        record["event"] == "foreign_snapshot_comparison_complete"
+        and isinstance(record["details"], dict)
+        and record["details"].get("unchanged") is True
+        for record in typed_events
+    )
+    publication_allowed = comparison_unchanged and {
         "cluster_absence_proof_complete",
         "profile_absence_proof_complete",
         "foreign_snapshot_comparison_complete",

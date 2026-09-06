@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -283,6 +284,11 @@ class V3B2JournalTest(unittest.TestCase):
             with self.subTest(argv=argv), self.assertRaises(JournalError):
                 Command(argv, 30, env=command_env, mutating=mutating)
 
+    def test_command_rejects_every_unreviewed_executable_spelling(self) -> None:
+        for executable in ("rm", "sh", "env", "unknown", "/usr/bin/kubectl", "Kubectl"):
+            with self.subTest(executable=executable), self.assertRaises(JournalError):
+                Command((executable, "noop"), 30)
+
     def test_create_rejects_oversized_inputs_before_creating_any_file(self) -> None:
         values = {field: getattr(self.inputs, field) for field in self.inputs.__dataclass_fields__}
         values["expected_objects"] = tuple(f"{index:04d}-" + "x" * 4090 for index in range(300))
@@ -434,6 +440,94 @@ class V3B2JournalTest(unittest.TestCase):
         with self.assertRaisesRegex(JournalError, "symlink|safe"):
             load_journal(self.path)
 
+    def test_lone_surrogates_are_totalized_at_constructor_load_and_append_boundaries(self) -> None:
+        values = {field: getattr(self.inputs, field) for field in self.inputs.__dataclass_fields__}
+        values["global_context_before"] = "bad\ud800context"
+        with self.assertRaises(JournalError):
+            JournalInputs(**values)
+        with self.assertRaises(JournalError):
+            Command(("unknown\ud800",), 30)
+
+        self._journal()
+        payload = self.path.read_bytes().replace(b"desktop-linux", b"\\ud800")
+        self.path.write_bytes(payload)
+        os.chmod(self.path, 0o600)
+        with self.assertRaises(JournalError):
+            load_journal(self.path)
+
+        self.path.unlink()
+        self._journal()
+        self._ready()
+        self._start_driver("kil-v3-baseline", "driver-uid")
+        with self.assertRaises(JournalError):
+            self._append("request_intent", {
+                "track": "credential_policy_baseline",
+                "request_id": "bad\ud800request",
+                "case_sha256": "f" * 64,
+            })
+
+    def test_append_event_serializes_conflicting_threads_without_lost_update(self) -> None:
+        self._journal()
+        first_loaded = threading.Event()
+        release_first = threading.Event()
+        real_load = load_journal
+        load_calls = 0
+        call_guard = threading.Lock()
+
+        def controlled_load(path: Path) -> dict[str, object]:
+            nonlocal load_calls
+            with call_guard:
+                load_calls += 1
+                position = load_calls
+            value = real_load(path)
+            if position == 1:
+                first_loaded.set()
+                self.assertTrue(release_first.wait(5))
+            return value
+
+        outcomes: list[str] = []
+
+        def worker(started: threading.Event) -> None:
+            started.set()
+            try:
+                append_event(self.path, "profile_start_intent", {"colima_profile": "kil-v3-lab"})
+                outcomes.append("success")
+            except JournalError:
+                outcomes.append("rejected")
+
+        with patch("kil.v3b2_journal.load_journal", side_effect=controlled_load):
+            first_started = threading.Event()
+            second_started = threading.Event()
+            first = threading.Thread(target=worker, args=(first_started,))
+            second = threading.Thread(target=worker, args=(second_started,))
+            first.start()
+            self.assertTrue(first_started.wait(5))
+            self.assertTrue(first_loaded.wait(5))
+            second.start()
+            self.assertTrue(second_started.wait(5))
+            second.join(0.1)
+            self.assertTrue(second.is_alive())
+            with call_guard:
+                self.assertEqual(load_calls, 1)
+            release_first.set()
+            first.join(5)
+            second.join(5)
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        self.assertEqual(sorted(outcomes), ["rejected", "success"])
+        loaded = load_journal(self.path)
+        self.assertEqual(len(loaded["events"]), 1)
+
+    def test_append_rejects_symlink_lock_without_changing_journal(self) -> None:
+        original = self._journal()
+        target = self.private / "lock-target"
+        target.write_text("do not follow", encoding="utf-8")
+        lock = self.private / ".journal.json.lock"
+        lock.symlink_to(target)
+        with self.assertRaisesRegex(JournalError, "lock|symlink|safe"):
+            self._append("profile_start_intent", {"colima_profile": "kil-v3-lab"})
+        self.assertEqual(load_journal(self.path), original)
+
     def test_load_rejects_open_schema_wrong_mode_and_path_escape(self) -> None:
         journal = self._journal()
         journal["surprise"] = True
@@ -456,7 +550,8 @@ class V3B2JournalTest(unittest.TestCase):
         self.assertEqual([event["sequence"] for event in value["events"]], [1, 2])
         self.assertEqual(load_journal(self.path), value)
         leftovers = tuple(self.private.glob(".journal.json.*"))
-        self.assertEqual(leftovers, ())
+        self.assertEqual(leftovers, (self.private / ".journal.json.lock",))
+        self.assertEqual(leftovers[0].stat().st_mode & 0o777, 0o600)
 
     def test_event_grammar_rejects_unknown_duplicates_completion_without_intent_and_open_details(self) -> None:
         self._journal()
@@ -776,6 +871,39 @@ class V3B2JournalTest(unittest.TestCase):
         for name, details in self._canonical_events():
             self._append(name, details)
         self.assertTrue(recovery_plan(load_journal(self.path)).publication_allowed)
+
+    def test_failed_foreign_comparison_never_authorizes_promotable_publication(self) -> None:
+        self._journal()
+        events = self._canonical_events()
+        for name, details in events:
+            if name.startswith("foreign_snapshot_comparison_"):
+                details = {**details, "unchanged": False}
+            if name == "publication_intent":
+                break
+            self._append(name, details)
+        failed = load_journal(self.path)
+        self.assertFalse(recovery_plan(failed).publication_allowed)
+        with self.assertRaisesRegex(JournalError, "unchanged|publication|order"):
+            self._append("publication_intent", {"public_commitment_sha256": "7" * 64})
+
+        mutated = load_journal(self.path)
+        mutated["events"].extend([
+            {
+                "sequence": len(mutated["events"]) + 1,
+                "event": "publication_intent",
+                "details": {"public_commitment_sha256": "7" * 64},
+            },
+            {
+                "sequence": len(mutated["events"]) + 2,
+                "event": "publication_complete",
+                "details": {"public_commitment_sha256": "7" * 64},
+            },
+        ])
+        mutated["phase"] = "publication_complete"
+        self.path.write_text(json.dumps(mutated, sort_keys=True, separators=(",", ":")) + "\n")
+        os.chmod(self.path, 0o600)
+        with self.assertRaisesRegex(JournalError, "unchanged|publication|order"):
+            load_journal(self.path)
 
     def test_every_crash_boundary_recovers_only_the_pending_exact_mutation(self) -> None:
         events = self._canonical_events()
