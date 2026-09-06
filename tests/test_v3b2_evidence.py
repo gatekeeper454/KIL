@@ -221,13 +221,15 @@ class V3B2EvidenceTest(unittest.TestCase):
         payload = b'{"partial":true}'
         reader = Reader(payload)
         with tempfile.TemporaryDirectory() as directory:
-            raw = Path(directory).resolve() / "private" / "driver.raw"
+            unit = Path(directory).resolve() / "private" / "driver-diagnostic"
             with self.assertRaises(EvidenceError):
-                capture_source(reader, reader.expected, private_diagnostic_path=raw)
+                capture_source(reader, reader.expected, private_diagnostic_path=unit)
+            raw = unit / "raw.bin"
+            diagnostic = json.loads((unit / "diagnostic.json").read_text())
             self.assertEqual(raw.read_bytes(), payload)
-            diagnostic = json.loads((raw.parent / "driver.raw.diagnostic.json").read_text())
             self.assertEqual(diagnostic["sha256"], sha256(payload).hexdigest())
             self.assertEqual(stat_mode(raw), 0o600)
+            self.assertEqual(stat_mode(unit), 0o700)
 
     def test_private_diagnostic_rejects_invalid_and_symlinked_ancestry(self):
         payload = b'{"partial":true}'
@@ -280,6 +282,98 @@ class V3B2EvidenceTest(unittest.TestCase):
             self.assertEqual(sentinel.read_text(), "preserve")
             self.assertFalse((decoy / "raw").exists())
             self.assertFalse((moved / "raw").exists())
+
+    def test_private_diagnostic_unit_is_absent_on_second_write_or_rename_failure(self):
+        payload = b'{"partial":true}'
+        for failure in ("second_write", "rename"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                private = root / "private"
+                private.mkdir(mode=0o700)
+                unit = private / "diagnostic-unit"
+                reader = Reader(payload)
+                if failure == "second_write":
+                    original = evidence_module._write_regular_at
+                    calls = 0
+
+                    def fail_second(directory_fd: int, name: str, data: bytes) -> None:
+                        nonlocal calls
+                        calls += 1
+                        if calls == 2:
+                            raise OSError("private detail")
+                        original(directory_fd, name, data)
+
+                    context = patch.object(evidence_module, "_write_regular_at", side_effect=fail_second)
+                else:
+                    context = patch.object(
+                        evidence_module,
+                        "_rename_directory_exclusive",
+                        side_effect=OSError("private detail"),
+                    )
+                with context, self.assertRaises(EvidenceError) as caught:
+                    capture_source(reader, reader.expected, private_diagnostic_path=unit)
+                self.assertNotIn("private detail", str(caught.exception))
+                self.assertFalse(unit.exists())
+                self.assertEqual(list(private.iterdir()), [])
+
+    def test_private_diagnostic_exclusive_rename_preserves_raced_destination(self):
+        payload = b'{"partial":true}'
+        with tempfile.TemporaryDirectory() as directory:
+            private = Path(directory).resolve() / "private"
+            private.mkdir(mode=0o700)
+            unit = private / "diagnostic-unit"
+            original = evidence_module._rename_directory_exclusive
+
+            def race_destination(
+                source_fd: int,
+                source: str,
+                destination_fd: int,
+                destination: str,
+            ) -> None:
+                os.mkdir(destination, 0o700, dir_fd=destination_fd)
+                descriptor = os.open(
+                    destination,
+                    os.O_RDONLY | os.O_DIRECTORY,
+                    dir_fd=destination_fd,
+                )
+                try:
+                    evidence_module._write_regular_at(descriptor, "sentinel", b"preserve")
+                finally:
+                    os.close(descriptor)
+                original(source_fd, source, destination_fd, destination)
+
+            reader = Reader(payload)
+            with patch.object(
+                evidence_module,
+                "_rename_directory_exclusive",
+                side_effect=race_destination,
+            ), self.assertRaises(EvidenceError):
+                capture_source(reader, reader.expected, private_diagnostic_path=unit)
+            self.assertEqual((unit / "sentinel").read_bytes(), b"preserve")
+            self.assertFalse((unit / "raw.bin").exists())
+            self.assertFalse((unit / "diagnostic.json").exists())
+            self.assertEqual({entry.name for entry in private.iterdir()}, {unit.name})
+
+    def test_source_adapter_exceptions_are_sanitized_but_process_control_propagates(self):
+        identity = SourceIdentity("x", "u", "1", "c", 0, sha256(b"").hexdigest())
+
+        class Broken:
+            def identity(self) -> SourceIdentity:
+                raise RuntimeError("private adapter detail")
+
+            def read(self, maximum: int) -> bytes:
+                return b""
+
+        with self.assertRaises(EvidenceError) as caught:
+            capture_source(Broken(), identity)
+        self.assertNotIn("private adapter detail", str(caught.exception))
+
+        class Cancelled(Broken):
+            def identity(self) -> SourceIdentity:
+                raise KeyboardInterrupt()
+
+        with self.assertRaises(KeyboardInterrupt):
+            capture_source(Cancelled(), identity)
 
     def test_nominal_tuple_and_target_cardinality_are_exact(self):
         bundle = build_public_bundle(private_evidence())
@@ -534,6 +628,49 @@ class V3B2EvidenceTest(unittest.TestCase):
             with self.assertRaises(EvidenceError):
                 verify_bundle(alias / "public" / published.name)
             self.assertEqual(sentinel.read_text(), "preserve")
+
+    def test_public_parent_replacement_is_rejected_before_staging_and_rename(self):
+        for boundary in ("after_prepare", "before_rename"):
+            with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                parent = root / "public"
+                parent.mkdir(mode=0o700)
+                moved = root / "moved"
+                decoy = root / "decoy"
+                decoy.mkdir(mode=0o700)
+                sentinel = decoy / "sentinel"
+                sentinel.write_text("preserve")
+
+                def replace_parent() -> None:
+                    parent.rename(moved)
+                    decoy.rename(parent)
+
+                if boundary == "after_prepare":
+                    original_prepare = evidence_module._prepare_public_parent
+
+                    def prepared(path: object):
+                        result = original_prepare(path)
+                        replace_parent()
+                        return result
+
+                    context = patch.object(evidence_module, "_prepare_public_parent", side_effect=prepared)
+                else:
+                    original_verify = evidence_module._verify_v3b2
+                    replaced = False
+
+                    def verified(payloads):
+                        nonlocal replaced
+                        result = original_verify(payloads)
+                        if not replaced:
+                            replace_parent()
+                            replaced = True
+                        return result
+
+                    context = patch.object(evidence_module, "_verify_v3b2", side_effect=verified)
+                with context, self.assertRaises(EvidenceError):
+                    publish_bundle(private_evidence(), parent)
+                self.assertEqual((parent / "sentinel").read_text(), "preserve")
+                self.assertFalse((parent / RUN_ID).exists())
 
     def test_public_apis_totalize_malformed_types_and_unicode(self):
         identity = SourceIdentity("x", "u", "1", "c", 0, sha256(b"").hexdigest())

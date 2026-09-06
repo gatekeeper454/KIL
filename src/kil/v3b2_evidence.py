@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ctypes
 from hashlib import sha256
 import hmac
 import json
@@ -10,7 +11,6 @@ import os
 from pathlib import Path
 import re
 import stat
-import tempfile
 from typing import Callable, Mapping, Protocol, Sequence
 
 from kil.v3b2_contracts import (
@@ -206,7 +206,7 @@ def capture_source(
         before = reader.identity()
         payload = reader.read(maximum)
         after = reader.identity()
-    except (AttributeError, OSError, TypeError, ValueError, UnicodeError):
+    except Exception:
         raise EvidenceError("source capture failed closed") from None
     if type(before) is not SourceIdentity or type(after) is not SourceIdentity or type(payload) is not bytes:
         raise EvidenceError("source reader returned an invalid exact type")
@@ -228,25 +228,15 @@ def capture_source(
 
 
 def _persist_private_diagnostic(path: Path, payload: bytes) -> None:
-    """Persist malformed source bytes and a closed hash binding in a private area."""
+    """Atomically publish one private raw/hash diagnostic directory."""
     if not isinstance(path, Path) or not path.is_absolute() or ".." in path.parts:
         raise EvidenceError("private diagnostic path must be absolute and normalized")
-    target = path
-    diagnostic = target.with_name(target.name + ".diagnostic.json")
-    parent = _prepare_private_diagnostic_parent(target)
-    parent_before = os.stat(parent, follow_symlinks=False)
-    descriptor = -1
-    temporary_names: list[str] = []
+    parent, parent_fd, parent_identity = _prepare_private_diagnostic_parent(path)
+    staging_fd = -1
+    staging_name = ""
+    renamed = False
     try:
-        descriptor = os.open(
-            parent,
-            os.O_RDONLY
-            | getattr(os, "O_DIRECTORY", 0)
-            | getattr(os, "O_CLOEXEC", 0)
-            | getattr(os, "O_NOFOLLOW", 0),
-        )
-        opened = os.fstat(descriptor)
-        if (opened.st_dev, opened.st_ino) != (parent_before.st_dev, parent_before.st_ino):
+        if _entry_exists(parent_fd, path.name):
             raise EvidenceError("private diagnostic destination is unsafe")
         diagnostic_payload = _canonical_bytes(
             {
@@ -256,38 +246,34 @@ def _persist_private_diagnostic(path: Path, payload: bytes) -> None:
             }
         )
         token = sha256(os.urandom(32)).hexdigest()
-        raw_temporary = f".{target.name}.{token}.tmp"
-        diagnostic_temporary = f".{diagnostic.name}.{token}.tmp"
-        temporary_names.extend((raw_temporary, diagnostic_temporary))
-        _write_regular_at(descriptor, raw_temporary, payload)
-        _write_regular_at(descriptor, diagnostic_temporary, diagnostic_payload)
-        current = _canonical_directory(parent, "private diagnostic parent")
-        current_identity = os.stat(current, follow_symlinks=False)
-        if (current_identity.st_dev, current_identity.st_ino) != (
-            opened.st_dev,
-            opened.st_ino,
-        ):
-            raise EvidenceError("private diagnostic parent changed during write")
-        os.link(raw_temporary, target.name, src_dir_fd=descriptor, dst_dir_fd=descriptor, follow_symlinks=False)
-        os.link(diagnostic_temporary, diagnostic.name, src_dir_fd=descriptor, dst_dir_fd=descriptor, follow_symlinks=False)
-        for name in temporary_names:
-            os.unlink(name, dir_fd=descriptor)
-        temporary_names.clear()
-        os.fsync(descriptor)
+        staging_name = f".{path.name}.{token}.tmp"
+        os.mkdir(staging_name, 0o700, dir_fd=parent_fd)
+        staging_fd = _open_child_directory(parent_fd, staging_name, "private diagnostic staging")
+        _write_regular_at(staging_fd, "raw.bin", payload)
+        _write_regular_at(staging_fd, "diagnostic.json", diagnostic_payload)
+        os.fsync(staging_fd)
+        _assert_anchor_path(parent, parent_identity, "private diagnostic parent")
+        _rename_directory_exclusive(parent_fd, staging_name, parent_fd, path.name)
+        renamed = True
+        published = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+        staged = os.fstat(staging_fd)
+        if _directory_identity(published) != _directory_identity(staged):
+            raise EvidenceError("private diagnostic unit changed during publication")
+        os.fsync(parent_fd)
+        if _directory_identity(
+            os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+        ) != _directory_identity(staged):
+            raise EvidenceError("private diagnostic unit was replaced after publication")
     except EvidenceError:
         raise
     except (OSError, TypeError, ValueError, UnicodeError):
         raise EvidenceError("private diagnostic persistence failed closed") from None
     finally:
-        if descriptor >= 0:
-            for name in temporary_names:
-                try:
-                    os.unlink(name, dir_fd=descriptor)
-                except FileNotFoundError:
-                    pass
-                except OSError:
-                    pass
-            os.close(descriptor)
+        if staging_fd >= 0:
+            if not renamed:
+                _cleanup_staging_directory(parent_fd, staging_fd, staging_name)
+            os.close(staging_fd)
+        os.close(parent_fd)
 
 
 def _closed_record(label: str, value: object, fields: frozenset[str]) -> dict[str, object]:
@@ -1040,15 +1026,6 @@ def _artifacts(public: Mapping[str, object]) -> dict[str, bytes]:
     }
 
 
-def _write_regular(path: Path, payload: bytes) -> None:
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0), 0o600)
-    try:
-        with os.fdopen(descriptor, "wb", closefd=False) as stream:
-            stream.write(payload); stream.flush(); os.fsync(stream.fileno())
-    finally:
-        os.close(descriptor)
-
-
 def _write_regular_at(directory_fd: int, name: str, payload: bytes) -> None:
     descriptor = os.open(
         name,
@@ -1069,65 +1046,160 @@ def _write_regular_at(directory_fd: int, name: str, payload: bytes) -> None:
         os.close(descriptor)
 
 
-def _canonical_directory(path: object, label: str) -> Path:
+def _directory_identity(value: os.stat_result) -> tuple[int, int, int, int]:
+    return (value.st_dev, value.st_ino, value.st_uid, value.st_mode & 0o777)
+
+
+def _open_child_directory(parent_fd: int, name: str, label: str) -> int:
+    try:
+        descriptor = os.open(
+            name,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=parent_fd,
+        )
+        inspected = os.fstat(descriptor)
+        if not stat.S_ISDIR(inspected.st_mode):
+            raise OSError("not directory")
+        return descriptor
+    except OSError:
+        raise EvidenceError(f"{label} is unavailable or unsafe") from None
+
+
+def _open_directory_anchor(
+    path: object, label: str
+) -> tuple[Path, int, tuple[int, int, int, int]]:
+    if not isinstance(path, Path) or not path.is_absolute() or ".." in path.parts:
+        raise EvidenceError(f"{label} must be an absolute normalized path")
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            path.anchor,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        for component in path.parts[1:]:
+            child = _open_child_directory(descriptor, component, label)
+            os.close(descriptor)
+            descriptor = child
+        inspected = os.fstat(descriptor)
+        return path, descriptor, _directory_identity(inspected)
+    except EvidenceError:
+        if descriptor >= 0:
+            os.close(descriptor)
+        raise
+    except OSError:
+        if descriptor >= 0:
+            os.close(descriptor)
+        raise EvidenceError(f"{label} ancestry is unavailable") from None
+
+
+def _assert_anchor_path(
+    path: Path, identity: tuple[int, int, int, int], label: str
+) -> None:
+    _, descriptor, current = _open_directory_anchor(path, label)
+    os.close(descriptor)
+    if current != identity:
+        raise EvidenceError(f"{label} changed after identity anchoring")
+
+
+def _entry_exists(directory_fd: int, name: str) -> bool:
+    try:
+        os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        raise EvidenceError("directory entry cannot be inspected safely") from None
+
+
+def _rename_directory_exclusive(
+    source_fd: int, source: str, destination_fd: int, destination: str
+) -> None:
+    """Atomically rename a directory without replacing a raced destination."""
+    library = ctypes.CDLL(None, use_errno=True)
+    source_bytes = source.encode("utf-8")
+    destination_bytes = destination.encode("utf-8")
+    if hasattr(library, "renameatx_np"):
+        operation = library.renameatx_np
+        operation.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+        operation.restype = ctypes.c_int
+        result = operation(
+            source_fd, source_bytes, destination_fd, destination_bytes, 0x00000004
+        )
+    elif hasattr(library, "renameat2"):
+        operation = library.renameat2
+        operation.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+        operation.restype = ctypes.c_int
+        result = operation(
+            source_fd, source_bytes, destination_fd, destination_bytes, 0x00000001
+        )
+    else:
+        raise EvidenceError("exclusive atomic directory rename is unavailable")
+    if result != 0:
+        error_number = ctypes.get_errno()
+        raise OSError(error_number, "exclusive directory rename failed")
+
+
+def _cleanup_staging_directory(parent_fd: int, staging_fd: int, name: str) -> None:
+    try:
+        for child in os.listdir(staging_fd):
+            os.unlink(child, dir_fd=staging_fd)
+        os.rmdir(name, dir_fd=parent_fd)
+        os.fsync(parent_fd)
+    except OSError:
+        pass
+
+
+def _prepare_directory_parent(
+    path: object, label: str, *, private: bool
+) -> tuple[Path, int, tuple[int, int, int, int]]:
     if not isinstance(path, Path) or not path.is_absolute() or ".." in path.parts:
         raise EvidenceError(f"{label} must be an absolute normalized path")
     try:
-        resolved = path.resolve(strict=True)
-    except (OSError, RuntimeError):
-        raise EvidenceError(f"{label} ancestry is unavailable") from None
-    if path != resolved or str(path) != str(resolved):
-        raise EvidenceError(f"{label} ancestry must not contain symlinks")
-    current = Path(path.anchor)
-    for component in path.parts[1:]:
-        current /= component
+        result = _open_directory_anchor(path, label)
+        descriptor = result[1]
+        inspected = os.fstat(descriptor)
+    except EvidenceError:
+        _, ancestor_fd, _ = _open_directory_anchor(
+            path.parent, f"{label} ancestor"
+        )
         try:
-            inspected = os.stat(current, follow_symlinks=False)
-        except OSError:
-            raise EvidenceError(f"{label} ancestry is unavailable") from None
-        if stat.S_ISLNK(inspected.st_mode) or not stat.S_ISDIR(inspected.st_mode):
-            raise EvidenceError(f"{label} ancestry must contain only directories")
-    return path
+            os.mkdir(path.name, 0o700, dir_fd=ancestor_fd)
+            os.fsync(ancestor_fd)
+            descriptor = _open_child_directory(ancestor_fd, path.name, label)
+        except (OSError, EvidenceError):
+            os.close(ancestor_fd)
+            raise EvidenceError(f"{label} cannot be created safely") from None
+        os.close(ancestor_fd)
+        inspected = os.fstat(descriptor)
+        result = (path, descriptor, _directory_identity(inspected))
+    if private and (
+        inspected.st_uid != os.geteuid() or inspected.st_mode & 0o077
+    ):
+        os.close(descriptor)
+        raise EvidenceError(f"{label} permissions or ownership are unsafe")
+    return result
 
 
-def _prepare_public_parent(path: object) -> Path:
-    if not isinstance(path, Path) or not path.is_absolute() or ".." in path.parts:
-        raise EvidenceError("public parent must be an absolute normalized path")
-    if path.exists() or path.is_symlink():
-        return _canonical_directory(path, "public parent")
-    _canonical_directory(path.parent, "public parent ancestor")
-    try:
-        path.mkdir(mode=0o700)
-    except OSError:
-        raise EvidenceError("public parent cannot be created safely") from None
-    return _canonical_directory(path, "public parent")
+def _prepare_public_parent(
+    path: object,
+) -> tuple[Path, int, tuple[int, int, int, int]]:
+    return _prepare_directory_parent(path, "public parent", private=False)
 
 
-def _prepare_private_diagnostic_parent(target: Path) -> Path:
+def _prepare_private_diagnostic_parent(
+    target: Path,
+) -> tuple[Path, int, tuple[int, int, int, int]]:
     if not target.name or target.name in {".", ".."}:
         raise EvidenceError("private diagnostic file name is invalid")
-    parent = target.parent
-    if parent.exists() or parent.is_symlink():
-        canonical = _canonical_directory(parent, "private diagnostic parent")
-    else:
-        _canonical_directory(parent.parent, "private diagnostic ancestor")
-        try:
-            parent.mkdir(mode=0o700)
-        except OSError:
-            raise EvidenceError("private diagnostic parent cannot be created safely") from None
-        canonical = _canonical_directory(parent, "private diagnostic parent")
-    mode = os.stat(canonical, follow_symlinks=False).st_mode & 0o777
-    if mode & 0o077:
-        raise EvidenceError("private diagnostic parent permissions are unsafe")
-    diagnostic = target.with_name(target.name + ".diagnostic.json")
-    if (
-        target.exists()
-        or target.is_symlink()
-        or diagnostic.exists()
-        or diagnostic.is_symlink()
-    ):
-        raise EvidenceError("private diagnostic destination is unsafe")
-    return canonical
+    return _prepare_directory_parent(
+        target.parent, "private diagnostic parent", private=True
+    )
 
 
 def publish_bundle(private: object, public_parent: Path) -> Path:
@@ -1142,7 +1214,7 @@ def publish_bundle(private: object, public_parent: Path) -> Path:
 
 def _publish_bundle(private: object, public_parent: Path) -> Path:
     public = build_public_bundle(private)
-    parent = _prepare_public_parent(public_parent)
+    parent, parent_fd, parent_identity = _prepare_public_parent(public_parent)
     run_id = str(public["run_id"])
     private_manifest = _private_manifest(private)
     runtime = private_manifest["runtime_identities"]
@@ -1155,15 +1227,20 @@ def _publish_bundle(private: object, public_parent: Path) -> Path:
         )
     )
     destination = parent / run_id
-    if destination.exists() or destination.is_symlink():
+    if _entry_exists(parent_fd, run_id):
+        os.close(parent_fd)
         raise EvidenceError("public destination clobber is forbidden")
-    staging = Path(tempfile.mkdtemp(prefix=f".{run_id}.private-", dir=parent))
-    os.chmod(staging, 0o700)
-    _canonical_directory(staging, "private publication staging")
-    parent_before = os.stat(parent, follow_symlinks=False)
-    staging_before = os.stat(staging, follow_symlinks=False)
+    token = sha256(os.urandom(32)).hexdigest()
+    staging_name = f".{run_id}.private-{token}"
+    staging_fd = -1
     renamed = False
     try:
+        _assert_anchor_path(parent, parent_identity, "public parent")
+        os.mkdir(staging_name, 0o700, dir_fd=parent_fd)
+        staging_fd = _open_child_directory(
+            parent_fd, staging_name, "private publication staging"
+        )
+        staging_identity = _directory_identity(os.fstat(staging_fd))
         artifacts = _artifacts(public)
         for name, payload in artifacts.items():
             try:
@@ -1179,137 +1256,136 @@ def _publish_bundle(private: object, public_parent: Path) -> Path:
         validate_public_projection(public)
         payloads = {"manifest.json": _canonical_bytes(public), **artifacts}
         for name in sorted(payloads):
-            _write_regular(staging / name, payloads[name])
+            _write_regular_at(staging_fd, name, payloads[name])
         sums = "".join(f"{sha256(payloads[name]).hexdigest()}  {name}\n" for name in sorted(payloads)).encode("ascii")
-        _write_regular(staging / "SHA256SUMS", sums)
-        directory_fd = os.open(staging, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        try: os.fsync(directory_fd)
-        finally: os.close(directory_fd)
-        verify_bundle(staging)
-        _canonical_directory(parent, "public parent")
-        _canonical_directory(staging, "private publication staging")
-        current_parent = os.stat(parent, follow_symlinks=False)
-        if (parent_before.st_dev, parent_before.st_ino) != (
-            current_parent.st_dev,
-            current_parent.st_ino,
-        ):
-            raise EvidenceError("public parent changed before publication")
-        os.rename(staging, destination)
+        _write_regular_at(staging_fd, "SHA256SUMS", sums)
+        os.fsync(staging_fd)
+        staged_payloads = _read_tree_fd(staging_fd, set(PUBLIC_FILES))
+        _verify_sums(staged_payloads, set(PUBLIC_FILES))
+        _verify_v3b2(staged_payloads)
+        _assert_anchor_path(parent, parent_identity, "public parent")
+        _rename_directory_exclusive(parent_fd, staging_name, parent_fd, run_id)
         renamed = True
-        _canonical_directory(destination, "published bundle")
-        published_identity = os.stat(destination, follow_symlinks=False)
-        if (staging_before.st_dev, staging_before.st_ino) != (
-            published_identity.st_dev,
-            published_identity.st_ino,
-        ):
+        published_identity = os.stat(run_id, dir_fd=parent_fd, follow_symlinks=False)
+        if staging_identity != _directory_identity(published_identity):
             raise EvidenceError("published directory identity changed during rename")
-        parent_fd = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        try: os.fsync(parent_fd)
-        finally: os.close(parent_fd)
-        verify_bundle(destination)
+        os.fsync(parent_fd)
+        final_payloads = _read_tree_fd(staging_fd, set(PUBLIC_FILES))
+        _verify_sums(final_payloads, set(PUBLIC_FILES))
+        _verify_v3b2(final_payloads)
+        if _directory_identity(
+            os.stat(run_id, dir_fd=parent_fd, follow_symlinks=False)
+        ) != staging_identity:
+            raise EvidenceError("published directory was replaced after verification")
+        _assert_anchor_path(parent, parent_identity, "public parent")
         return destination
     except EvidenceError:
         if renamed:
-            _quarantine_failed_publication(parent, destination, run_id)
+            _quarantine_failed_publication_at(parent_fd, run_id)
         raise
     except (OSError, ValueError, TypeError, UnicodeError):
         if renamed:
-            _quarantine_failed_publication(parent, destination, run_id)
+            _quarantine_failed_publication_at(parent_fd, run_id)
         raise EvidenceError("atomic publication failed closed") from None
+    finally:
+        if staging_fd >= 0:
+            if not renamed:
+                _cleanup_staging_directory(parent_fd, staging_fd, staging_name)
+            os.close(staging_fd)
+        os.close(parent_fd)
 
 
-def _quarantine_failed_publication(
-    parent: Path, destination: Path, run_id: str
-) -> None:
+def _quarantine_failed_publication_at(parent_fd: int, run_id: str) -> None:
     try:
-        _canonical_directory(parent, "public parent")
-        if destination.is_symlink() or not destination.is_dir():
-            raise EvidenceError("failed publication cannot be quarantined safely")
         for counter in range(10_000):
-            quarantine = parent / f".{run_id}.failed-{counter}"
-            if not quarantine.exists() and not quarantine.is_symlink():
-                os.rename(destination, quarantine)
-                descriptor = os.open(
-                    parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+            quarantine = f".{run_id}.failed-{counter}"
+            if not _entry_exists(parent_fd, quarantine):
+                os.rename(
+                    run_id,
+                    quarantine,
+                    src_dir_fd=parent_fd,
+                    dst_dir_fd=parent_fd,
                 )
-                try:
-                    os.fsync(descriptor)
-                finally:
-                    os.close(descriptor)
+                os.fsync(parent_fd)
                 return
-    except EvidenceError:
-        raise
-    except OSError:
+    except (EvidenceError, OSError):
         raise EvidenceError("failed publication quarantine failed closed") from None
     raise EvidenceError("failed publication quarantine namespace is exhausted")
 
 
-def _read_tree(bundle: Path, expected: set[str], before_completion: Callable[[], None] | None = None) -> dict[str, bytes]:
-    if bundle.is_symlink() or not bundle.is_dir():
-        raise EvidenceError("evidence directory is missing or unsafe")
-    directory_before = os.stat(bundle, follow_symlinks=False)
-    directory_identity = (directory_before.st_dev, directory_before.st_ino)
-    observed = {path.name for path in bundle.iterdir()}
-    if observed != expected:
+def _read_tree_fd(
+    directory_fd: int,
+    expected: set[str],
+    before_completion: Callable[[], None] | None = None,
+) -> dict[str, bytes]:
+    directory_before = os.fstat(directory_fd)
+    if not stat.S_ISDIR(directory_before.st_mode) or set(os.listdir(directory_fd)) != expected:
         raise EvidenceError("evidence file set is not exact")
     payloads: dict[str, bytes] = {}
     identities: dict[str, tuple[int, int, int, int]] = {}
     for name in sorted(expected):
-        path = bundle / name
         try:
-            before = os.stat(path, follow_symlinks=False)
+            before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
             if not stat.S_ISREG(before.st_mode) or before.st_size > _MAX_FILE_BYTES:
                 raise EvidenceError("evidence file is unsafe or oversized")
-            fd = os.open(path, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0))
+            descriptor = os.open(
+                name,
+                os.O_RDONLY
+                | getattr(os, "O_CLOEXEC", 0)
+                | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=directory_fd,
+            )
             try:
-                opened = os.fstat(fd)
+                opened = os.fstat(descriptor)
                 chunks: list[bytes] = []
                 remaining = _MAX_FILE_BYTES + 1
                 while remaining:
-                    chunk = os.read(fd, min(1024 * 1024, remaining))
+                    chunk = os.read(descriptor, min(1024 * 1024, remaining))
                     if not chunk:
                         break
                     chunks.append(chunk)
                     remaining -= len(chunk)
                 data = b"".join(chunks)
-                if len(data) > _MAX_FILE_BYTES:
-                    raise EvidenceError("evidence file exceeds its byte bound")
             finally:
-                os.close(fd)
-            after = os.stat(path, follow_symlinks=False)
+                os.close(descriptor)
+            after = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
         except EvidenceError:
             raise
         except OSError:
             raise EvidenceError("evidence file changed during bounded read") from None
         identity = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
-        if identity != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns) or identity != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+        if (
+            len(data) > _MAX_FILE_BYTES
+            or identity != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
+            or identity != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+        ):
             raise EvidenceError("evidence file was replaced during validation")
-        identities[name] = identity; payloads[name] = data
+        identities[name] = identity
+        payloads[name] = data
     if before_completion is not None:
         before_completion()
-    if {path.name for path in bundle.iterdir()} != expected:
+    if set(os.listdir(directory_fd)) != expected:
         raise EvidenceError("evidence tree changed during validation")
-    directory_after = os.stat(bundle, follow_symlinks=False)
-    if not stat.S_ISDIR(directory_after.st_mode) or directory_identity != (directory_after.st_dev, directory_after.st_ino):
-        raise EvidenceError("evidence directory was replaced during validation")
+    if _directory_identity(os.fstat(directory_fd)) != _directory_identity(directory_before):
+        raise EvidenceError("evidence directory changed during validation")
     for name, identity in identities.items():
-        current = os.stat(bundle / name, follow_symlinks=False)
-        if not stat.S_ISREG(current.st_mode) or identity != (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns):
+        current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        if not stat.S_ISREG(current.st_mode) or identity != (
+            current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns
+        ):
             raise EvidenceError("evidence tree was replaced after validation")
     return payloads
 
 
-def _read_manifest_only(bundle: Path) -> bytes:
-    if bundle.is_symlink() or not bundle.is_dir():
-        raise EvidenceError("evidence directory is missing or unsafe")
-    path = bundle / "manifest.json"
+def _read_manifest_only_fd(directory_fd: int) -> bytes:
     try:
-        before = os.stat(path, follow_symlinks=False)
+        before = os.stat("manifest.json", dir_fd=directory_fd, follow_symlinks=False)
         if not stat.S_ISREG(before.st_mode) or before.st_size > _MAX_FILE_BYTES:
             raise EvidenceError("evidence manifest is unsafe or oversized")
         descriptor = os.open(
-            path,
+            "manifest.json",
             os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=directory_fd,
         )
         try:
             opened = os.fstat(descriptor)
@@ -1324,17 +1400,14 @@ def _read_manifest_only(bundle: Path) -> bytes:
             payload = b"".join(chunks)
         finally:
             os.close(descriptor)
-        after = os.stat(path, follow_symlinks=False)
+        after = os.stat("manifest.json", dir_fd=directory_fd, follow_symlinks=False)
     except EvidenceError:
         raise
     except OSError:
         raise EvidenceError("evidence manifest changed during bounded read") from None
     identity = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
     if len(payload) > _MAX_FILE_BYTES or identity != (
-        opened.st_dev,
-        opened.st_ino,
-        opened.st_size,
-        opened.st_mtime_ns,
+        opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns
     ) or identity != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
         raise EvidenceError("evidence manifest changed during bounded read")
     return payload
@@ -1601,39 +1674,48 @@ def verify_bundle(path: Path, *, before_completion: Callable[[], None] | None = 
 
 
 def _verify_bundle(path: Path, *, before_completion: Callable[[], None] | None = None) -> VerifiedBundle:
-    bundle = _canonical_directory(path, "evidence bundle")
-    manifest = _parse_json(_read_manifest_only(bundle), "public manifest")
-    schema = manifest.get("schema_version")
+    bundle, directory_fd, identity = _open_directory_anchor(path, "evidence bundle")
     try:
-        family = dispatch_schema(manifest)
-    except SchemaError:
-        raise EvidenceError("bundle schema dispatch failed closed") from None
-    if schema == PUBLIC_MANIFEST_SCHEMA:
-        expected = set(PUBLIC_FILES)
-        payloads = _read_tree(bundle, expected, before_completion=before_completion)
-        _verify_sums(payloads, expected)
-        return _verify_v3b2(payloads)
-    if type(schema) is str and schema.startswith("kil.v3b1-public-manifest.") and family == schema:
+        manifest = _parse_json(_read_manifest_only_fd(directory_fd), "public manifest")
+        schema = manifest.get("schema_version")
         try:
-            from tools.v3b1_local_envoy import (
-                ControllerError,
-                _verify_failure_presenter_bundle,
-                verify_presenter_bundle,
+            family = dispatch_schema(manifest)
+        except SchemaError:
+            raise EvidenceError("bundle schema dispatch failed closed") from None
+        if schema == PUBLIC_MANIFEST_SCHEMA:
+            expected = set(PUBLIC_FILES)
+            payloads = _read_tree_fd(
+                directory_fd, expected, before_completion=before_completion
             )
-        except (ImportError, AttributeError):
-            raise EvidenceError("V3B-1 verifier is unavailable") from None
-        accepted = False
-        for verifier in (verify_presenter_bundle, _verify_failure_presenter_bundle):
+            _verify_sums(payloads, expected)
+            result = _verify_v3b2(payloads)
+            _assert_anchor_path(bundle, identity, "evidence bundle")
+            return result
+        if type(schema) is str and schema.startswith("kil.v3b1-public-manifest.") and family == schema:
+            _assert_anchor_path(bundle, identity, "evidence bundle")
             try:
-                verifier(bundle, before_completion=before_completion)
-                accepted = True
-                break
-            except (ControllerError, OSError):
-                continue
-        if not accepted:
-            raise EvidenceError("V3B-1 bundle failed its independent verifier")
-        run_id = manifest.get("run_id", "")
-        if type(run_id) is not str:
-            raise EvidenceError("V3B-1 run ID is invalid")
-        return VerifiedBundle("v3b1", run_id, str(manifest.get("bundle_class", "v3b1")), str(manifest.get("promotion_status", "not_promoted")), sha256(_canonical_bytes(manifest)).hexdigest())
-    raise EvidenceError("bundle schema family is not implemented")
+                from tools.v3b1_local_envoy import (
+                    ControllerError,
+                    _verify_failure_presenter_bundle,
+                    verify_presenter_bundle,
+                )
+            except (ImportError, AttributeError):
+                raise EvidenceError("V3B-1 verifier is unavailable") from None
+            accepted = False
+            for verifier in (verify_presenter_bundle, _verify_failure_presenter_bundle):
+                try:
+                    verifier(bundle, before_completion=before_completion)
+                    accepted = True
+                    break
+                except (ControllerError, OSError):
+                    continue
+            if not accepted:
+                raise EvidenceError("V3B-1 bundle failed its independent verifier")
+            _assert_anchor_path(bundle, identity, "evidence bundle")
+            run_id = manifest.get("run_id", "")
+            if type(run_id) is not str:
+                raise EvidenceError("V3B-1 run ID is invalid")
+            return VerifiedBundle("v3b1", run_id, str(manifest.get("bundle_class", "v3b1")), str(manifest.get("promotion_status", "not_promoted")), sha256(_canonical_bytes(manifest)).hexdigest())
+        raise EvidenceError("bundle schema family is not implemented")
+    finally:
+        os.close(directory_fd)
