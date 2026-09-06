@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from ipaddress import IPv4Address, IPv4Network
 import json
 from pathlib import PurePosixPath
 import re
 
-from .canonical import canonical_json
-
-
 _MAX_KUBECTL_BYTES = 8 * 1024 * 1024
+_MAX_JSON_DEPTH = 64
+_MAX_JSON_ITEMS = 250_000
+_MAX_INTEGER_DIGITS = 128
 _NODE_ID = re.compile(r"[0-9a-f]{64}")
 _DIGEST_REFERENCE = re.compile(r"[^@\s]+@sha256:[0-9a-f]{64}")
 _KIL_CONTENT_REFERENCE = re.compile(r"kil\.local/kil-v3b2:sha256-[0-9a-f]{64}")
@@ -52,6 +53,39 @@ _CALICO_CONTAINER_CONTRACT = {
         "calico-kube-controllers", "regular", "calico-kube-controllers",
     ): _CALICO_PINS["calico-kube-controllers"],
 }
+
+
+def _closed_object_keys() -> tuple[tuple[str, str, str, str], ...]:
+    """Return the 60 rendered objects plus the three reviewed system projections."""
+    records: list[tuple[str, str, str, str]] = []
+    for namespace in ("kil-v3-baseline", "kil-v3-local-reduce", "kil-v3-signed"):
+        records.append(("v1", "Namespace", "", namespace))
+        records.extend(("v1", "ServiceAccount", namespace, role) for role in ("driver", "envoy", "authz", "target"))
+        records.extend(("v1", "ConfigMap", namespace, name) for name in ("authz-config", "target-config", "envoy-config"))
+        records.extend(("networking.k8s.io/v1", "NetworkPolicy", namespace, name) for name in ("default-deny", "allow-dns", "allow-driver-egress-envoy", "allow-envoy-ingress-egress", "allow-backends-ingress-envoy"))
+        records.extend(("v1", "Service", namespace, role) for role in ("envoy", "authz", "target"))
+        records.extend(("apps/v1", "Deployment", namespace, role) for role in ("envoy", "authz", "target"))
+        records.append(("v1", "Pod", namespace, "driver"))
+    records.extend((
+        ("v1", "Namespace", "", "kube-system"),
+        ("apps/v1", "DaemonSet", "kube-system", "calico-node"),
+        ("apps/v1", "Deployment", "kube-system", "calico-kube-controllers"),
+    ))
+    return tuple(sorted(records))
+
+
+_EXPECTED_OBJECT_KEYS = _closed_object_keys()
+_EXPECTED_WORKLOAD_KEYS = tuple(sorted(
+    (namespace, "regular", role)
+    for namespace in ("kil-v3-baseline", "kil-v3-local-reduce", "kil-v3-signed")
+    for role in ("driver", "envoy", "authz", "target")
+))
+_EXPECTED_ENDPOINT_KEYS = tuple(sorted(
+    (namespace, service, "http", "TCP", 8080)
+    for namespace in ("kil-v3-baseline", "kil-v3-local-reduce", "kil-v3-signed")
+    for service in ("envoy", "authz", "target")
+))
+_POD_NETWORK = IPv4Network("10.244.0.0/16")
 
 
 def _closed_policy_graph() -> tuple[PolicyEdge, ...]:
@@ -242,6 +276,29 @@ def _validate_common(record: object) -> None:
     _sorted_records("objects", record.objects, ObjectIdentity)
     _sorted_records("pod_images", record.pod_images, PodImageIdentity)
     _sorted_records("endpoints", record.endpoints, EndpointIdentity)
+    object_keys = tuple(
+        (item.api_version, item.kind, item.namespace, item.name)
+        for item in record.objects
+    )
+    if object_keys != _EXPECTED_OBJECT_KEYS:
+        raise InventoryError("object inventory differs from the fixed topology oracle")
+    workload = tuple(item for item in record.pod_images if item.image_role == "workload")
+    workload_keys = tuple(sorted(
+        (item.namespace, item.container_type, item.container) for item in workload
+    ))
+    if workload_keys != _EXPECTED_WORKLOAD_KEYS:
+        raise InventoryError("application workload container inventory is not exact")
+    for item in workload:
+        if item.container == "driver":
+            valid_pod = item.pod == "driver"
+        else:
+            valid_pod = re.fullmatch(
+                rf"{re.escape(item.container)}-"
+                r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?",
+                item.pod,
+            ) is not None
+        if not valid_pod:
+            raise InventoryError("application workload Pod family is not exact")
     calico = tuple(item for item in record.pod_images if item.image_role != "workload")
     actual_calico_contract = tuple(sorted(
         (item.image_role, item.container_type, item.container) for item in calico
@@ -274,6 +331,26 @@ def _validate_common(record: object) -> None:
         )
     if any(len(kinds) != 1 for kinds in source_kinds.values()):
         raise InventoryError("ambiguous mixed Endpoints and EndpointSlice Service sources")
+    if tuple(sorted(endpoint_keys)) != _EXPECTED_ENDPOINT_KEYS:
+        raise InventoryError("endpoint inventory differs from the fixed Service oracle")
+    for item in record.endpoints:
+        if item.source_kind == "Endpoints":
+            valid_source_name = item.source_name == item.service
+        else:
+            valid_source_name = re.fullmatch(
+                rf"{re.escape(item.service)}-"
+                r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?",
+                item.source_name,
+            ) is not None
+        if not valid_source_name:
+            raise InventoryError("endpoint source name is outside the Service family")
+        for address in item.addresses:
+            try:
+                parsed_address = IPv4Address(address)
+            except ValueError as error:
+                raise InventoryError("endpoint address is not canonical IPv4") from error
+            if str(parsed_address) != address or parsed_address not in _POD_NETWORK:
+                raise InventoryError("endpoint address is not canonical or outside the Pod CIDR")
     _sorted_records("policy_graph", record.policy_graph, PolicyEdge)
     if record.policy_graph != _EXPECTED_POLICY_GRAPH:
         raise InventoryError("policy_graph differs from the exact twelve-edge contract")
@@ -365,16 +442,67 @@ def _keys(label: str, value: object, expected: frozenset[str]) -> dict[str, obje
     return value
 
 
+def _bounded_integer(text: str) -> int:
+    digits = text[1:] if text.startswith("-") else text
+    if len(digits) > _MAX_INTEGER_DIGITS:
+        raise ValueError("JSON integer exceeds the inventory grammar")
+    return int(text)
+
+
+def _reject_constant(text: str) -> object:
+    raise ValueError(f"non-finite JSON constant is forbidden: {text}")
+
+
+def _validate_json_tree(value: object) -> None:
+    stack: list[tuple[object, int]] = [(value, 0)]
+    count = 0
+    while stack:
+        current, depth = stack.pop()
+        if depth > _MAX_JSON_DEPTH:
+            raise InventoryError("kubectl JSON exceeds the depth limit")
+        count += 1
+        if count > _MAX_JSON_ITEMS:
+            raise InventoryError("kubectl JSON exceeds the item limit")
+        if current is None or type(current) in {str, int, bool}:
+            continue
+        if type(current) is list:
+            stack.extend((item, depth + 1) for item in current)
+            continue
+        if type(current) is dict:
+            if any(type(key) is not str for key in current):
+                raise InventoryError("kubectl JSON object keys must be exact strings")
+            stack.extend((item, depth + 1) for item in current.values())
+            continue
+        raise InventoryError("kubectl JSON contains a non-JSON value")
+
+
+def _canonical_inventory_bytes(value: object) -> bytes:
+    try:
+        text = json.dumps(
+            value, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        )
+        return (text + "\n").encode("utf-8", errors="strict")
+    except (TypeError, ValueError, RecursionError, UnicodeEncodeError) as error:
+        raise InventoryError(f"kubectl JSON cannot be canonicalized: {error}") from error
+
+
 def _decode_list(payload: bytes, expected_kind: str) -> list[dict[str, object]]:
     if type(payload) is not bytes or len(payload) > _MAX_KUBECTL_BYTES:
         raise InventoryError("kubectl response must be bytes of at most 8 MiB")
     _exact_string("expected_kind", expected_kind)
     try:
         value = json.loads(
-            payload.decode("utf-8", errors="strict"), object_pairs_hook=_closed_object
+            payload.decode("utf-8", errors="strict"),
+            object_pairs_hook=_closed_object,
+            parse_int=_bounded_integer,
+            parse_constant=_reject_constant,
         )
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+    except InventoryError:
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError) as error:
         raise InventoryError(f"invalid kubectl JSON: {error}") from error
+    _validate_json_tree(value)
     envelope = _keys(
         "Kubernetes List envelope", value,
         frozenset({"apiVersion", "kind", "metadata", "items"}),
@@ -385,7 +513,7 @@ def _decode_list(payload: bytes, expected_kind: str) -> list[dict[str, object]]:
     _exact_string("List resourceVersion", metadata["resourceVersion"], empty=True)
     if type(envelope["items"]) is not list:
         raise InventoryError("List items must be an exact JSON array")
-    if payload != (canonical_json(value) + "\n").encode("utf-8"):
+    if payload != _canonical_inventory_bytes(value):
         raise InventoryError("kubectl response must be canonical JSON followed by one newline")
     items = envelope["items"]
     identities: set[tuple[str, str, str, str]] = set()
@@ -444,7 +572,12 @@ def _parse_pod_image_list(payload: bytes) -> tuple[PodImageIdentity, ...]:
         condition = _keys(
             "Pod condition", conditions[0], frozenset({"type", "status"})
         )
-        if condition["type"] != "Ready" or condition["status"] not in {"True", "False"}:
+        if (
+            type(condition["type"]) is not str
+            or type(condition["status"]) is not str
+            or condition["type"] != "Ready"
+            or condition["status"] not in {"True", "False"}
+        ):
             raise InventoryError("unknown or ambiguous Pod condition")
         ready = condition["status"] == "True"
         seen_containers: set[str] = set()
@@ -698,26 +831,8 @@ def _parse_calico_workload_list(
 def parse_kubectl_list(payload: bytes, expected_kind: str) -> tuple[ObjectIdentity, ...]:
     """Parse one bounded canonical projection of a Kubernetes List."""
 
-    if type(payload) is not bytes or len(payload) > _MAX_KUBECTL_BYTES:
-        raise InventoryError("kubectl response must be bytes of at most 8 MiB")
-    _exact_string("expected_kind", expected_kind)
-    try:
-        text = payload.decode("utf-8", errors="strict")
-        value = json.loads(text, object_pairs_hook=_closed_object)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise InventoryError(f"invalid kubectl JSON: {error}") from error
-    envelope = _keys(
-        "Kubernetes List envelope", value,
-        frozenset({"apiVersion", "kind", "metadata", "items"}),
-    )
-    if envelope["apiVersion"] != "v1" or envelope["kind"] != "List":
-        raise InventoryError("kubectl response is not an exact Kubernetes List envelope")
-    metadata = _keys("List metadata", envelope["metadata"], frozenset({"resourceVersion"}))
-    _exact_string("List resourceVersion", metadata["resourceVersion"], empty=True)
-    if type(envelope["items"]) is not list:
-        raise InventoryError("List items must be an exact JSON array")
     records: list[ObjectIdentity] = []
-    for item in envelope["items"]:
+    for item in _decode_list(payload, expected_kind):
         closed = _keys("List item", item, frozenset({"apiVersion", "kind", "metadata"}))
         if type(closed["kind"]) is not str or closed["kind"] != expected_kind:
             raise InventoryError("List item kind differs from expected_kind")
@@ -739,8 +854,6 @@ def parse_kubectl_list(payload: bytes, expected_kind: str) -> tuple[ObjectIdenti
     )
     if len(set(object_keys)) != len(object_keys):
         raise InventoryError("Kubernetes List contains duplicate object identities")
-    if payload != (canonical_json(value) + "\n").encode("utf-8"):
-        raise InventoryError("kubectl response must be canonical JSON followed by one newline")
     return ordered
 
 

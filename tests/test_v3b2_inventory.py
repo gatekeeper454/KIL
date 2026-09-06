@@ -1,10 +1,14 @@
 from copy import copy
 from dataclasses import FrozenInstanceError, replace
 import json
+from pathlib import Path
+import re
 import unittest
 
 from kil.canonical import canonical_json
 import kil.v3b2_inventory as inventory
+from kil.v3b2_contracts import V3B2Profile
+from kil.v3b2_manifests import expected_object_keys
 from kil.v3b2_inventory import (
     EndpointIdentity,
     ExpectedInventory,
@@ -22,11 +26,16 @@ from kil.v3b2_inventory import (
 KUBE_SYSTEM_UID = "11111111-1111-4111-8111-111111111111"
 NODE_ID = "a" * 64
 DOCKER_HOST = "unix:///Users/test/.colima/kil-v3-lab/docker.sock"
-CALICO_CNI = "quay.io/calico/cni@sha256:1cfc6aa9c4dad3575fdf36b78185fd7d68bcd4acc95778f8342be4fb6a851a14"
-CALICO_NODE = "quay.io/calico/node@sha256:f4fafd8ba641d96c5a91b01e5a519117d77d55dee789a3562ba3ad4aa125b36a"
-CALICO_CONTROLLERS = "quay.io/calico/kube-controllers@sha256:adf0ac895796d21bca5383bc81c4cd2614be3a4308085b47857d7999f4cc2b1f"
+ROOT = Path(__file__).resolve().parents[1]
+FIXED_PROFILE = V3B2Profile.load(ROOT / "deploy/kind/v3b2-profile.json")
+PROFILE_CALICO_IMAGES = dict(FIXED_PROFILE.calico_images)
+CALICO_CNI = PROFILE_CALICO_IMAGES["cni"]
+CALICO_NODE = PROFILE_CALICO_IMAGES["node"]
+CALICO_CONTROLLERS = PROFILE_CALICO_IMAGES["kube_controllers"]
 KIL_IMAGE = "kil.local/kil-v3b2:sha256-" + "d" * 64
 KIL_IMAGE_ID = "docker-pullable://kil.local/kil-v3b2@sha256:" + "d" * 64
+ENVOY_IMAGE = "docker.io/envoyproxy/envoy@sha256:" + "e" * 64
+ENVOY_IMAGE_ID = "docker-pullable://docker.io/envoyproxy/envoy@sha256:" + "e" * 64
 
 
 def obj(kind: str, namespace: str, name: str, suffix: str) -> ObjectIdentity:
@@ -49,20 +58,50 @@ def policies() -> tuple[PolicyEdge, ...]:
 
 
 def snapshot() -> InventorySnapshot:
-    objects = tuple(sorted((
-        ObjectIdentity("v1", "Namespace", "", "kube-system", KUBE_SYSTEM_UID, "100"),
-        obj("Deployment", "kil-v3-baseline", "envoy", "envoy"),
-        obj("Service", "kil-v3-baseline", "envoy", "service"),
-    )))
-    images = tuple(sorted((
+    profile = V3B2Profile.load(ROOT / "deploy/kind/v3b2-profile.json")
+    object_records = [
+        ObjectIdentity(api, kind, namespace, name, f"uid-{index}", f"rv-{index}")
+        for index, (api, kind, namespace, name) in enumerate(
+            expected_object_keys(profile), start=1,
+        )
+    ]
+    object_records.extend((
+        ObjectIdentity("v1", "Namespace", "", "kube-system", KUBE_SYSTEM_UID, "system-1"),
+        ObjectIdentity("apps/v1", "DaemonSet", "kube-system", "calico-node", "uid-calico-node", "system-2"),
+        ObjectIdentity("apps/v1", "Deployment", "kube-system", "calico-kube-controllers", "uid-calico-controller", "system-3"),
+    ))
+    objects = tuple(sorted(object_records))
+    image_records = [
         PodImageIdentity("calico-cni", "init", "kube-system", "calico-node-a", "upgrade-ipam", "pod-calico", "201", CALICO_CNI, "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1], True),
         PodImageIdentity("calico-cni", "init", "kube-system", "calico-node-a", "install-cni", "pod-calico", "201", CALICO_CNI, "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1], True),
         PodImageIdentity("calico-node", "init", "kube-system", "calico-node-a", "ebpf-bootstrap", "pod-calico", "201", CALICO_NODE, "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1], True),
         PodImageIdentity("calico-node", "regular", "kube-system", "calico-node-a", "calico-node", "pod-calico", "201", CALICO_NODE, "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1], True),
         PodImageIdentity("calico-kube-controllers", "regular", "kube-system", "calico-kube-controllers-a", "calico-kube-controllers", "pod-controller", "202", CALICO_CONTROLLERS, "docker-pullable://quay.io/calico/kube-controllers@sha256:" + CALICO_CONTROLLERS.rsplit(":", 1)[1], True),
-        PodImageIdentity("workload", "regular", "kil-v3-baseline", "envoy-a", "envoy", "pod-envoy", "203", KIL_IMAGE, KIL_IMAGE_ID, True),
-    )))
-    endpoints = (EndpointIdentity("Endpoints", "envoy", "kil-v3-baseline", "envoy", ("10.244.0.10",), "http", "TCP", 8080),)
+    ]
+    for namespace_index, namespace in enumerate(
+        ("kil-v3-baseline", "kil-v3-local-reduce", "kil-v3-signed"), start=1,
+    ):
+        for role_index, role in enumerate(("driver", "envoy", "authz", "target"), start=1):
+            pod_name = "driver" if role == "driver" else f"{role}-a"
+            image_records.append(PodImageIdentity(
+                "workload", "regular", namespace, pod_name, role,
+                f"pod-{namespace_index}-{role}", f"rv-pod-{namespace_index}-{role}",
+                ENVOY_IMAGE if role == "envoy" else KIL_IMAGE,
+                ENVOY_IMAGE_ID if role == "envoy" else KIL_IMAGE_ID,
+                True,
+            ))
+    images = tuple(sorted(image_records))
+    endpoints = tuple(sorted(
+        EndpointIdentity(
+            "Endpoints", service, namespace, service,
+            (f"10.244.{namespace_index}.{service_index + 10}",),
+            "http", "TCP", 8080,
+        )
+        for namespace_index, namespace in enumerate(
+            ("kil-v3-baseline", "kil-v3-local-reduce", "kil-v3-signed"), start=1,
+        )
+        for service_index, service in enumerate(("envoy", "authz", "target"), start=1)
+    ))
     return InventorySnapshot(
         KUBE_SYSTEM_UID,
         NODE_ID,
@@ -169,12 +208,55 @@ class V3B2InventoryTest(unittest.TestCase):
         with self.assertRaises(InventoryError):
             parse_kubectl_list(payload, StrSubclass("Pod"))
 
+    def test_raw_decoder_totalizes_types_integer_depth_and_eight_mib_bound(self) -> None:
+        value = {
+            "apiVersion": "v1", "kind": "List", "metadata": {"resourceVersion": ""},
+            "items": [{
+                "apiVersion": "v1", "kind": "Pod",
+                "metadata": {"namespace": "n", "name": "p", "uid": "u", "resourceVersion": "r"},
+                "status": {
+                    "conditions": [{"type": "Ready", "status": []}],
+                    "containerStatuses": [], "initContainerStatuses": [],
+                },
+            }],
+        }
+        encoded = lambda item: (json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
+        with self.assertRaises(InventoryError):
+            inventory._parse_pod_image_list(encoded(value))
+        huge_integer = encoded({
+            "apiVersion": "v1", "kind": "List", "metadata": {"resourceVersion": 0}, "items": [],
+        }).replace(b'"resourceVersion":0', b'"resourceVersion":' + b"9" * 5000)
+        with self.assertRaises(InventoryError):
+            parse_kubectl_list(huge_integer, "Pod")
+        deep = []
+        cursor = deep
+        for _ in range(80):
+            child = []
+            cursor.append(child)
+            cursor = child
+        deep_value = {
+            "apiVersion": "v1", "kind": "List", "metadata": {"resourceVersion": ""},
+            "items": [{"apiVersion": "v1", "kind": "Pod", "metadata": {"namespace": "n", "name": "p", "uid": "u", "resourceVersion": "r"}, "extra": deep}],
+        }
+        with self.assertRaises(InventoryError):
+            parse_kubectl_list(encoded(deep_value), "Pod")
+        large_uid = "u" * (1_100_000)
+        large_value = {
+            "apiVersion": "v1", "kind": "List", "metadata": {"resourceVersion": ""},
+            "items": [{"apiVersion": "v1", "kind": "Pod", "metadata": {"namespace": "n", "name": "p", "uid": large_uid, "resourceVersion": "r"}}],
+        }
+        large_payload = encoded(large_value)
+        self.assertGreater(len(large_payload), 1_000_000)
+        self.assertEqual(parse_kubectl_list(large_payload, "Pod")[0].uid, large_uid)
+        with self.assertRaises(InventoryError):
+            parse_kubectl_list(b" " * (8 * 1024 * 1024 + 1), "Pod")
+
     def test_rejects_extra_namespace_workload_service_endpoint_or_policy(self) -> None:
         mutations = (
             tampered(self.snapshot, namespaces=tuple(sorted((*self.snapshot.namespaces, "foreign-in-cluster")))),
-            replace(self.snapshot, objects=tuple(sorted((*self.snapshot.objects, obj("Deployment", "kil-v3-baseline", "extra", "x"))))),
-            replace(self.snapshot, objects=tuple(sorted((*self.snapshot.objects, obj("Service", "kil-v3-signed", "public", "y"))))),
-            replace(self.snapshot, endpoints=(*self.snapshot.endpoints, EndpointIdentity("Endpoints", "public", "kil-v3-signed", "public", ("10.244.0.20",), "http", "TCP", 8080))),
+            tampered(self.snapshot, objects=tuple(sorted((*self.snapshot.objects, obj("Deployment", "kil-v3-baseline", "extra", "x"))))),
+            tampered(self.snapshot, objects=tuple(sorted((*self.snapshot.objects, obj("Service", "kil-v3-signed", "public", "y"))))),
+            tampered(self.snapshot, endpoints=tuple(sorted((*self.snapshot.endpoints, EndpointIdentity("Endpoints", "public", "kil-v3-signed", "public", ("10.244.0.20",), "http", "TCP", 8080))))),
             tampered(
                 self.snapshot,
                 policy_graph=tuple(sorted((
@@ -191,6 +273,40 @@ class V3B2InventoryTest(unittest.TestCase):
                 with self.assertRaises(InventoryError):
                     validate_inventory(mutated, self.expected)
 
+    def test_mirrored_expected_cannot_authorize_extra_fixed_topology_or_workload(self) -> None:
+        extra_object = obj("Deployment", "kil-v3-baseline", "extra", "mirrored")
+        extra_service = obj("Service", "kil-v3-signed", "public", "mirrored-service")
+        extra_workload = PodImageIdentity(
+            "workload", "regular", "kil-v3-baseline", "extra-a", "extra",
+            "pod-extra", "rv-extra", KIL_IMAGE, KIL_IMAGE_ID, True,
+        )
+        for label, field, value in (
+            ("deployment", "objects", tuple(sorted((*self.snapshot.objects, extra_object)))),
+            ("service", "objects", tuple(sorted((*self.snapshot.objects, extra_service)))),
+            ("container", "pod_images", tuple(sorted((*self.snapshot.pod_images, extra_workload)))),
+        ):
+            current = tampered(self.snapshot, **{field: value})
+            expected = tampered(self.expected, **{field: value})
+            with self.subTest(label=label):
+                with self.assertRaises(InventoryError):
+                    validate_inventory(current, expected)
+
+    def test_mirrored_endpoint_service_port_and_address_cannot_expand_topology(self) -> None:
+        original = self.snapshot.endpoints[0]
+        mutations = (
+            replace(original, service="public", source_name="public"),
+            replace(original, port_name="metrics", port=9090),
+            replace(original, addresses=("not-an-ip",)),
+            replace(original, addresses=("192.0.2.10",)),
+        )
+        for changed in mutations:
+            endpoints = tuple(sorted((changed, *self.snapshot.endpoints[1:])))
+            current = tampered(self.snapshot, endpoints=endpoints)
+            expected = tampered(self.expected, endpoints=endpoints)
+            with self.subTest(changed=changed):
+                with self.assertRaises(InventoryError):
+                    validate_inventory(current, expected)
+
     def test_rejects_uid_resourceversion_or_image_identity_drift(self) -> None:
         after = self.snapshot
         changed_object = replace(after.objects[1], uid="changed")
@@ -199,8 +315,8 @@ class V3B2InventoryTest(unittest.TestCase):
             after.pod_images[0], image_id=after.pod_images[0].image_id[:-1] + "a",
         )
         for mutated in (
-            replace(after, objects=tuple(sorted((after.objects[0], changed_object, after.objects[2])))),
-            replace(after, objects=tuple(sorted((after.objects[0], changed_rv, after.objects[2])))),
+            tampered(after, objects=tuple(sorted(changed_object if item == after.objects[1] else item for item in after.objects))),
+            tampered(after, objects=tuple(sorted(changed_rv if item == after.objects[1] else item for item in after.objects))),
             tampered(after, pod_images=tuple(sorted((changed_image, *after.pod_images[1:])))),
         ):
             with self.assertRaises(InventoryError):
@@ -345,12 +461,7 @@ class V3B2InventoryTest(unittest.TestCase):
         same_source = inventory._parse_endpoint_list(
             raw_list([multi_port]), "Endpoints",
         )
-        same_source_snapshot = tampered(self.snapshot, endpoints=same_source)
-        same_source_expected = tampered(self.expected, endpoints=same_source)
-        self.assertEqual(
-            validate_inventory(same_source_snapshot, same_source_expected).endpoints,
-            same_source,
-        )
+        self.assertEqual(len(same_source), 2)
         ambiguous = tampered(self.snapshot, endpoints=tuple(sorted((*first, *second))))
         mirrored = ExpectedInventory(
             self.expected.cluster_incarnation_uid, self.expected.node_container_id,
@@ -497,6 +608,24 @@ class V3B2InventoryTest(unittest.TestCase):
             with self.subTest(spoofed=spoofed):
                 with self.assertRaisesRegex(InventoryError, "kil-v3-lab"):
                     validate_inventory(current, expected)
+
+    def test_profile_and_vendored_manifest_prove_calico_container_oracle(self) -> None:
+        profile = V3B2Profile.load(ROOT / "deploy/kind/v3b2-profile.json")
+        pins = dict(profile.calico_images)
+        text = (ROOT / profile.calico_manifest_path).read_text(encoding="utf-8")
+        daemonset = text[text.index("kind: DaemonSet"):text.index("kind: Deployment", text.index("kind: DaemonSet"))]
+        init_text, regular_text = daemonset.split("      containers:", 1)
+        pair_pattern = re.compile(r'- name: "?([^"\n]+)"?\n\s+image: (quay\.io/calico/[^\s]+)')
+        self.assertEqual(
+            pair_pattern.findall(init_text),
+            [("upgrade-ipam", pins["cni"]), ("install-cni", pins["cni"]), ("ebpf-bootstrap", pins["node"])],
+        )
+        self.assertEqual(pair_pattern.findall(regular_text)[:1], [("calico-node", pins["node"])])
+        deployment = text[text.index("kind: Deployment", text.index("kind: DaemonSet")):]
+        self.assertIn(
+            f"- name: calico-kube-controllers\n          image: {pins['kube_controllers']}",
+            deployment,
+        )
 
 
 if __name__ == "__main__":
