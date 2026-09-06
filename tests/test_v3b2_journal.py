@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from kil.v3b2_journal import (
     Command,
@@ -268,6 +269,20 @@ class V3B2JournalTest(unittest.TestCase):
             with self.subTest(argv=argv), self.assertRaises(JournalError):
                 Command(argv, 30, env=env if argv[0] == "kind" else (), mutating=argv[0] != "kubectl")
 
+    def test_tool_argv_grammars_reject_short_aliases_and_extra_flags(self) -> None:
+        env = (("DOCKER_CONFIG", str(self.private / "docker-config")), ("DOCKER_HOST", self.identity.docker_host))
+        cases = (
+            (("colima", "stop", "-p", "kil-v3-lab"), (), True),
+            (("colima", "status", "--profile", "kil-v3-lab", "--verbose"), (), False),
+            (("kind", "delete", "cluster", "-n", "kil-v3-lab", "--kubeconfig", self.kubeconfig), env, True),
+            (("kind", "delete", "cluster", "--name", "kil-v3-lab", "--kubeconfig", self.kubeconfig, "--retain"), env, True),
+            (("kubectl", "-k", self.kubeconfig, "get", "pods"), (), False),
+            (("kubectl", "--kubeconfig", self.kubeconfig, "get", "pods", "--context", "foreign"), (), False),
+        )
+        for argv, command_env, mutating in cases:
+            with self.subTest(argv=argv), self.assertRaises(JournalError):
+                Command(argv, 30, env=command_env, mutating=mutating)
+
     def test_create_rejects_oversized_inputs_before_creating_any_file(self) -> None:
         values = {field: getattr(self.inputs, field) for field in self.inputs.__dataclass_fields__}
         values["expected_objects"] = tuple(f"{index:04d}-" + "x" * 4090 for index in range(300))
@@ -291,6 +306,40 @@ class V3B2JournalTest(unittest.TestCase):
         self._append("profile_start_intent", {"colima_profile": "kil-v3-lab"})
         with self.assertRaisesRegex(JournalError, "pending|overlap"):
             self._append("profile_stop_intent", {"colima_profile": "kil-v3-lab"})
+
+    def test_request_intent_blocks_forward_work_and_freeze_makes_late_result_terminal(self) -> None:
+        self.path.unlink(missing_ok=True)
+        self._journal()
+        self._ready()
+        self._start_driver("kil-v3-baseline", "driver-uid")
+        request = {"track": "credential_policy_baseline", "request_id": "v3b1-central-request", "case_sha256": "f" * 64}
+        self._append("request_intent", request)
+        with self.assertRaisesRegex(JournalError, "pending|terminal|order"):
+            self._append("driver_start_intent", {"namespace": "kil-v3-signed", "pod": "driver", "uid": "signed-driver"})
+        freeze = {"evidence_sha256": "5" * 64}
+        self._append("evidence_freeze_intent", freeze)
+        self._append("evidence_freeze_complete", freeze)
+        with self.assertRaisesRegex(JournalError, "terminal|order"):
+            self._append("request_result", {**request, "result_sha256": "1" * 64})
+
+    def test_create_sets_private_mode_before_first_file_fsync(self) -> None:
+        order: list[str] = []
+        real_fchmod = os.fchmod
+        real_fsync = os.fsync
+
+        def observed_fchmod(descriptor: int, mode: int) -> None:
+            order.append("fchmod")
+            real_fchmod(descriptor, mode)
+
+        def observed_fsync(descriptor: int) -> None:
+            order.append("fsync")
+            real_fsync(descriptor)
+
+        with patch("kil.v3b2_journal.os.fchmod", side_effect=observed_fchmod), patch(
+            "kil.v3b2_journal.os.fsync", side_effect=observed_fsync
+        ):
+            self._journal()
+        self.assertLess(order.index("fchmod"), order.index("fsync"))
 
     def test_recovery_requires_external_observation_before_any_delete(self) -> None:
         fresh = self._journal()
@@ -454,6 +503,23 @@ class V3B2JournalTest(unittest.TestCase):
         events = self._canonical_events()
         intent_indices = [index for index, (name, _details) in enumerate(events) if name.endswith("_intent")]
         self.assertEqual(len(intent_indices), 16)
+        expected_probe = {
+            "profile_start_intent": "status",
+            "cluster_create_intent": "inspect",
+            "calico_apply_intent": "kube-system",
+            "application_apply_intent": "networkpolicies",
+            "readiness_intent": "pods",
+            "driver_start_intent": "metadata.uid=driver-uid",
+            "request_intent": "deployment/authz",
+            "evidence_freeze_intent": "deployment/authz",
+            "driver_cancel_intent": "metadata.uid=driver-uid",
+            "cluster_delete_intent": "inspect",
+            "cluster_absence_proof_intent": "inspect",
+            "profile_stop_intent": "status",
+            "profile_delete_intent": "status",
+            "profile_absence_proof_intent": "status",
+            "foreign_snapshot_comparison_intent": "list",
+        }
         for intent_index in intent_indices:
             name = events[intent_index][0]
             with self.subTest(event=name):
@@ -464,6 +530,12 @@ class V3B2JournalTest(unittest.TestCase):
                 pending = recovery_plan(load_journal(self.path))
                 self.assertEqual(pending.requests_to_send, ())
                 self.assertFalse(any(command.mutating for command in pending.commands))
+                pending_text = " ".join(argument for command in pending.commands for argument in command.argv)
+                if name in expected_probe:
+                    self.assertIn(expected_probe[name], pending_text)
+                else:
+                    self.assertEqual(name, "publication_intent")
+                    self.assertEqual(pending.commands, ())
                 completion_name, completion_details = events[intent_index + 1]
                 self._append(completion_name, completion_details)
                 completed = recovery_plan(load_journal(self.path))
@@ -495,8 +567,14 @@ class V3B2JournalTest(unittest.TestCase):
         self.assertFalse(any(command.mutating for command in frozen.commands))
         observed = self._observation(driver_pods=(("kil-v3-baseline", "driver", "driver-uid"),))
         gated = recovery_plan(load_journal(self.path), observed)
-        delete_index = next(index for index, command in enumerate(gated.commands) if "delete" in command.argv)
-        self.assertIn("metadata.uid=driver-uid", gated.commands[delete_index - 1].argv)
+        deletion = next(command for command in gated.commands if "delete" in command.argv)
+        self.assertIn("--raw", deletion.argv)
+        self.assertIn("/api/v1/namespaces/kil-v3-baseline/pods/driver", deletion.argv)
+        self.assertEqual(
+            deletion.stdin,
+            b'{"apiVersion":"v1","kind":"DeleteOptions","preconditions":{"uid":"driver-uid"}}\n',
+        )
+        self.assertNotIn("metadata.uid=driver-uid", " ".join(deletion.argv))
 
     def test_foreign_profiles_never_appear_in_mutation_commands(self) -> None:
         journal = self._journal()

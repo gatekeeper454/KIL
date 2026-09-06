@@ -136,6 +136,111 @@ class Command:
         if executable == "colima" and self.mutating:
             if profiles != (LAB_IDENTITY,):
                 raise JournalError("mutating Colima command may name only kil-v3-lab")
+        if executable == "colima":
+            allowed = {
+                ("colima", "start", "--profile", LAB_IDENTITY): True,
+                ("colima", "stop", "--profile", LAB_IDENTITY): True,
+                ("colima", "delete", "--profile", LAB_IDENTITY, "--force", "--data"): True,
+                ("colima", "status", "--profile", LAB_IDENTITY): False,
+                ("colima", "list", "--json"): False,
+            }
+            if self.argv not in allowed or self.mutating is not allowed[self.argv]:
+                raise JournalError("Colima command is outside the closed argv grammar")
+            if self.stdin is not None or self.env:
+                raise JournalError("Colima command carries unreviewed input or environment")
+        elif executable == "docker":
+            if self.argv != ("docker", "inspect", f"{LAB_IDENTITY}-control-plane") or self.mutating:
+                raise JournalError("Docker command is outside the closed argv grammar")
+            if self.stdin is not None:
+                raise JournalError("Docker command carries unreviewed input")
+        elif executable == "kind":
+            if len(kubeconfigs) != 1:
+                raise JournalError("Kind command requires one exact kubeconfig binding")
+            kubeconfig = _absolute_path("Kind kubeconfig", kubeconfigs[0])
+            config = str(Path(kubeconfig).parent / "kind-config.yaml")
+            allowed = {
+                ("kind", "create", "cluster", "--name", LAB_IDENTITY, "--config", config, "--kubeconfig", kubeconfig),
+                ("kind", "delete", "cluster", "--name", LAB_IDENTITY, "--kubeconfig", kubeconfig),
+            }
+            if self.argv not in allowed or not self.mutating:
+                raise JournalError("Kind command is outside the closed argv grammar")
+            if self.stdin is not None:
+                raise JournalError("Kind command carries unreviewed input")
+        elif executable == "kubectl":
+            arguments = self.argv[3:]
+            fixed_reads = {
+                ("get", "all", "--namespace", "kube-system", "--output", "json"),
+                ("get", "all,networkpolicies", "--all-namespaces", "--output", "json"),
+                ("get", "pods", "--all-namespaces", "--output", "json"),
+                ("get", "namespace", "kube-system", "--output", "json"),
+                (
+                    "get",
+                    "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies",
+                    "--all-namespaces",
+                    "--output",
+                    "json",
+                ),
+            }
+            reviewed_read = arguments in fixed_reads
+            if len(arguments) == 9 and arguments[:2] == ("get", "pod"):
+                uid = arguments[6][len("metadata.uid="):] if arguments[6].startswith("metadata.uid=") else ""
+                reviewed_read = (
+                    arguments[2] == "driver"
+                    and arguments[3] == "--namespace"
+                    and arguments[4] in _APPLICATION_NAMESPACES
+                    and arguments[5] == "--field-selector"
+                    and bool(uid)
+                    and arguments[7] == "--output"
+                )
+                # The final output value is intentionally checked separately so
+                # no authority-like option can occupy it.
+                reviewed_read = reviewed_read and arguments[8] == "name"
+                if reviewed_read:
+                    _exact_string("kubectl Pod UID selector", uid)
+            if len(arguments) == 5 and arguments[0] == "logs":
+                resource = arguments[1]
+                reviewed_read = (
+                    (resource == "pod/driver" or resource in {"deployment/authz", "deployment/envoy", "deployment/target"})
+                    and arguments[2] == "--namespace"
+                    and arguments[3] in _APPLICATION_NAMESPACES
+                    and arguments[4:] == ("--limit-bytes=1048576",)
+                )
+            raw_delete = (
+                len(arguments) == 5
+                and arguments[0:2] == ("delete", "--raw")
+                and arguments[3:] == ("-f", "-")
+            )
+            if raw_delete:
+                uri = arguments[2]
+                prefix = "/api/v1/namespaces/"
+                pieces = uri[len(prefix):].split("/") if uri.startswith(prefix) else []
+                if len(pieces) != 3 or pieces[0] not in _APPLICATION_NAMESPACES or pieces[1:] != ["pods", "driver"]:
+                    raise JournalError("kubectl raw delete URI is outside the closed grammar")
+                if self.stdin is None:
+                    raise JournalError("kubectl raw delete requires DeleteOptions stdin")
+                try:
+                    options = json.loads(self.stdin)
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    raise JournalError("kubectl raw delete has invalid DeleteOptions") from error
+                if type(options) is not dict or set(options) != {"apiVersion", "kind", "preconditions"}:
+                    raise JournalError("kubectl raw delete DeleteOptions fields are not closed")
+                preconditions = options.get("preconditions")
+                if (
+                    options.get("apiVersion") != "v1"
+                    or options.get("kind") != "DeleteOptions"
+                    or type(preconditions) is not dict
+                    or set(preconditions) != {"uid"}
+                ):
+                    raise JournalError("kubectl raw delete DeleteOptions are not exact")
+                _exact_string("kubectl raw delete UID", preconditions["uid"])
+                if self.stdin != _canonical_bytes(options):
+                    raise JournalError("kubectl raw delete DeleteOptions are not canonical")
+            elif not reviewed_read or self.mutating or self.stdin is not None:
+                raise JournalError("kubectl command is outside the closed argv grammar")
+            if raw_delete is not self.mutating:
+                raise JournalError("kubectl mutation classification does not match its grammar")
+            if self.env:
+                raise JournalError("kubectl command carries an unreviewed environment")
 
 
 @dataclass(frozen=True, slots=True)
@@ -395,11 +500,11 @@ def create_journal(path: Path, inputs: JournalInputs) -> dict[str, object]:
     except OSError as error:
         raise JournalError(f"cannot create journal safely: {error}") from error
     try:
+        os.fchmod(descriptor, 0o600)
         with os.fdopen(descriptor, "wb", closefd=False) as handle:
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        os.fchmod(descriptor, 0o600)
     except BaseException:
         try:
             journal.unlink()
@@ -617,12 +722,15 @@ def _validate_history(events: object) -> None:
         family, stage, key = _validate_event_details(record["event"], record["details"])
         state_key = (family, key)
         prior = states.get(state_key)
+        request_pending = bool(request_claims and request_claims[-1] not in request_results)
         if stage == "intent":
             if prior is not None:
                 message = "request already claimed" if family == "request" else f"{family} intent is duplicated or already pending"
                 raise JournalError(message)
             if active is not None:
                 raise JournalError("journal lifecycle has overlapping pending intents")
+            if request_pending and family != "evidence_freeze":
+                raise JournalError("request intent is terminal-pending until its result or evidence freeze")
             if family == "profile_start":
                 require(sequence == 1, "profile start must be first")
             elif family == "cluster_create":
@@ -687,8 +795,12 @@ def _validate_history(events: object) -> None:
             continue
         if prior is None or prior[0] != "pending":
             raise JournalError(f"{family} completion lacks its exact intent")
-        if family == "request" and active is not None:
-            raise JournalError("request completion overlaps another pending lifecycle intent")
+        if family == "request" and (
+            active is not None or any(candidate[0] == "evidence_freeze" for candidate in states)
+        ):
+            raise JournalError(
+                "request completion lifecycle order/overlap violation: terminal after recovery begins"
+            )
         intent = prior[1]
         completion = record["details"]
         assert isinstance(completion, dict)
@@ -953,14 +1065,29 @@ def _driver_uid_attestation(identity: OwnedIdentity, details: Mapping[str, objec
 
 
 def _driver_delete(identity: OwnedIdentity, details: Mapping[str, object]) -> Command:
-    return _kubectl(
-        identity,
-        "delete",
-        "pod",
-        str(details["pod"]),
-        "--namespace",
-        str(details["namespace"]),
-        "--wait=true",
+    namespace = str(details["namespace"])
+    pod = str(details["pod"])
+    uid = _exact_string("driver Pod UID", details["uid"])
+    if namespace not in _APPLICATION_NAMESPACES or pod != "driver":
+        raise JournalError("driver deletion identity is outside the reviewed set")
+    body = _canonical_bytes(
+        {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": {"uid": uid}}
+    )
+    _require_complete_identity(identity)
+    assert identity.kubeconfig is not None
+    return Command(
+        (
+            "kubectl",
+            "--kubeconfig",
+            identity.kubeconfig,
+            "delete",
+            "--raw",
+            f"/api/v1/namespaces/{namespace}/pods/{pod}",
+            "-f",
+            "-",
+        ),
+        300,
+        stdin=body,
         mutating=True,
     )
 
@@ -1064,6 +1191,14 @@ def recovery_plan(
     request_claimed = any(record["event"] == "request_intent" for record in typed_events)
     frozen = any(record["event"] == "evidence_freeze_complete" for record in typed_events)
     readiness_complete = any(record["event"] == "readiness_complete" for record in typed_events)
+    command_pending = [(family, details) for family, details in pending if family != "request"]
+    if command_pending:
+        if len(command_pending) != 1:
+            raise JournalError("manual_recovery_required: multiple owned mutations are pending")
+        if command_pending[0][0] == "evidence_freeze":
+            return RecoveryPlan(_evidence_freeze_commands(identity, drivers))
+        command = _pending_command(*command_pending[0], identity)
+        return RecoveryPlan(()) if command is None else RecoveryPlan((command,))
     if (request_claimed or readiness_complete) and not frozen:
         return RecoveryPlan(
             _evidence_freeze_commands(identity, drivers),
@@ -1084,16 +1219,8 @@ def recovery_plan(
             if item not in observed_set:
                 continue
             details = {"namespace": item[0], "pod": item[1], "uid": item[2]}
-            commands.extend((_driver_uid_attestation(identity, details), _driver_delete(identity, details)))
+            commands.append(_driver_delete(identity, details))
         return RecoveryPlan(tuple(commands), requests_to_send=(), publication_allowed=False)
-    command_pending = [(family, details) for family, details in pending if family != "request"]
-    if command_pending:
-        if len(command_pending) != 1:
-            raise JournalError("manual_recovery_required: multiple owned mutations are pending")
-        if command_pending[0][0] == "evidence_freeze":
-            return RecoveryPlan(_evidence_freeze_commands(identity, drivers))
-        command = _pending_command(*command_pending[0], identity)
-        return RecoveryPlan(()) if command is None else RecoveryPlan((command,))
     completed = {record["event"] for record in typed_events}
     if not typed_events:
         return RecoveryPlan((Command(("colima", "status", "--profile", LAB_IDENTITY), 60),))
