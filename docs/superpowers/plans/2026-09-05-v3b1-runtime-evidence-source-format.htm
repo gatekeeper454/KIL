@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V3B-1 Runtime Evidence Source-Format Implementation Plan</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md">
+<meta name="source-sha256" content="79eaa2d9588cce973ea9d3426f5d13ce8a75d55d03478e92f6c4a618d52ce801">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md</code> (<code>79eaa2d9588cce973ea9d3426f5d13ce8a75d55d03478e92f6c4a618d52ce801</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">V3B-1 Runtime Evidence Source-Format Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md</code> (<code>79eaa2d9588cce973ea9d3426f5d13ce8a75d55d03478e92f6c4a618d52ce801</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-1-runtime-evidence-source-format-implementation-plan">V3B-1 Runtime Evidence Source-Format Implementation Plan</a></li><li class="level-2"><a href="#file-map">File map</a></li><li class="level-3"><a href="#task-1-classify-exact-envoy-transport-headers">Task 1: Classify exact Envoy transport headers</a></li><li class="level-3"><a href="#task-2-emit-canonical-envoy-json-text-at-the-producer">Task 2: Emit canonical Envoy JSON text at the producer</a></li><li class="level-3"><a href="#task-3-bound-live-ledger-availability-without-retrying-requests">Task 3: Bound live ledger availability without retrying requests</a></li><li class="level-3"><a href="#task-4-document-and-publish-the-correction">Task 4: Document and publish the correction</a></li><li class="level-3"><a href="#task-5-execute-and-publish-the-newly-authorized-proof">Task 5: Execute and publish the newly authorized proof</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-1-runtime-evidence-source-format-implementation-plan" href="#v3b-1-runtime-evidence-source-format-implementation-plan">V3B-1 Runtime Evidence Source-Format Implementation Plan</a></li><li class="level-2"><a data-section-id="file-map" href="#file-map">File map</a></li><li class="level-3"><a data-section-id="task-1-classify-exact-envoy-transport-headers" href="#task-1-classify-exact-envoy-transport-headers">Task 1: Classify exact Envoy transport headers</a></li><li class="level-3"><a data-section-id="task-2-emit-canonical-envoy-json-text-at-the-producer" href="#task-2-emit-canonical-envoy-json-text-at-the-producer">Task 2: Emit canonical Envoy JSON text at the producer</a></li><li class="level-3"><a data-section-id="task-3-bound-live-ledger-availability-without-retrying-requests" href="#task-3-bound-live-ledger-availability-without-retrying-requests">Task 3: Bound live ledger availability without retrying requests</a></li><li class="level-3"><a data-section-id="task-4-document-and-publish-the-correction" href="#task-4-document-and-publish-the-correction">Task 4: Document and publish the correction</a></li><li class="level-3"><a data-section-id="task-5-execute-and-publish-the-newly-authorized-proof" href="#task-5-execute-and-publish-the-newly-authorized-proof">Task 5: Execute and publish the newly authorized proof</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="v3b-1-runtime-evidence-source-format-implementation-plan">V3B-1 Runtime Evidence Source-Format Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Make the V3B-1 real Envoy runtime emit the existing canonical evidence shape and make live ledger reads bounded, so one newly authorized exactly-once Task 11 run can produce an accepted proof.</p>
+<p><strong>Architecture:</strong> Correct evidence at its producers instead of rewriting collected bytes. The authorization service ignores only two exact Envoy-generated transport headers, Envoy emits canonical JSON text with string/sentinel values, and the controller performs a bounded read-only ledger availability loop before exact copy and digest comparison. Publish and synchronize the code correction before starting a separate clean live-proof worktree.</p>
+<p><strong>Tech Stack:</strong> Python 3.12, <code>unittest</code>, Envoy v3 JSON bootstrap, Docker CLI, Colima, canonical JSONL, GitHub Actions.</p>
+<hr />
+<h2 id="file-map">File map</h2>
+<ul>
+<li><code>src/kil/ext_authz_http.py</code>: classify exact transport-generated headers without widening trusted client input.</li>
+<li><code>tests/test_ext_authz_http.py</code>: prove fixed Envoy headers are ignored and arbitrary headers remain recorded.</li>
+<li><code>src/kil/v3b_envoy.py</code>: emit the existing closed Envoy evidence record as canonical JSON text.</li>
+<li><code>tests/test_v3b_envoy.py</code>: lock the exact inline format, string values, sentinels, and secret exclusions.</li>
+<li><code>tools/v3b1_local_envoy.py</code>: bound live ledger availability and verify copied bytes against the observed source.</li>
+<li><code>tests/test_v3b1_local_envoy.py</code>: cover missing-then-present, timeout, integrity, and no-request behavior.</li>
+<li><code>README.md</code>, <code>adapters/envoy/README.md</code>, <code>docs/lab/V3-PROGRESS.md</code>: record the failed-closed discovery and correction boundary.</li>
+<li><code>docs/superpowers/specs/2026-09-05-v3b1-runtime-evidence-source-format-design.md</code>: change status from approved design to implemented only after tests pass.</li>
+<li><code>docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md</code>: track this plan.</li>
+<li><code>artifacts/generated/v3b1-local-envoy/$kil_verified_run_id/</code>: force-add only the exact accepted bundle after offline verification.</li>
+<li><code>docs/paper/kinetic-infrastructure.md</code>: add only calibrated accepted local-Envoy claims after the live proof passes.</li>
+</ul>
+<h3 id="task-1-classify-exact-envoy-transport-headers">Task 1: Classify exact Envoy transport headers</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tests/test_ext_authz_http.py</code></p>
+</li>
+<li>
+<p>Modify: <code>src/kil/ext_authz_http.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write the failing transport-metadata test</strong></p>
+</li>
+</ul>
+<p>Add this test to <code>ExtAuthzHttpTest</code>:</p>
+<pre><code class="language-python">def test_envoy_transport_headers_are_ignored_but_arbitrary_headers_are_not(self):
+    app = self.app(LiveTrack.SIGNED_STATE_ONLY)
+
+    response = app.handle(
+        self.request(
+            self.signed_token,
+            extra_headers=(
+                (&quot;x-envoy-expected-rq-timeout-ms&quot;, &quot;250&quot;),
+                (&quot;x-envoy-internal&quot;, &quot;true&quot;),
+                (&quot;x-client-controlled&quot;, &quot;present&quot;),
+            ),
+        )
+    )
+
+    self.assertEqual(response.status, 200)
+    self.assertEqual(
+        app.records[0].untrusted_header_names,
+        (&quot;x-client-controlled&quot;,),
+    )
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src ../../.venv/bin/python -m unittest \
+  tests.test_ext_authz_http.ExtAuthzHttpTest.test_envoy_transport_headers_are_ignored_but_arbitrary_headers_are_not -v
+</code></pre>
+<p>Expected: FAIL because both <code>x-envoy-*</code> names are currently included in
+<code>untrusted_header_names</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the exact transport classification</strong></li>
+</ul>
+<p>Change the constant to this literal closed set:</p>
+<pre><code class="language-python">_IGNORED_TRANSPORT_HEADERS = frozenset(
+    {
+        &quot;host&quot;,
+        &quot;content-length&quot;,
+        &quot;x-envoy-expected-rq-timeout-ms&quot;,
+        &quot;x-envoy-internal&quot;,
+    }
+)
+</code></pre>
+<p>Do not add an <code>x-envoy-</code> prefix rule or change <code>_TRUSTED_HEADERS</code>.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify GREEN and the authorization module</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_ext_authz_http -v
+</code></pre>
+<p>Expected: all authorization HTTP tests PASS.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/ext_authz_http.py tests/test_ext_authz_http.py
+git commit -m &quot;fix: classify Envoy transport headers&quot;
+</code></pre>
+<h3 id="task-2-emit-canonical-envoy-json-text-at-the-producer">Task 2: Emit canonical Envoy JSON text at the producer</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tests/test_v3b_envoy.py</code></p>
+</li>
+<li>
+<p>Modify: <code>src/kil/v3b_envoy.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Replace the typed-JSON expectation with a failing text-format test</strong></p>
+</li>
+</ul>
+<p>Update the stdout access-log assertion to require:</p>
+<pre><code class="language-python">expected_record = {
+    &quot;run_id&quot;: &quot;%REQ(X-KIL-RUN-ID)%&quot;,
+    &quot;request_id&quot;: &quot;%REQ(X-REQUEST-ID)%&quot;,
+    &quot;track&quot;: TRACK.value,
+    &quot;response_code&quot;: &quot;%RESPONSE_CODE%&quot;,
+    &quot;upstream_host&quot;: &quot;%UPSTREAM_HOST%&quot;,
+    &quot;upstream_service_time&quot;: &quot;%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%&quot;,
+    &quot;decision_digest&quot;: (
+        &quot;%DYNAMIC_METADATA(envoy.filters.http.ext_authz:&quot;
+        &quot;x-kil-decision-digest)%&quot;
+    ),
+}
+expected_line = canonical_json(expected_record) + &quot;\n&quot;
+self.assertEqual(
+    access_log[&quot;typed_config&quot;][&quot;log_format&quot;],
+    {&quot;text_format_source&quot;: {&quot;inline_string&quot;: expected_line}},
+)
+self.assertEqual(json.loads(expected_line), expected_record)
+self.assertNotIn(&quot;json_format&quot;, access_log[&quot;typed_config&quot;][&quot;log_format&quot;])
+</code></pre>
+<p>Import <code>json</code> in the test module. Update the digest-evidence test to read and
+parse <code>text_format_source.inline_string</code> instead of <code>json_format</code>.</p>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b_envoy -v
+</code></pre>
+<p>Expected: FAIL because the renderer still produces <code>json_format</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the canonical inline source</strong></li>
+</ul>
+<p>In <code>render_envoy_config</code>, build the fixed record and replace <code>json_format</code>:</p>
+<pre><code class="language-python">access_record = {
+    &quot;run_id&quot;: &quot;%REQ(X-KIL-RUN-ID)%&quot;,
+    &quot;request_id&quot;: &quot;%REQ(X-REQUEST-ID)%&quot;,
+    &quot;track&quot;: track.value,
+    &quot;response_code&quot;: &quot;%RESPONSE_CODE%&quot;,
+    &quot;upstream_host&quot;: &quot;%UPSTREAM_HOST%&quot;,
+    &quot;upstream_service_time&quot;: &quot;%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%&quot;,
+    &quot;decision_digest&quot;: (
+        &quot;%DYNAMIC_METADATA(envoy.filters.http.ext_authz:&quot;
+        &quot;x-kil-decision-digest)%&quot;
+    ),
+}
+</code></pre>
+<p>Set the logger field exactly:</p>
+<pre><code class="language-python">&quot;log_format&quot;: {
+    &quot;text_format_source&quot;: {
+        &quot;inline_string&quot;: canonical_json(access_record) + &quot;\n&quot;
+    }
+},
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Verify GREEN and closed configuration</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b_envoy -v
+</code></pre>
+<p>Expected: all tests PASS, the rendered config contains one inline JSON
+line, and secret-bearing formatter fields remain absent.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/v3b_envoy.py tests/test_v3b_envoy.py tests/test_v3b1_local_envoy.py
+git commit -m &quot;fix: emit canonical Envoy evidence records&quot;
+</code></pre>
+<h3 id="task-3-bound-live-ledger-availability-without-retrying-requests">Task 3: Bound live ledger availability without retrying requests</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>tests/test_v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tools/v3b1_local_envoy.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing availability and timeout tests</strong></p>
+</li>
+</ul>
+<p>Add a focused <code>LiveLedgerCopyTest</code> using an injected runner, monotonic clock,
+and sleeper. The success test must return a missing closed <code>_LEDGER_PROBE</code>
+record once, then a present record, perform one exact <code>docker cp</code>, and assert
+the destination bytes and digest match. The runner must reject any argv
+containing <code>driver</code>, <code>run</code>, an HTTP client, or a request instruction.</p>
+<p>Use these closed observations:</p>
+<pre><code class="language-python">missing = canonical_json({
+    &quot;exists&quot;: False,
+    &quot;regular_file&quot;: False,
+    &quot;byte_count&quot;: None,
+    &quot;sha256&quot;: None,
+}) + &quot;\n&quot;
+payload = (canonical_json({&quot;track&quot;: &quot;signed_state_only&quot;}) + &quot;\n&quot;).encode()
+present = canonical_json({
+    &quot;exists&quot;: True,
+    &quot;regular_file&quot;: True,
+    &quot;byte_count&quot;: len(payload),
+    &quot;sha256&quot;: sha256(payload).hexdigest(),
+}) + &quot;\n&quot;
+</code></pre>
+<p>The timeout test must keep returning <code>missing</code>, advance the injected monotonic
+clock beyond five seconds through the sleeper, and require
+<code>ControllerError(&quot;live ledger availability deadline exceeded&quot;)</code> with zero copy
+commands. Add table-driven tests that return nonregular, oversized, copied-size
+mismatch, and copied-digest mismatch observations and require immediate failure
+without another probe.</p>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src ../../.venv/bin/python -m unittest \
+  tests.test_v3b1_local_envoy.LiveLedgerCopyTest -v
+</code></pre>
+<p>Expected: FAIL because <code>_copy_live_ledger</code> and injected <code>sleep</code> do not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Add bounded constants and injected sleep</strong></li>
+</ul>
+<p>Add:</p>
+<pre><code class="language-python">_EVIDENCE_READ_DEADLINE_NS = 5_000_000_000
+_EVIDENCE_READ_POLL_S = 0.05
+</code></pre>
+<p>Extend <code>LocalEnvoyController.__init__</code> with:</p>
+<pre><code class="language-python">sleep: Callable[[float], None] | None = None,
+</code></pre>
+<p>and bind:</p>
+<pre><code class="language-python">self.sleep = time.sleep if sleep is None else sleep
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Implement <code>_copy_live_ledger</code></strong></li>
+</ul>
+<p>Implement a private controller method with this contract:</p>
+<pre><code class="language-python">def _copy_live_ledger(
+    self,
+    *,
+    container_id: str,
+    source_path: str,
+    destination: Path,
+) -&gt; bytes:
+    &quot;&quot;&quot;Copy one exact live ledger under a shared monotonic deadline.&quot;&quot;&quot;
+</code></pre>
+<p>It must validate the full container ID and literal source path, establish one
+five-second deadline, call the existing <code>_LEDGER_PROBE</code>, retry only a closed
+missing observation after the injected 50 ms sleep, clip every command timeout
+to the remaining budget, reject oversize before copy, perform one exact
+<code>docker cp</code> after a present observation, require a regular nonsymlink output,
+and compare copied byte count and SHA-256 with the probe. Any copy or integrity
+failure is terminal; remove or quarantine a partial destination before raising.</p>
+<ul>
+<li>[ ] <strong>Step 5: Route live collection through the helper</strong></li>
+</ul>
+<p>In <code>_copy_sources</code>, replace both direct ledger <code>docker cp</code> blocks with:</p>
+<pre><code class="language-python">decision_bytes = self._copy_live_ledger(
+    container_id=str(authz[&quot;id&quot;]),
+    source_path=&quot;/evidence/decisions.jsonl&quot;,
+    destination=decision_path,
+)
+target_bytes = self._copy_live_ledger(
+    container_id=str(target[&quot;id&quot;]),
+    source_path=&quot;/evidence/targets.jsonl&quot;,
+    destination=target_path,
+)
+</code></pre>
+<p>Parse <code>decision_bytes</code> and <code>target_bytes</code> directly. Do not add any call to
+driver startup, instruction writing, <code>run</code>, HTTP, or request-state mutation.</p>
+<ul>
+<li>[ ] <strong>Step 6: Verify GREEN and request sequencing</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src ../../.venv/bin/python -m unittest \
+  tests.test_v3b1_local_envoy.LiveLedgerCopyTest \
+  tests.test_v3b1_local_envoy.DriverRequestSequencingTest -v
+</code></pre>
+<p>Expected: all tests PASS; timeout is bounded; exactly one request intent and
+instruction remain enforced per track.</p>
+<ul>
+<li>[ ] <strong>Step 7: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add tools/v3b1_local_envoy.py tests/test_v3b1_local_envoy.py
+git commit -m &quot;fix: bound V3B-1 live evidence reads&quot;
+</code></pre>
+<h3 id="task-4-document-and-publish-the-correction">Task 4: Document and publish the correction</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>README.md</code></p>
+</li>
+<li>
+<p>Modify: <code>adapters/envoy/README.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/lab/V3-PROGRESS.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/superpowers/specs/2026-09-05-v3b1-runtime-evidence-source-format-design.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md</code></p>
+</li>
+<li>
+<p>Modify: generated <code>.htm</code> siblings</p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Run focused tests and update status</strong></p>
+</li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONPATH=src ../../.venv/bin/python -m unittest \
+  tests.test_ext_authz_http tests.test_v3b_envoy \
+  tests.test_v3b1_local_envoy.LiveLedgerCopyTest \
+  tests.test_v3b1_local_envoy.DriverRequestSequencingTest -v
+</code></pre>
+<p>Expected: PASS. Then mark Tasks 1–3 complete, set the design status to
+<code>Implemented; publication pending</code>, and document that the failed bundle remains
+nonpromotable and no second request occurred during implementation.</p>
+<ul>
+<li>[ ] <strong>Step 2: Regenerate readers and run the full gate</strong></li>
+</ul>
+<pre><code class="language-bash">../../.venv/bin/python tools/render_markdown.py
+make validate PYTHON=../../.venv/bin/python
+</code></pre>
+<p>Expected: all tests PASS, all generated readers verify, and <code>git diff --check</code>
+emits no error.</p>
+<ul>
+<li>[ ] <strong>Step 3: Run the public-boundary secret scan</strong></li>
+</ul>
+<p>Run the repository's existing V3B-1 forbidden-token/public-boundary tests and:</p>
+<pre><code class="language-bash">git diff --cached --name-only
+git grep -n -I -E 'Bearer |eyJ|/Users/|execution_nonce' -- \
+  README.md adapters/envoy/README.md docs/lab/V3-PROGRESS.md \
+  docs/superpowers/specs/2026-09-05-v3b1-runtime-evidence-source-format-design.md \
+  docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md
+</code></pre>
+<p>Expected: only explicitly documented forbidden-token names, if any; no secret
+value, private host path, raw foreign-profile name, or nonce value.</p>
+<ul>
+<li>[ ] <strong>Step 4: Review the exact diff</strong></li>
+</ul>
+<p>Because agent delegation is disabled for this session, perform two separate
+fresh-context local review passes: specification compliance, then quality and
+security. Resolve every critical or important issue and rerun focused and full
+verification.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit and publish</strong></li>
+</ul>
+<pre><code class="language-bash">git add README.md README.htm adapters/envoy/README.md adapters/envoy/README.htm \
+  docs/lab/V3-PROGRESS.md docs/lab/V3-PROGRESS.htm \
+  docs/superpowers/specs/2026-09-05-v3b1-runtime-evidence-source-format-design.md \
+  docs/superpowers/specs/2026-09-05-v3b1-runtime-evidence-source-format-design.htm \
+  docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md \
+  docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.htm
+git commit -m &quot;docs: record V3B-1 evidence correction&quot;
+git push -u origin codex/v3b1-central-proof-v3
+gh pr create --base main --head codex/v3b1-central-proof-v3 \
+  --title &quot;Correct V3B-1 runtime evidence production&quot; \
+  --body &quot;Correct producer formats and bound evidence reads; no live request in this PR.&quot;
+</code></pre>
+<p>Require public CI success, merge the PR, fetch <code>origin/main</code>, and prove local,
+remote-tracking, and <code>ls-remote</code> main equality before any new <code>up</code>.</p>
+<h3 id="task-5-execute-and-publish-the-newly-authorized-proof">Task 5: Execute and publish the newly authorized proof</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create worktree: <code>.worktrees/v3b1-central-proof-v3-rerun</code></p>
+</li>
+<li>
+<p>Force-add: <code>artifacts/generated/v3b1-local-envoy/$kil_verified_run_id/</code></p>
+</li>
+<li>
+<p>Modify: <code>README.md</code></p>
+</li>
+<li>
+<p>Modify: <code>adapters/envoy/README.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/lab/V3-PROGRESS.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/paper/kinetic-infrastructure.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/superpowers/plans/2026-09-05-v3b1-runtime-evidence-source-format.md</code></p>
+</li>
+<li>
+<p>Modify: generated <code>.htm</code> siblings</p>
+</li>
+<li>
+<p>Modify live only: ignored <code>artifacts/generated/v3b1-task6-live-status.md</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Create a new clean synchronized worktree</strong></p>
+</li>
+</ul>
+<p>After the correction PR merges, create
+<code>codex/v3b1-central-proof-v3-rerun</code> from the exact <code>origin/main</code> commit. Verify
+<code>.worktrees/</code> is ignored, the old failed-run worktree still exists, the new tree
+is clean, and <code>make validate PYTHON=../../.venv/bin/python</code> passes.</p>
+<ul>
+<li>[ ] <strong>Step 2: Install/verify tools and execute the lifecycle visibly</strong></li>
+</ul>
+<p>Update the ignored live board before every command. Run exactly:</p>
+<pre><code class="language-bash">make v3b-tools PYTHON=../../.venv/bin/python
+make v3b-preflight PYTHON=../../.venv/bin/python
+PATH=&quot;$PWD/.tools/bin:$PATH&quot; PYTHONPATH=src ../../.venv/bin/python tools/v3b1_local_envoy.py preflight
+PATH=&quot;$PWD/.tools/bin:$PATH&quot; PYTHONPATH=src ../../.venv/bin/python tools/v3b1_local_envoy.py up
+PATH=&quot;$PWD/.tools/bin:$PATH&quot; PYTHONPATH=src ../../.venv/bin/python tools/v3b1_local_envoy.py run
+</code></pre>
+<p>Invoke <code>run</code> once. If it returns a complete provisional bundle and the journal
+contains <code>evidence_collect_complete</code>, do not invoke <code>collect</code> separately. If it
+returns before collection and the journal proves three completed request states
+with no collect completion, invoke <code>collect</code> once. Under every outcome invoke:</p>
+<pre><code class="language-bash">PATH=&quot;$PWD/.tools/bin:$PATH&quot; PYTHONPATH=src ../../.venv/bin/python tools/v3b1_local_envoy.py down
+</code></pre>
+<p>Never invoke <code>run</code> again.</p>
+<ul>
+<li>[ ] <strong>Step 3: Verify the accepted bundle</strong></li>
+</ul>
+<p>Require the exact run ID pattern, V3 public manifest, <code>run_complete: true</code>,
+accepted local-boundary class, <code>permit / permit / deny</code>, HTTP <code>200 / 200 / 403</code>,
+markers <code>1 / 1 / 0</code>, three canonical driver results, nine complete source
+attestations, exact foreign before/after equality, complete 15-by-6 teardown,
+valid <code>SHA256SUMS</code>, public-boundary secret scan, and:</p>
+<pre><code class="language-bash">PATH=&quot;$PWD/.tools/bin:$PATH&quot; PYTHONPATH=src ../../.venv/bin/python \
+  tools/v3b1_local_envoy.py view --bundle \
+  &quot;artifacts/generated/v3b1-local-envoy/$kil_verified_run_id&quot;
+</code></pre>
+<p>Expected: exactly one <code>accepted presenter .../live.html</code> line.</p>
+<ul>
+<li>[ ] <strong>Step 4: Stage only the accepted bundle and calibrated documents</strong></li>
+</ul>
+<p>Validate the run ID from <code>manifest.json</code>, then:</p>
+<pre><code class="language-bash">git add -f &quot;artifacts/generated/v3b1-local-envoy/$kil_verified_run_id/&quot;
+</code></pre>
+<p>Update the listed documentation with the exact observed result and exclusions,
+mark Task 11 complete, regenerate readers, and inspect <code>git diff --cached --name-only</code>. Reject any staged sibling run, <code>.tools/</code> path, private journal,
+credential, raw profile name, nonce, or host path.</p>
+<ul>
+<li>[ ] <strong>Step 5: Validate, review, publish, and synchronize</strong></li>
+</ul>
+<p>Run bundle checksums, offline view, full <code>make validate</code>, the public-boundary
+secret scan, and separate specification and quality/security review passes.
+Commit, push, create a proof PR, require public CI, merge, fast-forward local
+<code>main</code>, and prove exact local/remote/GitHub main equality. Preserve both private
+worktrees until the user supplies the offline-backup destination and retention
+policy.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>
