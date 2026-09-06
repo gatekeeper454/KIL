@@ -11,7 +11,13 @@ import stat
 import tempfile
 from typing import Mapping
 
-from kil.v3b2_contracts import JOURNAL_FIELDS, JOURNAL_SCHEMA, LAB_IDENTITY, TRACKS
+from kil.v3b2_contracts import (
+    JOURNAL_FIELDS,
+    JOURNAL_SCHEMA,
+    LAB_IDENTITY,
+    TRACK_NAMESPACES,
+    TRACKS,
+)
 
 
 _MAX_JOURNAL_BYTES = 1024 * 1024
@@ -64,14 +70,22 @@ class Command:
     def __post_init__(self) -> None:
         if type(self.argv) is not tuple or not self.argv:
             raise JournalError("command argv must be an exact nonempty tuple")
+        if len(self.argv) > 256:
+            raise JournalError("command argv exceeds its argument bound")
         if any(type(value) is not str or not value for value in self.argv):
             raise JournalError("command argv values must be exact nonempty strings")
+        if any(len(value.encode("utf-8")) > 65536 for value in self.argv):
+            raise JournalError("command argument exceeds its byte bound")
         if type(self.timeout_s) is not int or self.timeout_s <= 0 or self.timeout_s > 900:
             raise JournalError("command timeout must be an exact bounded positive integer")
         if self.stdin is not None and type(self.stdin) is not bytes:
             raise JournalError("command stdin must be exact bytes or null")
+        if self.stdin is not None and len(self.stdin) > 1024 * 1024:
+            raise JournalError("command stdin exceeds its byte bound")
         if type(self.env) is not tuple:
             raise JournalError("command env must be an exact tuple")
+        if len(self.env) > 16:
+            raise JournalError("command env exceeds its record bound")
         keys: list[str] = []
         for pair in self.env:
             if (
@@ -83,6 +97,8 @@ class Command:
                 or not pair[1]
             ):
                 raise JournalError("command env contains an invalid binding")
+            if len(pair[0].encode("utf-8")) > 256 or len(pair[1].encode("utf-8")) > 65536:
+                raise JournalError("command env binding exceeds its byte bound")
             keys.append(pair[0])
         if len(keys) != len(set(keys)) or tuple(sorted(self.env)) != self.env:
             raise JournalError("command env bindings must be unique and sorted")
@@ -90,6 +106,19 @@ class Command:
             raise JournalError("command mutating flag must be an exact boolean")
         environment = dict(self.env)
         executable = self.argv[0]
+        def authority_values(flag: str) -> tuple[str, ...]:
+            if any(item.startswith(f"{flag}=") for item in self.argv):
+                raise JournalError(f"alternate {flag} syntax is prohibited")
+            positions = tuple(index for index, item in enumerate(self.argv) if item == flag)
+            if any(index + 1 >= len(self.argv) for index in positions):
+                raise JournalError(f"{flag} lacks its value")
+            return tuple(self.argv[index + 1] for index in positions)
+
+        profiles = authority_values("--profile")
+        names = authority_values("--name")
+        kubeconfigs = authority_values("--kubeconfig")
+        if len(profiles) > 1 or len(names) > 1 or len(kubeconfigs) > 1:
+            raise JournalError("command authority flags must not be duplicated or overridden")
         if executable in {"docker", "kind"}:
             if tuple(environment) != _ENV_KEYS:
                 raise JournalError("Docker/Kind commands require only both isolated bindings")
@@ -98,14 +127,14 @@ class Command:
             if not endpoint.startswith("unix:///") or not endpoint.endswith("/kil-v3-lab/docker.sock"):
                 raise JournalError("Docker/Kind command endpoint is not journal-bound")
         if executable == "kind" and self.mutating:
-            if ("--name", LAB_IDENTITY) not in tuple(zip(self.argv, self.argv[1:])):
+            if names != (LAB_IDENTITY,) or len(kubeconfigs) != 1:
                 raise JournalError("mutating Kind command may name only kil-v3-lab")
         if executable == "kubectl":
-            if len(self.argv) < 3 or self.argv[1] != "--kubeconfig":
+            if len(self.argv) < 3 or self.argv[1] != "--kubeconfig" or kubeconfigs != (self.argv[2],):
                 raise JournalError("kubectl command requires an explicit leading kubeconfig")
             _absolute_path("kubectl kubeconfig", self.argv[2])
         if executable == "colima" and self.mutating:
-            if ("--profile", LAB_IDENTITY) not in tuple(zip(self.argv, self.argv[1:])):
+            if profiles != (LAB_IDENTITY,):
                 raise JournalError("mutating Colima command may name only kil-v3-lab")
 
 
@@ -155,6 +184,45 @@ class RecoveryPlan:
 
 
 @dataclass(frozen=True, slots=True)
+class RecoveryObservation:
+    """External read-only identity observation used only to gate recovery actions."""
+
+    docker_host: str | None
+    colima_profile_present: bool
+    kind_cluster: str | None
+    cluster_incarnation_uid: str | None
+    node_container_id: str | None
+    driver_pods: tuple[tuple[str, str, str], ...]
+
+    def __post_init__(self) -> None:
+        if self.docker_host is not None:
+            endpoint = _exact_string("observed Docker endpoint", self.docker_host)
+            if not endpoint.startswith("unix:///"):
+                raise JournalError("observed Docker endpoint must be an explicit Unix socket")
+        if type(self.colima_profile_present) is not bool:
+            raise JournalError("observed profile presence must be an exact boolean")
+        if self.kind_cluster is not None and type(self.kind_cluster) is not str:
+            raise JournalError("observed Kind cluster must be an exact string or null")
+        if self.cluster_incarnation_uid is not None:
+            _exact_string("observed cluster incarnation UID", self.cluster_incarnation_uid)
+        if self.node_container_id is not None:
+            _exact_digest("observed node container ID", self.node_container_id)
+        if type(self.driver_pods) is not tuple:
+            raise JournalError("observed driver Pods must be an exact tuple")
+        for item in self.driver_pods:
+            if type(item) is not tuple or len(item) != 3:
+                raise JournalError("observed driver Pod identity is invalid")
+            namespace, pod, uid = item
+            if type(namespace) is not str or namespace not in _APPLICATION_NAMESPACES:
+                raise JournalError("observed driver namespace is not reviewed")
+            if type(pod) is not str or pod != "driver":
+                raise JournalError("observed driver Pod name is not fixed")
+            _exact_string("observed driver Pod UID", uid)
+        if tuple(sorted(self.driver_pods)) != self.driver_pods or len(set(self.driver_pods)) != len(self.driver_pods):
+            raise JournalError("observed driver Pods must be sorted and duplicate-free")
+
+
+@dataclass(frozen=True, slots=True)
 class JournalInputs:
     schema_version: str
     run_id: str
@@ -179,6 +247,8 @@ class JournalInputs:
         _exact_string("global Docker context", self.global_context_before)
         if type(self.foreign_profiles_before) is not tuple:
             raise JournalError("foreign profile snapshot must be an exact tuple")
+        if len(self.foreign_profiles_before) > 1024:
+            raise JournalError("foreign profile snapshot exceeds its record bound")
         names: list[str] = []
         for pair in self.foreign_profiles_before:
             if (
@@ -198,9 +268,12 @@ class JournalInputs:
         ):
             raise JournalError("foreign profile snapshot must be sorted and duplicate-free")
         if type(self.expected_objects) is not tuple or any(
-            type(item) is not str or not item for item in self.expected_objects
+            type(item) is not str or not item or len(item.encode("utf-8")) > 4096
+            for item in self.expected_objects
         ):
             raise JournalError("expected objects must be an exact tuple of strings")
+        if len(self.expected_objects) > 4096:
+            raise JournalError("expected objects exceed their record bound")
         if (
             tuple(sorted(self.expected_objects)) != self.expected_objects
             or len(self.expected_objects) != len(set(self.expected_objects))
@@ -310,6 +383,9 @@ def create_journal(path: Path, inputs: JournalInputs) -> dict[str, object]:
         raise JournalError("journal inputs must be an exact JournalInputs record")
     value = _inputs_mapping(inputs)
     _validate_journal(value)
+    payload = _canonical_bytes(value)
+    if len(payload) > _MAX_JOURNAL_BYTES:
+        raise JournalError("new journal exceeds its byte bound")
     journal, private = _private_location(path, create_parent=True)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -319,7 +395,6 @@ def create_journal(path: Path, inputs: JournalInputs) -> dict[str, object]:
     except OSError as error:
         raise JournalError(f"cannot create journal safely: {error}") from error
     try:
-        payload = _canonical_bytes(value)
         with os.fdopen(descriptor, "wb", closefd=False) as handle:
             handle.write(payload)
             handle.flush()
@@ -517,6 +592,21 @@ def _validate_history(events: object) -> None:
     if type(events) is not list or len(events) > 10_000:
         raise JournalError("journal events must be a bounded exact list")
     states: dict[tuple[str, tuple[object, ...]], tuple[str, dict[str, object]]] = {}
+    active: tuple[str, tuple[object, ...]] | None = None
+    completed: set[tuple[str, tuple[object, ...]]] = set()
+    driver_starts: dict[str, tuple[str, str, str]] = {}
+    driver_cancels: set[str] = set()
+    request_claims: list[str] = []
+    request_results: set[str] = set()
+    track_namespace = dict(TRACK_NAMESPACES)
+
+    def done(family: str) -> bool:
+        return (family, ()) in completed
+
+    def require(condition: bool, message: str) -> None:
+        if not condition:
+            raise JournalError(f"journal lifecycle phase/order violation: {message}")
+
     for sequence, record in enumerate(events, start=1):
         if type(record) is not dict or set(record) != {"sequence", "event", "details"}:
             raise JournalError("journal event fields are not closed")
@@ -531,10 +621,74 @@ def _validate_history(events: object) -> None:
             if prior is not None:
                 message = "request already claimed" if family == "request" else f"{family} intent is duplicated or already pending"
                 raise JournalError(message)
+            if active is not None:
+                raise JournalError("journal lifecycle has overlapping pending intents")
+            if family == "profile_start":
+                require(sequence == 1, "profile start must be first")
+            elif family == "cluster_create":
+                require(done("profile_start"), "cluster create requires profile start completion")
+            elif family == "calico_apply":
+                require(done("cluster_create"), "Calico apply requires cluster create completion")
+            elif family == "application_apply":
+                require(done("calico_apply"), "application apply requires Calico completion")
+            elif family == "readiness":
+                require(done("application_apply"), "readiness requires application completion")
+            elif family == "driver_start":
+                require(done("readiness") and not done("evidence_freeze"), "driver start requires readiness before freeze")
+                details = record["details"]
+                assert isinstance(details, dict)
+                namespace = str(details["namespace"])
+                expected_namespaces = tuple(namespace for _track, namespace in TRACK_NAMESPACES)
+                require(namespace not in driver_starts, "driver start is duplicated")
+                require(namespace == expected_namespaces[len(driver_starts)], "driver starts are out of fixed order")
+            elif family == "request":
+                details = record["details"]
+                assert isinstance(details, dict)
+                track = str(details["track"])
+                require(done("readiness") and not done("evidence_freeze"), "request requires readiness before freeze")
+                require(track == TRACKS[len(request_claims)], "requests are out of fixed track order")
+                require(track_namespace[track] in driver_starts, "request lacks a completed bound driver")
+                if request_claims:
+                    require(request_claims[-1] in request_results, "prior request is still pending")
+            elif family == "evidence_freeze":
+                require(done("readiness"), "evidence freeze requires completed readiness")
+            elif family == "driver_cancel":
+                require(done("evidence_freeze"), "driver cancellation requires durable evidence freeze")
+                details = record["details"]
+                assert isinstance(details, dict)
+                namespace = str(details["namespace"])
+                require(namespace in driver_starts, "driver cancellation lacks a started driver")
+                require(driver_starts[namespace] == (namespace, str(details["pod"]), str(details["uid"])), "driver cancellation UID does not match start")
+                require(namespace not in driver_cancels, "driver cancellation is duplicated")
+            elif family == "cluster_delete":
+                require(done("cluster_create"), "cluster deletion requires completed creation")
+                require(set(driver_starts) == driver_cancels, "cluster deletion requires all drivers canceled")
+                require(not done("readiness") or done("evidence_freeze"), "post-readiness deletion requires evidence freeze")
+            elif family == "cluster_absence_proof":
+                require(done("cluster_delete"), "cluster absence requires delete completion")
+            elif family == "profile_stop":
+                require(done("profile_start"), "profile stop requires start completion")
+                require(not done("cluster_create") or done("cluster_absence_proof"), "profile stop requires cluster absence")
+            elif family == "profile_delete":
+                require(done("profile_stop"), "profile delete requires stop completion")
+            elif family == "profile_absence_proof":
+                require(done("profile_delete"), "profile absence requires delete completion")
+            elif family == "foreign_snapshot_comparison":
+                require(done("profile_absence_proof"), "foreign comparison requires owned absence")
+            elif family == "publication":
+                require(done("foreign_snapshot_comparison"), "publication requires foreign comparison")
             states[state_key] = ("pending", record["details"])
+            if family == "request":
+                details = record["details"]
+                assert isinstance(details, dict)
+                request_claims.append(str(details["track"]))
+            else:
+                active = state_key
             continue
         if prior is None or prior[0] != "pending":
             raise JournalError(f"{family} completion lacks its exact intent")
+        if family == "request" and active is not None:
+            raise JournalError("request completion overlaps another pending lifecycle intent")
         intent = prior[1]
         completion = record["details"]
         assert isinstance(completion, dict)
@@ -542,6 +696,19 @@ def _validate_history(events: object) -> None:
             if completion.get(name) != expected:
                 raise JournalError(f"{family} completion details do not match intent")
         states[state_key] = ("complete", completion)
+        completed.add(state_key)
+        if family == "request":
+            request_results.add(str(completion["track"]))
+        else:
+            if active != state_key:
+                raise JournalError(f"{family} completion is out of lifecycle order")
+            active = None
+        if family == "driver_start":
+            driver_starts[str(completion["namespace"])] = (
+                str(completion["namespace"]), str(completion["pod"]), str(completion["uid"])
+            )
+        elif family == "driver_cancel":
+            driver_cancels.add(str(completion["namespace"]))
 
 
 def _validate_journal(value: object) -> None:
@@ -562,6 +729,8 @@ def _validate_journal(value: object) -> None:
 def _replace_journal(path: Path, value: dict[str, object]) -> None:
     journal, private = _private_location(path, create_parent=False)
     payload = _canonical_bytes(value)
+    if len(payload) > _MAX_JOURNAL_BYTES:
+        raise JournalError("updated journal exceeds its byte bound")
     temporary: Path | None = None
     descriptor: int | None = None
     try:
@@ -732,23 +901,148 @@ def _pending_events(events: list[dict[str, object]]) -> list[tuple[str, dict[str
 
 
 def _pending_command(family: str, details: dict[str, object], identity: OwnedIdentity) -> Command | None:
-    if family in {"profile_start", "profile_stop", "profile_delete"}:
-        return _colima_command(family.removeprefix("profile_"))
-    if family == "cluster_create":
-        return _kind_create_command(identity)
-    if family == "cluster_delete":
-        return kind_delete_command(identity)
+    if family in {"profile_start", "profile_stop", "profile_delete", "profile_absence_proof"}:
+        return Command(("colima", "status", "--profile", LAB_IDENTITY), 60)
+    if family in {"cluster_create", "cluster_delete", "cluster_absence_proof"}:
+        return _docker_inspect_node(identity)
     if family in {"calico_apply", "application_apply"}:
-        label = "kube-system" if family == "calico_apply" else "kil-v3-baseline"
-        return _kubectl(identity, "get", "all", "--namespace", label)
+        if family == "calico_apply":
+            return _kubectl(identity, "get", "all", "--namespace", "kube-system", "--output", "json")
+        return _kubectl(identity, "get", "all,networkpolicies", "--all-namespaces", "--output", "json")
     if family == "driver_start":
-        return _kubectl(identity, "get", "pod", str(details["pod"]), "--namespace", str(details["namespace"]), "--output", "json")
+        return _driver_uid_attestation(identity, details)
     if family == "driver_cancel":
-        return _kubectl(identity, "delete", "pod", str(details["pod"]), "--namespace", str(details["namespace"]), "--wait=true", mutating=True)
+        return _driver_uid_attestation(identity, details)
+    if family == "evidence_freeze":
+        return _evidence_freeze_commands(identity, ())[0]
+    if family == "readiness":
+        return _kubectl(identity, "get", "pods", "--all-namespaces", "--output", "json")
+    if family == "foreign_snapshot_comparison":
+        return Command(("colima", "list", "--json"), 60)
     return None
 
 
-def recovery_plan(journal: Mapping[str, object]) -> RecoveryPlan:
+def _docker_inspect_node(identity: OwnedIdentity) -> Command:
+    return Command(
+        ("docker", "inspect", f"{LAB_IDENTITY}-control-plane"),
+        60,
+        env=_docker_environment(identity),
+    )
+
+
+def _cluster_attestations(identity: OwnedIdentity) -> tuple[Command, ...]:
+    return (
+        _docker_inspect_node(identity),
+        _kubectl(identity, "get", "namespace", "kube-system", "--output", "json"),
+    )
+
+
+def _driver_uid_attestation(identity: OwnedIdentity, details: Mapping[str, object]) -> Command:
+    return _kubectl(
+        identity,
+        "get",
+        "pod",
+        str(details["pod"]),
+        "--namespace",
+        str(details["namespace"]),
+        "--field-selector",
+        f"metadata.uid={details['uid']}",
+        "--output",
+        "name",
+    )
+
+
+def _driver_delete(identity: OwnedIdentity, details: Mapping[str, object]) -> Command:
+    return _kubectl(
+        identity,
+        "delete",
+        "pod",
+        str(details["pod"]),
+        "--namespace",
+        str(details["namespace"]),
+        "--wait=true",
+        mutating=True,
+    )
+
+
+def _evidence_freeze_commands(
+    identity: OwnedIdentity, drivers: tuple[tuple[str, str, str], ...]
+) -> tuple[Command, ...]:
+    commands: list[Command] = []
+    for namespace, pod, _uid in drivers:
+        commands.append(_kubectl(identity, "logs", f"pod/{pod}", "--namespace", namespace, "--limit-bytes=1048576"))
+    for _track, namespace in TRACK_NAMESPACES:
+        for role in ("authz", "envoy", "target"):
+            commands.append(_kubectl(identity, "logs", f"deployment/{role}", "--namespace", namespace, "--limit-bytes=1048576"))
+    commands.append(
+        _kubectl(
+            identity,
+            "get",
+            "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies",
+            "--all-namespaces",
+            "--output",
+            "json",
+        )
+    )
+    return tuple(commands)
+
+
+def _completed_driver_identities(events: list[dict[str, object]]) -> tuple[tuple[str, str, str], ...]:
+    started: dict[str, tuple[str, str, str]] = {}
+    canceled: set[str] = set()
+    for record in events:
+        details = record["details"]
+        assert isinstance(details, dict)
+        if record["event"] == "driver_start_complete":
+            started[str(details["namespace"])] = (
+                str(details["namespace"]), str(details["pod"]), str(details["uid"])
+            )
+        elif record["event"] == "driver_cancel_complete":
+            canceled.add(str(details["namespace"]))
+    return tuple(sorted(identity for namespace, identity in started.items() if namespace not in canceled))
+
+
+def _validate_observation(
+    observation: RecoveryObservation | None,
+    identity: OwnedIdentity,
+    drivers: tuple[tuple[str, str, str], ...],
+) -> RecoveryObservation | None:
+    if observation is None:
+        return None
+    if type(observation) is not RecoveryObservation:
+        raise JournalError("manual_recovery_required: observation type is invalid")
+    observation.__post_init__()
+    endpoint_absent_after_owned_teardown = (
+        observation.docker_host is None
+        and not observation.colima_profile_present
+        and observation.kind_cluster is None
+    )
+    if observation.docker_host != identity.docker_host and not endpoint_absent_after_owned_teardown:
+        raise JournalError("manual_recovery_required: observed Docker endpoint mismatch")
+    if not observation.colima_profile_present and observation.kind_cluster is not None:
+        raise JournalError("manual_recovery_required: cluster cannot outlive its owned profile")
+    if observation.kind_cluster is not None:
+        if observation.kind_cluster != identity.kind_cluster:
+            raise JournalError("manual_recovery_required: observed Kind cluster mismatch")
+        if observation.cluster_incarnation_uid != identity.cluster_incarnation_uid:
+            raise JournalError("manual_recovery_required: observed cluster-incarnation UID mismatch")
+        if observation.node_container_id != identity.node_container_id:
+            raise JournalError("manual_recovery_required: observed node container ID mismatch")
+    elif observation.cluster_incarnation_uid is not None or observation.node_container_id is not None:
+        raise JournalError("manual_recovery_required: absent cluster has residual identity")
+    if observation.kind_cluster is None and observation.driver_pods:
+        raise JournalError("manual_recovery_required: driver Pods cannot outlive the cluster")
+    expected_by_namespace = {item[0]: item for item in drivers}
+    for observed in observation.driver_pods:
+        expected = expected_by_namespace.get(observed[0])
+        if expected is None or observed != expected:
+            raise JournalError("manual_recovery_required: observed driver Pod UID mismatch")
+    return observation
+
+
+def recovery_plan(
+    journal: Mapping[str, object], observation: RecoveryObservation | None = None
+) -> RecoveryPlan:
     """Derive bounded idempotent recovery from validated journal authority only."""
     if type(journal) is not dict:
         raise JournalError("manual_recovery_required: recovery journal must be an exact dict")
@@ -763,46 +1057,58 @@ def recovery_plan(journal: Mapping[str, object]) -> RecoveryPlan:
     assert isinstance(events, list)
     typed_events = events  # validation proved the closed record shape
     pending = _pending_events(typed_events)  # type: ignore[arg-type]
+    drivers = _completed_driver_identities(typed_events)  # type: ignore[arg-type]
+    observed = _validate_observation(observation, identity, drivers)
     request_claimed = any(record["event"] == "request_intent" for record in typed_events)
-    if request_claimed:
-        commands: list[Command] = []
-        started: dict[tuple[str, str, str], bool] = {}
-        for record in typed_events:
-            name = record["event"]
-            details = record["details"]
-            assert isinstance(details, dict)
-            if name == "driver_start_complete":
-                started[(str(details["namespace"]), str(details["pod"]), str(details["uid"]))] = True
-            elif name == "driver_cancel_complete":
-                started.pop((str(details["namespace"]), str(details["pod"]), str(details["uid"])), None)
-        for namespace, pod, _uid in sorted(started):
-            commands.append(_kubectl(identity, "delete", "pod", pod, "--namespace", namespace, "--wait=true", mutating=True))
-        commands.append(
-            _kubectl(
-                identity,
-                "get",
-                "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies",
-                "--all-namespaces",
-                "--output",
-                "json",
-            )
+    frozen = any(record["event"] == "evidence_freeze_complete" for record in typed_events)
+    readiness_complete = any(record["event"] == "readiness_complete" for record in typed_events)
+    if (request_claimed or readiness_complete) and not frozen:
+        return RecoveryPlan(
+            _evidence_freeze_commands(identity, drivers),
+            requests_to_send=(),
+            publication_allowed=False,
         )
+    if frozen and drivers and observed is None:
+        return RecoveryPlan(
+            tuple(_driver_uid_attestation(identity, {"namespace": item[0], "pod": item[1], "uid": item[2]}) for item in drivers),
+            requests_to_send=(),
+            publication_allowed=False,
+        )
+    if frozen and drivers:
+        assert observed is not None
+        observed_set = set(observed.driver_pods)
+        commands: list[Command] = []
+        for item in drivers:
+            if item not in observed_set:
+                continue
+            details = {"namespace": item[0], "pod": item[1], "uid": item[2]}
+            commands.extend((_driver_uid_attestation(identity, details), _driver_delete(identity, details)))
         return RecoveryPlan(tuple(commands), requests_to_send=(), publication_allowed=False)
     command_pending = [(family, details) for family, details in pending if family != "request"]
     if command_pending:
         if len(command_pending) != 1:
             raise JournalError("manual_recovery_required: multiple owned mutations are pending")
+        if command_pending[0][0] == "evidence_freeze":
+            return RecoveryPlan(_evidence_freeze_commands(identity, drivers))
         command = _pending_command(*command_pending[0], identity)
         return RecoveryPlan(()) if command is None else RecoveryPlan((command,))
     completed = {record["event"] for record in typed_events}
     if not typed_events:
-        return RecoveryPlan((_colima_command("start"),))
+        return RecoveryPlan((Command(("colima", "status", "--profile", LAB_IDENTITY), 60),))
     if "cluster_create_complete" in completed and "cluster_delete_complete" not in completed:
-        return RecoveryPlan((kind_delete_command(identity),))
+        if observed is None or observed.kind_cluster is None:
+            return RecoveryPlan(_cluster_attestations(identity))
+        return RecoveryPlan((*_cluster_attestations(identity), kind_delete_command(identity)))
     if "profile_start_complete" in completed and "profile_stop_complete" not in completed:
-        return RecoveryPlan((_colima_command("stop"),))
+        status = Command(("colima", "status", "--profile", LAB_IDENTITY), 60)
+        if observed is None or not observed.colima_profile_present:
+            return RecoveryPlan((status,))
+        return RecoveryPlan((status, _colima_command("stop")))
     if "profile_stop_complete" in completed and "profile_delete_complete" not in completed:
-        return RecoveryPlan((_colima_command("delete"),))
+        status = Command(("colima", "status", "--profile", LAB_IDENTITY), 60)
+        if observed is None or not observed.colima_profile_present:
+            return RecoveryPlan((status,))
+        return RecoveryPlan((status, _colima_command("delete")))
     publication_allowed = {
         "cluster_absence_proof_complete",
         "profile_absence_proof_complete",
@@ -818,6 +1124,7 @@ __all__ = [
     "JournalInputs",
     "OwnedIdentity",
     "RecoveryPlan",
+    "RecoveryObservation",
     "append_event",
     "create_journal",
     "kind_delete_command",
