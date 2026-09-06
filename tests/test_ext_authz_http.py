@@ -188,6 +188,26 @@ class ExtAuthzHttpTest(unittest.TestCase):
             ),
         )
 
+    def test_envoy_transport_headers_are_ignored_but_arbitrary_headers_are_not(self):
+        app = self.app(LiveTrack.SIGNED_STATE_ONLY)
+
+        response = app.handle(
+            self.request(
+                self.signed_token,
+                extra_headers=(
+                    ("x-envoy-expected-rq-timeout-ms", "250"),
+                    ("x-envoy-internal", "true"),
+                    ("x-client-controlled", "present"),
+                ),
+            )
+        )
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(
+            app.records[0].untrusted_header_names,
+            ("x-client-controlled",),
+        )
+
     def test_spoofed_subject_header_cannot_replace_server_side_identity(self):
         app = self.app(LiveTrack.SIGNED_STATE_ONLY)
 

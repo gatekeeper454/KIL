@@ -43,7 +43,14 @@ _BASE64URL = re.compile(r"^[A-Za-z0-9_-]+$")
 _TRUSTED_HEADERS = frozenset(
     {"x-request-id", "authorization", "x-kil-q-state"}
 )
-_IGNORED_TRANSPORT_HEADERS = frozenset({"host", "content-length"})
+_IGNORED_TRANSPORT_HEADERS = frozenset(
+    {
+        "host",
+        "content-length",
+        "x-envoy-expected-rq-timeout-ms",
+        "x-envoy-internal",
+    }
+)
 _PROHIBITED_BODY_HEADERS = frozenset({"transfer-encoding", "content-encoding"})
 
 

@@ -182,9 +182,10 @@ class V3BEnvoyConfigTest(unittest.TestCase):
         self.assertIn("allowed_client_headers_on_success", response)
         self.assertIn("allowed_client_headers", response)
         self.assertIn("dynamic_metadata_from_headers", response)
-        access_fields = self.connection_manager()["access_log"][0][
+        access_line = self.connection_manager()["access_log"][0][
             "typed_config"
-        ]["log_format"]["json_format"]
+        ]["log_format"]["text_format_source"]["inline_string"]
+        access_fields = json.loads(access_line)
         self.assertEqual(
             access_fields["decision_digest"],
             "%DYNAMIC_METADATA(envoy.filters.http.ext_authz:"
@@ -299,22 +300,28 @@ class V3BEnvoyConfigTest(unittest.TestCase):
             "type.googleapis.com/"
             "envoy.extensions.access_loggers.stream.v3.StdoutAccessLog",
         )
+        expected_record = {
+            "run_id": "%REQ(X-KIL-RUN-ID)%",
+            "request_id": "%REQ(X-REQUEST-ID)%",
+            "track": TRACK.value,
+            "response_code": "%RESPONSE_CODE%",
+            "upstream_host": "%UPSTREAM_HOST%",
+            "upstream_service_time": (
+                "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%"
+            ),
+            "decision_digest": (
+                "%DYNAMIC_METADATA(envoy.filters.http.ext_authz:"
+                "x-kil-decision-digest)%"
+            ),
+        }
+        expected_line = canonical_json(expected_record) + "\n"
         self.assertEqual(
-            access_log["typed_config"]["log_format"]["json_format"],
-            {
-                "run_id": "%REQ(X-KIL-RUN-ID)%",
-                "request_id": "%REQ(X-REQUEST-ID)%",
-                "track": TRACK.value,
-                "response_code": "%RESPONSE_CODE%",
-                "upstream_host": "%UPSTREAM_HOST%",
-                "upstream_service_time": (
-                    "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%"
-                ),
-                "decision_digest": (
-                    "%DYNAMIC_METADATA(envoy.filters.http.ext_authz:"
-                    "x-kil-decision-digest)%"
-                ),
-            },
+            access_log["typed_config"]["log_format"],
+            {"text_format_source": {"inline_string": expected_line}},
+        )
+        self.assertEqual(json.loads(expected_line), expected_record)
+        self.assertNotIn(
+            "json_format", access_log["typed_config"]["log_format"]
         )
         log_text = canonical_json(access_log)
         self.assertNotIn("AUTHORIZATION", log_text.upper())

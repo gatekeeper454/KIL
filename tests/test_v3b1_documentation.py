@@ -118,7 +118,7 @@ class V3B1DocumentationTest(unittest.TestCase):
                 )
                 self.assertRegex(
                     value,
-                    r"central `?run`?[^.]{0,180}prohibited",
+                    r"(?:run|attempt)[^.]{0,180}prohibited",
                 )
                 self.assertRegex(
                     value,
@@ -161,7 +161,7 @@ class V3B1DocumentationTest(unittest.TestCase):
                     r"foreign[^.]{0,180}(?:exact equality|exactly equal|unchanged)",
                 )
                 self.assertRegex(value, r"zero[^.]{0,120}(?:http|requests?)")
-                self.assertRegex(value, r"central `?run`?[^.]{0,180}prohibited")
+                self.assertRegex(value, r"(?:run|attempt)[^.]{0,180}prohibited")
 
         gate_text = TASK10_GATE.read_text(encoding="utf-8")
         self.assertIn(public_commitment, gate_text)
@@ -608,11 +608,9 @@ class V3B1DocumentationTest(unittest.TestCase):
             live_board_text = LIVE_BOARD.read_text(encoding="utf-8")
             self.assertIn(CITATION_URL, live_board_text)
             live_board_value = normalized(live_board_text).lower()
-            self.assertRegex(live_board_value, r"task 8[^.]{0,200}\b466\b")
-            self.assertRegex(
-                live_board_value,
-                r"fresh task 9 complete static gate[^.]{0,200}\b474\b",
-            )
+            self.assertRegex(live_board_value, r"task 11")
+            self.assertRegex(live_board_value, r"central request attempts:\s*1")
+            self.assertRegex(live_board_value, r"retry prohibited|never retry")
 
 
 if __name__ == "__main__":

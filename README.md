@@ -62,9 +62,14 @@ zero HTTP requests. All nine service sources were exactly empty, teardown
 proved all 15 containers and six networks absent, and its before/after foreign
 resource arrays have exact equality under pseudonymous references. This
 request-free result is intentionally nonpromotable and is not an enforcement
-result. The central
-`run` was not executed and remains prohibited until this public-safe checkpoint
-passes review, merge, and synchronization. Existing v1 and v2 bundles remain
+result. After that prerequisite merged and synchronized, the first central
+`run` was invoked exactly once. It observed the intended HTTP
+`200 / 200 / 403` and target-marker `1 / 1 / 0` tuple, but evidence collection
+failed closed on producer-shape and ledger-availability incompatibilities; the
+result remains private and nonpromotable, and no request was retried. The
+source-format correction is implemented and locally verified, but a new live
+attempt remains prohibited until the correction passes review, public CI,
+merge, and exact synchronization. Existing v1 and v2 bundles remain
 independently verifiable. Kind/Calico validation (V3B-2), repetition, and
 performance promotion (V3C) remain future work.
 
