@@ -78,9 +78,10 @@ them with exact-key equality before controller code imports them:
   `calico_upstream_sha256`, `calico_manifest_path`, `calico_manifest_sha256`,
   `calico_images`, `cluster_name`, `pod_subnet`, `service_subnet`,
   `system_namespaces`, `application_namespaces`, and `evidence_scope`.
-- `kil.v3b2-journal.v1`: `schema_version`, `run_id`, `execution_nonce`,
-  `source_commit`, `profile_sha256`, `phase`, `global_context_before`,
-  `foreign_profiles_before`, `expected_objects`, `owned_identity`, and `events`.
+- `kil.v3b2-journal.v1`: `schema_version`, `run_id`, `lifecycle_mode`,
+  `execution_nonce`, `source_commit`, `profile_sha256`, `phase`,
+  `global_context_before`, `foreign_profiles_before`, `expected_objects`,
+  `owned_identity`, and `events`.
 - `kil.v3b2-private-manifest.v1`: `schema_version`, `run_id`,
   `execution_nonce`, `source_commit`, `profile_sha256`, `tool_identities`,
   `content_identities`, `expected_topology`, `expected_policy_graph`,

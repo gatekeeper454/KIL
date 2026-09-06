@@ -173,7 +173,7 @@ fragments, current-context authority, or discovery-selected deletion targets.
 
 The private manifest and journal bind, before mutation or request as applicable:
 
-- source commit, execution nonce, run identity, and phase;
+- source commit, execution nonce, run identity, lifecycle mode, and phase;
 - locked tool hashes and versions;
 - Colima profile and Kind cluster configuration digests;
 - node image, Calico manifest, Envoy image, and KIL image digests;
@@ -205,6 +205,16 @@ V3B-2 uses `kil.v3b2-profile.v1`, `kil.v3b2-journal.v1`,
 V3B-2 campaign schemas explicitly and rejects hybrid field sets. The
 implementation plan must enumerate each closed field set and its validator
 before runtime code is written.
+
+### Approved lifecycle-mode amendment
+
+The V3B-2 journal binds exactly one `lifecycle_mode`, either `request-free` or
+`nominal`, before the first owned mutation. Request-free history may start and
+cancel all three waiting drivers without recording a request intent or result;
+nominal history retains the fixed per-track start, request-intent, single-send,
+and result sequence. Events from the two modes cannot be combined. This field
+is part of the closed `kil.v3b2-journal.v1` schema and is required for recovery
+to distinguish zero-request readiness evidence from a stranded nominal request.
 
 ## 8. V3B-2a acceptance and claims
 
