@@ -389,7 +389,7 @@ fresh-context local review passes: specification compliance, then quality and
 security. Resolve every critical or important issue and rerun focused and full
 verification.
 
-- [ ] **Step 5: Commit and publish**
+- [x] **Step 5: Commit and publish**
 
 ```bash
 git add README.md README.htm adapters/envoy/README.md adapters/envoy/README.htm \
