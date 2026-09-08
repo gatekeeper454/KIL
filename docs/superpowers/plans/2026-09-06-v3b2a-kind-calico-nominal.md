@@ -66,6 +66,53 @@ above, and verify the final checksum. Registry-resolved arm64 image IDs are
 captured separately from realized Pods and must be stable across each evidence
 read.
 
+The corrective pass also binds the canonical projection
+`deploy/kind/calico-v3.32.0.objects.json` to SHA-256
+`de76213b8097d55a674cbe88ef9ac349317b067fb3c6fc326d4280d17c7104a8`.
+It contains all 38 YAML documents, including CRDs and RBAC objects, not only
+the subset visible in the public workload topology. Root independently checked
+every projected document against a safe parse of the checksummed YAML. This
+review-time projection introduces no runtime YAML parser dependency. Its
+closed top-level keys are `source_sha256` and `items`; both source bytes and
+canonical projection bytes must match before deriving application proofs.
+
+#### Verified native image identity chains
+
+Read-only registry verification on 2026-09-07 checked each pinned index hash,
+the unique linux/arm64 child hash and descriptor size, then the config blob
+hash/size and its linux/arm64 fields. Keep these identities distinct:
+
+| Image | ARM64 manifest SHA-256 | Config SHA-256 |
+|---|---|---|
+| Envoy | `b21240e552b588017072424716c0bce30000f49deed6262bde55b042b5acfd97` | `ef846ec85aabf01a2ff7176a185260e476ca43d20478f57281d88f7a66d5671f` |
+| Calico CNI | `98517eda58fb74caceb68efd19849daba32acc1e145423d3ba768ba70de24aac` | `b2f2bd95db9e9051c42eba83d403d3a0dc76ea589340911306a4073e92779c72` |
+| Calico node | `f737550f3eb703d65941c0ae4daddd52431395ad4b33184c44f1fe467c0f328c` | `66d7bdfe4b6af8092769145316c850fed71ed50b2bb5a197e325db2e05a6ec09` |
+| Calico controllers | `a935ba71347e6a7ea95e1dfe94fe97d6873386d8d3af4bff5b76d39018a4a4bd` | `5a2dc3609caf3dabd2a7357ebe0ea306e63bbaf2c6af88b41a2d1234cb9056eb` |
+
+Source indexes:
+[Envoy](https://registry-1.docker.io/v2/envoyproxy/envoy/manifests/sha256:57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38c524401b4),
+[CNI](https://quay.io/v2/calico/cni/manifests/sha256:1cfc6aa9c4dad3575fdf36b78185fd7d68bcd4acc95778f8342be4fb6a851a14),
+[node](https://quay.io/v2/calico/node/manifests/sha256:f4fafd8ba641d96c5a91b01e5a519117d77d55dee789a3562ba3ad4aa125b36a),
+[controllers](https://quay.io/v2/calico/kube-controllers/manifests/sha256:adf0ac895796d21bca5383bc81c4cd2614be3a4308085b47857d7999f4cc2b1f).
+The accepted KIL archive manifest is
+`sha256:45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649`,
+with config `sha256:f21285be21c8f691b9b60b7e38bb309564a5cc238512c7455eb7759f4d922ddb`.
+
+Docker image-inspect `.Id` and CRI image-list `.id` use the config identity.
+The pinned node-store `ctr images check` target digest instead binds the
+stored manifest/index. Kubernetes Pod `containerStatuses[].imageID` has a
+third, explicitly traced representation: the
+[1.36.1 kubelet API projection](https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/kubelet/kubelet_pods.go)
+uses internal `ImageRef`, not internal `ImageID`.
+[containerd 2.3.1 ContainerStatus](https://github.com/containerd/containerd/blob/v2.3.1/internal/cri/server/container_status.go)
+sets that reference to a stored repo digest when present, falling back to the
+config digest otherwise. Thus digest-pulled Envoy/Calico should bind their
+exact repository/index reference; a tag-only imported KIL image may report
+its config digest. Validate that branch against the observed node-store
+reference chain, not by permitting either arbitrary digest suffix. Preserve
+the raw runtime representation while publishing its independently validated
+content relationship. These are source/registry checks, not live runtime proof.
+
 ## Closed schema inventory
 
 The implementation must declare these field sets as constants and validate
@@ -81,7 +128,8 @@ them with exact-key equality before controller code imports them:
 - `kil.v3b2-journal.v1`: `schema_version`, `run_id`, `lifecycle_mode`,
   `execution_nonce`, `source_commit`, `profile_sha256`, `phase`,
   `global_context_before`, `foreign_profiles_before`, `expected_objects`,
-  `owned_identity`, and `events`.
+  `expected_inputs_sha256`, `teardown_from_sequence`, `owned_identity`, and
+  `events`.
 - `kil.v3b2-private-manifest.v1`: `schema_version`, `run_id`,
   `execution_nonce`, `source_commit`, `profile_sha256`, `tool_identities`,
   `content_identities`, `expected_topology`, `expected_policy_graph`,
@@ -109,6 +157,8 @@ unchanged and hybrid field sets are rejected.
 
 - `deploy/kind/v3b2-profile.json` — exact V3B-2 profile and topology identity.
 - `deploy/kind/calico-v3.32.0.yaml` — vendored digest-pinned Calico manifest.
+- `deploy/kind/calico-v3.32.0.objects.json` — canonical safe-parsed projection
+  of all 38 vendored YAML documents, bound to both source and projection digests.
 - `src/kil/v3b2_contracts.py` — closed schemas, scalar validators, canonical
   profile loader, fixed tracks, and request-free/nominal case definitions.
 - `tests/test_v3b2_contracts.py` — field closure, value closure, dispatch, and
@@ -653,8 +703,16 @@ commands only from `owned_identity` and completed journal events.
 Writes use a contained private root, mode 0600, canonical JSON, fsync of the
 file and parent directory, and atomic replacement. Each mutation has an
 `*_intent` before execution and `*_complete` after postcondition attestation.
+An `*_failed` event may close an intent only when an exact bound observation
+proves the mutation did not occur. For an uncertain or partial non-request
+mutation after exact ownership is established, an
+`*_abandoned_for_teardown` event may only enter the permanently nonpromotable
+diagnostic-freeze and exact-teardown path; it never claims completion or permits
+forward work. Ambiguous ownership remains manual recovery, and request intent
+continues to use the nonreplayable stranded-request freeze path.
 The event grammar covers profile start/stop/delete, cluster create/delete,
-Calico apply, application apply, readiness, driver start/cancel, evidence
+image import/load, Calico apply, application apply, readiness, driver
+start/cancel, Envoy quiescence, evidence
 freeze, request intent/result, absence proofs, foreign snapshot comparison, and
 publication.
 
@@ -897,8 +955,19 @@ digest, and literal kubeconfig path. It installs the checksum-verified Calico
 file, waits for the closed system inventory, applies NetworkPolicies before
 workloads, then records all UIDs and runtime image IDs.
 
+Before any runtime mutation, preflight requires the fixed
+`.tools/v3b2-input/kil-image.tar` input and verifies its checksum against the
+accepted V3B-1 manifest. The controller does not search other worktrees or
+Docker daemons for content. An `image_import` intent binds the archive digest,
+content-derived KIL tag, and exact Envoy repository digest. Through only the
+owned profile's explicit Docker socket and private configuration, it loads
+and tags the accepted KIL content, pulls the pinned Envoy content, and inspects
+both identities before completing import. The separate `image_load` step loads
+both images into only `kil-v3-lab` before `Never`-pull workloads are started.
+An image-import failure cannot authorize workload startup or promotion.
+
 `request_free()` creates fresh waiting drivers, captures readiness, sends no
-stdin, cancels them, freezes empty ledgers, deletes the exact cluster, verifies
+instruction bytes, cancels them, freezes empty ledgers, deletes the exact cluster, verifies
 absence, stops/deletes only `kil-v3-lab`, compares foreign state and global
 context, then publishes a request-free diagnostic bundle.
 
@@ -930,6 +999,29 @@ Test every boundary with the command succeeding but completion persistence
 failing. Recovery may finish the exact action or attest its postcondition; it
 may not issue a driver instruction or select a resource from discovery.
 
+Cancellation and quiescence must leave driver and Envoy evidence readable
+until freeze completes; deleting Pods or scaling away their containers is not
+a source-preserving implementation. Any separate control command is fixed,
+journal-bound, and incapable of carrying a consequential instruction. Read the
+authorization and target files under `/evidence/` through a bounded fixed
+source-read boundary, not their process stdout. Bind capture to freshly
+observed Pod resource versions with stable before/after UID and container
+incarnation checks. Raw Kubernetes responses are bounded and duplicate-safe
+decoded before constructing canonical closed projections; live defaults and
+terminal driver state must be represented in integration fixtures.
+
+Apply service workloads before driver Pods. TCP readiness probes on Envoy,
+authorization, and target port 8080 plus matching ready endpoints establish
+listener readiness before a driver performs its single TCP connection; the
+driver itself is never changed to reconnect or retry. EOF-only cancellation
+uses a separately classified empty-stdin control attach and verifies successful
+termination of the same Pod/container while retaining its logs. Envoy uses a
+V3B-2-only loopback admin listener on port 9901 and a fixed identity-bound drain
+command; completion requires listener refusal and zero relevant active gauges,
+not merely an HTTP 200 response. It retains its process and Pod through freeze.
+There is no admin Service or host exposure. Keep admin logs disabled and route
+Envoy operational diagnostics to `/tmp/envoy.log`, separate from access stdout.
+
 - [ ] **Step 6: Implement a thin fixed CLI**
 
 ```python
@@ -957,6 +1049,905 @@ git diff --check
 git add src/kil/v3b2_controller.py tools/v3b2_kind_calico.py tests/test_v3b2_controller.py
 git commit -m "feat: orchestrate V3B-2a Kind Calico lifecycle"
 ```
+
+### Task 6 corrective pass: Shared observed-proof boundary
+
+The 2026-09-07 independent review rejected the 753-test checkpoint. These
+steps are required before Task 6 acceptance, not a new live phase. The root
+cause is that normal execution and recovery have separate completion paths
+which can substitute command status or unrelated observations for an operation's
+postcondition. A second interface gap lets synthetic reduced source records
+stand in for the actual producer schemas. Preserve the completed content-import,
+source-preserving control, and publication work while replacing these gaps.
+
+**Files:**
+
+- Create: `src/kil/v3b2_proofs.py` and `tests/test_v3b2_proofs.py` for the shared
+  immutable expected context, operation-specific observation validators, and
+  typed proof decisions.
+- Modify: `src/kil/v3b2_controller.py` and `src/kil/v3b2_journal.py` to route
+  normal execution and recovery through that single proof boundary.
+- Modify: `src/kil/v3b2_inventory.py` and `tests/test_v3b2_inventory.py` for
+  independently derived expectations and the complete pinned platform inventory.
+- Modify: `src/kil/v3b2_contracts.py`, `src/kil/v3b2_evidence.py`,
+  `tests/test_v3b2_contracts.py`, and `tests/test_v3b2_evidence.py` for durable
+  raw capture bindings and closed real-producer adapters.
+- Modify: `tests/test_v3b2_controller.py` and `tests/test_v3b2_journal.py` for
+  real-format observations, poisoned observations, and crash recovery.
+- Create: `tests/test_v3b2_observed_lifecycle.py` for focused integration tests
+  of immutable inputs, terminal-writer enforcement, and normal/recovery parity.
+- Create: `src/kil/v3b2_profile_state.py` and
+  `tests/test_v3b2_profile_state.py` for exact host-profile paths, closed saved
+  configuration decoding, no-follow resource bindings, and deletion checks.
+- Create: `src/kil/v3b2_api_defaults.py` and
+  `tests/test_v3b2_api_defaults.py` for pure root-kind/exact-path Kubernetes
+  default normalization, separate from inventory ownership and controller
+  sequencing. Integrate that bounded contract before completing the finite
+  generated-resource owner joins; normalization alone must not enable readiness.
+- Create: `src/kil/v3b2_colima_inventory.py` and
+  `tests/test_v3b2_colima_inventory.py` for one closed pinned Colima inventory
+  decoder shared by controller, proofs, and private evidence validation.
+- Create: `src/kil/v3b2_service_bindings.py` and
+  `tests/test_v3b2_service_bindings.py` for the next bounded dynamic allocation
+  contract: independently expected KIL Services, validated IPv4 allocation and
+  immutable UID/address bindings. Keep static normalization and later generated
+  owner/Pod admission contracts separate; this module alone cannot open readiness.
+- Create: `src/kil/v3b2_bootstrap_inventory.py` and
+  `tests/test_v3b2_bootstrap_inventory.py` for exact Namespace, platform
+  ServiceAccount/ConfigMap identities, cardinality, incarnation and continuity.
+  Platform ConfigMap content remains an explicitly unvalidated current digest in
+  this module; bootstrap identities alone cannot open readiness.
+- Create: `src/kil/v3b2_source_rendered_configmaps.py` and
+  `tests/test_v3b2_source_rendered_configmaps.py` for the exact source-rendered
+  CoreDNS and Kind local-path ConfigMaps, including client-side-apply annotation
+  semantics. Keep CA/JWS and typed kubeadm/kubelet/kube-proxy relations in later
+  focused validators, and keep generated ReplicaSet/Pod/EndpointSlice ownership
+  and actual Pod admission separate.
+- Create: `src/kil/v3b2_trust_configmaps.py` and
+  `tests/test_v3b2_trust_configmaps.py` for the eight namespace root-CA
+  publishers, extension-apiserver cluster/front-proxy trust roles and legacy
+  token-tracking creation-era date. Keep `cluster-info` kubeconfig/JWS lifecycle
+  and typed component documents separate; this trust proof cannot open readiness.
+- Create: `src/kil/v3b2_cluster_info.py` and
+  `tests/test_v3b2_cluster_info.py` for the closed internal kubeconfig, exact
+  detached HS256 token signature and active-to-expired signer reconciliation
+  transition. Token Secret shape/usage capture remains a separate private input;
+  this proof alone cannot open readiness.
+- Create: `src/kil/v3b2_closed_yaml.py` and
+  `tests/test_v3b2_closed_yaml.py` as the dependency-free decoder for the
+  deterministic kubeadm/component YAML subset. Bound bytes, lines, depth,
+  semantic nodes, scalar bytes and integer conversion work before allocation;
+  reject general YAML graph/type/block syntax and ambiguous YAML 1.1 scalars.
+  This syntax layer returns exact built-in values and proves no component
+  semantics or runtime readiness by itself.
+- Create: `src/kil/v3b2_component_configmaps.py` and
+  `tests/test_v3b2_component_configmaps.py` for the source-closed uploaded
+  `kubeadm-config` and generic `kubelet-config` semantics. Compare the decoded
+  observations to immutable generated/defaulted expected inputs, independently
+  bind the pinned cluster/version/network/DNS relations and rootful-provider
+  selection, and keep node-local CRI patching and kube-proxy credentials outside
+  this proof. Retain only identity and raw/semantic commitments; readiness stays
+  closed.
+- Create: `src/kil/v3b2_kube_proxy_configmap.py` and
+  `tests/test_v3b2_kube_proxy_configmap.py` for the remaining typed platform
+  ConfigMap. Bind the generated/defaulted iptables configuration and the exact
+  source-rendered one-cluster/context/user kubeconfig to the internal endpoint;
+  require the service-account CA/token file references and reject every embedded
+  credential or alternate authentication mechanism. Retain digest-only evidence
+  and keep Pod volume/service-account admission as a later relation.
+- Create: `src/kil/v3b2_deployment_ownership.py` and
+  `tests/test_v3b2_deployment_ownership.py` for the fresh generated Deployment
+  families. Derive the 12 exact Deployment identities and replica counts, then
+  bind each sole revision-1 ReplicaSet and its 13 total Pods by namespace,
+  controller UID, template hash and generated name. Cardinality fails before
+  record traversal; this relation alone does not prove Pod readiness or images.
+- Create: `src/kil/v3b2_node_ownership.py` and
+  `tests/test_v3b2_node_ownership.py` for the two single-node DaemonSet Pods and
+  four control-plane mirror Pods. Bind DaemonSet controller UIDs and the exact
+  Node incarnation UID, component/source fields and equal config/mirror hashes;
+  retain the Node-owner UID in every static binding so reconstructed proofs
+  cannot substitute a different Node incarnation. Readiness and images remain
+  separate.
+- Create: `src/kil/v3b2_kil_endpoint_ownership.py` and
+  `tests/test_v3b2_kil_endpoint_ownership.py` for the nine KIL Service target
+  relations. Revalidate the accepted Service-allocation and Deployment-owner
+  proofs, then bind each ready single-stack Pod IP to the exact controller-made
+  EndpointSlice owner UID, manager, resolved port, address, target UID and
+  node. Treat generated names as supplemental namespace-scoped evidence and
+  keep platform Services, full Pod admission/CNI and image identity separate.
+- Create: `src/kil/v3b2_platform_endpoints.py` and
+  `tests/test_v3b2_platform_endpoints.py` for the source-distinct Kubernetes
+  and kube-dns Service/Endpoints/EndpointSlice relations. Bind the special
+  API-server-owned fixed-name endpoint to the sole Node InternalIP and bind the
+  selector-managed DNS endpoints to the two role-preserved CoreDNS Pods. Keep
+  producer-specific labels and owner rules distinct, compose a collision-free
+  resource-UID domain, and leave complete Pod admission/images separate.
+
+#### A. Establish the completion invariant test-first
+
+- [ ] Add a proof decision with the four closed outcomes `complete`,
+  `proved_not_applied`, `teardown_only`, and `unknown`. Inputs are an immutable
+  expected context, exact pending intent, and bounded raw observations. The
+  expected context binds run, intent sequence, source/profile/content
+  commitments, fixed rendered objects, and previously established incarnations.
+  A candidate response cannot supply its own expected values.
+  Before the first mutation, persist private immutable `expected-inputs.json`
+  and bind its digest in required journal field `expected_inputs_sha256`.
+  It commits the reviewed profile, rendered Kind/application configuration,
+  pinned Calico projection, accepted manifest/config image identities, fixed
+  paths, and foreign-state baseline. Operation contexts may extend those inputs
+  only with incarnation bindings rederived from hash-verified prior proof files.
+  Journals lacking the commitment cannot authorize controller mutations or
+  automated recovery; they must not be upgraded from current observations.
+- [ ] Add an operation registry mapping each closed event family to its
+  observation commands and pure validator. Normal execution and recovery call
+  the same validator and terminal-event writer; remove the fallback that appends
+  completion merely because an action returned. Unknown event families fail
+  closed, not through a default completion branch.
+- [ ] Persist the canonical bounded observation bundle privately before the
+  terminal event, with no-follow/exclusive writes and fsync. Its commitment
+  includes run, intent sequence, expected-input commitment, observation bytes,
+  and bound resource identities. The terminal event binds that commitment.
+  A hash of locally fabricated assertions is not observation evidence.
+- [ ] Enforce one 64 MiB replayable proof-bundle budget distinct from individual
+  32 MiB raw-observation limits; include hex expansion and expected inputs before terminal
+  commitment. A valid profile JSON response with 17 MiB trailing whitespace
+  must either be rejected before terminal or commit a proof that a fresh
+  controller can revalidate. Never accept a bundle larger than its replay
+  decoder permits.
+- [ ] Write proof bytes to an owned private temporary file, flush/fsync, then
+  atomically publish the complete digest-derived final name with no-replace
+  semantics and fsync the parent before the terminal. A crash during the first
+  100 bytes must not leave a partial final-name proof that blocks every retry.
+  Preserve strict validation of an already-existing final file; do not silently
+  overwrite corrupt evidence or foreign/symlink collisions. Test interrupted
+  writing and completed-publication-before-terminal reuse separately.
+- [ ] Preserve `TimeoutExpired` stdout/stderr buffers as original bytes, including
+  malformed UTF-8. Reserve synthetic transport code -1000 for a timeout with
+  all captured partial buffers retained and -1001 for a timeout whose retained
+  buffers are explicitly bounded prefixes. Neither is an observed process exit
+  or a successful transport; neither can satisfy a completion validator. Do not
+  replace emitted stderr with a diagnostic label. Test the image-load case where
+  a timed-out store read plus fresh exact cluster proof permits teardown-only:
+  its private observation bundle must still retain the emitted timeout bytes.
+- [ ] Write and run the following regression shape for every non-request
+  event before implementing its successful validator:
+
+```python
+for family in CLOSED_NON_REQUEST_EVENT_FAMILIES:
+    with self.subTest(family=family):
+        scenario = self.scenario(family)
+        for observation in scenario.unrelated_or_malformed_observations:
+            self.assertNotEqual(
+                scenario.validate(observation).outcome, "complete"
+            )
+        self.assertEqual(
+            scenario.validate(scenario.exact_postcondition).outcome, "complete"
+        )
+        scenario.assert_same_normal_and_recovery_decision()
+```
+
+The test fixture's closed family set is the journal's event family set minus
+`request`; each scenario supplies actual command-response shapes and immutable
+expected inputs from the following matrix. No scenario may merely make an
+unrelated command return zero. `scenario.validate` calls the production pure
+validator, and `assert_same_normal_and_recovery_decision` exercises both
+production callers against the same observation.
+
+| Family | Required completion observation; recovery rule |
+|---|---|
+| `profile_start` | Valid closed Colima inventory and reviewed owned configuration show exactly one running `kil-v3-lab`; observe an existing result, never start a missing profile during failure cleanup. Proven absence can establish not-applied; uncertain ownership remains manual. |
+| `cluster_create` | Exact bound Docker endpoint, fixed node name/Kind labels/pinned node image, full node ID, fixed Kind-config digest, and `kube-system` UID; persist the created incarnation before it can authorize cleanup. |
+| `image_import` | Both exact image references resolve to the bound content through the owned daemon; retained archive bytes match the intent. Do not repair missing images after failure. |
+| `image_load` | A fixed read of the exact journal-bound Kind node's image store proves both image contents/references. Host-daemon image inspection or node existence is insufficient. Incomplete load enters teardown-only. |
+| `calico_apply` | Objects and reviewed configuration derived from every pinned manifest document match explicit server-default normalization. Calico/node readiness is separately proven before application work; broad `get all` is insufficient. |
+| `application_apply` | Exact rendered objects/configuration, policy-before-workload stage proofs, and generated Pod owner/UID/container bindings. Driver Pods are created only after listener/endpoints readiness. Missing objects during recovery do not authorize more apply operations. |
+| `readiness` | Independent expected namespace/object families, image contents, policy graph, Calico/node readiness, workload/container counts, and endpoint address/Pod-UID joins. Persist the canonical attestation; do not mirror the candidate into `ExpectedInventory`. |
+| `driver_start` | The existing bound Pod/container and one canonical track-bound readiness record, with unchanged identity around capture. This registers readiness of an already-created driver; recovery never creates or forward-starts missing drivers. |
+| `driver_cancel` | Same bound Pod UID/container incarnation and successful terminal exit after EOF-only cancellation, or already-observed successful terminal state. Nonzero terminal exit after EOF is teardown-only abandonment, not proof the mutation did not occur. |
+| `envoy_quiesce` | Same live Pod/container, explicit listener refusal, and each required active gauge present exactly once and zero. An HTTP response or generic socket error alone is insufficient. Repeat only the fixed cleanup control when the exact same process remains serving. |
+| `evidence_freeze` | Durable real source bytes plus stable capture-time identities and individual lengths/hashes; include each source boundary in the commitment, not only concatenated payloads. Reuse verified frozen bytes or capture still-readable bound sources. Missing/malformed sources stay explicit private diagnostics. |
+| `cluster_delete` | Exact owned identity before deletion and positive cluster/node absence through a functioning owned endpoint afterward. Repeat deletion only against an already-established matching incarnation. |
+| `cluster_absence_proof` | Successful authoritative inventory excludes both the bound node ID and fixed cluster/node name; transport, permission, malformed-response, or daemon errors are unknown. |
+| `profile_stop` | Successful closed inventory proves the owned profile stopped; exact running ownership permits an idempotent stop. Do not require its deliberately stopped Docker daemon to be available before profile cleanup. |
+| `profile_delete` | Successful closed inventory excludes the owned profile and the exact enumerated profile state paths are checked. Arbitrary `colima status` failure is not absence. |
+| `profile_absence_proof` | Valid profile absence and no-follow absence of every enumerated active-state path, after authorized path cleanup. Retained private frozen evidence is explicitly distinct from active state. |
+| `foreign_snapshot_comparison` | Newly observed full closed profile projection and global Docker context are compared to the immutable preflight snapshot. Preserve mismatch evidence; never reuse the intent's equality flag as proof or repair foreign state. |
+| `publication` | Exact destination/run, valid owned-absence and foreign-comparison proofs, allowed result class, and reverified complete file/tree commitment. Failed lifecycles can expose only a supported calibrated diagnostic, never nominal success. |
+
+Request intent remains outside generic recovery mutation. Never resend an
+instruction; bind the original canonical result to the exact case and driver,
+or preserve the stranded intent for diagnostic capture and teardown.
+
+#### B. Close authority, absence, expectations, and failure transitions
+
+- [ ] Preserve the accepted dedicated VM configuration: 4 CPUs, 8 GiB memory,
+  60 GiB data disk, `aarch64`, Docker, and `vz`. Bind these independent values
+  in expected inputs and compare raw Colima byte counts (8589934592 memory,
+  64424509440 disk). Carry forward explicit non-activation, no SSH-config,
+  no template, no agent-forwarding/emulation/embedded-Kubernetes, and restricted
+  shared-network flags from the accepted V3B-1 command. Use `--mount none`
+  because V3B-2 imports and applies via command input rather than a shared
+  staging directory; verify saved configuration, not flags alone. Test that
+  global-context activation and default home/tmp mounts cannot occur. The
+  [pinned Colima start source](https://github.com/abiosoft/colima/blob/v0.10.3/cmd/start.go)
+  defines the explicit no-mount option and otherwise enables activation and
+  SSH-config generation by default.
+- [ ] Reproduce the inherited-authority defect by setting a synthetic
+  `DOCKER_CONTEXT` in a patched test environment and mocking the process boundary.
+  Assert the child cannot inherit Docker authority/configuration overrides,
+  `KUBECONFIG`, or alternate Colima/Lima homes that redirect reviewed commands.
+  Preserve only reviewed process prerequisites; explicitly supply each command's
+  owned authority. Inspect only the synthetic test keys, never dump real env.
+- [ ] Replace generic return-code absence with typed present/absent/unknown/
+  identity-mismatch observations. Add cases where permission denied, unavailable
+  daemon, timeout, malformed JSON, or arbitrary stderr have the same exit status
+  as a missing target: none may complete an absence event.
+- [ ] Construct immutable expected topology/configuration from the reviewed
+  profile, rendered application objects, pinned Calico documents, and explicit
+  pinned Kind defaults. Include Calico ServiceAccounts `calico-node`,
+  `calico-cni-plugin`, `calico-kube-controllers`, and ConfigMap `calico-config`;
+  enumerate the remaining actual Kind objects from reviewed inputs rather than
+  accepting arbitrary extras. Dynamic UIDs/IPs are validated observations bound
+  to expected owners/selectors, not replacements for expected topology.
+- [ ] Add one permanent failure/teardown latch to journal validation and command
+  authorization. After it is set, permit only existing-resource cancellation,
+  quiescence, diagnostics, exact teardown, positive absence proofs, comparison,
+  and supported diagnostic publication. Remove failure cleanup that creates or
+  registers missing drivers to satisfy nominal prerequisites. Allow available
+  source capture/owned cleanup when only a subset of drivers was established;
+  never manufacture successful start/cancel events for missing/failed drivers.
+
+#### B.1 Pinned bootstrap inventory inputs
+
+For the unchanged Kind 0.32.0 / Kubernetes 1.36.1 feature profile, settled
+readiness requires 16 platform ConfigMaps and 48 platform ServiceAccounts,
+before adding explicit Calico and KIL objects. Bootstrap observations may show
+subsets while waiting, but may not declare settled readiness with missing
+members or accept unlisted namespace extras. Bind the control-plane arguments
+and feature settings that justify this finite inventory.
+
+Required ConfigMaps, in addition to `kube-root-ca.crt` in each of the eight
+fixed namespaces:
+
+```text
+kube-system/coredns
+kube-system/extension-apiserver-authentication
+kube-system/kube-apiserver-legacy-service-account-token-tracking
+kube-system/kube-proxy
+kube-system/kubeadm-config
+kube-system/kubelet-config
+kube-public/cluster-info
+local-path-storage/local-path-config
+```
+
+Require `default` ServiceAccount in each fixed namespace, plus
+`kube-system/coredns`, `kube-system/kube-proxy`, and
+`local-path-storage/local-path-provisioner-service-account`. The remaining 37
+platform ServiceAccounts are the following exact `kube-system` client names:
+
+```text
+attachdetach-controller
+bootstrap-signer
+certificate-controller
+clusterrole-aggregation-controller
+cronjob-controller
+daemon-set-controller
+deployment-controller
+device-taint-eviction-controller
+disruption-controller
+endpoint-controller
+endpointslice-controller
+endpointslicemirroring-controller
+ephemeral-volume-controller
+expand-controller
+generic-garbage-collector
+horizontal-pod-autoscaler
+job-controller
+legacy-service-account-token-cleaner
+namespace-controller
+node-controller
+persistent-volume-binder
+pod-garbage-collector
+pv-protection-controller
+pvc-protection-controller
+replicaset-controller
+replication-controller
+resource-claim-controller
+resourcequota-controller
+root-ca-cert-publisher
+service-account-controller
+service-cidrs-controller
+statefulset-controller
+token-cleaner
+ttl-after-finished-controller
+ttl-controller
+validatingadmissionpolicy-status-controller
+volumeattributesclass-protection-controller
+```
+
+These names derive from actual dynamic-client creation, not RBAC role suffixes.
+Kubeadm enables `controllers=*,bootstrapsigner,tokencleaner` and
+`use-service-account-credentials=true`; shared certificate/node clients do not
+create a distinct account for every controller. The token controller uses the
+root client, so `tokens-controller` is not an expected account. Under the
+pinned defaults, do not permit accounts for resource-pool-status, PodGroup,
+PodCertificateRequest, ClusterTrustBundle, storage-version API/migration,
+SELinux-warning, or cloud route/service controllers. DRA device taints are
+default-on in this tag. Source references:
+[kubeadm arguments](https://github.com/kubernetes/kubernetes/blob/v1.36.1/cmd/kubeadm/app/phases/controlplane/manifests.go),
+[dynamic client builder](https://github.com/kubernetes/kubernetes/blob/v1.36.1/staging/src/k8s.io/controller-manager/pkg/clientbuilder/client_builder_dynamic.go),
+[controller construction](https://github.com/kubernetes/kubernetes/blob/v1.36.1/cmd/kube-controller-manager/app/controllermanager.go),
+[core client names](https://github.com/kubernetes/kubernetes/blob/v1.36.1/cmd/kube-controller-manager/app/core.go),
+[bootstrap client names](https://github.com/kubernetes/kubernetes/blob/v1.36.1/cmd/kube-controller-manager/app/bootstrap.go),
+[feature defaults](https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/features/kube_features.go),
+and [apiserver feature defaults](https://github.com/kubernetes/kubernetes/blob/v1.36.1/staging/src/k8s.io/apiserver/pkg/features/kube_features.go).
+
+ConfigMap provenance is the pinned kubeadm
+[constants](https://github.com/kubernetes/kubernetes/blob/v1.36.1/cmd/kubeadm/app/constants/constants.go),
+[DNS manifest](https://github.com/kubernetes/kubernetes/blob/v1.36.1/cmd/kubeadm/app/phases/addons/dns/manifests.go),
+[proxy manifest](https://github.com/kubernetes/kubernetes/blob/v1.36.1/cmd/kubeadm/app/phases/addons/proxy/manifests.go),
+[cluster-info bootstrap](https://github.com/kubernetes/kubernetes/blob/v1.36.1/cmd/kubeadm/app/phases/bootstraptoken/clusterinfo/clusterinfo.go),
+[apiserver startup](https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/controlplane/apiserver/server.go),
+[root-CA publisher](https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/controller/certificates/rootcacertpublisher/publisher.go),
+and [Kind storage manifest](https://github.com/kubernetes-sigs/kind/blob/v0.32.0/pkg/build/nodeimage/const_storage.go).
+Dynamic CA material, kubeconfigs, signatures, and the tracking `since` date
+remain private and require relationship/type validation, not equality to
+invented static fixture bytes.
+
+The fresh-producer ConfigMap contract is now source-closed. All 16 platform
+objects are core/v1 ConfigMaps with string-valued `data`; none is produced with
+`binaryData`, `immutable`, owner references, or finalizers. Require these exact
+fresh data-key sets: `ca.crt` for each `kube-root-ca.crt`; `Corefile` for
+`coredns`; `since` for the legacy-token tracker; `config.conf` and
+`kubeconfig.conf` for `kube-proxy`; `ClusterConfiguration` for `kubeadm-config`;
+`kubelet` for `kubelet-config`; `kubeconfig` plus the lifecycle-qualified JWS
+key described below for `cluster-info`; and exactly `config.json`, `setup`,
+`teardown`, and `helperPod.yaml` for `local-path-config`. The extension-apiserver
+object has exactly `client-ca-file`, `requestheader-client-ca-file`,
+`requestheader-username-headers`, `requestheader-group-headers`,
+`requestheader-extra-headers-prefix`, and `requestheader-allowed-names` under
+the fixed kubeadm arguments; `requestheader-uid-headers` is absent because
+kubeadm supplies no UID header list. Require the root-CA publisher's exact
+description annotation, `app: kube-proxy` on the proxy ConfigMap, and the
+client-side-apply annotation on `local-path-config`; do not invent other
+producer metadata.
+
+Validate the content by producer relationship rather than text fragments.
+Every root-CA PEM must parse and bind to the independently observed cluster CA;
+the extension object must bind the cluster-client and distinct front-proxy CA
+roles plus the four exact JSON header arrays. The legacy `since` value is a real
+UTC `YYYY-MM-DD` creation-era date retained across later reconciliation, not
+the observation date. Compare the entire CoreDNS `cluster.local` rendering.
+Decode `kubeadm-config`, `kubelet-config`, and both kube-proxy values against the
+generated/defaulted component inputs, while keeping the generic uploaded
+kubelet configuration distinct from node-local CRI patching. Kind supplies both
+component documents, so neither kubelet nor kube-proxy carries
+`kubeadm.kubernetes.io/component-config.hash`. The cluster-info kubeconfig must
+contain only the flattened internal cluster entry, with no authentication or
+contexts, and must bind its HTTPS server and decoded CA to the internal admin
+endpoint evidence.
+
+The `cluster-info` signature count is lifecycle-bound, not permanently one.
+With the single bootstrap token still valid and signer reconciliation settled,
+require exactly `jws-kubeconfig-<six-lowercase-alphanumeric-token-id>` and verify
+the detached compact HS256 JWS against the exact kubeconfig bytes and private
+token evidence. After token expiry and cleaner/signer reconciliation, require
+zero JWS keys. Syntax alone is not authenticity evidence. For
+`local-path-config`, compare all four exact Kind-rendered values, including the
+helper Pod using the pinned storage-helper image, and parse the last-applied
+annotation as the original ConfigMap values without its own annotation or
+server metadata.
+
+The signature HMAC key is the 16-character token secret alone, never the full
+`id.secret` token. Decode and require the exact protected `{alg: HS256, kid:
+tokenID}` header, retain its original unpadded base64url segment, and verify
+`HMAC-SHA256(tokenSecret, P + "." + base64url(exactKubeconfigBytes))` in constant
+time. Kubernetes classifies the token expired when `expiration <= currentTime`.
+Time passage alone does not prove signature removal: accepting the expired
+zero-signature state requires a prior active signed proof for the same ConfigMap
+UID/config/token and a strictly advanced ConfigMap resourceVersion after expiry.
+The expired transition must also receive the transient prior raw `cluster-info`
+ConfigMap and cryptographically revalidate its exact JWS against the private
+token evidence at the prior capture time; a caller-constructible proof object or
+digest alone cannot authorize removal. The returned proof retains neither raw
+ConfigMap/JWS bytes nor the token secret.
+Semantically parse the closed one-empty-name-cluster kubeconfig and bind its
+HTTPS server and CA DER to independent internal-endpoint/trust evidence; verify
+the JWS over the original string, not a reserialization.
+
+The independently decoded fixture boundary is byte-exact. The Corefile is 420
+UTF-8 bytes, retains one final LF, and has SHA-256
+`22847ad9af7452500838865a67e018076226d8fbfcabf54f8673973571f470f6`.
+The Kind `config.json`, `setup`, `teardown`, and `helperPod.yaml` values are
+respectively 173, 45, 35, and 343 UTF-8 bytes, retain no final LF, and have
+SHA-256 values `00112e23d095775fb664cbd04ca45734a237bbdd3fe8445c6b04857c702f0381`,
+`b79c9a0bc2128407670551dc4086f4761bece38ca2aee95c23d307ac83ba99da`,
+`b4567ea114784d0ab18a26d0057a0dc3e6945dc15ced1f40f6241e10f94b4d16`,
+and `eb44d89e8e474527ec44571f5a2ba0c7bda81e13201124d225d2e9c5727c53be`.
+The last-applied JSON may differ only in ordering/whitespace and may contain
+either no `metadata.annotations` or an empty mapping; require exact core/v1
+identity and the same four data values, with no self annotation or server
+metadata.
+
+The runtime observation must include ReplicaSets and Node identity so generated
+Pods can be bound through exact controller UIDs: Deployment → ReplicaSet → Pod;
+DaemonSet → Pod on the single bound node; static mirror Pod → Node UID plus
+expected component/mirror annotation. EndpointSlices must bind exact owner UID,
+manager label, ports, address, and target UID. Name prefixes alone do not prove
+ownership. Include fixed CoreDNS/kube-proxy/local-path parents, the four fixed
+control-plane mirror Pods, and the Kubernetes/kube-dns Services and endpoints.
+No storage helper Pod is expected for these non-PVC KIL workloads.
+
+Pinned fresh kubeadm creates two CoreDNS replicas; do not infer its count from
+the one-node cluster size. Kind's single-node post-init removes the control-plane
+taint and external-load-balancer exclusion label, not a DNS replica. Confirm
+the generated kubeadm configuration contains no overriding DNS patch before
+using this default. The kubeadm DNS Service input carries resourceVersion `"0"`
+for create/update compatibility; that is a transient trusted-input field, not
+permission to admit observed runtime resourceVersion zero. Source references:
+[DNS initialization](https://github.com/kubernetes/kubernetes/blob/v1.36.1/cmd/kubeadm/app/phases/addons/dns/dns.go),
+[DNS manifests](https://github.com/kubernetes/kubernetes/blob/v1.36.1/cmd/kubeadm/app/phases/addons/dns/manifests.go),
+and [Kind post-init](https://github.com/kubernetes-sigs/kind/blob/v0.32.0/pkg/cluster/internal/create/actions/kubeadminit/init.go).
+
+That confirmation is now source-backed for the fixed rendered Kind input:
+Kind's beta-v4 kubeadm template has no DNS image/repository/patch-directory
+override, and its patch generator applies only explicitly supplied cluster or
+node patches; this profile supplies none. Omitted kube-proxy mode defaults to
+iptables, rendered with `iptables.minSyncPeriod: 1s` and
+`conntrack.maxPerCore: 0`. Rootless-only timeout/feature changes are not assumed:
+the eventual runtime proof must bind whether the VZ provider is rootful before
+selecting those values. Kubeadm supplies `registry.k8s.io/coredns/coredns:v1.14.2`
+and `registry.k8s.io/kube-proxy:v1.36.1`, while Kind adds
+`enable-hostpath-provisioner=true` without overriding
+`controllers=*,bootstrapsigner,tokencleaner` or
+`use-service-account-credentials=true`. Bind the actual generated kubeadm
+configuration and effective arguments rather than treating these source-derived
+references as observed image identities. Additional pinned sources:
+[Kind kubeadm template](https://github.com/kubernetes-sigs/kind/blob/v0.32.0/pkg/cluster/internal/kubeadm/config.go),
+[Kind configuration action](https://github.com/kubernetes-sigs/kind/blob/v0.32.0/pkg/cluster/internal/create/actions/config/config.go),
+[Kind defaults](https://github.com/kubernetes-sigs/kind/blob/v0.32.0/pkg/apis/config/v1alpha4/default.go),
+[kubeadm defaults](https://github.com/kubernetes/kubernetes/blob/v1.36.1/cmd/kubeadm/app/apis/kubeadm/v1beta4/defaults.go),
+and [kubeadm image selection](https://github.com/kubernetes/kubernetes/blob/v1.36.1/cmd/kubeadm/app/images/images.go).
+
+Adding the three pinned Calico ServiceAccounts and `calico-config` yields 51
+SAs and 17 CMs before KIL-specific accounts/configuration. Full Calico apply
+proof still covers all 38 documents. Public topology remains a deliberately
+scoped projection; do not confuse its 67 explicit objects with the entire
+platform resource count.
+
+#### B.2 Kind/path-specific server normalization
+
+Dispatch normalization by root API version/kind and exact structural path,
+never by whether an arbitrary path contains `spec`. CRD schemas themselves
+contain similarly named fields and must remain exact. Normalize desired
+configuration, validate relational runtime additions separately, and compare
+the resulting configurations. The pinned inputs require these rules:
+
+- Ignore top-level `status` on both desired and observed objects for apply
+  comparison; the last Calico CRD includes a status placeholder that the API
+  replaces. Readiness still validates observed status independently.
+- Root metadata admits validated UID/resourceVersion/timestamps/generation and
+  bounded managedFields. Setup rejects deletionTimestamp. Template metadata
+  admits only omitted/null creationTimestamp, not root identity fields.
+  Last-applied annotations belong only at root and cannot prove configuration.
+  Deployment revision is a positive bounded decimal joined to its ReplicaSet;
+  fresh unchanged deployments settle at revision 1. Cluster-scoped kinds never
+  acquire a default namespace.
+- Namespace gets only its exact `kubernetes.io/metadata.name` label and
+  `spec.finalizers=["kubernetes"]`; require separate Active status.
+- The nine KIL Services get sessionAffinity None, internalTrafficPolicy Cluster,
+  ipFamilyPolicy SingleStack, ipFamilies `["IPv4"]`, and a singleton clusterIPs
+  equal to clusterIP. Validate usable, noncolliding addresses inside the bound
+  Service CIDR and persist UID/IP bindings. Reject headless, external, NodePort,
+  and load-balancer additions. Current desired type/ports/protocol are explicit.
+  In the bounded static-only slice, normalize only sessionAffinity and
+  internalTrafficPolicy. Keep IP-family policy/families and allocated address
+  additions exact until the dynamic allocation validator supplies context;
+  neither family value is an unconditional static API default.
+- Current Deployments use Recreate: permit revisionHistoryLimit 10 and
+  progressDeadlineSeconds 600, but no rollingUpdate configuration. Calico's
+  DaemonSet uses RollingUpdate/maxUnavailable 1; permit only added maxSurge 0
+  and revisionHistoryLimit 10 at its corresponding paths.
+- PodSpec exists only at Pod.spec or Deployment/DaemonSet.spec.template.spec.
+  Fill omitted dnsPolicy ClusterFirst, restartPolicy Always, securityContext
+  `{}`, terminationGracePeriodSeconds 30, schedulerName default-scheduler, and
+  deprecated serviceAccount alias equal to serviceAccountName. Preserve explicit
+  driver Never and Calico termination grace 0.
+  Omitted enableServiceLinks becomes true only on a direct Pod: it is set by
+  `SetDefaults_Pod`, not `SetDefaults_PodSpec`, so it must not be inserted into
+  Deployment/DaemonSet templates. Preserve KIL's explicit false. Pod-only
+  request-from-limit and host-network host-port defaulting likewise belong to
+  later actual/generated Pod validation, not template normalization.
+- Existing containers/initContainers may acquire terminationMessagePath
+  `/dev/termination-log`, terminationMessagePolicy File, omitted resources `{}`,
+  existing-port protocol TCP, and fieldRef apiVersion v1. Image pull policies
+  are already explicit and must not be relaxed. Existing probes acquire missing
+  timeoutSeconds 1, periodSeconds 10, successThreshold 1, failureThreshold 3;
+  do not admit a different probe action. Existing Calico hostPath type may
+  become empty string, and omitted configMap defaultMode becomes 420; preserve
+  KIL's explicit mode 292.
+- Normalize only relevant scalar serialization omissions: container tty false,
+  volumeMount readOnly false, and CRD preserveUnknownFields false may be omitted.
+  Do not globally equate false/zero/empty/null with absence. Pointer-valued
+  security false values, automount false, and all CRD schema defaults remain
+  explicitly bound.
+- CRD omitted conversion becomes exactly `{"strategy":"None"}`. Existing
+  supplied names and every schema/version/subresource stay exact. A cleanup
+  finalizer indicates deletion, not an ordinary create default. PDB v1 has no
+  inserted default spec field in this tag; nil behavior is not an added
+  IfHealthyBudget value. Existing NetworkPolicy and RBAC values are explicit.
+- Directly applied driver Pods additionally admit priority 0, preemptionPolicy
+  PreemptLowerPriority, and exactly two default Exists/NoExecute tolerations
+  (not-ready/unreachable, 300 seconds); nodeName binds the single owned node.
+  Calico podIP/podIPs annotations must agree with status and the Pod CIDR.
+  Calico's containerID annotation identifies the CNI sandbox, not the app's
+  containerStatuses containerID. No token mount or inherited imagePullSecret
+  is permitted for KIL's automount-disabled Pods. Do not admit these Pod-only
+  additions inside workload templates.
+- Generated Calico Pods require separate owner-derived admission validation,
+  including correlated token projection/mount, resolved priority class, and
+  DaemonSet node affinity/tolerations. A generated name is not permission for
+  an arbitrary volume or controller chain.
+
+Assemble representative API-response fixtures independently of the production
+normalizer. For each permitted default or omission, test the exact valid
+transformation and a changed value/wrong-kind/wrong-path rejection. Include
+CRD schema properties named like PodSpec defaults to prove normalization cannot
+rewrite nested schema content. Include wrong owner UID, extra Pod/container,
+duplicate Service address, missing bootstrap object, and deleting-object cases.
+
+Primary sources for the finite rules:
+[core defaults](https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/apis/core/v1/defaults.go),
+[core conversion](https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/apis/core/v1/conversion.go),
+[core JSON tags](https://github.com/kubernetes/kubernetes/blob/v1.36.1/staging/src/k8s.io/api/core/v1/types.go),
+[apps defaults](https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/apis/apps/v1/defaults.go),
+[Service allocation](https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/registry/core/service/storage/alloc.go),
+[CRD defaults](https://github.com/kubernetes/kubernetes/blob/v1.36.1/staging/src/k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1/defaults.go),
+[CRD create strategy](https://github.com/kubernetes/kubernetes/blob/v1.36.1/staging/src/k8s.io/apiextensions-apiserver/pkg/registry/customresourcedefinition/strategy.go),
+[PDB default registration](https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/apis/policy/v1/zz_generated.defaults.go),
+[default tolerations](https://github.com/kubernetes/kubernetes/blob/v1.36.1/plugin/pkg/admission/defaulttolerationseconds/admission.go),
+[priority admission](https://github.com/kubernetes/kubernetes/blob/v1.36.1/plugin/pkg/admission/priority/admission.go),
+[ServiceAccount admission](https://github.com/kubernetes/kubernetes/blob/v1.36.1/plugin/pkg/admission/serviceaccount/admission.go),
+[DaemonSet additions](https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/controller/daemon/util/daemonset_util.go),
+and [Calico annotations](https://github.com/projectcalico/calico/blob/v3.32.0/libcalico-go/lib/backend/k8s/resources/workloadendpoint.go).
+
+#### B.3 Complete owned profile state and shutdown proof
+
+Use the focused profile-state module for this bounded slice; keep operation
+sequencing in the controller and pure event decisions in the proof registry.
+Let `H` be the passwd-derived home (not ambient `HOME`), `C=H/.colima`,
+`L=C/_lima`, and `N=colima-kil-v3-lab`. Bind a private runtime TMPDIR before
+starting Colima. The exact owned runtime paths are:
+
+```text
+C/kil-v3-lab/              # saved colima.yaml, docker.sock, daemon files
+L/N/                       # lima.yaml, runtime colima.yaml, root disk, VM state
+L/_disks/N/                # datadisk and intentional in_use_by symlink
+C/_store/N.json            # Colima disk/runtime bookkeeping
+BOUND_TMPDIR/N.yaml        # generated startup configuration
+```
+
+- [ ] Preflight rejects any owned profile/instance/disk/store/startup remnants
+  before creating the journal's mutation authority. Derive paths from passwd
+  home plus the fixed identity and private TMPDIR, never from discovered names
+  or caller-supplied paths. Reject symlinked parents with no-follow component
+  checks. Shared `_config`, `_networks`, templates/caches and shared SSH config
+  are not owned instance paths and must never be removed.
+  Repeat the pristine check before recording startup intent and immediately
+  before actual start dispatch, including resumed prepared journals. If the
+  latter check refuses, durably latch that exact intent as refused so neither
+  the ordinary error handler nor fresh recovery can adopt the rejected state
+  as a creation binding. This authority-reducing refusal is not fabricated
+  command output or proof that an attempted mutation was not applied. Recovery
+  remains observe-first for legitimate pending starts without a refusal marker.
+  The required nullable `profile_start_refused_sequence` is tied to that exact
+  sole pending startup intent and is monotonic once set, alongside the permanent
+  teardown latch. Missing-field older journals fail closed rather than acquiring
+  authority through automatic migration. This is not an atomic exclusion lock
+  against an uncooperative external Colima invocation between check and dispatch.
+- [ ] Bind HOME consistently in controller and runner; remove ambient
+  COLIMA_HOME/XDG_CONFIG_HOME/LIMA_HOME/COLIMA_SAVE_CONFIG authority and supply
+  the exact LIMA_HOME only to a reviewed Lima fallback. Bind private
+  DOCKER_CONFIG for Colima host setup/teardown as well as owned Docker/Kind
+  operations; global Docker context observation remains a separate read of the
+  original global context. Use private bound TMPDIR so interrupted startup does
+  not leave untracked active configuration in a shared temporary directory.
+- [ ] Parse bounded saved `C/kil-v3-lab/colima.yaml` and `L/N/colima.yaml`
+  with a closed, duplicate-rejecting inert YAML subset; reject tags, aliases,
+  custom scripts/environment/daemon overrides and ambiguous scalar forms.
+  Follow the existing safe fixed-profile parsing approach, without introducing
+  a runtime YAML dependency. Require 4 CPU/8 GiB memory/60 GiB data disk,
+  aarch64/docker/vz, 20 GiB root disk, virtiofs, no activation/SSH-config/agent/
+  emulation/nested virtualization/embedded Kubernetes, and the restricted
+  shared network with pinned defaults. The no-mount representation is exactly
+  `mounts: null`: `mounts: []` means default writable HOME mounting and must
+  fail. `--template=false` is a CLI control, not a saved YAML field.
+- [ ] Successful profile creation must persist verified configuration hashes,
+  exact resource identities, data-disk size, and lock relation as proof-derived
+  bindings for later operations. Inspect the intentional `in_use_by` symlink
+  only with readlink and require its exact target `L/N`; never follow it.
+  Extend the closed private event/binding contract deliberately as required;
+  do not infer an expected resource identity from a later candidate.
+- [ ] Profile deletion requires positive list absence and no-follow absence of
+  the entire profile, instance, and disk directories, plus startup artifact.
+  A zero-valued Colima store residue may be classified explicitly as inactive,
+  but is never evidence that its disk disappeared. Private Docker configuration
+  created by Colima must be cleaned only through exact owned, validated entries,
+  not an assumed empty-directory rmdir or broad recursive removal.
+  Pure capture validation must enforce parent/child presence and exact known
+  directory-entry membership, not merely validate each record separately.
+  Absent profile/instance/disk parents cannot coexist with present child config,
+  disk, or lock records. Reject these contradictions through direct absence,
+  orphan authorization, terminal decisions, and retained-proof replay.
+- [ ] Normal cleanup uses only the existing exact Colima delete command.
+  If its already creation-bound data disk remains, allow the registry's scoped
+  fallback `limactl disk delete colima-kil-v3-lab` with exact bound LIMA_HOME,
+  never `--force`. Recheck directory absence afterward; exit zero alone can
+  skip a referenced or corrupt disk. Require established disk provenance and
+  no foreign lock/reference before authorizing this fallback. Lost provenance,
+  replacement/symlink, unreadable/corrupt disk, protected VM or malformed
+  instance remains manual recovery rather than guessed deletion.
+  Do not classify all non-QCOW2 bytes as raw: match the pinned Lima reader's
+  recognized image-container formats (including VHDX/VMDK/VDI/Parallels/VPC/ASIF)
+  before accepting raw. In-place unsupported-header changes with the same inode
+  and size must block both ordinary deletion and orphan fallback. This is bounded
+  container-format/metadata validation, not a guest filesystem integrity scan.
+  The initial fallback may conservatively refuse when another Lima instance
+  prevents proving absence of references; classify this as unproved reference
+  absence, not a confirmed foreign reference. Normal owned Colima deletion must
+  still work with unrelated profiles present, and no fallback may operate on
+  those other instances.
+- [ ] Use temporary isolated home fixtures, not real host state, for tests.
+  Cover ambient HOME/Colima/Lima/TMPDIR redirection, mounts null versus empty,
+  config mismatch between both saved files, pre-existing orphan refusal,
+  Colima exit zero with disk still present, exact orphan cleanup, foreign lock,
+  replaced inode, post-delete store zero-state, and interrupted profile startup.
+  Keep readiness fail-closed pending B.1/B.2/resource proof completion.
+
+Pinned sources:
+[profile paths](https://github.com/abiosoft/colima/blob/v0.10.3/config/profile.go),
+[environment-sensitive paths](https://github.com/abiosoft/colima/blob/v0.10.3/config/files.go),
+[saved template](https://github.com/abiosoft/colima/blob/v0.10.3/embedded/defaults/colima.yaml),
+[nil-preserving YAML](https://github.com/abiosoft/colima/blob/v0.10.3/util/yamlutil/yaml.go),
+[mount semantics](https://github.com/abiosoft/colima/blob/v0.10.3/config/config.go),
+[Colima delete](https://github.com/abiosoft/colima/blob/v0.10.3/app/app.go),
+[configuration teardown](https://github.com/abiosoft/colima/blob/v0.10.3/config/configmanager/configmanager.go),
+[store reset](https://github.com/abiosoft/colima/blob/v0.10.3/store/store.go),
+[startup temporary config](https://github.com/abiosoft/colima/blob/v0.10.3/environment/vm/lima/lima.go),
+[Lima disk state](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/store/disk.go),
+[pinned image-format dispatch](https://github.com/lima-vm/go-qcow2reader/blob/v0.7.1/qcow2reader.go),
+[bounded first-sector probes](https://github.com/lima-vm/go-qcow2reader/blob/v0.7.1/image/stub/stub.go),
+[Lima filenames](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/limatype/filenames/filenames.go),
+and [disk CLI](https://github.com/lima-vm/lima/blob/v2.2.0/cmd/limactl/disk.go).
+Colima 0.10.3 removes the saved profile directory during deletion, but its data
+disk deletion depends on `disk_formatted`; missing/malformed store can leave an
+orphan. This is why configuration removal and runtime-disk absence are separate
+postconditions.
+
+Fresh CLI defaults are not identical to the commented template: the reviewed
+`cmd/start.go` flag-to-config path supplies empty `cpuType` and `hostname`, null
+DNS and provision slices, and an empty `dnsHosts` map. The saved serializer
+overlays template fields and preserves those nil slices as null. The profile
+fixtures must represent this CLI path, not the template alone. The current
+profile slice conservatively accepts only raw disks, as used by the pinned
+Linux VZ driver; unsupported disk formats and interrupted startup without a
+completed creation binding require manual recovery. These limitations do not
+authorize discovering or deleting resources from their names alone.
+
+#### B.4 Preserve the pinned foreign-profile inventory schema
+
+The pinned Colima `list --json` emits one `InstanceInfo` per line, with `dir`
+removed and `network` cleared. `address` is optional but legitimate for foreign
+profiles. Runtime can be docker/containerd/incus, their `+k3s` variants, or none;
+an unrecognized configuration yields an omitted runtime, not a safe default.
+The present exact-seven-field/docker-or-containerd decoders therefore reject
+some ordinary unrelated profiles and need a shared corrected boundary before
+live validation. This does not weaken the owned profile's exact docker/no-address
+configuration contract or permit mutation of another profile.
+
+- [ ] Decode bounded duplicate-free JSONL (and retained test/legacy array form)
+  with one closed schema. Validate known optional address as a single IP literal;
+  retain presence/value in private before/after comparison. Accept only the
+  pinned nonempty runtime forms for foreign records. Missing/invalid required
+  fields and unknown fields remain unknown/fail-closed, never inferred defaults.
+- [ ] Reuse the decoder in controller, pure proofs and private evidence checks,
+  keeping the owned configuration stricter. Explicitly project public fields:
+  private foreign addresses and names must not leak through a wholesale copy.
+  Changes in optional address/runtime must affect the private equality result.
+  Add a domain-separated keyed commitment of each full private normalized record
+  to its public projection, using the existing private per-run projection key.
+  This preserves public before/after equality checking when a hidden address
+  changes; simply dropping addresses before comparison would lose that signal.
+  Do not publish the key/nonce, raw address, or an unkeyed low-entropy address
+  hash. Public verification compares the opaque commitments but cannot
+  independently reconstruct private address values or recompute their HMAC.
+  Bind the terminal attestation commitment and private after-snapshot to the
+  same retained proof observation. A preliminary controller sample must not
+  supply evidence while a later registry sample supplies only the equality
+  flag. Recovery and hydration must derive the final snapshot/commitment from
+  the validated proof, including when state changed after the initial intent.
+- [ ] Test JSONL/arrays, absent/present address, all supported runtime forms,
+  invalid address, duplicate fields, missing runtime, unexpected fields, and
+  before/after drift. Preserve exact observed raw bytes in existing proof files.
+- [ ] Assess completeness against the existing no-follow Lima directory roster
+  before declaring a foreign snapshot complete. `Instances` uses a Scanner and
+  does not propagate its final error; a truncated underlying listing must not
+  silently become a complete empty foreign inventory. Use read-only exact
+  roster reconciliation or fail closed; never operate on discovered foreign
+  names. Do not inspect unrelated guest contents.
+
+Sources: [JSONL command](https://github.com/abiosoft/colima/blob/v0.10.3/cmd/list.go)
+and [InstanceInfo/Instances/getRuntime](https://github.com/abiosoft/colima/blob/v0.10.3/environment/vm/lima/limautil/instance.go).
+
+#### C. Bind actual producer bytes before deriving reduced evidence
+
+- [ ] Replace nominal FakeRunner source rows with real producer-format records
+  from `kil.v3b1_request_driver`, `kil.ext_authz_http`, `kil.target_http`, and the
+  reviewed Envoy access-log format. First demonstrate that unchanged raw records
+  fail the old reduced-schema publication path.
+- [ ] Add closed validators/adapters for each actual producer schema. Driver
+  `attempt_count`/`response_status`, authorization `outcome`, Envoy access
+  fields, and actual target records are validated before deriving the existing
+  reduced joins. Derive decisions/digests from observed authorization and
+  correlated sources, never from the expected result tuple. Bind any fixed
+  transport-to-V3B-2 run/request mapping explicitly to the durable instruction
+  and case identities; retain original record values.
+- [ ] Persist each `CapturedSource` payload and a closed capture manifest before
+  teardown. Bind kind/track, exact Pod/container location, UID, capture-time
+  resourceVersion, container incarnation, full byte count, and full digest.
+  Retain driver readiness bytes even though readiness is not an application
+  request. Distinguish initial readiness RV from the later stable capture RV.
+- [ ] Extend the private/public source-attestation validators together so public
+  claims bind the full captured source and its reduced projection separately.
+  Keep exactly eleven public files. Safe canonical source records may be bound
+  within the manifest; malformed or sensitive bytes remain private with only
+  permitted sanitized metadata exposed. Public verification must rederive both
+  raw-source commitments and reduced joins; a checksum over reduced rows is not
+  a raw-source commitment. Update every exact-field contract and privacy path
+  allowlist deliberately, with repaired-hash tampering tests.
+- [ ] Request-free verification must retain all twelve source bindings,
+  including three readiness records and nine empty service ledgers, while still
+  proving zero application requests/results/joins. Missing source capture must
+  never become a synthetic empty attestation.
+
+##### C.1 Durable instruction, case, and result association
+
+- [ ] Persist canonical private case bytes before request intent. Each case
+  includes its existing safe expectations and the actual private instruction's
+  SHA-256 and byte count. Define `case_sha256` as the digest of those canonical
+  case bytes, not an alias for the instruction digest. Extend the closed request
+  intent with a separate `instruction_sha256`; repeat the case/instruction
+  association in its terminal result.
+- [ ] Persist exact attach stdout privately before its terminal event. Define
+  `attach_sha256` over those actual bytes and `result_sha256` over the canonical
+  parsed terminal record. Accept only the existing terminal-only or
+  readiness-plus-terminal framing, with no extra records. If attach includes
+  readiness, require equality with the captured driver readiness record.
+- [ ] Private replay reads the actual bounded canonical instruction, applies
+  `parse_instruction`, recomputes its digest, and checks the exact run-prefix,
+  track, and request-ID mapping. Recompute case bytes and join the unique journal
+  intent/result, attach terminal, and captured driver terminal. Repaired hashes
+  cannot bypass inconsistent contents, incarnation, or missing/duplicate events.
+- [ ] Public `manifest.json` carries a closed safe `request_bindings` projection
+  with case facts and case/instruction/result commitments; source attestations
+  reference the same association. Explicitly project public fields rather than
+  copying the private record wholesale. Public verification rederives case and
+  driver-result commitments and their consistency. It cannot recompute a private
+  sensitive instruction's digest without private bytes, and must say so.
+- [ ] Keep the shared V3B-1 driver protocol unchanged. Its terminal does not echo
+  a consumed-instruction digest: the supported claim is controller/journal-bound
+  association, not producer-attested consumption. Stronger consumption evidence
+  would require a separately reviewed protocol change, not inference from a hash.
+- [ ] Cover changed instructions, wrong run/track/request, swapped cases,
+  changed journal commitments, changed attach/captured terminal, duplicate or
+  missing intent/result, both valid attach framings, readiness mismatch, extra
+  lines, truncation, and noncanonical bytes. No private Q-state or instruction
+  bytes may enter the public eleven-file bundle.
+
+##### C.2 Partial capture and calibrated failure publication
+
+- [ ] Version the private capture manifest with `schema_version`, `run_id`,
+  `capture_outcome`, and twelve ordered logical source-status entries. A
+  `captured` entry binds actual identity/bytes; an `unavailable` entry has a
+  closed reason (`not_established`, `read_failed`, `identity_drift`, `truncated`,
+  or `invalid_records`) and a diagnostic observation commitment where applicable.
+  Never turn a failed or unattempted read into empty source records.
+- [ ] Persist each successful source immediately. Finalize a diagnostic-partial
+  manifest when later sources fail, retain malformed bytes privately, and reuse
+  immutable captures after restart. Freeze observes files actually committed in
+  this manifest and validates statuses against established identities and actual
+  diagnostic observations. It cannot demand twelve successful captures after a
+  driver never started. A diagnostic-partial freeze is teardown-only and latches
+  non-promotion; only a complete verified capture may claim all boundaries frozen.
+  Read at least one overflow-sentinel byte beyond the accepted source limit
+  for bounded Kubernetes logs as already done for ledger-file reads. A read
+  capped at exactly the accepted byte limit cannot establish completeness at
+  that boundary. Update command builders/allowlists together and preserve
+  oversized returned bytes privately as explicitly truncated diagnostics.
+  On retry or hydration, derive reduced records and counts once from retained
+  captures; do not accumulate `_application_records` again or reread live
+  sources to reconstruct already-frozen evidence.
+- [ ] Known-owned cancellation/deletion and foreign-state comparison must remain
+  possible before readiness, after an absent later driver, or after a failed
+  source read. Failure classification does not relax ownership or postcondition
+  checks and does not authorize application retries or further forward work.
+- [ ] Private partial capture and safe cleanup may be implemented/reviewed as an
+  intermediate slice, but Task 6 still requires the approved calibrated failure
+  publication path. Add a distinct nonpromotable partial-diagnostic result class
+  within the same eleven public files. Its closed sanitized projection records
+  which boundaries were captured versus unavailable, valid commitments and
+  failure categories; it must not manufacture complete topology, nominal joins,
+  request-free success, or empty-capture attestations for missing observations.
+  The public verifier independently rejects these invalid claims. Empty derived
+  output files signify unavailable derivation under this result class, not proof
+  of zero source events. Private sensitive/malformed bytes remain private.
+- [ ] Test failures before readiness, before any driver, after a failed first
+  request, with a missing later driver, unreadable source, identity drift, and
+  restart after individual capture or manifest persistence. Test public/private
+  schema separation and repaired-hash attempts to relabel partial as complete.
+
+##### C.3 Exact Envoy refusal observation
+
+- [ ] Preserve the reviewed plain HTTP drain/stats control and retained Envoy
+  incarnation. The producer must classify exact `ECONNREFUSED`, not arbitrary
+  TCP or shell failure, before emitting `listener_refused: true`. Use bounded
+  control/observation and fixed diagnostic locale; do not synthesize the boolean
+  in the controller. Timeout, permission failure, unreachable network, reset,
+  or malformed/truncated admin response remains unsuccessful observation.
+  The repository establishes Bash, not Python/curl/timeout availability inside
+  the pinned Envoy image. A fixed-command Bash probe may classify an exact
+  complete C-locale diagnostic as explicit refusal, with reviewed exit status,
+  zero stdout, bounded stderr, fixed script name/line numbering, and suppressed
+  startup/environment execution. Never substring-match refusal text or claim
+  Bash exposes numeric errno. Independently supplied grammar fixtures prove
+  fail-closed classification; the actual pinned-image grammar remains a later
+  live compatibility gate, and unfamiliar output must fail closed. Bound HTTP
+  headers/body and reads; an outer kubectl timeout alone does not prove the
+  remote shell terminated. Do not add unproved runtime-binary dependencies.
+- [ ] Preserve the existing accepted proof rule: every one of the four active
+  gauges appears exactly once as integer zero. Cover open listener, exact
+  refusal, timeout/EACCES/ENETUNREACH/reset, admin non-200, truncated response,
+  and active/missing/duplicate gauges through the actual producer command path.
+
+#### D. Reverify the real interfaces and return to independent review
+
+- [ ] Replace the legacy tiny-archive fixture's patched digest function with a
+  self-consistent synthetic accepted-input fixture. Its manifest, archive size,
+  archive SHA-256, and image identities must describe the actual fixture bytes;
+  scope any test-only substitutions to the fixed acceptance constants, never
+  the production digest/streaming verifier. Separately assert the real pinned
+  acceptance constants and reject mismatched bytes, size, and repaired manifest
+  claims. Do not add a production caller-selected acceptance override, a large
+  checked-in archive, or a dependency on another worktree's private runtime
+  directory. Keep Docker config IDs, node-store targets, and public Pod imageID
+  fixtures distinct according to the pinned representation contract above.
+- [ ] For each matrix family, simulate command success plus invalid/missing
+  postcondition and crash after mutation but before completion persistence.
+  Assert the exact permitted transition and absence of forward work. Include
+  wrong cluster/Pod/container identities, wrong image contents, missing pinned
+  Calico objects, mismatched endpoint UID/address, poisoned inherited authority,
+  unknown absence observations, and partial-source capture.
+- [ ] Run focused and full gates on the stable corrected tree:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest \
+  tests.test_v3b2_proofs tests.test_v3b2_contracts tests.test_v3b2_manifests \
+  tests.test_v3b2_inventory tests.test_v3b2_journal tests.test_v3b2_evidence \
+  tests.test_v3b2_controller tests.test_v3b2_observed_lifecycle \
+  tests.test_v3b2_profile_state tests.test_v3b2_api_defaults \
+  tests.test_v3b2_colima_inventory -v
+make docs-html PYTHON=../../.venv/bin/python
+PYTHONDONTWRITEBYTECODE=1 make validate PYTHON=../../.venv/bin/python
+git diff --check
+```
+
+Expected: all tests and readers pass; no live runtime command was executed and
+no private/runtime artifact is tracked. Root handles staging/commits so an
+implementer cannot silently stall on Git approval. Repeat independent
+specification and then quality review on the complete corrected Task 6 delta.
+Only after both accept does Task 7 open. The already selected subagent workflow
+continues; this correction does not reopen V3B-2b or V3C.
 
 ### Task 7: Wire documentation, Make targets, and static acceptance
 

@@ -273,6 +273,15 @@ def _target_config(track: str, run_id: str) -> str:
     }) + "\n"
 
 
+def _envoy_config(track: str) -> str:
+    value = json.loads(render_envoy_json(LiveTrack(track), "authz", "target"))
+    value["admin"] = {
+        "access_log_path": "/dev/null",
+        "address": {"socket_address": {"address": "127.0.0.1", "port_value": 9901}},
+    }
+    return canonical_json(value) + "\n"
+
+
 def _pod_spec(role: str, track: str, image: str, command: list[str], config_name: str | None) -> dict[str, object]:
     mounts: list[dict[str, object]] = [
         {"name": "evidence", "mountPath": "/evidence"},
@@ -305,6 +314,10 @@ def _pod_spec(role: str, track: str, image: str, command: list[str], config_name
         container.update({"stdin": True, "stdinOnce": True, "tty": False})
     else:
         container["ports"] = [{"containerPort": 8080, "name": "http", "protocol": "TCP"}]
+        container["readinessProbe"] = {
+            "tcpSocket": {"port": 8080}, "periodSeconds": 1,
+            "timeoutSeconds": 1, "failureThreshold": 30, "successThreshold": 1,
+        }
     return {
         "serviceAccountName": role,
         "automountServiceAccountToken": False,
@@ -349,7 +362,7 @@ def _namespace_objects(track: str, namespace: str, workload: WorkloadIdentity) -
     config_values = (
         ("authz-config", "authz", "authz.json", _authz_config(track)),
         ("target-config", "target", "target.json", _target_config(track, run_id)),
-        ("envoy-config", "envoy", "envoy.json", render_envoy_json(LiveTrack(track), "authz", "target") + "\n"),
+        ("envoy-config", "envoy", "envoy.json", _envoy_config(track)),
     )
     objects.extend(
         _object("v1", "ConfigMap", _metadata(name, track, run_id, namespace=namespace, role=role), data={filename: value})
@@ -368,7 +381,7 @@ def _namespace_objects(track: str, namespace: str, workload: WorkloadIdentity) -
         for role in ("envoy", "authz", "target")
     )
     commands = {
-        "envoy": ["envoy", "-c", "/config/envoy.json"],
+        "envoy": ["envoy", "-c", "/config/envoy.json", "--log-path", "/tmp/envoy.log"],
         "authz": ["sh", "-ceu", "umask 077; set -C; : > /evidence/decisions.jsonl; exec python -m kil.ext_authz_http --config /config/authz.json"],
         "target": ["sh", "-ceu", "umask 077; set -C; : > /evidence/targets.jsonl; exec python -m kil.target_http --config /config/target.json"],
     }

@@ -17,6 +17,11 @@ from kil.v3b2_inventory import (
     ObjectIdentity,
     PodImageIdentity,
     PolicyEdge,
+    RuntimePodIdentity,
+    parse_runtime_pod_identity,
+    parse_ready_endpoint_slice,
+    parse_calico_runtime_workload,
+    parse_runtime_inventory,
     parse_kubectl_list,
     stable_source,
     validate_inventory,
@@ -70,6 +75,9 @@ def snapshot() -> InventorySnapshot:
         ObjectIdentity("apps/v1", "DaemonSet", "kube-system", "calico-node", "uid-calico-node", "system-2"),
         ObjectIdentity("apps/v1", "Deployment", "kube-system", "calico-kube-controllers", "uid-calico-controller", "system-3"),
     ))
+    for index, (kind, name) in enumerate((("ServiceAccount", "calico-node"), ("ServiceAccount", "calico-cni-plugin"),
+                                         ("ServiceAccount", "calico-kube-controllers"), ("ConfigMap", "calico-config")), start=4):
+        object_records.append(ObjectIdentity("v1", kind, "kube-system", name, "uid-system-" + str(index), "system-" + str(index)))
     objects = tuple(sorted(object_records))
     image_records = [
         PodImageIdentity("calico-cni", "init", "kube-system", "calico-node-a", "upgrade-ipam", "pod-calico", "201", CALICO_CNI, "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1], True),
@@ -90,7 +98,10 @@ def snapshot() -> InventorySnapshot:
                 ENVOY_IMAGE_ID if role == "envoy" else KIL_IMAGE_ID,
                 True,
             ))
-    images = tuple(sorted(image_records))
+    images = tuple(sorted(
+        replace(item, container_id="containerd://" + f"{index:064x}")
+        for index, item in enumerate(image_records, start=1)
+    ))
     endpoints = tuple(sorted(
         EndpointIdentity(
             "Endpoints", service, namespace, service,
@@ -141,6 +152,147 @@ class TupleSubclass(tuple):
 
 
 class V3B2InventoryTest(unittest.TestCase):
+    def test_fixed_inventory_requires_all_calico_accounts_and_configuration(self):
+        required = {("v1", "ServiceAccount", "kube-system", name) for name in ("calico-node", "calico-cni-plugin", "calico-kube-controllers")}
+        required.add(("v1", "ConfigMap", "kube-system", "calico-config"))
+        self.assertTrue(required.issubset(inventory._EXPECTED_OBJECT_KEYS), "pinned Calico objects are missing from expectations")
+
+    def test_ready_endpoint_slice_binds_one_ready_pod_uid_and_exact_port(self) -> None:
+        value = {
+            "apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSlice",
+            "metadata": {"name": "envoy-abcde", "namespace": "kil-v3-baseline",
+                         "labels": {"kubernetes.io/service-name": "envoy"}},
+            "addressType": "IPv4",
+            "ports": [{"name": "http", "port": 8080, "protocol": "TCP"}],
+            "endpoints": [{"addresses": ["10.244.0.10"], "conditions": {"ready": True},
+                           "targetRef": {"kind": "Pod", "name": "envoy-abc", "namespace": "kil-v3-baseline", "uid": "pod-uid"}}],
+        }
+        endpoint, uid = parse_ready_endpoint_slice(
+            json.dumps(value, indent=2).encode(),
+            expected_namespace="kil-v3-baseline", expected_service="envoy",
+        )
+        self.assertEqual((endpoint.source_kind, endpoint.port, uid), ("EndpointSlice", 8080, "pod-uid"))
+        value["endpoints"][0]["conditions"]["ready"] = False
+        with self.assertRaises(InventoryError):
+            parse_ready_endpoint_slice(
+                json.dumps(value).encode(), expected_namespace="kil-v3-baseline",
+                expected_service="envoy",
+            )
+
+    def test_runtime_driver_pod_identity_is_strict_and_image_bound(self) -> None:
+        value = {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "name": "driver", "namespace": "kil-v3-baseline",
+                "resourceVersion": "17", "uid": "driver-uid",
+            },
+            "status": {
+                "conditions": [{"status": "True", "type": "Ready"}],
+                "containerStatuses": [{
+                    "image": KIL_IMAGE, "imageID": KIL_IMAGE_ID,
+                    "containerID": "containerd://" + "1" * 64,
+                    "name": "driver", "ready": True,
+                }],
+            },
+        }
+        payload = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        parsed = parse_runtime_pod_identity(
+            payload,
+            expected_namespace="kil-v3-baseline",
+            expected_pod="driver",
+            expected_container="driver",
+            expected_image=KIL_IMAGE,
+        )
+        self.assertEqual(parsed, RuntimePodIdentity(
+            "kil-v3-baseline", "driver", "driver-uid", "17", "driver",
+            KIL_IMAGE, KIL_IMAGE_ID, True, "containerd://" + "1" * 64,
+        ))
+        value["metadata"]["managedFields"] = [{"manager": "kubelet"}]
+        value["spec"] = {"nodeName": "kil-v3-lab-control-plane"}
+        value["status"]["containerStatuses"][0]["state"] = {
+            "terminated": {"exitCode": 0, "finishedAt": "2026-09-07T00:00:00Z"},
+        }
+        value["status"]["containerStatuses"][0]["ready"] = False
+        value["status"]["conditions"][0]["status"] = "False"
+        terminal = parse_runtime_pod_identity(
+            json.dumps(value, indent=2).encode(),
+            expected_namespace="kil-v3-baseline", expected_pod="driver",
+            expected_container="driver", expected_image=KIL_IMAGE,
+            require_ready=False,
+        )
+        self.assertEqual(terminal.terminated_exit_code, 0)
+        value["status"]["containerStatuses"][0]["image"] = "kil.local/kil-v3b2:latest"
+        bad = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        with self.assertRaises(InventoryError):
+            parse_runtime_pod_identity(
+                bad, expected_namespace="kil-v3-baseline", expected_pod="driver",
+                expected_container="driver", expected_image=KIL_IMAGE,
+            )
+
+    def test_calico_runtime_workload_requires_exact_ready_pinned_projection(self) -> None:
+        item = {
+            "apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": {"name": "calico-kube-controllers", "namespace": "kube-system", "resourceVersion": "2", "uid": "uid-controller"},
+            "spec": {"containers": [{"image": CALICO_CONTROLLERS, "name": "calico-kube-controllers"}], "initContainers": []},
+            "status": {"readyReplicas": 1, "replicas": 1},
+        }
+        payload = (json.dumps(item, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        desired, ready, images = parse_calico_runtime_workload(payload, "Deployment")
+        self.assertEqual((desired, ready), (1, 1))
+        self.assertEqual(images[0][2], CALICO_CONTROLLERS)
+        item["status"]["readyReplicas"] = 0
+        bad = (json.dumps(item, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        with self.assertRaises(InventoryError):
+            parse_calico_runtime_workload(bad, "Deployment")
+
+    def test_composite_runtime_parser_closes_the_entire_raw_object_set(self) -> None:
+        from kil.v3b2_manifests import WorkloadIdentity
+        from tests.test_v3b2_controller import raw_runtime_inventory
+
+        kil = "45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649"
+        envoy = "57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38c524401b4"
+        workload = WorkloadIdentity(
+            "v3b2-" + "1" * 64, "sha256:" + kil,
+            "docker.io/envoyproxy/envoy@sha256:" + envoy,
+        )
+        payload = raw_runtime_inventory().encode()
+        raw_value = json.loads(payload)
+        platform = (
+            ("v1", "Pod", "kube-system", "kube-apiserver-kil-v3-lab-control-plane"),
+            ("v1", "Pod", "kube-system", "coredns-7db6d8ff4d-abcde"),
+            ("v1", "Pod", "local-path-storage", "local-path-provisioner-abcde"),
+            ("v1", "Service", "default", "kubernetes"),
+            ("v1", "Service", "kube-system", "kube-dns"),
+            ("v1", "Endpoints", "default", "kubernetes"),
+            ("discovery.k8s.io/v1", "EndpointSlice", "kube-system", "kube-dns-abcde"),
+            ("v1", "ServiceAccount", "default", "default"),
+            ("v1", "ConfigMap", "kil-v3-baseline", "kube-root-ca.crt"),
+            ("apps/v1", "Deployment", "kube-system", "coredns"),
+            ("apps/v1", "DaemonSet", "kube-system", "kube-proxy"),
+        )
+        for index, (api_version, kind, namespace, name) in enumerate(platform):
+            raw_value["items"].append({
+                "apiVersion": api_version, "kind": kind,
+                "metadata": {"name": name, "namespace": namespace,
+                             "resourceVersion": str(900 + index),
+                             "uid": f"33333333-3333-4333-8333-{index:012x}"},
+                "spec": {}, "status": {},
+            })
+        payload = json.dumps(raw_value, indent=2).encode()
+        parsed = parse_runtime_inventory(
+            payload, profile=FIXED_PROFILE, workload=workload,
+            node_container_id=NODE_ID, docker_host=DOCKER_HOST,
+        )
+        self.assertEqual((len(parsed.objects), len(parsed.pod_images), len(parsed.endpoints)), (67, 17, 9))
+        value = json.loads(payload)
+        value["items"].append({"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "extra", "namespace": "default", "resourceVersion": "1", "uid": "22222222-2222-4222-8222-222222222222"}})
+        extra = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        with self.assertRaisesRegex(InventoryError, "extra"):
+            parse_runtime_inventory(
+                extra, profile=FIXED_PROFILE, workload=workload,
+                node_container_id=NODE_ID, docker_host=DOCKER_HOST,
+            )
     def setUp(self) -> None:
         self.snapshot = snapshot()
         self.expected = ExpectedInventory(
@@ -392,11 +544,11 @@ class V3B2InventoryTest(unittest.TestCase):
             "metadata": {"namespace": "kube-system", "name": "calico-node-a", "uid": "pod-calico", "resourceVersion": "201"},
             "status": {
                 "conditions": [{"type": "Ready", "status": "True"}],
-                "containerStatuses": [{"name": "calico-node", "image": CALICO_NODE, "imageID": "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1]}],
+                "containerStatuses": [{"name": "calico-node", "image": CALICO_NODE, "imageID": "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1], "containerID": "containerd://" + "1" * 64}],
                 "initContainerStatuses": [
-                    {"name": "upgrade-ipam", "image": CALICO_CNI, "imageID": "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1]},
-                    {"name": "install-cni", "image": CALICO_CNI, "imageID": "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1]},
-                    {"name": "ebpf-bootstrap", "image": CALICO_NODE, "imageID": "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1]},
+                    {"name": "upgrade-ipam", "image": CALICO_CNI, "imageID": "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1], "containerID": "containerd://" + "2" * 64},
+                    {"name": "install-cni", "image": CALICO_CNI, "imageID": "docker-pullable://quay.io/calico/cni@sha256:" + CALICO_CNI.rsplit(":", 1)[1], "containerID": "containerd://" + "3" * 64},
+                    {"name": "ebpf-bootstrap", "image": CALICO_NODE, "imageID": "docker-pullable://quay.io/calico/node@sha256:" + CALICO_NODE.rsplit(":", 1)[1], "containerID": "containerd://" + "4" * 64},
                 ],
             },
         }
@@ -405,7 +557,7 @@ class V3B2InventoryTest(unittest.TestCase):
             "metadata": {"namespace": "kube-system", "name": "calico-kube-controllers-a", "uid": "pod-controller", "resourceVersion": "202"},
             "status": {
                 "conditions": [{"type": "Ready", "status": "True"}],
-                "containerStatuses": [{"name": "calico-kube-controllers", "image": CALICO_CONTROLLERS, "imageID": "docker-pullable://quay.io/calico/kube-controllers@sha256:" + CALICO_CONTROLLERS.rsplit(":", 1)[1]}],
+                "containerStatuses": [{"name": "calico-kube-controllers", "image": CALICO_CONTROLLERS, "imageID": "docker-pullable://quay.io/calico/kube-controllers@sha256:" + CALICO_CONTROLLERS.rsplit(":", 1)[1], "containerID": "containerd://" + "5" * 64}],
                 "initContainerStatuses": [],
             },
         }

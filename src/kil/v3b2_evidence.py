@@ -13,12 +13,14 @@ import re
 import stat
 from typing import Callable, Mapping, Protocol, Sequence
 
+from kil.v3b2_colima_inventory import MAX_RECORDS as MAX_FOREIGN_RECORDS, validate_records, validate_resources
 from kil.v3b2_contracts import (
     PRIVATE_MANIFEST_FIELDS,
     PRIVATE_MANIFEST_SCHEMA,
     PUBLIC_MANIFEST_FIELDS,
     PUBLIC_MANIFEST_SCHEMA,
     TRACKS,
+    TRACK_NAMESPACES,
     SchemaError,
     dispatch_schema,
     require_closed_object,
@@ -29,6 +31,7 @@ from kil.v3b2_inventory import (
     ObjectIdentity,
     PodImageIdentity,
     PolicyEdge,
+    _EXPECTED_OBJECT_KEYS,
 )
 from kil.v3b2_manifests import (
     WorkloadIdentity,
@@ -121,8 +124,6 @@ _HOST_PATH_PATTERNS = (
     re.compile(r"(?:^|[^a-z0-9])~[\\/]", re.IGNORECASE),
     re.compile(r"\$(?:home|\{home\})|%userprofile%", re.IGNORECASE),
 )
-_FOREIGN_ARCHES = frozenset({"aarch64", "x86_64", "amd64", "arm64"})
-_FOREIGN_RUNTIMES = frozenset({"docker", "containerd"})
 
 
 class EvidenceError(ValueError):
@@ -196,6 +197,62 @@ class VerifiedBundle:
                 raise EvidenceError("verified bundle contains an invalid bounded string")
         if type(self.public_commitment) is not str or _HEX64.fullmatch(self.public_commitment) is None:
             raise EvidenceError("verified public commitment is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedPublication:
+    parent: Path
+    destination: Path
+    run_id: str
+    source_commit: str
+    profile_sha256: str
+    private_manifest: bytes
+    content_sha256: str
+    public_commitment: str
+    tree_commitment: str
+    file_sha256: tuple[tuple[str, str], ...]
+    payloads: tuple[tuple[str, bytes], ...]
+
+    def __post_init__(self) -> None:
+        if not all(isinstance(path, Path) and path.is_absolute() and ".." not in path.parts for path in (self.parent, self.destination)):
+            raise EvidenceError("prepared publication paths are invalid")
+        if self.destination.parent != self.parent or self.destination.name != self.run_id or _V3B2_RUN.fullmatch(self.run_id) is None:
+            raise EvidenceError("prepared publication destination is not run-bound")
+        if _HEX40.fullmatch(self.source_commit) is None or any(_HEX64.fullmatch(value) is None for value in (self.profile_sha256, self.content_sha256, self.public_commitment, self.tree_commitment)):
+            raise EvidenceError("prepared publication identities are invalid")
+        if type(self.private_manifest) is not bytes or type(self.file_sha256) is not tuple or type(self.payloads) is not tuple:
+            raise EvidenceError("prepared publication records must be exact tuples")
+        names = tuple(name for name, _value in self.payloads)
+        if names != tuple(sorted(PUBLIC_FILES)) or len(set(names)) != len(names) or any(type(payload) is not bytes for _name, payload in self.payloads):
+            raise EvidenceError("prepared publication payload set is not closed")
+        digests = tuple((name, sha256(payload).hexdigest()) for name, payload in self.payloads)
+        if self.file_sha256 != digests or self.tree_commitment != sha256(_canonical_bytes(dict(digests))).hexdigest():
+            raise EvidenceError("prepared publication tree identity is invalid")
+        try:
+            private = json.loads(self.private_manifest)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise EvidenceError("prepared private manifest is invalid") from None
+        if type(private) is not dict or self.private_manifest != _canonical_bytes(private):
+            raise EvidenceError("prepared private manifest is not canonical")
+        content = private.get("content_identities")
+        if type(content) is not dict or sha256(_canonical_bytes(content)).hexdigest() != self.content_sha256:
+            raise EvidenceError("prepared content identity differs from private input")
+        rebuilt = build_public_bundle(private)
+        artifacts = _artifacts(rebuilt)
+        rebuilt["public_commitment_sha256"] = _public_commitment(rebuilt, artifacts)
+        rebuilt_payloads = {"manifest.json": _canonical_bytes(rebuilt), **artifacts}
+        rebuilt_payloads["SHA256SUMS"] = "".join(
+            f"{sha256(rebuilt_payloads[name]).hexdigest()}  {name}\n"
+            for name in sorted(rebuilt_payloads)
+        ).encode("ascii")
+        if (
+            rebuilt.get("run_id") != self.run_id
+            or rebuilt.get("source_commit") != self.source_commit
+            or rebuilt.get("profile_sha256") != self.profile_sha256
+            or rebuilt.get("public_commitment_sha256") != self.public_commitment
+            or tuple((name, rebuilt_payloads[name]) for name in sorted(rebuilt_payloads)) != self.payloads
+        ):
+            raise EvidenceError("prepared publication differs from bound private input")
 
 
 class SourceReader(Protocol):
@@ -324,7 +381,120 @@ _DRIVER_FIELDS = frozenset({"track", "request_id", "attempt", "decision", "http_
 _DECISION_FIELDS = frozenset({"track", "request_id", "decision", "decision_digest"})
 _ENVOY_FIELDS = frozenset({"track", "request_id", "decision_digest", "upstream_attempted", "upstream_status"})
 _TARGET_FIELDS = frozenset({"track", "request_id", "marker"})
-_ATTESTATION_FIELDS = frozenset({"kind", "track", "records"})
+_ATTESTATION_FIELDS = frozenset({"kind", "track", "records", "capture", "instruction_sha256"})
+_CAPTURE_FIELDS = frozenset({"namespace", "pod", "container", "uid", "resource_version", "container_id", "byte_count", "sha256", "raw_records"})
+
+_AUTHZ_PRODUCER_FIELDS = frozenset({
+    "schema_version", "request_id", "track", "method", "path", "outcome",
+    "http_status", "decision_digest", "adapter_reasons", "engine_reasons",
+    "untrusted_header_names", "monotonic_ns",
+})
+_ENVOY_PRODUCER_FIELDS = frozenset({
+    "run_id", "request_id", "track", "response_code", "upstream_host",
+    "upstream_service_time", "decision_digest",
+})
+_TARGET_PRODUCER_FIELDS = frozenset({
+    "schema_version", "run_id", "request_id", "track", "path", "decision_digest",
+    "received_monotonic_ns", "response_monotonic_ns",
+})
+
+
+def adapt_producer_sources(
+    sources: object, *, track: str, run_id: str,
+) -> dict[str, list[dict[str, object]]]:
+    """Validate complete producer records before deriving the public join rows.
+
+    The driver carries neither a decision nor a request ID: those facts join
+    through the single durable instruction and the authorization decision. The
+    Envoy transport uses the V3B-1 run prefix while the target binds V3B-2.
+    """
+    from kil.v3b1_driver_protocol import parse_result, DriverProtocolError
+    from kil.target_http import TargetRecord
+    from kil.ext_authz_http import LiveTrack
+    from ipaddress import IPv4Address, IPv4Network
+
+    raw = _closed_record("producer source set", sources, frozenset({"driver", "decision", "envoy", "target"}))
+    if track not in TRACKS or _V3B2_RUN.fullmatch(run_id) is None:
+        raise EvidenceError("producer binding is invalid")
+    if any(type(rows) is not list for rows in raw.values()):
+        raise EvidenceError("producer records must be exact arrays")
+    driver = raw["driver"]
+    if len(driver) not in {1, 2}:
+        raise EvidenceError("driver source must retain one readiness record")
+    try:
+        parsed = [parse_result(_canonical_bytes(row), expected_track=track) for row in driver]
+    except (DriverProtocolError, TypeError, ValueError):
+        raise EvidenceError("driver producer record is invalid") from None
+    if parsed[0].get("schema_version") != "kil.v3b1-driver-readiness.v1":
+        raise EvidenceError("driver readiness is missing")
+    result: dict[str, list[dict[str, object]]] = {kind: [] for kind in raw}
+    if len(parsed) == 1:
+        if any(raw[kind] for kind in ("decision", "envoy", "target")):
+            raise EvidenceError("request-free producer source contains application records")
+        return result
+    terminal = parsed[1]
+    if terminal.get("schema_version") != "kil.v3b1-driver-result.v1" or terminal.get("status") != "complete":
+        raise EvidenceError("driver producer terminal is not complete")
+    if len(raw["decision"]) != 1 or len(raw["envoy"]) != 1 or len(raw["target"]) > 1:
+        raise EvidenceError("producer source cardinality is invalid")
+    authz = _closed_record("authorization producer", raw["decision"][0], _AUTHZ_PRODUCER_FIELDS)
+    if (
+        authz["schema_version"] != "kil.v3b-authz-record.v1"
+        or authz["track"] != track or authz["request_id"] != "v3b1-central-request"
+        or authz["method"] != "POST" or authz["path"] != "/consequential/admin"
+        or authz["outcome"] not in {"permit", "deny"}
+        or type(authz["http_status"]) is not int
+        or authz["http_status"] != (200 if authz["outcome"] == "permit" else 403)
+        or type(authz["monotonic_ns"]) is not int or authz["monotonic_ns"] < 0
+        or type(authz["decision_digest"]) is not str or _HEX64.fullmatch(authz["decision_digest"]) is None
+        or any(type(authz[field]) is not list or any(type(value) is not str or len(value) > 256 for value in authz[field])
+               for field in ("adapter_reasons", "engine_reasons", "untrusted_header_names"))
+    ):
+        raise EvidenceError("authorization producer values are invalid")
+    envoy = _closed_record("Envoy producer", raw["envoy"][0], _ENVOY_PRODUCER_FIELDS)
+    permitted = authz["outcome"] == "permit"
+    if (
+        envoy["track"] != track or envoy["request_id"] != authz["request_id"]
+        or envoy["run_id"] != "v3b1-" + run_id.removeprefix("v3b2-")
+        or type(envoy["response_code"]) is not str
+        or envoy["response_code"] != str(terminal["response_status"])
+        or terminal["response_status"] != authz["http_status"]
+        or envoy["decision_digest"] != authz["decision_digest"]
+        or terminal["decision_digest"] != authz["decision_digest"]
+    ):
+        raise EvidenceError("producer response identities do not join")
+    if permitted:
+        try:
+            host, port = envoy["upstream_host"].rsplit(":", 1)
+            if port != "8080" or IPv4Address(host) not in IPv4Network("10.244.0.0/16"):
+                raise ValueError()
+            duration = envoy["upstream_service_time"]
+            if type(duration) is not str or re.fullmatch(r"[0-9]+", duration) is None:
+                raise ValueError()
+        except (ValueError, TypeError, AttributeError):
+            raise EvidenceError("Envoy producer upstream proof is invalid") from None
+    elif envoy["upstream_host"] != "-" or envoy["upstream_service_time"] != "-":
+        raise EvidenceError("Envoy denial has an upstream")
+    if len(raw["target"]) != int(permitted):
+        raise EvidenceError("target producer cardinality does not join")
+    for target in raw["target"]:
+        value = _closed_record("target producer", target, _TARGET_PRODUCER_FIELDS)
+        try:
+            TargetRecord(**{**value, "track": LiveTrack(value["track"])})
+        except (TypeError, ValueError):
+            raise EvidenceError("target producer record is invalid") from None
+        if (value["run_id"] != run_id or value["request_id"] != authz["request_id"]
+                or value["track"] != track or value["path"] != authz["path"]
+                or value["decision_digest"] != authz["decision_digest"]):
+            raise EvidenceError("target producer identity does not join")
+    common = {"track": track, "request_id": authz["request_id"]}
+    result["driver"] = [{**common, "attempt": terminal["attempt_count"], "decision": authz["outcome"],
+                         "http_status": terminal["response_status"], "decision_digest": terminal["decision_digest"]}]
+    result["decision"] = [{**common, "decision": authz["outcome"], "decision_digest": authz["decision_digest"]}]
+    result["envoy"] = [{**common, "decision_digest": envoy["decision_digest"], "upstream_attempted": permitted,
+                        "upstream_status": terminal["response_status"] if permitted else None}]
+    result["target"] = [{**common, "marker": 1} for _ in raw["target"]]
+    return result
 
 
 def _private_manifest(private: object) -> dict[str, object]:
@@ -355,6 +525,10 @@ def _records(private: Mapping[str, object]) -> dict[str, list[dict[str, object]]
     seen_attestations: set[tuple[str, str]] = set()
     attestations = private["source_attestations"]
     assert type(attestations) is list
+    raw_by_track: dict[str, dict[str, object]] = {track: {} for track in TRACKS}
+    instruction_by_track: dict[str, object] = {}
+    if len(attestations) != 12:
+        raise EvidenceError("source capture cardinality is invalid")
     for raw in attestations:
         item = _closed_record("source attestation", raw, _ATTESTATION_FIELDS)
         kind, track, values = item["kind"], item["track"], item["records"]
@@ -363,11 +537,47 @@ def _records(private: Mapping[str, object]) -> dict[str, list[dict[str, object]]
         if (kind, track) in seen_attestations:
             raise EvidenceError("source attestation is duplicated")
         seen_attestations.add((kind, track))
+        capture = _closed_record("source capture", item["capture"], _CAPTURE_FIELDS)
+        raw_records = capture["raw_records"]
+        if type(raw_records) is not list or any(type(row) is not dict for row in raw_records):
+            raise EvidenceError("raw producer records are invalid")
+        payload = b"".join(_canonical_bytes(row) for row in raw_records)
+        if (type(capture["byte_count"]) is not int or capture["byte_count"] != len(payload)
+                or len(payload) > _MAX_SOURCE_BYTES or capture["sha256"] != sha256(payload).hexdigest()):
+            raise EvidenceError("raw source commitment does not bind its records")
+        namespace = dict(TRACK_NAMESPACES)[track]
+        role = {"driver": "driver", "decision": "authz", "envoy": "envoy", "target": "target"}[kind]
+        if (capture["namespace"] != namespace or capture["container"] != role
+                or type(capture["uid"]) is not str or _KUBERNETES_UID.fullmatch(capture["uid"]) is None
+                or type(capture["resource_version"]) is not str or _RESOURCE_VERSION.fullmatch(capture["resource_version"]) is None
+                or type(capture["container_id"]) is not str
+                or re.fullmatch(r"containerd://[0-9a-f]{64}", capture["container_id"]) is None
+                or type(capture["pod"]) is not str
+                or (capture["pod"] != "driver" if role == "driver" else re.fullmatch(role + r"-[a-z0-9-]+", capture["pod"]) is None)):
+            raise EvidenceError("source capture location is invalid")
+        topology = private.get("runtime_identities", {}).get("topology_attestation", {})
+        images = topology.get("pod_images", [])
+        if images and not any(all(image.get(key) == capture[key] for key in ("namespace", "pod", "container", "uid", "container_id")) for image in images):
+            raise EvidenceError("source capture incarnation does not match topology")
+        instruction = item["instruction_sha256"]
+        if instruction is not None and (type(instruction) is not str or _HEX64.fullmatch(instruction) is None):
+            raise EvidenceError("source instruction binding is invalid")
+        if track in instruction_by_track and instruction_by_track[track] != instruction:
+            raise EvidenceError("source instruction bindings disagree")
+        instruction_by_track[track] = instruction
+        raw_by_track[track][kind] = raw_records
         for raw_record in values:
             record = _closed_record(f"{kind} record", raw_record, {"driver": _DRIVER_FIELDS, "decision": _DECISION_FIELDS, "envoy": _ENVOY_FIELDS, "target": _TARGET_FIELDS}[kind])
             if record.get("track") != track:
                 raise EvidenceError("cross-track evidence is prohibited")
             grouped[kind].append(record)
+    for track, sources in raw_by_track.items():
+        derived = adapt_producer_sources(sources, track=track, run_id=str(private["run_id"]))
+        if bool(derived["driver"]) != (instruction_by_track[track] is not None):
+            raise EvidenceError("producer source lacks its durable instruction binding")
+        for kind, rows in derived.items():
+            if [row for row in grouped[kind] if row["track"] == track] != rows:
+                raise EvidenceError("reduced source records do not rederive from producer records")
     return grouped
 
 
@@ -461,38 +671,14 @@ def join_nominal_evidence(private: object) -> list[dict[str, object]]:
     return joins
 
 
-_FOREIGN_FIELDS = frozenset({"name", "status", "arch", "cpus", "memory", "disk", "runtime"})
-
-
 def _foreign_records(value: object) -> list[dict[str, object]]:
-    if type(value) is not list:
-        raise EvidenceError("foreign profile inventory must be an exact array")
-    normalized: list[dict[str, object]] = []
-    names: set[str] = set()
-    for raw in value:
-        record = _closed_record("foreign profile", raw, _FOREIGN_FIELDS)
-        name = record["name"]
-        if type(name) is not str or not name or name == "kil-v3-lab" or name in names:
-            raise EvidenceError("foreign profile identity is ambiguous")
-        try:
-            if len(name.encode("utf-8")) > 4096:
-                raise EvidenceError("foreign profile identity exceeds its bound")
-        except UnicodeEncodeError:
-            raise EvidenceError("foreign profile identity contains invalid Unicode") from None
-        if type(record["status"]) is not str or record["status"] not in {"Running", "Stopped"}:
-            raise EvidenceError("foreign profile status is invalid")
-        if any(type(record[field]) is not int or record[field] < 0 for field in ("cpus", "memory", "disk")):
-            raise EvidenceError("foreign profile resource is invalid")
-        if (
-            type(record["arch"]) is not str
-            or record["arch"] not in _FOREIGN_ARCHES
-            or type(record["runtime"]) is not str
-            or record["runtime"] not in _FOREIGN_RUNTIMES
-        ):
-            raise EvidenceError("foreign profile resource text is not normalized")
-        names.add(name)
-        normalized.append(dict(record))
-    return sorted(normalized, key=lambda item: str(item["name"]))
+    try:
+        rows = validate_records(value)
+    except ValueError:
+        raise EvidenceError('foreign profile inventory is invalid') from None
+    if any(row['name'] == 'kil-v3-lab' for row in rows):
+        raise EvidenceError('foreign profile inventory includes owned identity')
+    return rows
 
 
 def project_foreign_profiles(before: object, after: object, key: bytes) -> dict[str, object]:
@@ -505,12 +691,13 @@ def project_foreign_profiles(before: object, after: object, key: bytes) -> dict[
             name = str(record["name"])
             result.append({
                 "pseudonym": hmac.new(key, name.encode("utf-8"), "sha256").hexdigest(),
+                "state_hmac_sha256": hmac.new(key, b'kil.v3b2-foreign-profile-state.v1\x00' + _canonical_bytes(record), 'sha256').hexdigest(),
                 "status": record["status"], "arch": record["arch"], "cpus": record["cpus"],
                 "memory": record["memory"], "disk": record["disk"], "runtime": record["runtime"],
             })
         return sorted(result, key=lambda item: str(item["pseudonym"]))
     projected_before, projected_after = project(left), project(right)
-    return {"before": projected_before, "after": projected_after, "unchanged": projected_before == projected_after}
+    return {"before": projected_before, "after": projected_after, "unchanged": left == right}
 
 
 def _public_commitment(manifest: Mapping[str, object], artifacts: Mapping[str, bytes]) -> str:
@@ -595,7 +782,7 @@ def _validate_topology_attestation(
     )
     if type(topology["namespaces"]) is not list or tuple(topology["namespaces"]) != expected_namespaces or any(type(item) is not str for item in topology["namespaces"]):
         raise EvidenceError("topology namespace inventory is not exact")
-    if type(topology["objects"]) is not list or len(topology["objects"]) != 63:
+    if type(topology["objects"]) is not list or len(topology["objects"]) != len(_EXPECTED_OBJECT_KEYS):
         raise EvidenceError("topology object inventory cardinality is invalid")
     objects: list[ObjectIdentity] = []
     for raw in topology["objects"]:
@@ -611,7 +798,7 @@ def _validate_topology_attestation(
             objects.append(ObjectIdentity(**record))
         except (TypeError, ValueError):
             raise EvidenceError("topology object identity is invalid") from None
-    expected_keys = tuple(sorted((*expected_object_keys(profile), ("v1", "Namespace", "", "kube-system"), ("apps/v1", "DaemonSet", "kube-system", "calico-node"), ("apps/v1", "Deployment", "kube-system", "calico-kube-controllers"))))
+    expected_keys = _EXPECTED_OBJECT_KEYS
     keys = tuple((item.api_version, item.kind, item.namespace, item.name) for item in objects)
     if tuple(sorted(objects)) != tuple(objects) or len(set(objects)) != len(objects) or keys != expected_keys:
         raise EvidenceError("topology object keys or ordering differ from the fixed inventory")
@@ -635,7 +822,7 @@ def _validate_pod_images(
     if type(value) is not list or len(value) != 17:
         raise EvidenceError("Pod image inventory cardinality is invalid")
     records: list[PodImageIdentity] = []
-    fields = frozenset({"image_role", "container_type", "namespace", "pod", "container", "uid", "resource_version", "image", "image_id", "ready"})
+    fields = frozenset({"image_role", "container_type", "namespace", "pod", "container", "uid", "resource_version", "image", "image_id", "ready", "container_id"})
     for raw in value:
         item = _closed_record("Pod image identity", raw, fields)
         if (
@@ -643,6 +830,8 @@ def _validate_pod_images(
             or _KUBERNETES_UID.fullmatch(item["uid"]) is None
             or type(item["resource_version"]) is not str
             or _RESOURCE_VERSION.fullmatch(item["resource_version"]) is None
+            or type(item["container_id"]) is not str
+            or re.fullmatch(r"(?:docker|containerd)://[0-9a-f]{64}", item["container_id"]) is None
         ):
             raise EvidenceError("Pod image runtime identity grammar is invalid")
         try:
@@ -751,12 +940,7 @@ def _validate_policy_attestation(value: object) -> dict[str, object]:
 
 
 def _trusted_expected_topology(profile: V3B2Profile) -> dict[str, object]:
-    object_keys = sorted((
-        *expected_object_keys(profile),
-        ("v1", "Namespace", "", "kube-system"),
-        ("apps/v1", "DaemonSet", "kube-system", "calico-node"),
-        ("apps/v1", "Deployment", "kube-system", "calico-kube-controllers"),
-    ))
+    object_keys = _EXPECTED_OBJECT_KEYS
     pod_image_keys = sorted((
         ("calico-cni", "init", "kube-system", "install-cni"),
         ("calico-cni", "init", "kube-system", "upgrade-ipam"),
@@ -962,7 +1146,7 @@ def _public_source_attestations(value: object) -> list[dict[str, object]]:
     for item in value:
         record = _closed_record("source attestation", item, _ATTESTATION_FIELDS)
         payload = b"".join(_canonical_bytes(member) for member in record["records"]) if type(record["records"]) is list else b""
-        result.append({"kind": record["kind"], "track": record["track"], "byte_count": len(payload), "sha256": sha256(payload).hexdigest()})
+        result.append({**record, "byte_count": len(payload), "sha256": sha256(payload).hexdigest()})
     return result
 
 
@@ -979,7 +1163,7 @@ _PUBLIC_KEYS_BY_PATH: Mapping[tuple[str, ...], frozenset[str]] = {
     ("topology_attestation", "pod_images", "*"): frozenset(
         {
             "image_role", "container_type", "namespace", "pod", "container",
-            "uid", "resource_version", "image", "image_id", "ready",
+            "uid", "resource_version", "image", "image_id", "ready", "container_id",
         }
     ),
     ("topology_attestation", "endpoints", "*"): frozenset(
@@ -1006,14 +1190,19 @@ _PUBLIC_KEYS_BY_PATH: Mapping[tuple[str, ...], frozenset[str]] = {
         }
     ),
     ("source_attestations", "*"): frozenset(
-        {"kind", "track", "byte_count", "sha256"}
+        _ATTESTATION_FIELDS | {"byte_count", "sha256"}
     ),
+    ("source_attestations", "*", "capture"): _CAPTURE_FIELDS,
+    ("source_attestations", "*", "capture", "raw_records", "*"): _AUTHZ_PRODUCER_FIELDS | _ENVOY_PRODUCER_FIELDS | _TARGET_PRODUCER_FIELDS | frozenset({
+        "status", "connect_monotonic_ns", "ready_monotonic_ns", "send_monotonic_ns", "receive_monotonic_ns", "response_status", "attempt_count", "retry_performed",
+    }),
+    ("source_attestations", "*", "records", "*"): _DRIVER_FIELDS | _DECISION_FIELDS | _ENVOY_FIELDS | _TARGET_FIELDS,
     ("foreign_profile_attestation",): frozenset({"before", "after", "unchanged"}),
     ("foreign_profile_attestation", "before", "*"): frozenset(
-        {"pseudonym", "status", "arch", "cpus", "memory", "disk", "runtime"}
+        {"pseudonym", "state_hmac_sha256", "status", "arch", "cpus", "memory", "disk", "runtime"}
     ),
     ("foreign_profile_attestation", "after", "*"): frozenset(
-        {"pseudonym", "status", "arch", "cpus", "memory", "disk", "runtime"}
+        {"pseudonym", "state_hmac_sha256", "status", "arch", "cpus", "memory", "disk", "runtime"}
     ),
     ("owned_teardown",): frozenset(
         {"cluster_absent", "profile_absent", "private_active_state_absent"}
@@ -1027,6 +1216,7 @@ _PUBLIC_DYNAMIC_STRING_PATHS = frozenset(
         ("topology_attestation", "pod_images", "*", "pod"),
         ("topology_attestation", "pod_images", "*", "uid"),
         ("topology_attestation", "pod_images", "*", "resource_version"),
+        ("topology_attestation", "pod_images", "*", "container_id"),
     }
 )
 _PUBLIC_REVIEWED_LIST_VALUE_PATHS = frozenset(
@@ -1111,13 +1301,14 @@ def validate_public_projection(
                 walk(child, depth + 1, (*path, "*"))
         elif type(member) is str:
             lowered = member.lower()
+            safe_route = path == ("source_attestations", "*", "capture", "raw_records", "*", "path") and member == "/consequential/admin"
             if (
                 member not in TRACKS
                 and any(token in lowered for token in _PRIVATE_TEXT)
-            ) or member.startswith("/") or any(
+            ) or (member.startswith("/") and not safe_route) or any(
                 pattern.search(member) is not None
                 for pattern in _HOST_PATH_PATTERNS
-            ) or _ABSOLUTE_POSIX_PATH.search(member) is not None:
+            ) or (_ABSOLUTE_POSIX_PATH.search(member) is not None and not safe_route):
                 raise PublicBoundaryError("public projection contains private material")
             try:
                 encoded = member.encode("utf-8")
@@ -1356,17 +1547,52 @@ def _prepare_private_diagnostic_parent(
 def publish_bundle(private: object, public_parent: Path) -> Path:
     """Build privately, verify semantically, then publish with one rename."""
     try:
-        return _publish_bundle(private, public_parent)
+        return publish_prepared(prepare_publication(private, public_parent))
     except EvidenceError:
         raise
     except (OSError, TypeError, ValueError, UnicodeError, RuntimeError):
         raise EvidenceError("publication inputs are invalid") from None
 
 
-def _publish_bundle(private: object, public_parent: Path) -> Path:
+def prepare_publication(private: object, public_parent: Path) -> PreparedPublication:
+    """Finalize immutable public bytes and identities without publishing them."""
     public = build_public_bundle(private)
+    parent = public_parent
+    if not isinstance(parent, Path) or not parent.is_absolute() or ".." in parent.parts:
+        raise EvidenceError("public parent must be an absolute normalized path")
+    artifacts = _artifacts(public)
+    public["public_commitment_sha256"] = _public_commitment(public, artifacts)
+    validate_public_projection(public)
+    payloads = {"manifest.json": _canonical_bytes(public), **artifacts}
+    sums = "".join(f"{sha256(payloads[name]).hexdigest()}  {name}\n" for name in sorted(payloads)).encode("ascii")
+    payloads["SHA256SUMS"] = sums
+    ordered = tuple((name, payloads[name]) for name in sorted(payloads))
+    file_sha256 = tuple((name, sha256(payload).hexdigest()) for name, payload in ordered)
+    manifest = private if type(private) is dict else {}
+    content = manifest.get("content_identities") if type(manifest) is dict else None
+    if type(content) is not dict:
+        raise EvidenceError("prepared publication content identity is invalid")
+    return PreparedPublication(
+        parent, parent / str(public["run_id"]), str(public["run_id"]),
+        str(public["source_commit"]), str(public["profile_sha256"]),
+        _canonical_bytes(private),
+        sha256(_canonical_bytes(content)).hexdigest(),
+        str(public["public_commitment_sha256"]),
+        sha256(_canonical_bytes(dict(file_sha256))).hexdigest(),
+        file_sha256, ordered,
+    )
+
+
+def publish_prepared(prepared: PreparedPublication) -> Path:
+    """Revalidate and atomically publish one exact prepared byte tree."""
+    if type(prepared) is not PreparedPublication:
+        raise EvidenceError("prepared publication type is invalid")
+    prepared.__post_init__()
+    payloads = dict(prepared.payloads)
+    _verify_sums(payloads, set(PUBLIC_FILES))
+    public_parent = prepared.parent
     parent, parent_fd, parent_identity = _prepare_public_parent(public_parent)
-    run_id = str(public["run_id"])
+    run_id = prepared.run_id
     destination = parent / run_id
     if _entry_exists(parent_fd, run_id):
         os.close(parent_fd)
@@ -1382,14 +1608,8 @@ def _publish_bundle(private: object, public_parent: Path) -> Path:
             parent_fd, staging_name, "private publication staging"
         )
         staging_identity = _directory_identity(os.fstat(staging_fd))
-        artifacts = _artifacts(public)
-        public["public_commitment_sha256"] = _public_commitment(public, artifacts)
-        validate_public_projection(public)
-        payloads = {"manifest.json": _canonical_bytes(public), **artifacts}
         for name in sorted(payloads):
             _write_regular_at(staging_fd, name, payloads[name])
-        sums = "".join(f"{sha256(payloads[name]).hexdigest()}  {name}\n" for name in sorted(payloads)).encode("ascii")
-        _write_regular_at(staging_fd, "SHA256SUMS", sums)
         os.fsync(staging_fd)
         staged_payloads = _read_tree_fd(staging_fd, set(PUBLIC_FILES))
         _verify_sums(staged_payloads, set(PUBLIC_FILES))
@@ -1617,19 +1837,19 @@ def _verify_v3b2(payloads: Mapping[str, bytes]) -> VerifiedBundle:
         if got != wanted or len(joins) != 3:
             raise EvidenceError("public nominal tuple is invalid")
         _verify_nominal_public_records(parsed, requests, joins)
-        _verify_public_source_attestations(value.get("source_attestations"), parsed)
+        _verify_public_source_attestations(value.get("source_attestations"), parsed, run_id=value["run_id"], topology=value["topology_attestation"])
         if value.get("global_context_unchanged") is not True or value["foreign_profile_attestation"]["unchanged"] is not True:  # type: ignore[index]
             raise EvidenceError("nominal bundle foreign state is not unchanged")
     elif result_class == REQUEST_FREE_RESULT_CLASS:
-        if requests or joins or value.get("source_attestations") != []:
+        if requests or joins:
             raise EvidenceError("request-free bundle contains requests or joins")
+        _verify_public_source_attestations(value.get("source_attestations"), parsed, run_id=value["run_id"], topology=value["topology_attestation"])
         if value.get("global_context_unchanged") is not True or value["foreign_profile_attestation"]["unchanged"] is not True:  # type: ignore[index]
             raise EvidenceError("request-free bundle foreign state is not unchanged")
     elif result_class == "diagnostic_foreign_state_mismatch":
         if (
             requests
             or joins
-            or value.get("source_attestations") != []
             or any(parsed[name] for name in (
                 "requests.jsonl", "decisions.jsonl", "envoy.jsonl",
                 "targets.jsonl", "joins.jsonl",
@@ -1637,6 +1857,7 @@ def _verify_v3b2(payloads: Mapping[str, bytes]) -> VerifiedBundle:
             or value.get("foreign_profile_attestation", {}).get("unchanged") is not False  # type: ignore[union-attr]
         ):
             raise EvidenceError("foreign mismatch diagnostic is invalid")
+        _verify_public_source_attestations(value.get("source_attestations"), parsed, run_id=value["run_id"], topology=value["topology_attestation"])
     else:
         raise EvidenceError("public result class is invalid")
     # Only render after every manifest list and member has passed its exact
@@ -1662,25 +1883,24 @@ def _verify_foreign_projection(value: object) -> None:
     )
     if type(record["before"]) is not list or type(record["after"]) is not list or type(record["unchanged"]) is not bool:
         raise EvidenceError("foreign profile attestation types are invalid")
-    fields = frozenset({"pseudonym", "status", "arch", "cpus", "memory", "disk", "runtime"})
+    fields = frozenset({"pseudonym", "state_hmac_sha256", "status", "arch", "cpus", "memory", "disk", "runtime"})
     for side in (record["before"], record["after"]):
+        if len(side) > MAX_FOREIGN_RECORDS:
+            raise EvidenceError('foreign profile projection exceeds record bound')
         pseudonyms: list[str] = []
         for raw in side:
             item = _closed_record("foreign profile projection", raw, fields)
             pseudonym = item["pseudonym"]
             if type(pseudonym) is not str or _HEX64.fullmatch(pseudonym) is None:
                 raise EvidenceError("foreign profile pseudonym is invalid")
-            if type(item["status"]) is not str or item["status"] not in {"Running", "Stopped"}:
-                raise EvidenceError("foreign profile projected status is invalid")
-            if any(type(item[name]) is not int or item[name] < 0 for name in ("cpus", "memory", "disk")):
-                raise EvidenceError("foreign profile projected resources are invalid")
-            if (
-                type(item["arch"]) is not str
-                or item["arch"] not in _FOREIGN_ARCHES
-                or type(item["runtime"]) is not str
-                or item["runtime"] not in _FOREIGN_RUNTIMES
-            ):
-                raise EvidenceError("foreign profile projected resource text is invalid")
+            # Public verification checks the keyed commitment's syntax and
+            # equality only. The private key and address are never published.
+            if type(item['state_hmac_sha256']) is not str or _HEX64.fullmatch(item['state_hmac_sha256']) is None:
+                raise EvidenceError('foreign profile state commitment is invalid')
+            try:
+                validate_resources(item)
+            except ValueError:
+                raise EvidenceError('foreign profile projected resources are invalid') from None
             pseudonyms.append(pseudonym)
         if pseudonyms != sorted(pseudonyms) or len(pseudonyms) != len(set(pseudonyms)):
             raise EvidenceError("foreign profile projections are not unique and sorted")
@@ -1689,7 +1909,7 @@ def _verify_foreign_projection(value: object) -> None:
 
 
 def _verify_public_source_attestations(
-    attestations: object, parsed: Mapping[str, list[dict[str, object]]]
+    attestations: object, parsed: Mapping[str, list[dict[str, object]]], *, run_id: str, topology: object,
 ) -> None:
     if type(attestations) is not list or len(attestations) != 12:
         raise EvidenceError("public source attestation cardinality is invalid")
@@ -1705,13 +1925,17 @@ def _verify_public_source_attestations(
         record = _closed_record(
             "public source attestation",
             raw,
-            frozenset({"kind", "track", "byte_count", "sha256"}),
+            _ATTESTATION_FIELDS | {"byte_count", "sha256"},
         )
         kind, track = record["kind"], record["track"]
         observed_pairs.append((kind, track))
         if type(kind) is not str or kind not in file_for_kind or type(track) is not str or track not in TRACKS:
             raise EvidenceError("public source attestation identity is invalid")
         selected = [item for item in parsed[file_for_kind[kind]] if item.get("track") == track]
+        if kind == "driver":
+            selected = [{key: value for key, value in item.items() if key != "target_markers"} for item in selected]
+        if record["records"] != selected:
+            raise EvidenceError("public source projection differs from its artifact")
         payload = b"".join(_canonical_bytes(item) for item in selected)
         if (
             type(record.get("byte_count")) is not int
@@ -1722,6 +1946,8 @@ def _verify_public_source_attestations(
             raise EvidenceError("public source attestation does not bind its records")
     if observed_pairs != expected_pairs:
         raise EvidenceError("public source attestations are not in canonical order")
+    _records({"run_id": run_id, "runtime_identities": {"topology_attestation": topology},
+              "source_attestations": [{key: value for key, value in row.items() if key in _ATTESTATION_FIELDS} for row in attestations]})
 
 
 def _verify_nominal_public_records(
@@ -1799,6 +2025,45 @@ def verify_bundle(path: Path, *, before_completion: Callable[[], None] | None = 
         RecursionError,
     ):
         raise EvidenceError("bundle verification failed closed") from None
+
+
+def verify_publication_identity(
+    path: Path,
+    *,
+    run_id: str,
+    public_commitment: str,
+    tree_commitment: str,
+) -> VerifiedBundle:
+    """Verify one exact final destination and its journal-bound public byte tree."""
+    if (
+        not isinstance(path, Path)
+        or not path.is_absolute()
+        or ".." in path.parts
+        or path.name != run_id
+        or _V3B2_RUN.fullmatch(run_id) is None
+        or _HEX64.fullmatch(public_commitment) is None
+        or _HEX64.fullmatch(tree_commitment) is None
+    ):
+        raise EvidenceError("publication identity is invalid")
+    bundle, directory_fd, identity = _open_directory_anchor(path, "evidence bundle")
+    try:
+        payloads = _read_tree_fd(directory_fd, set(PUBLIC_FILES))
+        _verify_sums(payloads, set(PUBLIC_FILES))
+        verified = _verify_v3b2(payloads)
+        file_sha256 = tuple(
+            (name, sha256(payloads[name]).hexdigest()) for name in sorted(payloads)
+        )
+        actual_tree = sha256(_canonical_bytes(dict(file_sha256))).hexdigest()
+        if (
+            verified.run_id != run_id
+            or verified.public_commitment != public_commitment
+            or actual_tree != tree_commitment
+        ):
+            raise EvidenceError("publication identity differs from journal authority")
+        _assert_anchor_path(bundle, identity, "evidence bundle")
+        return verified
+    finally:
+        os.close(directory_fd)
 
 
 def _verify_bundle(path: Path, *, before_completion: Callable[[], None] | None = None) -> VerifiedBundle:

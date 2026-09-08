@@ -48,6 +48,8 @@ def _project(value: object) -> object:
             "result_tuple": value.result_tuple,
             "instructions_sent": value.instructions_sent,
             "owned_teardown": value.owned_teardown,
+            "bundle": value.bundle,
+            "public_commitment": value.public_commitment,
         }
     return value
 

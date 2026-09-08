@@ -6,7 +6,7 @@
 <title>V3B-2 Kind/Calico Cluster Validation Design</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/specs/2026-09-06-v3b2-kind-calico-validation-design.md">
-<meta name="source-sha256" content="bfcd6bab34e6cab2063c8f68a29658f495a2926a46798c7695b11778c6cc93c7">
+<meta name="source-sha256" content="d4149be82fbbca7aa8d80d36d833addf6a8536c37b8d39777105af2bce685f1f">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,14 +55,14 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-09-06-v3b2-kind-calico-validation-design.md</code> (<code>bfcd6bab34e6cab2063c8f68a29658f495a2926a46798c7695b11778c6cc93c7</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-09-06-v3b2-kind-calico-validation-design.md</code> (<code>d4149be82fbbca7aa8d80d36d833addf6a8536c37b8d39777105af2bce685f1f</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">V3B-2 Kind/Calico Cluster Validation Design</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-09-06-v3b2-kind-calico-validation-design.md</code> (<code>bfcd6bab34e6cab2063c8f68a29658f495a2926a46798c7695b11778c6cc93c7</code>); edit the Markdown source, not this reader.</p></div>
-<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-2-kind-calico-cluster-validation-design">V3B-2 Kind/Calico Cluster Validation Design</a></li><li class="level-2"><a href="#1-decision-and-purpose">1. Decision and purpose</a></li><li class="level-2"><a href="#2-scope-and-non-goals">2. Scope and non-goals</a></li><li class="level-2"><a href="#3-environment-and-ownership-boundary">3. Environment and ownership boundary</a></li><li class="level-2"><a href="#4-cluster-topology">4. Cluster topology</a></li><li class="level-2"><a href="#5-networkpolicy-contract">5. NetworkPolicy contract</a></li><li class="level-2"><a href="#6-consequential-request-flow">6. Consequential request flow</a></li><li class="level-2"><a href="#7-v3b-2a-evidence-contract">7. V3B-2a evidence contract</a></li><li class="level-2"><a href="#8-v3b-2a-acceptance-and-claims">8. V3B-2a acceptance and claims</a></li><li class="level-2"><a href="#9-v3b-2b-failure-matrix">9. V3B-2b failure matrix</a></li><li class="level-3"><a href="#9-1-policy-isolation-probes">9.1 Policy-isolation probes</a></li><li class="level-3"><a href="#9-2-state-and-authority-failures">9.2 State and authority failures</a></li><li class="level-3"><a href="#9-3-availability-and-evidence-failures">9.3 Availability and evidence failures</a></li><li class="level-2"><a href="#10-failure-and-recovery-behavior">10. Failure and recovery behavior</a></li><li class="level-2"><a href="#11-teardown-and-publication-order">11. Teardown and publication order</a></li><li class="level-2"><a href="#12-test-strategy-and-implementation-gates">12. Test strategy and implementation gates</a></li><li class="level-2"><a href="#13-v3b-2b-campaign-acceptance">13. V3B-2b campaign acceptance</a></li><li class="level-2"><a href="#14-relationship-to-v3c">14. Relationship to V3C</a></li><li class="level-2"><a href="#15-design-acceptance-summary">15. Design acceptance summary</a></li></ol></nav></details><div class="reader-layout">
-<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-2-kind-calico-cluster-validation-design" href="#v3b-2-kind-calico-cluster-validation-design">V3B-2 Kind/Calico Cluster Validation Design</a></li><li class="level-2"><a data-section-id="1-decision-and-purpose" href="#1-decision-and-purpose">1. Decision and purpose</a></li><li class="level-2"><a data-section-id="2-scope-and-non-goals" href="#2-scope-and-non-goals">2. Scope and non-goals</a></li><li class="level-2"><a data-section-id="3-environment-and-ownership-boundary" href="#3-environment-and-ownership-boundary">3. Environment and ownership boundary</a></li><li class="level-2"><a data-section-id="4-cluster-topology" href="#4-cluster-topology">4. Cluster topology</a></li><li class="level-2"><a data-section-id="5-networkpolicy-contract" href="#5-networkpolicy-contract">5. NetworkPolicy contract</a></li><li class="level-2"><a data-section-id="6-consequential-request-flow" href="#6-consequential-request-flow">6. Consequential request flow</a></li><li class="level-2"><a data-section-id="7-v3b-2a-evidence-contract" href="#7-v3b-2a-evidence-contract">7. V3B-2a evidence contract</a></li><li class="level-2"><a data-section-id="8-v3b-2a-acceptance-and-claims" href="#8-v3b-2a-acceptance-and-claims">8. V3B-2a acceptance and claims</a></li><li class="level-2"><a data-section-id="9-v3b-2b-failure-matrix" href="#9-v3b-2b-failure-matrix">9. V3B-2b failure matrix</a></li><li class="level-3"><a data-section-id="9-1-policy-isolation-probes" href="#9-1-policy-isolation-probes">9.1 Policy-isolation probes</a></li><li class="level-3"><a data-section-id="9-2-state-and-authority-failures" href="#9-2-state-and-authority-failures">9.2 State and authority failures</a></li><li class="level-3"><a data-section-id="9-3-availability-and-evidence-failures" href="#9-3-availability-and-evidence-failures">9.3 Availability and evidence failures</a></li><li class="level-2"><a data-section-id="10-failure-and-recovery-behavior" href="#10-failure-and-recovery-behavior">10. Failure and recovery behavior</a></li><li class="level-2"><a data-section-id="11-teardown-and-publication-order" href="#11-teardown-and-publication-order">11. Teardown and publication order</a></li><li class="level-2"><a data-section-id="12-test-strategy-and-implementation-gates" href="#12-test-strategy-and-implementation-gates">12. Test strategy and implementation gates</a></li><li class="level-2"><a data-section-id="13-v3b-2b-campaign-acceptance" href="#13-v3b-2b-campaign-acceptance">13. V3B-2b campaign acceptance</a></li><li class="level-2"><a data-section-id="14-relationship-to-v3c" href="#14-relationship-to-v3c">14. Relationship to V3C</a></li><li class="level-2"><a data-section-id="15-design-acceptance-summary" href="#15-design-acceptance-summary">15. Design acceptance summary</a></li></ol></nav>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-09-06-v3b2-kind-calico-validation-design.md</code> (<code>d4149be82fbbca7aa8d80d36d833addf6a8536c37b8d39777105af2bce685f1f</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-2-kind-calico-cluster-validation-design">V3B-2 Kind/Calico Cluster Validation Design</a></li><li class="level-2"><a href="#1-decision-and-purpose">1. Decision and purpose</a></li><li class="level-2"><a href="#2-scope-and-non-goals">2. Scope and non-goals</a></li><li class="level-2"><a href="#3-environment-and-ownership-boundary">3. Environment and ownership boundary</a></li><li class="level-2"><a href="#4-cluster-topology">4. Cluster topology</a></li><li class="level-2"><a href="#5-networkpolicy-contract">5. NetworkPolicy contract</a></li><li class="level-2"><a href="#6-consequential-request-flow">6. Consequential request flow</a></li><li class="level-2"><a href="#7-v3b-2a-evidence-contract">7. V3B-2a evidence contract</a></li><li class="level-3"><a href="#approved-lifecycle-mode-amendment">Approved lifecycle-mode amendment</a></li><li class="level-2"><a href="#8-v3b-2a-acceptance-and-claims">8. V3B-2a acceptance and claims</a></li><li class="level-2"><a href="#9-v3b-2b-failure-matrix">9. V3B-2b failure matrix</a></li><li class="level-3"><a href="#9-1-policy-isolation-probes">9.1 Policy-isolation probes</a></li><li class="level-3"><a href="#9-2-state-and-authority-failures">9.2 State and authority failures</a></li><li class="level-3"><a href="#9-3-availability-and-evidence-failures">9.3 Availability and evidence failures</a></li><li class="level-2"><a href="#10-failure-and-recovery-behavior">10. Failure and recovery behavior</a></li><li class="level-2"><a href="#11-teardown-and-publication-order">11. Teardown and publication order</a></li><li class="level-2"><a href="#12-test-strategy-and-implementation-gates">12. Test strategy and implementation gates</a></li><li class="level-2"><a href="#13-v3b-2b-campaign-acceptance">13. V3B-2b campaign acceptance</a></li><li class="level-2"><a href="#14-relationship-to-v3c">14. Relationship to V3C</a></li><li class="level-2"><a href="#15-design-acceptance-summary">15. Design acceptance summary</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-2-kind-calico-cluster-validation-design" href="#v3b-2-kind-calico-cluster-validation-design">V3B-2 Kind/Calico Cluster Validation Design</a></li><li class="level-2"><a data-section-id="1-decision-and-purpose" href="#1-decision-and-purpose">1. Decision and purpose</a></li><li class="level-2"><a data-section-id="2-scope-and-non-goals" href="#2-scope-and-non-goals">2. Scope and non-goals</a></li><li class="level-2"><a data-section-id="3-environment-and-ownership-boundary" href="#3-environment-and-ownership-boundary">3. Environment and ownership boundary</a></li><li class="level-2"><a data-section-id="4-cluster-topology" href="#4-cluster-topology">4. Cluster topology</a></li><li class="level-2"><a data-section-id="5-networkpolicy-contract" href="#5-networkpolicy-contract">5. NetworkPolicy contract</a></li><li class="level-2"><a data-section-id="6-consequential-request-flow" href="#6-consequential-request-flow">6. Consequential request flow</a></li><li class="level-2"><a data-section-id="7-v3b-2a-evidence-contract" href="#7-v3b-2a-evidence-contract">7. V3B-2a evidence contract</a></li><li class="level-3"><a data-section-id="approved-lifecycle-mode-amendment" href="#approved-lifecycle-mode-amendment">Approved lifecycle-mode amendment</a></li><li class="level-2"><a data-section-id="8-v3b-2a-acceptance-and-claims" href="#8-v3b-2a-acceptance-and-claims">8. V3B-2a acceptance and claims</a></li><li class="level-2"><a data-section-id="9-v3b-2b-failure-matrix" href="#9-v3b-2b-failure-matrix">9. V3B-2b failure matrix</a></li><li class="level-3"><a data-section-id="9-1-policy-isolation-probes" href="#9-1-policy-isolation-probes">9.1 Policy-isolation probes</a></li><li class="level-3"><a data-section-id="9-2-state-and-authority-failures" href="#9-2-state-and-authority-failures">9.2 State and authority failures</a></li><li class="level-3"><a data-section-id="9-3-availability-and-evidence-failures" href="#9-3-availability-and-evidence-failures">9.3 Availability and evidence failures</a></li><li class="level-2"><a data-section-id="10-failure-and-recovery-behavior" href="#10-failure-and-recovery-behavior">10. Failure and recovery behavior</a></li><li class="level-2"><a data-section-id="11-teardown-and-publication-order" href="#11-teardown-and-publication-order">11. Teardown and publication order</a></li><li class="level-2"><a data-section-id="12-test-strategy-and-implementation-gates" href="#12-test-strategy-and-implementation-gates">12. Test strategy and implementation gates</a></li><li class="level-2"><a data-section-id="13-v3b-2b-campaign-acceptance" href="#13-v3b-2b-campaign-acceptance">13. V3B-2b campaign acceptance</a></li><li class="level-2"><a data-section-id="14-relationship-to-v3c" href="#14-relationship-to-v3c">14. Relationship to V3C</a></li><li class="level-2"><a data-section-id="15-design-acceptance-summary" href="#15-design-acceptance-summary">15. Design acceptance summary</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
 <h1 id="v3b-2-kind-calico-cluster-validation-design">V3B-2 Kind/Calico Cluster Validation Design</h1>
 <p><strong>Date:</strong> 2026-09-06</p>
@@ -126,6 +126,17 @@ and verifier dispatch remain independently readable.</p>
 and may create or delete only that exact cluster through journal-bound commands.
 Every other Colima profile, Docker context, Kind cluster, and Kubernetes context
 is foreign state and must remain untouched.</p>
+<p>The dedicated VM retains the accepted V3B-1 resource configuration: 4 CPUs,
+8 GiB memory, 60 GiB data disk, <code>aarch64</code>, Docker, and <code>vz</code>. Start commands
+explicitly disable runtime-context activation, SSH-config generation, template
+inheritance, agent forwarding, emulation, and Colima's embedded Kubernetes.
+They retain the restricted shared-network settings. V3B-2 transfers content
+through bound command input streams and needs no host filesystem mount, so
+<code>--mount none</code> is explicit and saved configuration must attest an empty mount
+set. Bare profile-only startup is not permitted. These are deterministic
+isolation settings, not a request to resize or alter any foreign VM. Colima's
+<a href="https://github.com/abiosoft/colima/blob/v0.10.3/cmd/start.go">pinned start implementation</a>
+defaults to context activation and SSH configuration unless explicitly disabled.</p>
 <p>Before any mutation, preflight must:</p>
 <ol>
 <li>prove source is the exact reviewed, merged, synchronized public <code>main</code>;</li>
@@ -213,7 +224,7 @@ fragments, current-context authority, or discovery-selected deletion targets.</p
 <h2 id="7-v3b-2a-evidence-contract">7. V3B-2a evidence contract</h2>
 <p>The private manifest and journal bind, before mutation or request as applicable:</p>
 <ul>
-<li>source commit, execution nonce, run identity, and phase;</li>
+<li>source commit, execution nonce, run identity, lifecycle mode, and phase;</li>
 <li>locked tool hashes and versions;</li>
 <li>Colima profile and Kind cluster configuration digests;</li>
 <li>node image, Calico manifest, Envoy image, and KIL image digests;</li>
@@ -243,6 +254,36 @@ only through pseudonymous before/after attestations.</p>
 V3B-2 campaign schemas explicitly and rejects hybrid field sets. The
 implementation plan must enumerate each closed field set and its validator
 before runtime code is written.</p>
+<h3 id="approved-lifecycle-mode-amendment">Approved lifecycle-mode amendment</h3>
+<p>The V3B-2 journal binds exactly one <code>lifecycle_mode</code>, either <code>request-free</code> or
+<code>nominal</code>, before the first owned mutation. Request-free history may start and
+cancel all three waiting drivers without recording a request intent or result;
+nominal history retains the fixed per-track start, request-intent, single-send,
+and result sequence. Events from the two modes cannot be combined. This field
+is part of the closed <code>kil.v3b2-journal.v1</code> schema and is required for recovery
+to distinguish zero-request readiness evidence from a stranded nominal request.</p>
+<p>Mutation intents terminate as <code>complete</code> only after their exact postcondition is
+attested. A closed <code>failed</code> event is permitted only when a bound observation
+proves that the mutation did not occur. If a non-request mutation may be partial
+or uncertain after exact ownership has already been established, an
+<code>abandoned_for_teardown</code> event may supersede it without claiming success. That
+transition permanently forbids forward execution and promotion and authorizes
+only bounded diagnostic capture, exact journal-bound teardown, absence proofs,
+foreign-state comparison, and nonpromotable failure publication. Ambiguous
+ownership requires manual recovery. Request intents use their existing
+nonreplayable stranded-request freeze path and cannot use this transition.</p>
+<p>The journal's required <code>teardown_from_sequence</code> field is initially null. Once
+set to the first teardown-only sequence, it is immutable and applies to command
+authorization as well as event validation. Every non-request terminal binds an
+<code>observed_proof_sha256</code> for a durable private observation bundle written before
+that terminal. Normal execution and recovery use the same operation-specific
+validator over independently committed expected inputs and actual bounded
+observations. No command exit status alone establishes completion or absence.</p>
+<p>Before mutation, the journal's required <code>expected_inputs_sha256</code> binds private
+immutable <code>expected-inputs.json</code>: reviewed configuration/content, fixed paths,
+and foreign baseline. Runtime incarnation bindings come only from previously
+validated durable proofs. Recovery rejects a journal missing this commitment
+rather than deriving an expectation from the resource it is meant to validate.</p>
 <h2 id="8-v3b-2a-acceptance-and-claims">8. V3B-2a acceptance and claims</h2>
 <p>V3B-2a is accepted only when:</p>
 <ol>
@@ -360,6 +401,28 @@ not attempt restoration.</p>
 </ol>
 <p>No result is publicly presentable before exact owned teardown and foreign-state
 comparison complete.</p>
+<p>Cancellation and quiescence must preserve the sources required by Step 3.
+Deleting a driver Pod or scaling an Envoy Deployment to zero before its source
+is frozen does not satisfy this order. A source-preserving control operation
+must be separately journaled, bound to the existing workload identity, and
+unable to transmit a consequential instruction. Capture reads the actual
+authorization and target ledger files, not empty process stdout. The source
+identity is re-observed at capture time and must remain stable across the
+bounded read; a legitimate earlier Pod resource-version change is not itself
+replacement, while changed Pod UID or container incarnation is rejected.</p>
+<p>The V3B-2 implementation uses EOF-only cancellation for waiting drivers:
+an explicitly classified control attach carries zero stdin bytes, never a
+request instruction, and must leave the original Pod/container terminated
+successfully with its logs retained. Envoy receives a V3B-2-only admin listener
+on <code>127.0.0.1:9901</code>, with no Service, host port, or external binding. Plain
+<code>POST /drain_listeners</code> stops the application listeners without stopping the
+process in the <a href="https://raw.githubusercontent.com/envoyproxy/envoy/v1.39.1/source/server/admin/listeners_handler.cc">pinned Envoy implementation</a>.
+Its response alone is not proof of quiescence: the controller must attest the
+same workload identity, refusal of new connections on port 8080, and zero
+relevant active-connection/request gauges before freezing. Admin traffic is
+control-plane traffic, not a consequential application request. Admin access
+logging is disabled and Envoy operational diagnostics go to a separate private
+file so application access-record stdout is not mixed with startup messages.</p>
 <h2 id="12-test-strategy-and-implementation-gates">12. Test strategy and implementation gates</h2>
 <p>Implementation is test-first and ordered:</p>
 <ol>

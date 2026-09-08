@@ -71,6 +71,9 @@ JOURNAL_FIELDS = frozenset(
         "foreign_profiles_before",
         "expected_objects",
         "lifecycle_mode",
+        "teardown_from_sequence",
+        "profile_start_refused_sequence",
+        "expected_inputs_sha256",
         "owned_identity",
         "events",
     }

@@ -73,6 +73,18 @@ and may create or delete only that exact cluster through journal-bound commands.
 Every other Colima profile, Docker context, Kind cluster, and Kubernetes context
 is foreign state and must remain untouched.
 
+The dedicated VM retains the accepted V3B-1 resource configuration: 4 CPUs,
+8 GiB memory, 60 GiB data disk, `aarch64`, Docker, and `vz`. Start commands
+explicitly disable runtime-context activation, SSH-config generation, template
+inheritance, agent forwarding, emulation, and Colima's embedded Kubernetes.
+They retain the restricted shared-network settings. V3B-2 transfers content
+through bound command input streams and needs no host filesystem mount, so
+`--mount none` is explicit and saved configuration must attest an empty mount
+set. Bare profile-only startup is not permitted. These are deterministic
+isolation settings, not a request to resize or alter any foreign VM. Colima's
+[pinned start implementation](https://github.com/abiosoft/colima/blob/v0.10.3/cmd/start.go)
+defaults to context activation and SSH configuration unless explicitly disabled.
+
 Before any mutation, preflight must:
 
 1. prove source is the exact reviewed, merged, synchronized public `main`;
@@ -216,6 +228,31 @@ and result sequence. Events from the two modes cannot be combined. This field
 is part of the closed `kil.v3b2-journal.v1` schema and is required for recovery
 to distinguish zero-request readiness evidence from a stranded nominal request.
 
+Mutation intents terminate as `complete` only after their exact postcondition is
+attested. A closed `failed` event is permitted only when a bound observation
+proves that the mutation did not occur. If a non-request mutation may be partial
+or uncertain after exact ownership has already been established, an
+`abandoned_for_teardown` event may supersede it without claiming success. That
+transition permanently forbids forward execution and promotion and authorizes
+only bounded diagnostic capture, exact journal-bound teardown, absence proofs,
+foreign-state comparison, and nonpromotable failure publication. Ambiguous
+ownership requires manual recovery. Request intents use their existing
+nonreplayable stranded-request freeze path and cannot use this transition.
+
+The journal's required `teardown_from_sequence` field is initially null. Once
+set to the first teardown-only sequence, it is immutable and applies to command
+authorization as well as event validation. Every non-request terminal binds an
+`observed_proof_sha256` for a durable private observation bundle written before
+that terminal. Normal execution and recovery use the same operation-specific
+validator over independently committed expected inputs and actual bounded
+observations. No command exit status alone establishes completion or absence.
+
+Before mutation, the journal's required `expected_inputs_sha256` binds private
+immutable `expected-inputs.json`: reviewed configuration/content, fixed paths,
+and foreign baseline. Runtime incarnation bindings come only from previously
+validated durable proofs. Recovery rejects a journal missing this commitment
+rather than deriving an expectation from the resource it is meant to validate.
+
 ## 8. V3B-2a acceptance and claims
 
 V3B-2a is accepted only when:
@@ -346,6 +383,30 @@ The controller must:
 
 No result is publicly presentable before exact owned teardown and foreign-state
 comparison complete.
+
+Cancellation and quiescence must preserve the sources required by Step 3.
+Deleting a driver Pod or scaling an Envoy Deployment to zero before its source
+is frozen does not satisfy this order. A source-preserving control operation
+must be separately journaled, bound to the existing workload identity, and
+unable to transmit a consequential instruction. Capture reads the actual
+authorization and target ledger files, not empty process stdout. The source
+identity is re-observed at capture time and must remain stable across the
+bounded read; a legitimate earlier Pod resource-version change is not itself
+replacement, while changed Pod UID or container incarnation is rejected.
+
+The V3B-2 implementation uses EOF-only cancellation for waiting drivers:
+an explicitly classified control attach carries zero stdin bytes, never a
+request instruction, and must leave the original Pod/container terminated
+successfully with its logs retained. Envoy receives a V3B-2-only admin listener
+on `127.0.0.1:9901`, with no Service, host port, or external binding. Plain
+`POST /drain_listeners` stops the application listeners without stopping the
+process in the [pinned Envoy implementation](https://raw.githubusercontent.com/envoyproxy/envoy/v1.39.1/source/server/admin/listeners_handler.cc).
+Its response alone is not proof of quiescence: the controller must attest the
+same workload identity, refusal of new connections on port 8080, and zero
+relevant active-connection/request gauges before freezing. Admin traffic is
+control-plane traffic, not a consequential application request. Admin access
+logging is disabled and Envoy operational diagnostics go to a separate private
+file so application access-record stdout is not mixed with startup messages.
 
 ## 12. Test strategy and implementation gates
 

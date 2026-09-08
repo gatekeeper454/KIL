@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import asdict, FrozenInstanceError
+from dataclasses import asdict, FrozenInstanceError, replace
 from hashlib import sha256
 import json
 import os
@@ -24,6 +24,7 @@ from kil.v3b2_evidence import (
     CLAIM_EXCLUSIONS,
     CapturedSource,
     EvidenceError,
+    PreparedPublication,
     PublicBoundaryError,
     SourceIdentity,
     VerifiedBundle,
@@ -31,9 +32,12 @@ from kil.v3b2_evidence import (
     capture_source,
     join_nominal_evidence,
     project_foreign_profiles,
+    prepare_publication,
     publish_bundle,
+    publish_prepared,
     validate_public_projection,
     verify_bundle,
+    verify_publication_identity,
 )
 
 
@@ -52,6 +56,33 @@ def canonical(value: object) -> bytes:
 
 def stat_mode(path: Path) -> int:
     return os.stat(path, follow_symlinks=False).st_mode & 0o777
+
+
+def producer_records(track: str, run_id: str, *, request_free: bool = False) -> dict[str, list[dict[str, object]]]:
+    """Wire-format observations emitted by the four existing producers."""
+    from kil.v3b1_request_driver import readiness_record
+    decision = "deny" if track == TRACKS[2] else "permit"
+    status = 403 if decision == "deny" else 200
+    digest = sha256(f"{track}:{decision}".encode()).hexdigest()
+    records = {"driver": [readiness_record(track, 1, 2)], "decision": [], "envoy": [], "target": []}
+    if request_free:
+        return records
+    records["driver"].append({"schema_version": "kil.v3b1-driver-result.v1", "track": track,
+        "status": "complete", "connect_monotonic_ns": 1, "send_monotonic_ns": 3,
+        "receive_monotonic_ns": 4, "response_status": status, "decision_digest": digest,
+        "attempt_count": 1, "retry_performed": False})
+    records["decision"] = [{"schema_version": "kil.v3b-authz-record.v1", "request_id": "v3b1-central-request",
+        "track": track, "method": "POST", "path": "/consequential/admin", "outcome": decision,
+        "http_status": status, "decision_digest": digest, "adapter_reasons": [],
+        "engine_reasons": [], "untrusted_header_names": [], "monotonic_ns": 3}]
+    records["envoy"] = [{"run_id": "v3b1-" + run_id.removeprefix("v3b2-"), "request_id": "v3b1-central-request",
+        "track": track, "response_code": str(status), "upstream_host": "-" if decision == "deny" else "10.244.0.8:8080",
+        "upstream_service_time": "-" if decision == "deny" else "1", "decision_digest": digest}]
+    if decision == "permit":
+        records["target"] = [{"schema_version": "kil.v3b-target-record.v1", "run_id": run_id,
+            "request_id": "v3b1-central-request", "track": track, "path": "/consequential/admin",
+            "decision_digest": digest, "received_monotonic_ns": 3, "response_monotonic_ns": 4}]
+    return records
 
 
 class Reader:
@@ -131,16 +162,24 @@ def private_evidence(*, request_free: bool = False) -> dict[str, object]:
             )
             image["uid"] = bound["uid"]
             image["resource_version"] = bound["resource_version"]
+    if request_free:
+        attestations = [{"kind": kind, "track": track, "records": []}
+                        for track in TRACKS for kind in ("driver", "decision", "envoy", "target")]
+    from kil.v3b2_contracts import TRACK_NAMESPACES
+    for attestation in attestations:
+        track, kind = attestation["track"], attestation["kind"]
+        role = {"driver": "driver", "decision": "authz", "envoy": "envoy", "target": "target"}[kind]
+        source = next(row for row in image_rows if row["namespace"] == dict(TRACK_NAMESPACES)[track] and row["container"] == role)
+        raw = producer_records(track, RUN_ID, request_free=request_free)[kind]
+        payload = b"".join(canonical(row) for row in raw)
+        attestation["capture"] = {**{key: source[key] for key in ("namespace", "pod", "container", "uid", "resource_version", "container_id")},
+                                  "byte_count": len(payload), "sha256": sha256(payload).hexdigest(), "raw_records": raw}
+        attestation["instruction_sha256"] = None if request_free else sha256((track + ":instruction").encode()).hexdigest()
     expected_topology = {
         "namespaces": list(inventory.namespaces),
         "object_keys": [
             list(item)
-            for item in sorted((
-                *expected_object_keys(PROFILE),
-                ("v1", "Namespace", "", "kube-system"),
-                ("apps/v1", "DaemonSet", "kube-system", "calico-node"),
-                ("apps/v1", "Deployment", "kube-system", "calico-kube-controllers"),
-            ))
+            for item in __import__("kil.v3b2_inventory", fromlist=["_EXPECTED_OBJECT_KEYS"])._EXPECTED_OBJECT_KEYS
         ],
         "pod_image_keys": [
             [item.image_role, item.container_type, item.namespace, item.container]
@@ -227,6 +266,99 @@ def private_evidence(*, request_free: bool = False) -> dict[str, object]:
 
 
 class V3B2EvidenceTest(unittest.TestCase):
+    def test_request_free_manifest_retains_twelve_raw_capture_bindings(self):
+        public = build_public_bundle(private_evidence(request_free=True))
+        self.assertEqual(len(public["source_attestations"]), 12)
+        for source in public["source_attestations"]:
+            self.assertIn("capture", source)
+            records = source["capture"]["raw_records"]
+            self.assertEqual(len(records), int(source["kind"] == "driver"))
+            self.assertEqual(source["records"], [])
+
+    def test_real_driver_producer_requires_adapter_and_retains_readiness(self):
+        from kil.v3b1_request_driver import readiness_record
+        track = TRACKS[0]
+        ready = readiness_record(track, 1, 2)
+        result = {"schema_version": "kil.v3b1-driver-result.v1", "track": track,
+                  "status": "complete", "connect_monotonic_ns": 1, "send_monotonic_ns": 3,
+                  "receive_monotonic_ns": 4, "response_status": 200,
+                  "decision_digest": HEX_A, "attempt_count": 1, "retry_performed": False}
+        self.assertTrue(hasattr(evidence_module, "adapt_producer_sources"), "real producer adapter is missing")
+        raw = {"driver": [ready, result], "decision": [{
+            "schema_version": "kil.v3b-authz-record.v1", "request_id": "v3b1-central-request",
+            "track": track, "method": "POST", "path": "/consequential/admin", "outcome": "permit",
+            "http_status": 200, "decision_digest": HEX_A, "adapter_reasons": [],
+            "engine_reasons": [], "untrusted_header_names": [], "monotonic_ns": 3}],
+            "envoy": [{"run_id": "v3b1-" + "1" * 64, "request_id": "v3b1-central-request",
+                       "track": track, "response_code": "200", "upstream_host": "10.244.0.8:8080",
+                       "upstream_service_time": "1", "decision_digest": HEX_A}],
+            "target": [{"schema_version": "kil.v3b-target-record.v1", "run_id": RUN_ID,
+                        "request_id": "v3b1-central-request", "track": track, "path": "/consequential/admin",
+                        "decision_digest": HEX_A, "received_monotonic_ns": 3, "response_monotonic_ns": 4}]}
+        projected = evidence_module.adapt_producer_sources(raw, track=track, run_id=RUN_ID)
+        self.assertEqual(projected["driver"], [{"track": track, "request_id": "v3b1-central-request",
+                          "attempt": 1, "decision": "permit", "http_status": 200, "decision_digest": HEX_A}])
+        self.assertEqual(raw["driver"][0], ready)
+        bad = deepcopy(raw)
+        bad["target"][0]["decision_digest"] = HEX_B
+        with self.assertRaises(EvidenceError):
+            evidence_module.adapt_producer_sources(bad, track=track, run_id=RUN_ID)
+
+    def test_prepared_publication_binds_exact_unpublished_tree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory).resolve() / "public"
+            prepared = prepare_publication(private_evidence(), parent)
+            self.assertIsInstance(prepared, PreparedPublication)
+            self.assertEqual(prepared.destination, parent / RUN_ID)
+            self.assertEqual(len(prepared.file_sha256), 11)
+            self.assertFalse(prepared.destination.exists())
+            with self.assertRaises(FrozenInstanceError):
+                prepared.run_id = "v3b2-" + "2" * 64  # type: ignore[misc]
+            with self.assertRaises(EvidenceError):
+                publish_prepared(replace(prepared, tree_commitment="f" * 64))
+            altered_private = prepared.private_manifest.replace(b'"source_commit":"', b'"source_commit":"f')
+            with self.assertRaises(EvidenceError):
+                publish_prepared(replace(prepared, private_manifest=altered_private))
+            self.assertFalse(prepared.destination.exists())
+            self.assertEqual(publish_prepared(prepared), prepared.destination)
+            verified = verify_bundle(prepared.destination)
+            self.assertEqual(verified.public_commitment, prepared.public_commitment)
+            self.assertEqual(
+                verify_publication_identity(
+                    prepared.destination,
+                    run_id=prepared.run_id,
+                    public_commitment=prepared.public_commitment,
+                    tree_commitment=prepared.tree_commitment,
+                ),
+                verified,
+            )
+            with self.assertRaises(EvidenceError):
+                verify_publication_identity(
+                    prepared.destination,
+                    run_id=prepared.run_id,
+                    public_commitment=prepared.public_commitment,
+                    tree_commitment="0" * 64,
+                )
+
+    def test_same_run_wrong_valid_bundle_does_not_satisfy_bound_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory).resolve() / "public"
+            expected_private = private_evidence()
+            wrong_private = private_evidence()
+            wrong_private["foreign_profiles_before"][0]["cpus"] = 8
+            wrong_private["runtime_identities"]["foreign_profiles_after"][0]["cpus"] = 8
+            expected = prepare_publication(expected_private, parent)
+            wrong = prepare_publication(wrong_private, parent)
+            self.assertNotEqual(expected.public_commitment, wrong.public_commitment)
+            publish_prepared(wrong)
+            with self.assertRaises(EvidenceError):
+                verify_publication_identity(
+                    wrong.destination,
+                    run_id=expected.run_id,
+                    public_commitment=expected.public_commitment,
+                    tree_commitment=expected.tree_commitment,
+                )
+
     def test_source_records_are_frozen_and_capture_is_stable_and_bounded(self):
         payload = canonical({"ok": True})
         reader = Reader(payload)
@@ -649,11 +781,44 @@ class V3B2EvidenceTest(unittest.TestCase):
         self.assertEqual(bundle["result_class"], "diagnostic_foreign_state_mismatch")
         self.assertEqual(bundle["request_results"], [])
         self.assertEqual(bundle["semantic_joins"], [])
-        self.assertEqual(bundle["source_attestations"], [])
+        self.assertEqual(len(bundle["source_attestations"]), 12)
+        self.assertTrue(all(row["records"] == [] for row in bundle["source_attestations"]))
         nominal_mismatch = private_evidence()
         nominal_mismatch["runtime_identities"]["foreign_profiles_after"][0]["cpus"] = 9  # type: ignore[index]
         with self.assertRaises(EvidenceError):
             build_public_bundle(nominal_mismatch)
+
+    def test_address_only_foreign_drift_is_private_and_public_hash_repair_cannot_hide_equality_mismatch(self):
+        evidence = private_evidence(request_free=True)
+        evidence['foreign_profiles_before'][0]['address'] = '192.0.2.120'
+        evidence['runtime_identities']['foreign_profiles_after'][0]['address'] = '2001:db8::120'
+        bundle = build_public_bundle(evidence)
+        self.assertEqual(bundle['result_class'], 'diagnostic_foreign_state_mismatch')
+        self.assertFalse(bundle['foreign_profile_attestation']['unchanged'])
+        for secret in ('192.0.2.120', '2001:db8::120', 'client-a', evidence['execution_nonce']):
+            self.assertNotIn(secret, json.dumps(bundle))
+        with tempfile.TemporaryDirectory() as directory:
+            published = publish_bundle(evidence, Path(directory).resolve() / 'public')
+            verify_bundle(published)
+            manifest_path = published / 'manifest.json'
+            manifest = json.loads(manifest_path.read_bytes())
+            manifest['foreign_profile_attestation']['unchanged'] = True
+            manifest_path.write_bytes(canonical(manifest))
+            self._repair_commitment_and_sums(published)
+            with self.assertRaises(EvidenceError):
+                verify_bundle(published)
+
+    def test_public_foreign_commitment_tampering_with_repaired_hashes_is_checked(self):
+        for replacement in ('bad', 'f' * 64):
+            with self.subTest(replacement=replacement), tempfile.TemporaryDirectory() as directory:
+                published = publish_bundle(private_evidence(request_free=True), Path(directory).resolve() / 'public')
+                manifest_path = published / 'manifest.json'
+                manifest = json.loads(manifest_path.read_bytes())
+                manifest['foreign_profile_attestation']['after'][0]['state_hmac_sha256'] = replacement
+                manifest_path.write_bytes(canonical(manifest))
+                self._repair_commitment_and_sums(published)
+                with self.assertRaises(EvidenceError):
+                    verify_bundle(published)
 
     def test_private_expected_topology_and_policy_are_exact_and_cross_bound(self):
         for request_free in (False, True):

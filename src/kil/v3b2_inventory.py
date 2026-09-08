@@ -56,7 +56,7 @@ _CALICO_CONTAINER_CONTRACT = {
 
 
 def _closed_object_keys() -> tuple[tuple[str, str, str, str], ...]:
-    """Return the 60 rendered objects plus the three reviewed system projections."""
+    """Return rendered objects plus the fixed Calico system projections."""
     records: list[tuple[str, str, str, str]] = []
     for namespace in ("kil-v3-baseline", "kil-v3-local-reduce", "kil-v3-signed"):
         records.append(("v1", "Namespace", "", namespace))
@@ -70,6 +70,10 @@ def _closed_object_keys() -> tuple[tuple[str, str, str, str], ...]:
         ("v1", "Namespace", "", "kube-system"),
         ("apps/v1", "DaemonSet", "kube-system", "calico-node"),
         ("apps/v1", "Deployment", "kube-system", "calico-kube-controllers"),
+        ("v1", "ServiceAccount", "kube-system", "calico-node"),
+        ("v1", "ServiceAccount", "kube-system", "calico-cni-plugin"),
+        ("v1", "ServiceAccount", "kube-system", "calico-kube-controllers"),
+        ("v1", "ConfigMap", "kube-system", "calico-config"),
     ))
     return tuple(sorted(records))
 
@@ -162,6 +166,7 @@ class PodImageIdentity:
     image: str
     image_id: str
     ready: bool
+    container_id: str = ""
 
     def __post_init__(self) -> None:
         if type(self.image_role) is not str or self.image_role not in {
@@ -186,6 +191,41 @@ class PodImageIdentity:
             raise InventoryError("requested and realized image digests differ")
         if type(self.ready) is not bool:
             raise InventoryError("ready condition must be an exact boolean")
+        if self.container_id and re.fullmatch(r"(?:docker|containerd)://[0-9a-f]{64}", self.container_id) is None:
+            raise InventoryError("containerID must be an exact runtime incarnation")
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimePodIdentity:
+    namespace: str
+    pod: str
+    uid: str
+    resource_version: str
+    container: str
+    image: str
+    image_id: str
+    ready: bool
+    container_id: str = ""
+    terminated_exit_code: int | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("namespace", "pod", "uid", "resource_version", "container"):
+            _exact_string(name, getattr(self, name))
+        if not (_DIGEST_REFERENCE.fullmatch(self.image) or _KIL_CONTENT_REFERENCE.fullmatch(self.image)):
+            raise InventoryError("runtime Pod image is not immutable")
+        if _IMAGE_ID.fullmatch(self.image_id) is None:
+            raise InventoryError("runtime Pod realized image identity is invalid")
+        if self.image.rsplit(":", 1)[-1].removeprefix("sha256-") != self.image_id.rsplit(":", 1)[-1]:
+            raise InventoryError("runtime Pod requested and realized images differ")
+        if type(self.ready) is not bool:
+            raise InventoryError("runtime Pod readiness must be exact")
+        if re.fullmatch(r"(?:docker|containerd)://[0-9a-f]{64}", self.container_id) is None:
+            raise InventoryError("runtime Pod containerID is invalid")
+        if self.terminated_exit_code is not None and (
+            type(self.terminated_exit_code) is not int
+            or not 0 <= self.terminated_exit_code <= 255
+        ):
+            raise InventoryError("runtime Pod termination exit code is invalid")
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -586,7 +626,7 @@ def _parse_pod_image_list(payload: bytes) -> tuple[PodImageIdentity, ...]:
             container_type = "regular" if field == "containerStatuses" else "init"
             for raw in _exact_array(field, status[field]):
                 container = _keys(
-                    "container status", raw, frozenset({"name", "image", "imageID"})
+                    "container status", raw, frozenset({"name", "image", "imageID", "containerID"})
                 )
                 name = _exact_string("container name", container["name"])
                 if name in seen_containers:
@@ -613,6 +653,7 @@ def _parse_pod_image_list(payload: bytes) -> tuple[PodImageIdentity, ...]:
                     role, container_type, metadata["namespace"], metadata["name"], name,
                     metadata["uid"], metadata["resourceVersion"],
                     container["image"], container["imageID"], ready,
+                    _exact_string("containerID", container.get("containerID")),
                 ))
         if metadata["namespace"] == "kube-system":
             if metadata["name"].startswith("calico-node-"):
@@ -828,6 +869,36 @@ def _parse_calico_workload_list(
     return desired, ready, tuple(sorted(images))
 
 
+def parse_calico_runtime_workload(
+    payload: bytes, expected_kind: str
+) -> tuple[int, int, tuple[tuple[str, str, str], ...]]:
+    """Parse one canonical Calico workload projection and require exact readiness."""
+    if type(payload) is not bytes or len(payload) > _MAX_KUBECTL_BYTES:
+        raise InventoryError("Calico kubectl response must be bounded bytes")
+    try:
+        item = json.loads(
+            payload.decode("utf-8", errors="strict"), object_pairs_hook=_closed_object,
+            parse_int=_bounded_integer, parse_constant=_reject_constant,
+        )
+    except InventoryError:
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError) as error:
+        raise InventoryError("invalid Calico kubectl JSON") from error
+    _validate_json_tree(item)
+    if payload != _canonical_inventory_bytes(item):
+        raise InventoryError("Calico kubectl response must be canonical JSON followed by one newline")
+    envelope = {
+        "apiVersion": "v1", "items": [item], "kind": "List",
+        "metadata": {"resourceVersion": ""},
+    }
+    desired, ready, images = _parse_calico_workload_list(
+        _canonical_inventory_bytes(envelope), expected_kind,
+    )
+    if desired != 1 or ready != 1:
+        raise InventoryError("Calico workload is not exactly one ready replica")
+    return desired, ready, images
+
+
 def parse_kubectl_list(payload: bytes, expected_kind: str) -> tuple[ObjectIdentity, ...]:
     """Parse one bounded canonical projection of a Kubernetes List."""
 
@@ -855,6 +926,416 @@ def parse_kubectl_list(payload: bytes, expected_kind: str) -> tuple[ObjectIdenti
     if len(set(object_keys)) != len(object_keys):
         raise InventoryError("Kubernetes List contains duplicate object identities")
     return ordered
+
+
+def parse_runtime_pod_identity(
+    payload: bytes,
+    *,
+    expected_namespace: str,
+    expected_pod: str,
+    expected_container: str,
+    expected_image: str,
+    require_ready: bool = True,
+) -> RuntimePodIdentity:
+    """Normalize one bounded, duplicate-safe kubectl Pod into a closed identity."""
+    if type(payload) is not bytes or len(payload) > _MAX_KUBECTL_BYTES:
+        raise InventoryError("kubectl Pod response must be bounded bytes")
+    for label, value in (
+        ("expected namespace", expected_namespace), ("expected Pod", expected_pod),
+        ("expected container", expected_container), ("expected image", expected_image),
+    ):
+        _exact_string(label, value)
+    try:
+        value = json.loads(
+            payload.decode("utf-8", errors="strict"), object_pairs_hook=_closed_object,
+            parse_int=_bounded_integer, parse_constant=_reject_constant,
+        )
+    except InventoryError:
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError) as error:
+        raise InventoryError("invalid kubectl Pod JSON") from error
+    _validate_json_tree(value)
+    if type(require_ready) is not bool:
+        raise InventoryError("runtime Pod readiness mode is invalid")
+    def required(label: str, item: object, names: frozenset[str]) -> dict[str, object]:
+        if type(item) is not dict or not names.issubset(item):
+            raise InventoryError(f"{label} lacks required fields")
+        return item
+    pod = required("runtime Pod", value, frozenset({"apiVersion", "kind", "metadata", "status"}))
+    if pod["apiVersion"] != "v1" or pod["kind"] != "Pod":
+        raise InventoryError("runtime Pod type is not exact")
+    metadata = required(
+        "runtime Pod metadata", pod["metadata"],
+        frozenset({"name", "namespace", "resourceVersion", "uid"}),
+    )
+    if metadata["namespace"] != expected_namespace or metadata["name"] != expected_pod:
+        raise InventoryError("runtime Pod identity is not the requested object")
+    status = required(
+        "runtime Pod status", pod["status"],
+        frozenset({"conditions", "containerStatuses"}),
+    )
+    conditions = _exact_array("runtime Pod conditions", status["conditions"])
+    ready_conditions = [item for item in conditions if type(item) is dict and item.get("type") == "Ready"]
+    if len(ready_conditions) != 1:
+        raise InventoryError("runtime Pod Ready condition is ambiguous")
+    condition = required("runtime Pod condition", ready_conditions[0], frozenset({"status", "type"}))
+    containers = _exact_array("runtime Pod containers", status["containerStatuses"])
+    matches = [item for item in containers if type(item) is dict and item.get("name") == expected_container]
+    if len(matches) != 1:
+        raise InventoryError("runtime Pod container identity is ambiguous")
+    container = required(
+        "runtime Pod container", matches[0],
+        frozenset({"containerID", "image", "imageID", "name", "ready"}),
+    )
+    ready = condition.get("status") == "True" and container.get("ready") is True
+    if (
+        condition.get("status") not in {"True", "False"}
+        or container["image"] != expected_image
+        or (require_ready and not ready)
+    ):
+        raise InventoryError("runtime Pod is not ready with the expected image")
+    terminated_exit_code = None
+    state = container.get("state")
+    if state is not None:
+        state = required("runtime Pod container state", state, frozenset())
+        if set(state) == {"terminated"}:
+            terminated = required(
+                "runtime Pod terminated state", state["terminated"],
+                frozenset({"exitCode"}),
+            )
+            terminated_exit_code = terminated["exitCode"]
+        elif set(state) not in ({"running"}, {"waiting"}):
+            raise InventoryError("runtime Pod container state is ambiguous")
+    return RuntimePodIdentity(
+        str(metadata["namespace"]), str(metadata["name"]),
+        _exact_string("runtime Pod UID", metadata["uid"]),
+        _exact_string("runtime Pod resourceVersion", metadata["resourceVersion"]),
+        str(container["name"]), str(container["image"]),
+        _exact_string("runtime Pod imageID", container["imageID"]), ready,
+        _exact_string("runtime Pod containerID", container["containerID"]),
+        terminated_exit_code,
+    )
+
+
+def parse_ready_endpoint_slice(
+    payload: bytes, *, expected_namespace: str, expected_service: str,
+) -> tuple[EndpointIdentity, str]:
+    """Normalize one exact ready service EndpointSlice and its Pod UID."""
+    if type(payload) is not bytes or len(payload) > _MAX_KUBECTL_BYTES:
+        raise InventoryError("EndpointSlice response must be bounded bytes")
+    _exact_string("expected namespace", expected_namespace)
+    if expected_service not in {"envoy", "authz", "target"}:
+        raise InventoryError("EndpointSlice service is not reviewed")
+    try:
+        value = json.loads(
+            payload.decode("utf-8", errors="strict"), object_pairs_hook=_closed_object,
+            parse_int=_bounded_integer, parse_constant=_reject_constant,
+        )
+    except InventoryError:
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError) as error:
+        raise InventoryError("EndpointSlice JSON is invalid") from error
+    _validate_json_tree(value)
+
+    def required(label: str, item: object, fields: frozenset[str]) -> dict[str, object]:
+        if type(item) is not dict or not fields.issubset(item):
+            raise InventoryError(f"{label} lacks required fields")
+        return item
+
+    decoded = required("EndpointSlice response", value, frozenset({"apiVersion", "kind"}))
+    if decoded["apiVersion"] == "v1" and decoded["kind"] == "List":
+        items = _exact_array("EndpointSlice List items", decoded.get("items"))
+        if len(items) != 1:
+            raise InventoryError("EndpointSlice List cardinality is not exact")
+        value = items[0]
+    root = required(
+        "EndpointSlice", value,
+        frozenset({"apiVersion", "kind", "metadata", "addressType", "ports", "endpoints"}),
+    )
+    metadata = required("EndpointSlice metadata", root["metadata"], frozenset({"name", "namespace", "labels"}))
+    labels = required("EndpointSlice labels", metadata["labels"], frozenset({"kubernetes.io/service-name"}))
+    if (
+        root["apiVersion"] != "discovery.k8s.io/v1"
+        or root["kind"] != "EndpointSlice"
+        or root["addressType"] != "IPv4"
+        or metadata["namespace"] != expected_namespace
+        or labels["kubernetes.io/service-name"] != expected_service
+    ):
+        raise InventoryError("EndpointSlice identity is not exact")
+    ports = _exact_array("EndpointSlice ports", root["ports"])
+    endpoints = _exact_array("EndpointSlice endpoints", root["endpoints"])
+    if len(ports) != 1 or len(endpoints) != 1:
+        raise InventoryError("EndpointSlice cardinality is not exact")
+    port = required("EndpointSlice port", ports[0], frozenset({"name", "port", "protocol"}))
+    endpoint = required("EndpointSlice endpoint", endpoints[0], frozenset({"addresses", "conditions", "targetRef"}))
+    conditions = required("EndpointSlice conditions", endpoint["conditions"], frozenset({"ready"}))
+    target = required("EndpointSlice target", endpoint["targetRef"], frozenset({"kind", "name", "namespace", "uid"}))
+    addresses = tuple(sorted(_exact_array("EndpointSlice addresses", endpoint["addresses"])))
+    if (
+        port["name"] != "http" or port["protocol"] != "TCP" or port["port"] != 8080
+        or conditions["ready"] is not True or target["kind"] != "Pod"
+        or target["namespace"] != expected_namespace
+        or not str(target["name"]).startswith(expected_service + "-")
+    ):
+        raise InventoryError("EndpointSlice is not exactly ready")
+    identity = EndpointIdentity(
+        "EndpointSlice", _exact_string("EndpointSlice name", metadata["name"]),
+        expected_namespace, expected_service, addresses, "http", "TCP", 8080,
+    )
+    return identity, _exact_string("EndpointSlice target UID", target["uid"])
+
+
+def parse_runtime_inventory(
+    payload: bytes,
+    *,
+    profile: object,
+    workload: object,
+    node_container_id: str,
+    docker_host: str,
+) -> InventorySnapshot:
+    """Parse the one closed multi-resource kubectl projection into typed inventory."""
+    from kil.v3b2_contracts import V3B2Profile
+    from kil.v3b2_manifests import (
+        WorkloadIdentity, expected_object_keys, expected_policy_graph, render_objects,
+    )
+
+    if type(profile) is not V3B2Profile or type(workload) is not WorkloadIdentity:
+        raise InventoryError("runtime inventory contracts are not exact")
+    if type(payload) is not bytes or len(payload) > _MAX_KUBECTL_BYTES:
+        raise InventoryError("runtime inventory response must be bounded bytes")
+    try:
+        root = json.loads(
+            payload.decode("utf-8", errors="strict"), object_pairs_hook=_closed_object,
+            parse_int=_bounded_integer, parse_constant=_reject_constant,
+        )
+    except InventoryError:
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError) as error:
+        raise InventoryError("runtime inventory JSON is invalid") from error
+    _validate_json_tree(root)
+    if type(root) is not dict or root.get("apiVersion") != "v1" or root.get("kind") != "List" or type(root.get("items")) is not list:
+        raise InventoryError("runtime inventory is not a Kubernetes List")
+    expected_keys = set(_EXPECTED_OBJECT_KEYS)
+    indexed: dict[tuple[str, str, str, str], dict[str, object]] = {}
+    for raw in root["items"]:
+        if type(raw) is not dict or type(raw.get("metadata")) is not dict:
+            raise InventoryError("runtime inventory item identity is invalid")
+        metadata = raw["metadata"]
+        key = (raw.get("apiVersion"), raw.get("kind"), metadata.get("namespace", ""), metadata.get("name"))
+        if any(type(part) is not str for part in key) or key in indexed:
+            raise InventoryError("runtime inventory item identity is ambiguous")
+        indexed[key] = raw
+    if not expected_keys.issubset(indexed):
+        raise InventoryError("runtime inventory omits a fixed topology object")
+    objects = tuple(sorted(ObjectIdentity(
+        key[0], key[1], key[2], key[3],
+        _exact_string("object UID", indexed[key]["metadata"].get("uid")),
+        _exact_string("object resourceVersion", indexed[key]["metadata"].get("resourceVersion")),
+    ) for key in expected_keys))
+    namespaces = tuple(sorted(key[3] for key in indexed if key[0:2] == ("v1", "Namespace")))
+    expected_namespaces = tuple(sorted((*profile.system_namespaces, *profile.application_namespaces)))
+    if namespaces != expected_namespaces:
+        raise InventoryError("namespace inventory differs from the closed allowlist")
+
+    def reviewed_platform_object(key: tuple[str, str, str, str]) -> bool:
+        api_version, kind, namespace, name = key
+        if api_version == "v1" and kind == "ServiceAccount" and name == "default" and namespace in expected_namespaces:
+            return True
+        if api_version == "v1" and kind == "ConfigMap" and name == "kube-root-ca.crt" and namespace in expected_namespaces:
+            return True
+        if key in {
+            ("v1", "Service", "default", "kubernetes"),
+            ("v1", "Endpoints", "default", "kubernetes"),
+            ("v1", "Service", "kube-system", "kube-dns"),
+            ("v1", "Endpoints", "kube-system", "kube-dns"),
+            ("apps/v1", "Deployment", "kube-system", "coredns"),
+            ("apps/v1", "DaemonSet", "kube-system", "kube-proxy"),
+            ("v1", "ServiceAccount", "kube-system", "coredns"),
+            ("v1", "ServiceAccount", "kube-system", "kube-proxy"),
+            ("apps/v1", "Deployment", "local-path-storage", "local-path-provisioner"),
+            ("v1", "ServiceAccount", "local-path-storage", "local-path-provisioner-service-account"),
+            ("v1", "ConfigMap", "local-path-storage", "local-path-config"),
+        }:
+            return True
+        patterns = {
+            ("v1", "Pod", "kube-system"): (
+                r"coredns-[a-z0-9]+-[a-z0-9]+",
+                r"etcd-kil-v3-lab-control-plane",
+                r"kube-apiserver-kil-v3-lab-control-plane",
+                r"kube-controller-manager-kil-v3-lab-control-plane",
+                r"kube-proxy-[a-z0-9]+",
+                r"kube-scheduler-kil-v3-lab-control-plane",
+            ),
+            ("v1", "Pod", "local-path-storage"): (
+                r"local-path-provisioner-[a-z0-9]+(?:-[a-z0-9]+)?",
+            ),
+            ("discovery.k8s.io/v1", "EndpointSlice", "default"): (
+                r"kubernetes(?:-[a-z0-9]+)?",
+            ),
+            ("discovery.k8s.io/v1", "EndpointSlice", "kube-system"): (
+                r"kube-dns-[a-z0-9]+",
+            ),
+        }
+        return any(
+            re.fullmatch(pattern, name)
+            for pattern in patterns.get((api_version, kind, namespace), ())
+        )
+
+    allowed = set(expected_keys)
+    allowed.update(
+        key for key in indexed
+        if key[0:3] == ("v1", "Namespace", "") and key[3] in profile.system_namespaces
+    )
+    allowed.update(key for key in indexed if reviewed_platform_object(key))
+    pod_images: list[PodImageIdentity] = []
+    expected_kil = "kil.local/kil-v3b2:sha256-" + workload.kil_image_id.removeprefix("sha256:")
+    for key, item in sorted(indexed.items()):
+        if key[1] != "Pod" or key in expected_keys:
+            continue
+        if reviewed_platform_object(key):
+            continue
+        namespace, pod_name = key[2], key[3]
+        app_role = next((role for role in ("envoy", "authz", "target") if namespace in profile.application_namespaces and pod_name.startswith(role + "-")), None)
+        calico_pod = namespace == "kube-system" and (pod_name.startswith("calico-node-") or pod_name.startswith("calico-kube-controllers-"))
+        if app_role is None and not calico_pod:
+            raise InventoryError("runtime inventory contains an extra Pod family")
+        allowed.add(key)
+        metadata, status = item.get("metadata"), item.get("status")
+        if type(metadata) is not dict or type(status) is not dict:
+            raise InventoryError("runtime Pod projection is invalid")
+        ready_conditions = [entry for entry in status.get("conditions", []) if type(entry) is dict and entry.get("type") == "Ready"] if type(status.get("conditions")) is list else []
+        if len(ready_conditions) != 1 or ready_conditions[0].get("status") != "True":
+            raise InventoryError("runtime Pod is not exactly ready")
+        seen: set[tuple[str, str]] = set()
+        for field, placement in (("initContainerStatuses", "init"), ("containerStatuses", "regular")):
+            rows = status.get(field, [])
+            if type(rows) is not list:
+                raise InventoryError("runtime Pod status list is invalid")
+            for row in rows:
+                if type(row) is not dict:
+                    raise InventoryError("runtime container status is invalid")
+                name, image, image_id = row.get("name"), row.get("image"), row.get("imageID")
+                if type(name) is not str or (placement, name) in seen:
+                    raise InventoryError("runtime container identity is ambiguous")
+                seen.add((placement, name))
+                role = {"upgrade-ipam": "calico-cni", "install-cni": "calico-cni", "ebpf-bootstrap": "calico-node", "calico-node": "calico-node", "calico-kube-controllers": "calico-kube-controllers"}.get(name, "workload")
+                expected_image = dict(profile.calico_images).get({"calico-cni": "cni", "calico-node": "node", "calico-kube-controllers": "kube_controllers"}.get(role, ""))
+                if role == "workload":
+                    expected_image = workload.envoy_image_digest if name == "envoy" else expected_kil
+                if image != expected_image or type(image_id) is not str:
+                    raise InventoryError("runtime container image differs from the content identity")
+                pod_images.append(PodImageIdentity(
+                    role, placement, namespace, pod_name, name,
+                    _exact_string("Pod UID", metadata.get("uid")),
+                    _exact_string("Pod resourceVersion", metadata.get("resourceVersion")),
+                    image, image_id, True, _exact_string("containerID", row.get("containerID")),
+                ))
+    # Driver Pods are rendered objects and carry their runtime images directly.
+    for namespace in profile.application_namespaces:
+        key = ("v1", "Pod", namespace, "driver")
+        item = indexed[key]
+        metadata, status = item.get("metadata"), item.get("status")
+        if type(metadata) is not dict or type(status) is not dict or type(status.get("containerStatuses")) is not list or len(status["containerStatuses"]) != 1:
+            raise InventoryError("driver Pod status is invalid")
+        row = status["containerStatuses"][0]
+        if type(row) is not dict or row.get("name") != "driver" or row.get("image") != expected_kil:
+            raise InventoryError("driver Pod image is invalid")
+        pod_images.append(PodImageIdentity(
+            "workload", "regular", namespace, "driver", "driver",
+            _exact_string("driver UID", metadata.get("uid")),
+            _exact_string("driver resourceVersion", metadata.get("resourceVersion")),
+            expected_kil, _exact_string("driver imageID", row.get("imageID")), True,
+            _exact_string("driver containerID", row.get("containerID")),
+        ))
+    for namespace in profile.application_namespaces:
+        for role in ("driver", "envoy", "authz", "target"):
+            matches = [
+                item for item in pod_images
+                if item.namespace == namespace and item.container == role
+                and item.container_type == "regular"
+            ]
+            if len(matches) != 1:
+                raise InventoryError("runtime workload Pod topology is not exact")
+    endpoints: list[EndpointIdentity] = []
+    for key, item in sorted(indexed.items()):
+        if key[1] != "Endpoints":
+            continue
+        if reviewed_platform_object(key):
+            continue
+        allowed.add(key)
+        if key[2] not in profile.application_namespaces or key[3] not in {"envoy", "authz", "target"}:
+            raise InventoryError("runtime endpoint is outside the fixed services")
+        subsets = item.get("subsets")
+        if type(subsets) is not list or len(subsets) != 1 or type(subsets[0]) is not dict:
+            raise InventoryError("runtime endpoint subset is ambiguous")
+        addresses = tuple(sorted(entry.get("ip") for entry in subsets[0].get("addresses", []) if type(entry) is dict))
+        ports = subsets[0].get("ports")
+        if type(ports) is not list:
+            raise InventoryError("runtime endpoint ports are invalid")
+        for port in ports:
+            if type(port) is not dict:
+                raise InventoryError("runtime endpoint port is invalid")
+            endpoints.append(EndpointIdentity("Endpoints", key[3], key[2], key[3], addresses, port.get("name"), port.get("protocol"), port.get("port")))
+    ready_slices: set[tuple[str, str]] = set()
+    for key, item in sorted(indexed.items()):
+        if key[1] != "EndpointSlice" or reviewed_platform_object(key):
+            continue
+        namespace = key[2]
+        service = next(
+            (role for role in ("envoy", "authz", "target") if key[3].startswith(role + "-")),
+            None,
+        )
+        if namespace not in profile.application_namespaces or service is None:
+            raise InventoryError("runtime EndpointSlice is outside the fixed services")
+        try:
+            endpoint, target_uid = parse_ready_endpoint_slice(
+                _canonical_inventory_bytes(item),
+                expected_namespace=namespace, expected_service=service,
+            )
+        except InventoryError:
+            raise InventoryError("runtime EndpointSlice is invalid") from None
+        if (namespace, service) in ready_slices:
+            raise InventoryError("runtime EndpointSlice service is duplicated")
+        target_matches = [
+            image for image in pod_images
+            if image.namespace == namespace and image.container == service
+            and image.uid == target_uid
+        ]
+        if len(target_matches) != 1 or endpoint.addresses not in {
+            current.addresses for current in endpoints
+            if current.namespace == namespace and current.service == service
+        }:
+            raise InventoryError("runtime EndpointSlice target identity differs from the ready Pod")
+        ready_slices.add((namespace, service))
+        allowed.add(key)
+    if ready_slices != {
+        (namespace, role)
+        for namespace in profile.application_namespaces
+        for role in ("envoy", "authz", "target")
+    }:
+        raise InventoryError("runtime EndpointSlice topology is incomplete")
+    rendered = json.loads(render_objects(profile, workload))["items"]
+    expected_specs = {(item["metadata"]["namespace"], item["metadata"]["name"]): item["spec"] for item in rendered if item["kind"] == "NetworkPolicy"}
+    actual_specs = {(key[2], key[3]): item.get("spec") for key, item in indexed.items() if key[1] == "NetworkPolicy"}
+    if actual_specs != expected_specs:
+        raise InventoryError("runtime policy graph differs from rendered content")
+    if set(indexed) != allowed:
+        raise InventoryError("runtime inventory contains extra object identities")
+    node_status = indexed[("apps/v1", "DaemonSet", "kube-system", "calico-node")].get("status")
+    controller_status = indexed[("apps/v1", "Deployment", "kube-system", "calico-kube-controllers")].get("status")
+    if type(node_status) is not dict or type(controller_status) is not dict:
+        raise InventoryError("Calico readiness projection is invalid")
+    cluster_uid = next(item.uid for item in objects if (item.api_version, item.kind, item.namespace, item.name) == ("v1", "Namespace", "", "kube-system"))
+    return InventorySnapshot(
+        cluster_uid, node_container_id, docker_host, namespaces, objects,
+        tuple(sorted(pod_images)), tuple(sorted(endpoints)),
+        tuple(sorted(PolicyEdge(
+            edge.namespace, edge.source_roles, edge.destination_namespace,
+            edge.destination_roles, edge.protocol_ports,
+        ) for edge in expected_policy_graph(profile))),
+        node_status.get("desiredNumberScheduled"), node_status.get("numberReady"),
+        controller_status.get("replicas"), controller_status.get("readyReplicas"),
+    )
 
 
 def _validated_snapshot(value: object, label: str) -> InventorySnapshot:
@@ -928,7 +1409,12 @@ __all__ = (
     "ObjectIdentity",
     "PodImageIdentity",
     "PolicyEdge",
+    "RuntimePodIdentity",
     "parse_kubectl_list",
+    "parse_calico_runtime_workload",
+    "parse_runtime_pod_identity",
+    "parse_ready_endpoint_slice",
+    "parse_runtime_inventory",
     "stable_source",
     "validate_inventory",
 )

@@ -21,10 +21,16 @@ from kil.v3b2_journal import (
     create_journal,
     kind_delete_command,
     kind_create_command,
+    kind_load_command,
     kubectl_apply_command,
     kubectl_apply_calico_command,
+    kubectl_calico_workload_command,
     kubectl_attach_command,
-    kubectl_quiesce_command,
+    kubectl_driver_pod_command,
+    kubectl_source_pod_command,
+    kubectl_ready_endpoint_command,
+    kubectl_source_read_command,
+    kubectl_envoy_quiesce_commands,
     load_journal,
     owned_commands,
     recovery_plan,
@@ -41,6 +47,58 @@ def adjacent_pairs(values: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
 
 
 class V3B2JournalTest(unittest.TestCase):
+    def test_teardown_latch_forbids_late_request_result_promotion(self):
+        from kil.v3b2_journal import latch_teardown
+        self._journal()
+        self._ready()
+        self._start_driver("kil-v3-baseline", "driver-uid")
+        request = {"track": "credential_policy_baseline", "request_id": "v3b1-central-request", "case_sha256": "f" * 64}
+        self._append("request_intent", request)
+        latch_teardown(self.path)
+        with self.assertRaisesRegex(JournalError, "teardown"):
+            self._append("request_result", {**request, "result_sha256": "e" * 64})
+
+    def test_teardown_latch_survives_reload_and_forbids_forward_work(self):
+        from kil import v3b2_journal as module
+        self._journal()
+        self._cluster_created()
+        self.assertTrue(hasattr(module, "latch_teardown"), "permanent teardown latch is missing")
+        module.latch_teardown(self.path)
+        self.assertIsInstance(load_journal(self.path)["teardown_from_sequence"], int)
+        with self.assertRaisesRegex(JournalError, "teardown"):
+            self._append("image_import_intent", {"archive_sha256": "1" * 64, "image": "kil.local/kil-v3b2:sha256-" + "2" * 64,
+                         "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "3" * 64})
+        module.latch_teardown(self.path)
+        self._append("cluster_delete_intent", {"kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig})
+
+    def test_terminal_writer_persists_raw_proof_before_completing(self):
+        from kil import v3b2_journal as journal_module
+        from kil.v3b2_proofs import ExpectedContext, RawObservation, canonical
+        self._journal()
+        intent = {"colima_profile": "kil-v3-lab"}
+        self._append("profile_start_intent", intent)
+        self.assertTrue(hasattr(journal_module, "append_observed_terminal"), "shared terminal writer is missing")
+        configuration = {"name": "kil-v3-lab", "arch": "aarch64", "cpus": 2, "memory": 2147483648, "disk": 107374182400, "runtime": "docker"}
+        from kil.v3b2_profile_state import ProfilePaths, capture
+        from tests.test_v3b2_profile_state import create_profile
+        from tests.test_v3b2_colima_inventory import inventory_observations
+        from kil.v3b2_colima_inventory import capture_roster
+        paths = ProfilePaths(self.private / 'home', self.private)
+        create_profile(paths)
+        expected = ExpectedContext(HEX64, 1, "profile_start", canonical(intent), canonical({
+            "profile_configuration": configuration, 'profile_paths': paths.document()}))
+        observations = inventory_observations([{**configuration, 'status': 'Running'}], paths.document(), capture_roster(paths))
+        filesystem = RawObservation('profile_state', (), (), 0, canonical(capture(paths)), b'')
+        decision = journal_module.append_observed_terminal(self.path, expected, (*observations, filesystem))
+        self.assertEqual(decision.outcome, "complete")
+        journal = load_journal(self.path)
+        commitment = journal["events"][-1]["details"]["observed_proof_sha256"]
+        proof = self.private / ("proof-1-" + commitment + ".json")
+        self.assertTrue(proof.is_file())
+        document = json.loads(proof.read_bytes())
+        inventory = next(row for row in document['observations'] if row['label'] == 'profile_inventory')
+        self.assertEqual(bytes.fromhex(inventory['stdout_hex']), observations[1].stdout)
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.private = Path(self.temporary.name).resolve() / "private"
@@ -97,6 +155,12 @@ class V3B2JournalTest(unittest.TestCase):
 
     def _ready(self) -> None:
         self._cluster_created()
+        image = {"image": "kil.local/kil-v3b2:sha256-" + "d" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64}
+        imported = {**image, "archive_sha256": "a" * 64}
+        self._append("image_import_intent", imported)
+        self._append("image_import_complete", imported)
+        self._append("image_load_intent", image)
+        self._append("image_load_complete", image)
         for family, details in (
             ("calico_apply", {"manifest_sha256": "2" * 64}),
             ("application_apply", {"manifest_sha256": "3" * 64}),
@@ -116,6 +180,13 @@ class V3B2JournalTest(unittest.TestCase):
         self._append("evidence_freeze_intent", details)
         self._append("evidence_freeze_complete", details)
 
+    def _publication(self) -> dict[str, object]:
+        return {
+            "destination": str(self.private.parent / "public" / ("v3b2-" + HEX64)),
+            "public_commitment_sha256": "7" * 64,
+            "tree_commitment_sha256": "8" * 64,
+        }
+
     def _canonical_events(self) -> list[tuple[str, dict[str, object]]]:
         profile = {"colima_profile": "kil-v3-lab"}
         cluster = {"kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig}
@@ -130,6 +201,8 @@ class V3B2JournalTest(unittest.TestCase):
         return [
             ("profile_start_intent", profile), ("profile_start_complete", profile),
             ("cluster_create_intent", cluster), ("cluster_create_complete", cluster_complete),
+            ("image_import_intent", {"archive_sha256": "a" * 64, "image": "kil.local/kil-v3b2:sha256-" + "d" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64}), ("image_import_complete", {"archive_sha256": "a" * 64, "image": "kil.local/kil-v3b2:sha256-" + "d" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64}),
+            ("image_load_intent", {"image": "kil.local/kil-v3b2:sha256-" + "d" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64}), ("image_load_complete", {"image": "kil.local/kil-v3b2:sha256-" + "d" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64}),
             ("calico_apply_intent", {"manifest_sha256": "2" * 64}), ("calico_apply_complete", {"manifest_sha256": "2" * 64}),
             ("application_apply_intent", {"manifest_sha256": "3" * 64}), ("application_apply_complete", {"manifest_sha256": "3" * 64}),
             ("readiness_intent", {"attestation_sha256": "4" * 64}), ("readiness_complete", {"attestation_sha256": "4" * 64}),
@@ -143,7 +216,7 @@ class V3B2JournalTest(unittest.TestCase):
             ("profile_delete_intent", profile), ("profile_delete_complete", profile),
             ("profile_absence_proof_intent", profile), ("profile_absence_proof_complete", profile),
             ("foreign_snapshot_comparison_intent", {"unchanged": True, "attestation_sha256": "6" * 64}), ("foreign_snapshot_comparison_complete", {"unchanged": True, "attestation_sha256": "6" * 64}),
-            ("publication_intent", {"public_commitment_sha256": "7" * 64}), ("publication_complete", {"public_commitment_sha256": "7" * 64}),
+            ("publication_intent", self._publication()), ("publication_complete", self._publication()),
         ]
 
     def _observation(self, **changes: object) -> RecoveryObservation:
@@ -314,19 +387,68 @@ class V3B2JournalTest(unittest.TestCase):
         attached = kubectl_attach_command(self.identity, "kil-v3-baseline", instruction)
         self.assertEqual(attached.argv[-5:], ("attach", "pod/driver", "--namespace", "kil-v3-baseline", "--stdin"))
         self.assertEqual(attached.stdin, instruction)
-        quiesce = kubectl_quiesce_command(self.identity, "kil-v3-baseline")
-        self.assertEqual(quiesce.argv[-5:], ("scale", "deployment/envoy", "--namespace", "kil-v3-baseline", "--replicas=0"))
+        endpoint = kubectl_ready_endpoint_command(self.identity, "kil-v3-baseline", "envoy")
+        self.assertEqual(endpoint.argv[-4:], ("--selector", "kubernetes.io/service-name=envoy", "--output", "json"))
+        source = kubectl_source_read_command(self.identity, "kil-v3-baseline", "authz-abc12", "authz")
+        self.assertEqual(source.argv[-5:], ("--", "head", "-c", "1048577", "/evidence/decisions.jsonl"))
+        drain, stats = kubectl_envoy_quiesce_commands(self.identity, "kil-v3-baseline", "envoy-abc12")
+        self.assertTrue(drain.mutating)
+        self.assertFalse(stats.mutating)
 
     def test_controller_command_grammar_rejects_aliases_overrides_and_unvalidated_input(self) -> None:
         invalid = (
             (("kubectl", "--kubeconfig", self.kubeconfig, "apply", "-f", "-", "--context", "other"), b"{}\n"),
             (("kubectl", "--kubeconfig", self.kubeconfig, "attach", "pod/driver", "-n", "kil-v3-baseline", "--stdin"), b"{}\n"),
             (("kubectl", "--kubeconfig", self.kubeconfig, "attach", "pod/other", "--namespace", "kil-v3-baseline", "--stdin"), b"{}\n"),
-            (("kubectl", "--kubeconfig", self.kubeconfig, "scale", "deployment/envoy", "--namespace", "kil-v3-baseline", "--replicas=1"), None),
+            (("kubectl", "--kubeconfig", self.kubeconfig, "scale", "deployment/envoy", "--namespace", "kil-v3-baseline", "--replicas=0"), None),
         )
         for argv, stdin in invalid:
             with self.subTest(argv=argv), self.assertRaises(JournalError):
                 Command(argv, 300, stdin=stdin, mutating=True)
+
+    def test_kind_load_is_exactly_image_and_lab_bound(self) -> None:
+        image = "kil.local/kil-v3b2:sha256-" + "d" * 64
+        command = kind_load_command(self.identity, image)
+        self.assertEqual(
+            command.argv,
+            ("kind", "load", "docker-image", image, "--name", "kil-v3-lab"),
+        )
+        self.assertEqual(dict(command.env)["DOCKER_HOST"], self.identity.docker_host)
+        for argv in (
+            ("kind", "load", "docker-image", image, "--name", "other"),
+            ("kind", "load", "docker-image", "kil.local/kil-v3b2:latest", "--name", "kil-v3-lab"),
+            ("kind", "load", "docker-image", image, "--name", "kil-v3-lab", "--name", "other"),
+        ):
+            with self.subTest(argv=argv), self.assertRaises(JournalError):
+                Command(argv, 300, env=command.env, mutating=True)
+
+    def test_driver_identity_read_is_exactly_namespace_bound(self) -> None:
+        command = kubectl_driver_pod_command(self.identity, "kil-v3-baseline")
+        self.assertEqual(command.argv[3:], (
+            "get", "pod", "driver", "--namespace", "kil-v3-baseline",
+            "--output", "json",
+        ))
+        self.assertFalse(command.mutating)
+        with self.assertRaises(JournalError):
+            kubectl_driver_pod_command(self.identity, "default")
+
+    def test_source_pod_read_is_exactly_inventory_name_bound(self) -> None:
+        command = kubectl_source_pod_command(
+            self.identity, "kil-v3-baseline", "authz-abc12-def34",
+        )
+        self.assertEqual(command.argv[3:6], ("get", "pod", "authz-abc12-def34"))
+        for pod in ("authz", "authz/abc", "foreign-abc12", "authz-ABC12"):
+            with self.subTest(pod=pod), self.assertRaises(JournalError):
+                kubectl_source_pod_command(self.identity, "kil-v3-baseline", pod)
+
+    def test_calico_readiness_reads_are_exactly_object_bound(self) -> None:
+        daemonset = kubectl_calico_workload_command(self.identity, "DaemonSet")
+        deployment = kubectl_calico_workload_command(self.identity, "Deployment")
+        self.assertIn("calico-node", daemonset.argv)
+        self.assertIn("calico-kube-controllers", deployment.argv)
+        self.assertFalse(daemonset.mutating or deployment.mutating)
+        with self.assertRaises(JournalError):
+            kubectl_calico_workload_command(self.identity, "StatefulSet")
 
     def test_command_rejects_every_unreviewed_executable_spelling(self) -> None:
         for executable in ("rm", "sh", "env", "unknown", "/usr/bin/kubectl", "Kubectl"):
@@ -344,7 +466,7 @@ class V3B2JournalTest(unittest.TestCase):
     def test_lifecycle_rejects_phase_skips_overlapping_intents_and_publication_first(self) -> None:
         invalid_first = (
             ("cluster_create_intent", {"kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig}),
-            ("publication_intent", {"public_commitment_sha256": "7" * 64}),
+            ("publication_intent", self._publication()),
         )
         for event, details in invalid_first:
             self.path.unlink(missing_ok=True)
@@ -356,6 +478,67 @@ class V3B2JournalTest(unittest.TestCase):
         self._append("profile_start_intent", {"colima_profile": "kil-v3-lab"})
         with self.assertRaisesRegex(JournalError, "pending|overlap"):
             self._append("profile_stop_intent", {"colima_profile": "kil-v3-lab"})
+
+    def test_proven_failed_mutation_closes_intent_and_allows_only_teardown(self) -> None:
+        self._journal()
+        details = {"colima_profile": "kil-v3-lab"}
+        self._append("profile_start_intent", details)
+        failed = {**details, "failure_category": "not_applied", "proof_sha256": "9" * 64}
+        self._append("profile_start_failed", failed)
+        with self.assertRaisesRegex(JournalError, "safe teardown"):
+            self._append("cluster_create_intent", {"kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig})
+        absence = {"colima_profile": "kil-v3-lab"}
+        self._append("profile_absence_proof_intent", absence)
+        self._append("profile_absence_proof_complete", absence)
+
+    def test_failure_transition_rejects_false_proof_and_cross_family_shape(self) -> None:
+        self._journal()
+        details = {"colima_profile": "kil-v3-lab"}
+        self._append("profile_start_intent", details)
+        for failed in (
+            {**details, "failure_category": "unknown", "proof_sha256": "9" * 64},
+            {**details, "failure_category": "not_applied", "proof_sha256": "bad"},
+            {"kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig, "failure_category": "not_applied", "proof_sha256": "9" * 64},
+        ):
+            with self.subTest(failed=failed), self.assertRaises(JournalError):
+                self._append("profile_start_failed", failed)
+
+    def test_uncertain_mutation_can_be_abandoned_only_for_owned_teardown(self) -> None:
+        self._journal()
+        self._cluster_created()
+        details = {"archive_sha256": "6" * 64, "image": "kil.local/kil-v3b2:sha256-" + "8" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "5" * 64}
+        self._append("image_import_intent", details)
+        abandoned = {
+            **details,
+            "abandoned_family": "image_import",
+            "stage_category": "uncertain_or_partial",
+            "observation_sha256": "7" * 64,
+            "promotion_forbidden": True,
+        }
+        self._append("image_import_abandoned_for_teardown", abandoned)
+        with self.assertRaisesRegex(JournalError, "safe teardown"):
+            self._append("calico_apply_intent", {"manifest_sha256": "6" * 64})
+        delete = {"kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig}
+        self._append("cluster_delete_intent", delete)
+
+    def test_abandonment_rejects_request_false_identity_and_cross_family_hybrids(self) -> None:
+        self._journal()
+        self._cluster_created()
+        details = {"archive_sha256": "6" * 64, "image": "kil.local/kil-v3b2:sha256-" + "8" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "5" * 64}
+        self._append("image_import_intent", details)
+        base = {
+            **details, "abandoned_family": "image_import",
+            "stage_category": "uncertain_or_partial",
+            "observation_sha256": "7" * 64, "promotion_forbidden": True,
+        }
+        for changed in (
+            {**base, "abandoned_family": "calico_apply"},
+            {**base, "promotion_forbidden": False},
+            {**base, "observation_sha256": "bad"},
+            {**base, "kind_cluster": "foreign"},
+        ):
+            with self.subTest(changed=changed), self.assertRaises(JournalError):
+                self._append("image_import_abandoned_for_teardown", changed)
 
     def test_request_intent_blocks_forward_work_and_freeze_makes_late_result_terminal(self) -> None:
         self.path.unlink(missing_ok=True)
@@ -442,7 +625,7 @@ class V3B2JournalTest(unittest.TestCase):
         self.assertFalse(any(command.mutating for command in gated.commands))
         self._append("driver_cancel_intent", dict(gated.next_intent[1]))
         authorized = recovery_plan(load_journal(self.path), observed)
-        self.assertTrue(any("delete" in command.argv for command in authorized.commands))
+        self.assertTrue(any("attach" in command.argv and command.stdin == b"" for command in authorized.commands))
 
     def test_ready_request_free_recovery_freezes_even_when_no_driver_was_started(self) -> None:
         self._journal()
@@ -792,8 +975,8 @@ class V3B2JournalTest(unittest.TestCase):
             ("profile_absence_proof_intent", profile), ("profile_absence_proof_complete", profile),
             ("foreign_snapshot_comparison_intent", {"unchanged": True, "attestation_sha256": "6" * 64}),
             ("foreign_snapshot_comparison_complete", {"unchanged": True, "attestation_sha256": "6" * 64}),
-            ("publication_intent", {"public_commitment_sha256": "7" * 64}),
-            ("publication_complete", {"public_commitment_sha256": "7" * 64}),
+            ("publication_intent", self._publication()),
+            ("publication_complete", self._publication()),
         )
         for name, details in tail:
             self._append(name, details)
@@ -863,8 +1046,9 @@ class V3B2JournalTest(unittest.TestCase):
             driver_pods=(("kil-v3-baseline", "driver", "driver-uid"),)
         ))
         deletion = next(command for command in pending.commands if command.mutating)
-        self.assertIn("--raw", deletion.argv)
-        self.assertIn(b'"uid":"driver-uid"', deletion.stdin or b"")
+        self.assertIn("attach", deletion.argv)
+        self.assertEqual(deletion.stdin, b"")
+        self.assertEqual(deletion.stdin, b"")
         self._append("driver_cancel_complete", driver)
 
         cluster = {"kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig}
@@ -878,8 +1062,8 @@ class V3B2JournalTest(unittest.TestCase):
             ("profile_absence_proof_intent", profile), ("profile_absence_proof_complete", profile),
             ("foreign_snapshot_comparison_intent", {"unchanged": True, "attestation_sha256": "6" * 64}),
             ("foreign_snapshot_comparison_complete", {"unchanged": True, "attestation_sha256": "6" * 64}),
-            ("publication_intent", {"public_commitment_sha256": "7" * 64}),
-            ("publication_complete", {"public_commitment_sha256": "7" * 64}),
+            ("publication_intent", self._publication()),
+            ("publication_complete", self._publication()),
         )
         for name, details in tail:
             self._append(name, details)
@@ -924,7 +1108,7 @@ class V3B2JournalTest(unittest.TestCase):
             self._append(event, details)
             deletion = recovery_plan(load_journal(self.path), observation)
             command = next(command for command in deletion.commands if command.mutating)
-            self.assertIn(str(details["uid"]).encode("utf-8"), command.stdin or b"")
+            self.assertEqual(command.stdin, b"")
             self._append("driver_cancel_complete", details)
             active.remove((str(details["namespace"]), str(details["pod"]), str(details["uid"])))
         self.assertEqual(
@@ -975,7 +1159,7 @@ class V3B2JournalTest(unittest.TestCase):
         self._append(plan.next_intent[0], dict(plan.next_intent[1]))
         self._append("profile_absence_proof_complete", dict(plan.next_intent[1]))
         comparison = {"unchanged": True, "attestation_sha256": "6" * 64}
-        publication = {"public_commitment_sha256": "7" * 64}
+        publication = self._publication()
         for family, details in (("foreign_snapshot_comparison", comparison), ("publication", publication)):
             self._append(f"{family}_intent", details)
             self._append(f"{family}_complete", details)
@@ -999,19 +1183,19 @@ class V3B2JournalTest(unittest.TestCase):
         failed = load_journal(self.path)
         self.assertFalse(recovery_plan(failed).publication_allowed)
         with self.assertRaisesRegex(JournalError, "unchanged|publication|order"):
-            self._append("publication_intent", {"public_commitment_sha256": "7" * 64})
+            self._append("publication_intent", self._publication())
 
         mutated = load_journal(self.path)
         mutated["events"].extend([
             {
                 "sequence": len(mutated["events"]) + 1,
                 "event": "publication_intent",
-                "details": {"public_commitment_sha256": "7" * 64},
+                "details": self._publication(),
             },
             {
                 "sequence": len(mutated["events"]) + 2,
                 "event": "publication_complete",
-                "details": {"public_commitment_sha256": "7" * 64},
+                "details": self._publication(),
             },
         ])
         mutated["phase"] = "publication_complete"
@@ -1023,13 +1207,15 @@ class V3B2JournalTest(unittest.TestCase):
     def test_every_crash_boundary_recovers_only_the_pending_exact_mutation(self) -> None:
         events = self._canonical_events()
         intent_indices = [index for index, (name, _details) in enumerate(events) if name.endswith("_intent")]
-        self.assertEqual(len(intent_indices), 16)
+        self.assertEqual(len(intent_indices), 18)
         expected_probe = {
             "profile_start_intent": "status",
             "cluster_create_intent": "inspect",
             "calico_apply_intent": "kube-system",
             "application_apply_intent": "networkpolicies",
             "readiness_intent": "pods",
+            "image_load_intent": "inspect",
+            "image_import_intent": "inspect",
             "driver_start_intent": "metadata.uid=driver-uid",
             "request_intent": "deployment/authz",
             "evidence_freeze_intent": "deployment/authz",
@@ -1091,13 +1277,10 @@ class V3B2JournalTest(unittest.TestCase):
         self.assertFalse(any(command.mutating for command in gated.commands))
         self._append("driver_cancel_intent", dict(gated.next_intent[1]))
         authorized = recovery_plan(load_journal(self.path), observed)
-        deletion = next(command for command in authorized.commands if "delete" in command.argv)
-        self.assertIn("--raw", deletion.argv)
-        self.assertIn("/api/v1/namespaces/kil-v3-baseline/pods/driver", deletion.argv)
-        self.assertEqual(
-            deletion.stdin,
-            b'{"apiVersion":"v1","kind":"DeleteOptions","preconditions":{"uid":"driver-uid"}}\n',
-        )
+        deletion = next(command for command in authorized.commands if "attach" in command.argv)
+        self.assertIn("attach", deletion.argv)
+        self.assertIn("kil-v3-baseline", deletion.argv)
+        self.assertEqual(deletion.stdin, b"")
         self.assertNotIn("metadata.uid=driver-uid", " ".join(deletion.argv))
 
     def test_foreign_profiles_never_appear_in_mutation_commands(self) -> None:
