@@ -9902,3 +9902,37 @@ the accepted platform endpoint proof as the Node-network authority. Future live
 actions remain limited to the unique `kil-v3-lab` Colima profile.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-199 — 2026-09-08 — V3B-2a checkpoint synchronized and shutdown-safe
+
+**Input:** Completion of the user-authorized checkpoint synchronization and
+host-state verification.
+
+**Interpretation:** Confirm the accepted branch and merged main tips on the
+remote, reverify the merged test tree, and inspect Colima read-only before
+declaring the workstation safe to shut down.
+
+**Decision status:** Confirmed. The accepted checkpoint branch is published at
+`e888a0f0695f5fe01a94478f3144a854db161dbb`; the implementation and prior
+lineage were merged and published on main at
+`b98615e7f114d909eb0201c1089986409012605a`. The merged main tree freshly passed
+503 tests in 42.139 seconds. The `kil-v3-lab` Colima profile is absent, so no
+project-owned runtime needed stopping. The unrelated running `attackswarm`
+profile was not touched.
+
+**Rationale:** Remote-tip readback plus merged-tree verification establishes a
+durable resume point. Read-only Colima inventory confirms shutdown safety
+without broadening authority to another project's profile.
+
+**Affected artifacts:** Remote and local main, the published implementation
+branch, and this Markdown lineage. The unrelated untracked `Inputs/` directory
+and modified lineage HTML remain uncommitted and untouched.
+
+**Unresolved questions:** All remaining Task 6 corrective work and Tasks 7–10;
+V3C remains a later phase.
+
+**Next gate:** Resume in a new session at direct-driver Pod admission/CNI/image
+identity. Any future Colima mutation must target only a newly and uniquely
+validated `kil-v3-lab` profile.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
