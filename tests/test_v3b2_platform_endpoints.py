@@ -75,15 +75,14 @@ def node_proof():
                                                "blockOwnerDeletion": True}})
     static_pods = []
     for index, component in enumerate(("etcd", "kube-apiserver", "kube-controller-manager", "kube-scheduler"), 1):
-        digest = f"{index:064x}"
+        digest = f"{index:032x}"
         static_pods.append({"apiVersion": "v1", "kind": "Pod", "namespace": "kube-system",
                             "name": f"{component}-{NODE}", "uid": f"static-{index}",
                             "resourceVersion": str(40 + index), "nodeName": NODE,
                             "component": component, "configSource": "file",
                             "configHash": digest, "mirrorHash": digest,
                             "ownerReference": {"apiVersion": "v1", "kind": "Node",
-                                               "name": NODE, "uid": "node-uid", "controller": True,
-                                               "blockOwnerDeletion": True}})
+                                               "name": NODE, "uid": "node-uid", "controller": True}})
     return validate_node_ownership(node=node, daemon_sets=daemon_sets,
                                    daemon_pods=daemon_pods, static_pods=static_pods,
                                    cluster_name="kil-v3-lab")

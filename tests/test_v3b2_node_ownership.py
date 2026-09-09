@@ -38,15 +38,14 @@ def fixtures():
         })
     static_pods = []
     for index, component in enumerate(COMPONENTS, 6):
-        digest = format(index, "064x")
+        digest = format(index, "032x")
         static_pods.append({
             "apiVersion": "v1", "kind": "Pod", "namespace": "kube-system",
             "name": f"{component}-{NODE}", "uid": f"uid-static-{index}",
             "resourceVersion": str(index), "nodeName": NODE, "component": component,
             "configSource": "file", "configHash": digest, "mirrorHash": digest,
             "ownerReference": {"apiVersion": "v1", "kind": "Node", "name": NODE,
-                               "uid": "uid-node", "controller": True,
-                               "blockOwnerDeletion": True},
+                               "uid": "uid-node", "controller": True},
         })
     return node, daemon_sets, daemon_pods, static_pods
 
@@ -60,6 +59,31 @@ def validate(values=None, **changes):
 
 
 class NodeOwnershipTest(unittest.TestCase):
+    def test_kubelet_static_mirror_producer_shape_is_accepted(self):
+        # Kubernetes v1.36.1 producer contracts:
+        # https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/kubelet/config/common.go
+        # https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/kubelet/pod/mirror_client.go
+        values = fixtures()
+        for row in values[3]:
+            self.assertRegex(row["configHash"], r"^[0-9a-f]{32}$")
+            self.assertEqual(row["configHash"], row["mirrorHash"])
+            self.assertEqual(set(row["ownerReference"]),
+                             {"apiVersion", "kind", "name", "uid", "controller"})
+        try:
+            proof = validate(values)
+        except NodeOwnershipError as error:
+            self.fail(f"valid kubelet producer shape rejected: {error}")
+        self.assertEqual(len(proof.static_pods), 4)
+        self.assertFalse(proof.runtime_complete)
+
+    def test_static_binding_accepts_opaque_32_character_producer_hash(self):
+        try:
+            binding = StaticPodBinding("etcd", f"etcd-{NODE}", "pod-uid", "1",
+                                       NODE, "uid-node", "a" * 32, "a" * 32)
+        except NodeOwnershipError as error:
+            self.fail(f"valid producer identifier rejected: {error}")
+        self.assertEqual(binding.config_hash, "a" * 32)
+
     def test_nominal_is_frozen_canonical_and_does_not_retain_input(self):
         values = fixtures()
         original = deepcopy(values)
@@ -137,7 +161,8 @@ class NodeOwnershipTest(unittest.TestCase):
         for key, value in (
             ("apiVersion", "v1"), ("kind", "Node"), ("name", "kube-proxy"),
             ("uid", "uid-ds-999"), ("controller", False),
-            ("blockOwnerDeletion", False), ("controller", 1),
+            ("blockOwnerDeletion", False), ("blockOwnerDeletion", 1),
+            ("blockOwnerDeletion", None), ("controller", 1),
         ):
             values = fixtures(); values[2][0]["ownerReference"][key] = value
             with self.subTest(key=key):
@@ -146,6 +171,8 @@ class NodeOwnershipTest(unittest.TestCase):
             values = fixtures(); owner = values[2][0]["ownerReference"]
             owner.pop("kind") if mutation == "missing" else owner.update(extra="x")
             with self.assertRaises(NodeOwnershipError): validate(values)
+        values = fixtures(); values[2][0]["ownerReference"].pop("blockOwnerDeletion")
+        with self.assertRaises(NodeOwnershipError): validate(values)
 
     def test_same_prefix_with_wrong_daemon_uid_is_rejected(self):
         values = fixtures()
@@ -170,11 +197,51 @@ class NodeOwnershipTest(unittest.TestCase):
         for key, value in (
             ("apiVersion", "apps/v1"), ("kind", "DaemonSet"), ("name", "other"),
             ("uid", "uid-node-other"), ("controller", False),
+            ("controller", 1), ("controller", None),
             ("blockOwnerDeletion", False), ("blockOwnerDeletion", 1),
+            ("blockOwnerDeletion", True), ("blockOwnerDeletion", None), ("extra", "x"),
         ):
             values = fixtures(); values[3][0]["ownerReference"][key] = value
             with self.subTest(key=key):
                 with self.assertRaises(NodeOwnershipError): validate(values)
+        values = fixtures(); values[3][0]["ownerReference"].pop("controller")
+        with self.assertRaises(NodeOwnershipError): validate(values)
+        values = fixtures(); owner = values[3][0]["ownerReference"]
+        owner["extra"] = owner.pop("controller")
+        with self.assertRaises(NodeOwnershipError): validate(values)
+
+    def test_static_hash_grammar_and_equality_are_revalidated(self):
+        class String(str): pass
+        malformed = ("0" * 31, "0" * 33, "0" * 64, "A" * 32,
+                     None, 1, True, [], String("a" * 32))
+        proof = validate()
+        binding = proof.static_pods[0]
+        for value in malformed:
+            with self.subTest(equal_malformed_hashes=value):
+                values = fixtures()
+                values[3][0].update(configHash=value, mirrorHash=value)
+                with self.assertRaises(NodeOwnershipError): validate(values)
+                args = {item.name: getattr(binding, item.name) for item in fields(binding)}
+                args.update(config_hash=value, mirror_hash=value)
+                with self.assertRaises(NodeOwnershipError): StaticPodBinding(**args)
+                forged = deepcopy(binding)
+                object.__setattr__(forged, "config_hash", value)
+                object.__setattr__(forged, "mirror_hash", value)
+                with self.assertRaises(NodeOwnershipError): NodeOwnershipProof(
+                    proof.node_name, proof.node_uid, proof.node_resource_version,
+                    proof.daemon_pods, (forged, *proof.static_pods[1:]), False)
+        for field, key in (("config_hash", "configHash"), ("mirror_hash", "mirrorHash")):
+            for value in (*malformed, "1" * 32):
+                with self.subTest(field=field, value=value):
+                    values = fixtures(); values[3][0][key] = value
+                    with self.assertRaises(NodeOwnershipError): validate(values)
+                    args = {item.name: getattr(binding, item.name) for item in fields(binding)}
+                    args[field] = value
+                    with self.assertRaises(NodeOwnershipError): StaticPodBinding(**args)
+                    forged = deepcopy(binding); object.__setattr__(forged, field, value)
+                    with self.assertRaises(NodeOwnershipError): NodeOwnershipProof(
+                        proof.node_name, proof.node_uid, proof.node_resource_version,
+                        proof.daemon_pods, (forged, *proof.static_pods[1:]), False)
 
     def test_global_uid_collisions_are_rejected(self):
         locations = ((1, 0), (2, 0), (3, 0))

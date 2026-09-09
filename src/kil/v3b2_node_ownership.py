@@ -24,7 +24,12 @@ _UINT64_MAX = 2**64 - 1
 _UID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
 _RV = re.compile(r"[1-9][0-9]{0,19}")
 _DNS = re.compile(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?")
-_DIGEST = re.compile(r"[0-9a-f]{64}")
+# Pinned kubelet producer: FNV-128a is hex-encoded as the static Pod UID,
+# then copied into config.hash and config.mirror. These are opaque relationship
+# identifiers; equality does not independently verify a manifest digest.
+# https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/kubelet/config/common.go
+# https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/kubelet/pod/mirror_client.go
+_STATIC_CONFIG_HASH = re.compile(r"[0-9a-f]{32}")
 _DAEMON_SUFFIX = re.compile(r"[a-z0-9]{5}")
 _NODE_KEYS = frozenset(("apiVersion", "kind", "name", "uid", "resourceVersion"))
 _DAEMON_SET_KEYS = frozenset((
@@ -40,9 +45,11 @@ _STATIC_POD_KEYS = frozenset((
     "nodeName", "component", "configSource", "configHash", "mirrorHash",
     "ownerReference",
 ))
-_OWNER_KEYS = frozenset((
+_DAEMON_OWNER_KEYS = frozenset((
     "apiVersion", "kind", "name", "uid", "controller", "blockOwnerDeletion",
 ))
+# mirror_client.go creates a Node controller reference without blockOwnerDeletion.
+_STATIC_OWNER_KEYS = frozenset(("apiVersion", "kind", "name", "uid", "controller"))
 
 
 class NodeOwnershipError(ValueError):
@@ -95,10 +102,10 @@ def _rv(value: object) -> str:
     return text
 
 
-def _digest(label: str, value: object) -> str:
-    text = _text(label, value, 64)
-    if _DIGEST.fullmatch(text) is None:
-        raise NodeOwnershipError(f"{label} is not a lowercase SHA-256 digest")
+def _static_config_hash(label: str, value: object) -> str:
+    text = _text(label, value, 32)
+    if _STATIC_CONFIG_HASH.fullmatch(text) is None:
+        raise NodeOwnershipError(f"{label} is not a 32-character lowercase kubelet identifier")
     return text
 
 
@@ -156,9 +163,9 @@ class StaticPodBinding:
         _rv(self.pod_resource_version)
         _literal("node name", self.node_name, _NODE)
         _uid(self.owner_node_uid)
-        config_hash = _digest("config hash", self.config_hash)
-        if _digest("mirror hash", self.mirror_hash) != config_hash:
-            raise NodeOwnershipError("static Pod hashes do not bind the same manifest")
+        config_hash = _static_config_hash("config hash", self.config_hash)
+        if _static_config_hash("mirror hash", self.mirror_hash) != config_hash:
+            raise NodeOwnershipError("static Pod config and mirror identifiers do not match")
 
 
 def _bindings(label: str, value: object, cls: type, count: int) -> tuple:
@@ -229,25 +236,27 @@ def _precheck(node: object, daemon_sets: object, daemon_pods: object,
     for record, count, label in records:
         if type(record) is not dict or len(record) != count:
             raise NodeOwnershipError(f"{label} record shape is not exact")
-    owned = (*daemon_pods, *static_pods)
-    for record in owned:
+    owned = (*((record, _DAEMON_OWNER_KEYS) for record in daemon_pods),
+             *((record, _STATIC_OWNER_KEYS) for record in static_pods))
+    for record, owner_keys in owned:
         owner = record.get("ownerReference")
-        if type(owner) is not dict or len(owner) != len(_OWNER_KEYS):
+        if type(owner) is not dict or len(owner) != len(owner_keys):
             raise NodeOwnershipError("ownerReference record shape is not exact")
     _keys("Node", node, _NODE_KEYS)
     for record in daemon_sets: _keys("DaemonSet", record, _DAEMON_SET_KEYS)
     for record in daemon_pods: _keys("daemon Pod", record, _DAEMON_POD_KEYS)
     for record in static_pods: _keys("static Pod", record, _STATIC_POD_KEYS)
-    for record in owned: _keys("ownerReference", record["ownerReference"], _OWNER_KEYS)
+    for record, owner_keys in owned: _keys("ownerReference", record["ownerReference"], owner_keys)
     return node, daemon_sets, daemon_pods, static_pods
 
 
 def _owner(record: dict, *, api_version: str, kind: str, name: str, uid: str) -> None:
     owner = record["ownerReference"]
-    if (type(owner["controller"]) is not bool or owner["controller"] is not True
-            or type(owner["blockOwnerDeletion"]) is not bool
-            or owner["blockOwnerDeletion"] is not True):
+    if type(owner["controller"]) is not bool or owner["controller"] is not True:
         raise NodeOwnershipError("ownerReference controller flags are not exact true booleans")
+    if kind == "DaemonSet" and (type(owner["blockOwnerDeletion"]) is not bool
+                                or owner["blockOwnerDeletion"] is not True):
+        raise NodeOwnershipError("DaemonSet blockOwnerDeletion is not an exact true boolean")
     _literal("owner apiVersion", owner["apiVersion"], api_version)
     _literal("owner kind", owner["kind"], kind)
     _literal("owner name", owner["name"], name)
@@ -314,10 +323,10 @@ def _validate(node: object, daemon_sets: object, daemon_pods: object,
         _literal("static Pod name", record["name"], f"{component}-{node_name}")
         _literal("static config source", record["configSource"], "file")
         _owner(record, api_version="v1", kind="Node", name=node_name, uid=node_uid)
-        config_hash = _digest("config hash", record["configHash"])
-        mirror_hash = _digest("mirror hash", record["mirrorHash"])
+        config_hash = _static_config_hash("config hash", record["configHash"])
+        mirror_hash = _static_config_hash("mirror hash", record["mirrorHash"])
         if mirror_hash != config_hash:
-            raise NodeOwnershipError("static Pod hashes do not bind the same manifest")
+            raise NodeOwnershipError("static Pod config and mirror identifiers do not match")
         static_bindings.append(StaticPodBinding(
             component, record["name"], _uid(record["uid"]),
             _rv(record["resourceVersion"]), node_name, node_uid,
