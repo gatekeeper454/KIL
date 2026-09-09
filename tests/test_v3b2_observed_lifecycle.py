@@ -224,10 +224,20 @@ class ObservedLifecycleTest(unittest.TestCase):
             append_event(controller.journal_path, family + "_complete", complete)
         append_event(controller.journal_path, "image_load_intent", images)
         latch_teardown(controller.journal_path)
+        expected_images = [
+            {"reference": images["image"], "manifest_digest": "sha256:" + "d" * 64,
+             "config_digest": "sha256:" + "b" * 64,
+             "target_media_type": "application/vnd.oci.image.manifest.v1+json",
+             "allowed_repo_tags": [images["image"]], "allowed_repo_digests": []},
+            {"reference": images["envoy_image"], "manifest_digest": "sha256:" + "e" * 64,
+             "config_digest": "sha256:" + "c" * 64,
+             "target_media_type": "application/vnd.oci.image.index.v1+json",
+             "allowed_repo_tags": [], "allowed_repo_digests": [images["envoy_image"]]},
+        ]
         context = ExpectedContext(controller.run_digest, 7, "image_load", canonical(images), canonical({
             "owned_identity": asdict(identity), "teardown_only": True,
             "kind_config_path": str(controller.kind_config), "kind_config_sha256": sha256(config).hexdigest(),
-            "kind_node_image": controller.profile.kind_node_image,
+            "kind_node_image": controller.profile.kind_node_image, "images": expected_images,
         }))
         stdout, stderr = b"partial raw stdout\xff", b"partial raw stderr\xfe"
         self.runner.cluster_exists = True

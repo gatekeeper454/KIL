@@ -15,10 +15,12 @@ from kil.v3b2_service_bindings import validate_service_allocations
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def fixture():
-    profile = V3B2Profile.load(ROOT / 'deploy/kind/v3b2-profile.json')
-    workload = WorkloadIdentity('v3b2-' + '1' * 64, 'sha256:' + '2' * 64,
-                                'docker.io/envoyproxy/envoy@sha256:' + '3' * 64)
+def fixture(*, profile=None, workload=None):
+    if profile is None:
+        profile = V3B2Profile.load(ROOT / 'deploy/kind/v3b2-profile.json')
+    if workload is None:
+        workload = WorkloadIdentity('v3b2-' + '1' * 64, 'sha256:' + '2' * 64,
+                                    'docker.io/envoyproxy/envoy@sha256:' + '3' * 64)
     desired = [row for row in json.loads(render_objects(profile, workload))['items'] if row['kind'] == 'Service']
     observed = deepcopy(desired)
     # Literal API additions are independent of the validator's normalization.

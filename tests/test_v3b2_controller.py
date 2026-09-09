@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+from functools import lru_cache
+from hashlib import sha256
+from io import BytesIO
 import json
 from pathlib import Path
 import shutil
 import tempfile
+import tarfile
 import unittest
 import importlib.util
 from unittest.mock import patch
@@ -17,7 +21,7 @@ from kil.v3b2_controller import (
     V3B2Controller,
     SubprocessCommandRunner,
 )
-from kil.v3b2_journal import Command, load_journal
+from kil.v3b2_journal import Command, OwnedIdentity, load_journal
 from kil.v3b2_contracts import TRACKS
 from kil.v3b2_evidence import verify_bundle
 from kil.v3b2_contracts import V3B2Profile
@@ -27,71 +31,153 @@ from kil.v3b2_manifests import WorkloadIdentity, render_objects
 HEX64 = "a" * 64
 SOURCE_COMMIT = "d" * 40
 NOMINAL_REQUEST_ID = "v3b1-central-request"
+KIL_MANIFEST_DIGEST = "45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649"
+KIL_CONFIG_ID = "sha256:f21285be21c8f691b9b60b7e38bb309564a5cc238512c7455eb7759f4d922ddb"
+ENVOY_MANIFEST_DIGEST = "57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38c524401b4"
+ENVOY_CONFIG_ID = "sha256:ef846ec85aabf01a2ff7176a185260e476ca43d20478f57281d88f7a66d5671f"
 
 
-def raw_runtime_inventory() -> str:
+def synthetic_kil_archive():
+    """A deterministic OCI archive whose descriptors hash its actual bytes."""
+    encode = lambda value: json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    config = encode({"architecture": "arm64", "os": "linux", "config": {"User": "65532"},
+                     "rootfs": {"type": "layers", "diff_ids": []}})
+    config_hash = sha256(config).hexdigest()
+    manifest = encode({"schemaVersion": 2, "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                       "config": {"mediaType": "application/vnd.oci.image.config.v1+json",
+                                  "digest": "sha256:" + config_hash, "size": len(config)}, "layers": []})
+    manifest_hash = sha256(manifest).hexdigest()
+    index = encode({"schemaVersion": 2, "manifests": [{
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "digest": "sha256:" + manifest_hash, "size": len(manifest),
+        "annotations": {"org.opencontainers.image.ref.name": "kil.local/kil-v3b2:sha256-" + manifest_hash},
+        "platform": {"architecture": "arm64", "os": "linux"},
+    }]})
+    output = BytesIO()
+    with tarfile.open(fileobj=output, mode="w", format=tarfile.USTAR_FORMAT) as archive:
+        for name, data in (("oci-layout", encode({"imageLayoutVersion": "1.0.0"})),
+                           ("index.json", index), ("blobs/sha256/" + manifest_hash, manifest),
+                           ("blobs/sha256/" + config_hash, config)):
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            info.mode = 0o644
+            archive.addfile(info, BytesIO(data))
+    return output.getvalue(), manifest_hash, "sha256:" + config_hash
+
+
+SYNTHETIC_ARCHIVE, SYNTHETIC_MANIFEST_DIGEST, SYNTHETIC_CONFIG_ID = synthetic_kil_archive()
+
+
+@lru_cache(maxsize=1)
+def production_runtime_snapshot():
     from tests.test_v3b2_inventory import snapshot
+
+    return snapshot()
+
+
+@lru_cache(maxsize=16)
+def raw_runtime_inventory(
+    run_id: str = "v3b2-" + "1" * 64,
+    kil_digest: str = KIL_MANIFEST_DIGEST,
+    kil_config_digest: str = KIL_CONFIG_ID,
+    *,
+    include_drivers: bool = True,
+) -> str:
+    from tests.test_v3b2_kil_pod_runtime import fixture as runtime_fixture
 
     root = Path(__file__).resolve().parents[1]
     profile = V3B2Profile.load(root / "deploy/kind/v3b2-profile.json")
-    kil_digest = "45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649"
-    envoy_digest = "57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38c524401b4"
+    envoy_digest = ENVOY_MANIFEST_DIGEST
     workload = WorkloadIdentity(
-        "v3b2-" + "1" * 64, "sha256:" + kil_digest,
+        run_id, "sha256:" + kil_digest,
         "docker.io/envoyproxy/envoy@sha256:" + envoy_digest,
     )
-    snap = snapshot()
+    owned = OwnedIdentity(
+        "kil-v3-lab", "unix:///tmp/owned/kil-v3-lab/docker.sock",
+        "kil-v3-lab", "/tmp/owned/kubeconfig",
+        "11111111-1111-4111-8111-111111111111", "a" * 64,
+    )
+    _configuration, _endpoints, _images, arguments = runtime_fixture(
+        profile=profile, workload=workload, owned_identity=owned,
+        kil_config_digest=kil_config_digest, envoy_config_digest=ENVOY_CONFIG_ID,
+    )
+    items = json.loads(arguments["runtime_objects"])["items"]
+    snap = production_runtime_snapshot()
     identities = {(item.api_version, item.kind, item.namespace, item.name): item for item in snap.objects}
     rendered = json.loads(render_objects(profile, workload))["items"]
-    items: list[dict[str, object]] = []
+    policy_identities = {
+        (item["apiVersion"], item["kind"], item["metadata"].get("namespace", ""),
+         item["metadata"]["name"]): (f"policy-{index}", str(index + 1))
+        for index, item in enumerate(
+            row for row in rendered if row["kind"] in {"Namespace", "NetworkPolicy"}
+        )
+    }
     for item in rendered:
         key = (item["apiVersion"], item["kind"], item["metadata"].get("namespace", ""), item["metadata"]["name"])
-        identity = identities[key]
-        item["metadata"]["uid"] = identity.uid
-        item["metadata"]["resourceVersion"] = identity.resource_version
-        if item["kind"] == "Pod":
-            image = "kil.local/kil-v3b2:sha256-" + kil_digest
-            item["status"] = {"conditions": [{"type": "Ready", "status": "True"}], "containerStatuses": [{"name": "driver", "image": image, "imageID": "docker-pullable://fixture@sha256:" + kil_digest, "containerID": "containerd://" + "1" * 64}]}
+        if any(
+            (row["apiVersion"], row["kind"], row["metadata"].get("namespace", ""), row["metadata"]["name"]) == key
+            for row in items
+        ):
+            continue
+        if key in policy_identities:
+            item["metadata"]["uid"], item["metadata"]["resourceVersion"] = policy_identities[key]
+        else:
+            identity = identities[key]
+            item["metadata"]["uid"] = identity.uid
+            item["metadata"]["resourceVersion"] = identity.resource_version
         items.append(item)
-    for key in (("v1", "Namespace", "", "kube-system"), ("apps/v1", "DaemonSet", "kube-system", "calico-node"), ("apps/v1", "Deployment", "kube-system", "calico-kube-controllers")):
-        identity = identities[key]
-        status = ({"desiredNumberScheduled": 1, "numberReady": 1} if key[1] == "DaemonSet" else {"replicas": 1, "readyReplicas": 1}) if key[1] != "Namespace" else None
-        value = {"apiVersion": key[0], "kind": key[1], "metadata": {"namespace": key[2], "name": key[3], "uid": identity.uid, "resourceVersion": identity.resource_version}}
-        if status is not None:
-            value["status"] = status
-        items.append(value)
     for name in ("default", "kube-node-lease", "kube-public", "local-path-storage"):
-        items.append({"apiVersion": "v1", "kind": "Namespace", "metadata": {"namespace": "", "name": name, "uid": "uid-" + name, "resourceVersion": "1"}})
+        if not any(row["kind"] == "Namespace" and row["metadata"]["name"] == name for row in items):
+            items.append({"apiVersion": "v1", "kind": "Namespace", "metadata": {
+                "namespace": "", "name": name, "uid": "uid-" + name, "resourceVersion": "1"}})
     calico = json.loads((root / "deploy/kind/calico-v3.32.0.objects.json").read_bytes())
     for item in calico["items"]:
         if item["kind"] not in {"ServiceAccount", "ConfigMap"}:
             continue
         key = (item["apiVersion"], item["kind"], item["metadata"].get("namespace", ""), item["metadata"]["name"])
+        if any(
+            (row["apiVersion"], row["kind"], row["metadata"].get("namespace", ""), row["metadata"]["name"]) == key
+            for row in items
+        ):
+            continue
         identity = identities[key]
         item["metadata"].update(uid=identity.uid, resourceVersion=identity.resource_version)
         items.append(item)
     grouped: dict[tuple[str, str], list[object]] = {}
     for image in snap.pod_images:
-        if image.container == "driver":
+        if image.image_role == "workload":
             continue
         digest = envoy_digest if image.container == "envoy" else kil_digest if image.image_role == "workload" else image.image.rsplit(":", 1)[1]
         requested = "docker.io/envoyproxy/envoy@sha256:" + digest if image.container == "envoy" else "kil.local/kil-v3b2:sha256-" + digest if image.image_role == "workload" else image.image
         row = {"name": image.container, "image": requested, "imageID": "docker-pullable://fixture@sha256:" + digest, "containerID": "containerd://" + __import__("hashlib").sha256((image.namespace + image.pod + image.container).encode()).hexdigest()}
         grouped.setdefault((image.namespace, image.pod), []).append((image.container_type, row, image.uid, image.resource_version))
-    for (namespace, pod), rows in grouped.items():
-        items.append({"apiVersion": "v1", "kind": "Pod", "metadata": {"namespace": namespace, "name": pod, "uid": rows[0][2], "resourceVersion": rows[0][3]}, "status": {"conditions": [{"type": "Ready", "status": "True"}], "initContainerStatuses": [row for placement, row, _uid, _rv in rows if placement == "init"], "containerStatuses": [row for placement, row, _uid, _rv in rows if placement == "regular"]}})
+    for (_namespace, pod), rows in grouped.items():
+        prefix = "calico-node-" if pod.startswith("calico-node-") else "calico-kube-controllers-"
+        actual = next(item for item in items if item["kind"] == "Pod"
+                      and item["metadata"].get("namespace") == "kube-system"
+                      and item["metadata"]["name"].startswith(prefix))
+        actual["status"] = {
+            "conditions": [{"type": "Ready", "status": "True"}],
+            "initContainerStatuses": [row for placement, row, _uid, _rv in rows if placement == "init"],
+            "containerStatuses": [row for placement, row, _uid, _rv in rows if placement == "regular"],
+        }
     for endpoint in snap.endpoints:
-        items.append({"apiVersion": "v1", "kind": "Endpoints", "metadata": {"namespace": endpoint.namespace, "name": endpoint.service, "uid": "uid-endpoint-" + endpoint.namespace + endpoint.service, "resourceVersion": "30"}, "subsets": [{"addresses": [{"ip": address} for address in endpoint.addresses], "ports": [{"name": endpoint.port_name, "protocol": endpoint.protocol, "port": endpoint.port}]}]})
-        pod = next(item for item in items if item["kind"] == "Pod" and item["metadata"].get("namespace") == endpoint.namespace and item["metadata"]["name"].startswith(endpoint.service + "-"))
+        if any(item["kind"] == "Endpoints"
+               and item["metadata"].get("namespace") == endpoint.namespace
+               and item["metadata"]["name"] == endpoint.service for item in items):
+            continue
         items.append({
-            "apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSlice",
-            "metadata": {"namespace": endpoint.namespace, "name": endpoint.service + "-abcde",
-                         "uid": "uid-slice-" + endpoint.namespace + endpoint.service,
-                         "resourceVersion": "31", "labels": {"kubernetes.io/service-name": endpoint.service}},
-            "addressType": "IPv4", "ports": [{"name": endpoint.port_name, "protocol": endpoint.protocol, "port": endpoint.port}],
-            "endpoints": [{"addresses": list(endpoint.addresses), "conditions": {"ready": True},
-                           "targetRef": {"kind": "Pod", "name": pod["metadata"]["name"],
-                                         "namespace": endpoint.namespace, "uid": pod["metadata"]["uid"]}}],
+            "apiVersion": "v1", "kind": "Endpoints",
+            "metadata": {
+                "namespace": endpoint.namespace, "name": endpoint.service,
+                "uid": "uid-endpoint-" + endpoint.namespace + endpoint.service,
+                "resourceVersion": "30",
+            },
+            "subsets": [{
+                "addresses": [{"ip": address} for address in endpoint.addresses],
+                "ports": [{"name": endpoint.port_name, "protocol": endpoint.protocol,
+                           "port": endpoint.port}],
+            }],
         })
     uid_map: dict[str, str] = {}
     rv_map: dict[str, str] = {}
@@ -99,14 +185,34 @@ def raw_runtime_inventory() -> str:
         metadata = item["metadata"]
         old_uid, old_rv = str(metadata["uid"]), str(metadata["resourceVersion"])
         if old_uid not in uid_map:
-            uid_map[old_uid] = old_uid if old_uid == "11111111-1111-4111-8111-111111111111" else f"00000000-0000-4000-8000-{len(uid_map) + 1:012x}"
+            uid_map[old_uid] = (
+                old_uid
+                if old_uid == "11111111-1111-4111-8111-111111111111"
+                or old_uid.startswith("policy-")
+                else f"00000000-0000-4000-8000-{len(uid_map) + 1:012x}"
+            )
         if old_rv not in rv_map:
             rv_map[old_rv] = str(len(rv_map) + 1)
         metadata["uid"], metadata["resourceVersion"] = uid_map[old_uid], rv_map[old_rv]
     for item in items:
+        metadata = item["metadata"]
+        for owner in metadata.get("ownerReferences", []):
+            owner["uid"] = uid_map[owner["uid"]]
         if item["kind"] == "EndpointSlice":
             for endpoint in item["endpoints"]:
-                endpoint["targetRef"]["uid"] = uid_map[endpoint["targetRef"]["uid"]]
+                if "targetRef" in endpoint:
+                    endpoint["targetRef"]["uid"] = uid_map[endpoint["targetRef"]["uid"]]
+        if item["kind"] == "Endpoints":
+            for subset in item.get("subsets", []):
+                for address in subset.get("addresses", []):
+                    if "targetRef" in address:
+                        address["targetRef"]["uid"] = uid_map[address["targetRef"]["uid"]]
+    if not include_drivers:
+        items = [item for item in items if not (
+            item["kind"] == "Pod"
+            and item["metadata"].get("namespace", "").startswith("kil-v3-")
+            and item["metadata"]["name"] == "driver"
+        )]
     return json.dumps({"apiVersion": "v1", "kind": "List", "items": items}, sort_keys=True, separators=(",", ":")) + "\n"
 
 
@@ -117,6 +223,7 @@ class FakeRunner:
         self.attach_count = 0
         self.cancel_attach_count = 0
         self.attached_tracks: set[str] = set()
+        self.drivers_applied = False
         self.fail_track: str | None = None
         self.inject_application_record = False
         self.profile_exists = False
@@ -127,16 +234,52 @@ class FakeRunner:
         self.failed_stage = False
         self.quiesce_seen = False
         self.wrong_image_id = False
+        self.kil_manifest_digest = KIL_MANIFEST_DIGEST
+        self.kil_config_id = KIL_CONFIG_ID
+        self.calico_applied = False
+        self.calico_expected = None
+        self.policy_expected = None
+        self.policy_observation_invalid = False
+        self.workload_dispatch_check = None
+        self.runtime_inventory_payload = None
+        self.bound_kubeconfig = None
+        self.bound_calico_path = None
+        self.bound_docker_environment = None
         self.canceled_drivers: set[str] = set()
         self.cancel_exit_code = 0
         self.swap_envoy_container_after_drain = False
         self.run_id = "v3b2-" + "1" * 64
 
+    def node_image_check(self):
+        return (
+            "REF TYPE DIGEST STATUS SIZE UNPACKED\n"
+            f"kil.local/kil-v3b2:sha256-{self.kil_manifest_digest} "
+            f"application/vnd.oci.image.manifest.v1+json sha256:{self.kil_manifest_digest} "
+            "complete (2/2) 1.0 KiB true\n"
+            f"docker.io/envoyproxy/envoy@sha256:{ENVOY_MANIFEST_DIGEST} "
+            f"application/vnd.oci.image.index.v1+json sha256:{ENVOY_MANIFEST_DIGEST} "
+            "complete (18/18) 64.0 MiB true\n"
+        )
+
+    def calico_observed(self):
+        items = json.loads(json.dumps(self.calico_expected))
+        for index, item in enumerate(items, 1):
+            item["metadata"].update(
+                uid=f"00000000-0000-4000-8000-{index:012x}",
+                resourceVersion=str(1000 + index),
+            )
+        return {"apiVersion": "v1", "kind": "List", "items": items}
+
     def run(self, command):
         self.commands.append(command)
         argv = command.argv
         if command.stdin and argv[-3:] == ("apply", "-f", "-"):
-            self.run_id = json.loads(command.stdin)["items"][0]["metadata"]["annotations"]["kil.dev/run-id"]
+            applied = json.loads(command.stdin)["items"]
+            self.run_id = applied[0]["metadata"]["annotations"]["kil.dev/run-id"]
+            if any(row["kind"] == "Pod" for row in applied):
+                self.drivers_applied = True
+            if any(row["kind"] not in {"Namespace", "NetworkPolicy"} for row in applied):
+                if self.workload_dispatch_check is not None: self.workload_dispatch_check()
         stage_matches = {
             "image_import": argv[:2] == ("docker", "load"),
             "image_load": argv[:3] == ("kind", "load", "docker-image"),
@@ -153,6 +296,14 @@ class FakeRunner:
         if self.fail_stage is not None and stage_matches[self.fail_stage] and not self.failed_stage:
             self.failed_stage = True
             return CommandResult(9, "", "injected")
+        exact_calico_apply = (
+            "kubectl", "--kubeconfig", self.bound_kubeconfig or "", "apply", "-f",
+            self.bound_calico_path or "",
+        )
+        if (argv == exact_calico_apply and command.mutating is True
+                and command.stdin is None):
+            self.calico_applied = True
+            return CommandResult(0, "", "")
         if argv[:2] == ("colima", "start"):
             if self.fail_profile_start:
                 return CommandResult(9, "", "injected")
@@ -219,10 +370,64 @@ class FakeRunner:
             return CommandResult(0, payload, "")
         if argv[:3] == ("docker", "image", "inspect"):
             image = argv[3]
-            digest = image.rsplit(":", 1)[1].removeprefix("sha256-")
+            config_ids = {
+                "kil.local/kil-v3b2:sha256-" + self.kil_manifest_digest: self.kil_config_id,
+                "docker.io/envoyproxy/envoy@sha256:" + ENVOY_MANIFEST_DIGEST: ENVOY_CONFIG_ID,
+            }
+            image_id = config_ids.get(image, "sha256:" + image.rsplit(":", 1)[1].removeprefix("sha256-"))
             if self.wrong_image_id:
-                digest = "0" * 64
-            return CommandResult(0, json.dumps([{"Id": "sha256:" + digest, "RepoTags": [image], "RepoDigests": [image]}]) + "\n", "")
+                image_id = "sha256:" + "0" * 64
+            return CommandResult(0, json.dumps([{"Id": image_id, "RepoTags": [image], "RepoDigests": [image]}]) + "\n", "")
+        node_image_argv = (
+            "docker", "exec", "a" * 64, "/usr/local/bin/ctr", "--address",
+            "/run/containerd/containerd.sock", "--namespace", "k8s.io",
+            "images", "check", "--snapshotter", "overlayfs",
+        )
+        expected_node_host = (f"unix://{self.profile_paths.profile}/docker.sock"
+                              if hasattr(self, "profile_paths") else None)
+        if (argv == node_image_argv
+                and dict(command.env).get("DOCKER_HOST") == expected_node_host):
+            return CommandResult(0, self.node_image_check(), "")
+        cri_prefix = ("docker", "exec", "a" * 64, "/usr/local/bin/crictl",
+                      "--runtime-endpoint", "unix:///run/containerd/containerd.sock",
+                      "--image-endpoint", "unix:///run/containerd/containerd.sock",
+                      "--timeout", "10s", "inspecti", "--quiet", "--output", "json")
+        if (len(argv) == 15 and argv[:14] == cri_prefix
+                and command.env == self.bound_docker_environment):
+            kil_reference = "kil.local/kil-v3b2:sha256-" + self.kil_manifest_digest
+            envoy_reference = "docker.io/envoyproxy/envoy@sha256:" + ENVOY_MANIFEST_DIGEST
+            if argv[-1] in (kil_reference, envoy_reference):
+                is_kil = argv[-1] == kil_reference
+                status = {"id": self.kil_config_id if is_kil else ENVOY_CONFIG_ID,
+                          "repoTags": [kil_reference] if is_kil else [],
+                          "repoDigests": [] if is_kil else [envoy_reference],
+                          "size": "1024", "username": "", "pinned": False}
+                if is_kil:
+                    status["uid"] = {"value": "65532"}
+                return CommandResult(0, json.dumps({"status": status}) + "\n", "")
+        calico_get = ("kubectl", "--kubeconfig", self.bound_kubeconfig or "",
+                      "get", "--filename", "-", "--output", "json")
+        if self.policy_expected is not None:
+            policy = self.policy_expected()
+            from kil.v3b2_journal import _canonical_bytes
+            if argv == calico_get and command.stdin == _canonical_bytes(policy) and command.env == ():
+                if self.policy_observation_invalid: return CommandResult(0, "{}", "")
+                observed = json.loads(json.dumps(policy))
+                observed["metadata"] = {"resourceVersion": ""}
+                for index, row in enumerate(observed["items"]):
+                    row["metadata"].update(uid=f"policy-{index}", resourceVersion=str(index + 1))
+                return CommandResult(0, _canonical_bytes(observed).decode(), "")
+            from kil.v3b2_contracts import TRACK_NAMESPACES
+            for _, namespace in TRACK_NAMESPACES:
+                if argv == ("kubectl", "--kubeconfig", self.bound_kubeconfig,
+                            "get", "pods,deployments,replicasets", "--namespace", namespace, "--output", "json") and command.env == ():
+                    return CommandResult(0, '{"apiVersion":"v1","kind":"List","metadata":{"resourceVersion":""},"items":[]}', "")
+        if self.calico_applied and argv == calico_get and self.calico_expected is not None:
+            from kil.v3b2_journal import _canonical_bytes
+            expected = _canonical_bytes({"apiVersion": "v1", "kind": "List",
+                                         "items": self.calico_expected})
+            if command.stdin == expected:
+                return CommandResult(0, _canonical_bytes(self.calico_observed()).decode(), "")
         if argv[:2] in {("docker", "load"), ("docker", "tag"), ("docker", "pull")}:
             return CommandResult(0, "", "")
         if argv[3:5] == ("get", "daemonset") or argv[3:5] == ("get", "deployment"):
@@ -246,7 +451,10 @@ class FakeRunner:
         if argv[3:5] == ("get", "pod") and argv[-2:] == ("--output", "json"):
             pod_name = argv[5]
             namespace = argv[argv.index("--namespace") + 1]
-            pod = next(item for item in json.loads(raw_runtime_inventory())["items"] if item["kind"] == "Pod" and item["metadata"].get("namespace") == namespace and item["metadata"]["name"] == pod_name)
+            pod = next(item for item in json.loads(raw_runtime_inventory(
+                self.run_id, self.kil_manifest_digest, self.kil_config_id))["items"]
+                if item["kind"] == "Pod" and item["metadata"].get("namespace") == namespace
+                and item["metadata"]["name"] == pod_name)
             role = "driver" if pod_name == "driver" else pod_name.split("-", 1)[0]
             status = next(row for row in pod["status"]["containerStatuses"] if row["name"] == role)
             track_by_namespace = dict((namespace, track) for track, namespace in __import__("kil.v3b2_contracts", fromlist=["TRACK_NAMESPACES"]).TRACK_NAMESPACES)
@@ -264,7 +472,8 @@ class FakeRunner:
         if argv[3:5] == ("get", "endpointslices"):
             namespace = argv[argv.index("--namespace") + 1]
             role = argv[argv.index("--selector") + 1].split("=", 1)[1]
-            inventory = json.loads(raw_runtime_inventory())["items"]
+            inventory = json.loads(raw_runtime_inventory(
+                self.run_id, self.kil_manifest_digest, self.kil_config_id))["items"]
             pod = next(item for item in inventory if item["kind"] == "Pod" and item["metadata"].get("namespace") == namespace and item["metadata"]["name"].startswith(role + "-"))
             endpoint = next(item for item in inventory if item["kind"] == "Endpoints" and item["metadata"].get("namespace") == namespace and item["metadata"]["name"] == role)
             item = {
@@ -278,8 +487,17 @@ class FakeRunner:
                                              "namespace": namespace, "uid": pod["metadata"]["uid"]}}],
             }
             return CommandResult(0, json.dumps({"apiVersion": "v1", "kind": "List", "items": [item]}, indent=2) + "\n", "")
-        if any(item.startswith("namespaces,pods,services") for item in argv):
-            return CommandResult(0, raw_runtime_inventory(), "")
+        if (argv == ("kubectl", "--kubeconfig", self.bound_kubeconfig, "get",
+                     "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies,nodes,replicasets",
+                     "--all-namespaces", "--output", "json") and command.env == ()
+                and command.stdin is None and command.mutating is False):
+            return CommandResult(
+                0,
+                self.runtime_inventory_payload or raw_runtime_inventory(
+                    self.run_id, self.kil_manifest_digest, self.kil_config_id,
+                    include_drivers=self.drivers_applied),
+                "",
+            )
         if "attach" in argv:
             if command.stdin == b"":
                 self.cancel_attach_count += 1
@@ -343,6 +561,37 @@ def foreign(name: str, status: str) -> dict[str, object]:
         "name": name, "status": status, "arch": "aarch64", "cpus": 2,
         "memory": 4, "disk": 20, "runtime": "docker",
     }
+
+
+class AcceptedArchiveConstantsTest(unittest.TestCase):
+    def test_real_production_acceptance_constants_are_not_fixture_values(self):
+        import kil.v3b2_controller as module
+        self.assertEqual(module._ACCEPTED_KIL_ARCHIVE_SHA256,
+                         "07c12f338c7d764812ef6271ec8942f0535d05019288f4df1e1b54f6cd75e4b6")
+        self.assertEqual(module._ACCEPTED_V3B1_MANIFEST_SHA256,
+                         "fa39212f1ffad95a1b5a674021ac5ce4ed9458025ce0dcc80077070355141cd0")
+        self.assertEqual(module._ACCEPTED_V3B1_COMMITMENT,
+                         "8d5ea5e8e12913945006af636bd674c39681a96b6d09a045e1b071ca77429ec2")
+        self.assertEqual(module._ACCEPTED_KIL_CONFIG_DIGEST, KIL_CONFIG_ID)
+        accepted = Path(__file__).resolve().parents[1] / "artifacts/generated/v3b1-local-envoy" / module._ACCEPTED_V3B1_RUN / "manifest.json"
+        self.assertEqual(sha256(accepted.read_bytes()).hexdigest(), module._ACCEPTED_V3B1_MANIFEST_SHA256)
+        self.assertEqual(json.loads(accepted.read_bytes())["immutable_images"]["kil_image_id"], "sha256:" + KIL_MANIFEST_DIGEST)
+        self.assertEqual(module._archive_digest(SYNTHETIC_ARCHIVE), sha256(SYNTHETIC_ARCHIVE).hexdigest())
+        self.assertEqual(module._digest(SYNTHETIC_ARCHIVE), sha256(SYNTHETIC_ARCHIVE).hexdigest())
+
+    def test_synthetic_oci_archive_descriptors_match_actual_blob_bytes(self):
+        with tarfile.open(fileobj=BytesIO(SYNTHETIC_ARCHIVE)) as archive:
+            index = json.load(archive.extractfile("index.json"))
+            descriptor = index["manifests"][0]
+            manifest_bytes = archive.extractfile("blobs/sha256/" + SYNTHETIC_MANIFEST_DIGEST).read()
+            self.assertEqual(descriptor["digest"], "sha256:" + sha256(manifest_bytes).hexdigest())
+            self.assertEqual(descriptor["size"], len(manifest_bytes))
+            config_descriptor = json.loads(manifest_bytes)["config"]
+            config_bytes = archive.extractfile("blobs/sha256/" + SYNTHETIC_CONFIG_ID.removeprefix("sha256:")).read()
+            self.assertEqual(config_descriptor["digest"], "sha256:" + sha256(config_bytes).hexdigest())
+            self.assertEqual(config_descriptor["size"], len(config_bytes))
+            self.assertEqual(json.loads(config_bytes)["architecture"], "arm64")
+            self.assertNotEqual(descriptor["digest"], config_descriptor["digest"])
 
 
 class V3B2ControllerTest(unittest.TestCase):
@@ -409,16 +658,59 @@ class V3B2ControllerTest(unittest.TestCase):
             "tools": tool_rows,
         }
         (root / ".tools/locks/v3b-tools.json").write_text(json.dumps(lock, sort_keys=True, separators=(",", ":")) + "\n")
-        archive = b"verified-test-oci-archive"
+        archive = SYNTHETIC_ARCHIVE
         (root / ".tools/v3b2-input").mkdir()
         (root / ".tools/v3b2-input/kil-image.tar").write_bytes(archive)
         import kil.v3b2_controller as controller_module
-        archive_patch = patch.object(
-            controller_module, "_archive_digest",
-            return_value="07c12f338c7d764812ef6271ec8942f0535d05019288f4df1e1b54f6cd75e4b6",
+        self.accepted_manifest_path = (root / "artifacts/generated/v3b1-local-envoy" /
+                                      controller_module._ACCEPTED_V3B1_RUN / "manifest.json")
+        manifest = json.loads(self.accepted_manifest_path.read_bytes())
+        manifest["immutable_images"]["kil_archive_sha256"] = sha256(archive).hexdigest()
+        manifest["immutable_images"]["kil_image_id"] = "sha256:" + SYNTHETIC_MANIFEST_DIGEST
+        # This fixture exercises the controller's accepted-input boundary, not
+        # publication of a replacement historical experiment bundle.
+        from tools.v3b1_local_envoy import _public_commitment_from_output
+        manifest["public_commitment_sha256"] = _public_commitment_from_output(
+            self.accepted_manifest_path.parent, manifest)
+        self.accepted_manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n")
+        self.accepted_constants = {
+            "_ACCEPTED_KIL_ARCHIVE_SHA256": sha256(archive).hexdigest(),
+            "_ACCEPTED_KIL_CONFIG_DIGEST": SYNTHETIC_CONFIG_ID,
+            "_ACCEPTED_V3B1_MANIFEST_SHA256": sha256(self.accepted_manifest_path.read_bytes()).hexdigest(),
+            "_ACCEPTED_V3B1_COMMITMENT": manifest["public_commitment_sha256"],
+        }
+        for name, value in self.accepted_constants.items():
+            constant_patch = patch.object(controller_module, name, value)
+            constant_patch.start()
+            self.addCleanup(constant_patch.stop)
+        # Keep the synthetic archive test boundary coherent with the finite
+        # production membership module that runtime inventory now consults.
+        import kil.v3b2_accepted_images as accepted_module
+        import kil.v3b2_evidence as evidence_module
+        production_runtime_snapshot()
+        synthetic_request = "kil.local/kil-v3b2:sha256-" + SYNTHETIC_MANIFEST_DIGEST
+        synthetic_contract = (
+            (
+                "kil", synthetic_request, "sha256:" + SYNTHETIC_MANIFEST_DIGEST,
+                SYNTHETIC_CONFIG_ID,
+                (SYNTHETIC_CONFIG_ID,
+                 "kil.local/kil-v3b2@sha256:" + SYNTHETIC_MANIFEST_DIGEST),
+            ),
+            accepted_module._CONTRACT[1],
         )
-        archive_patch.start()
-        self.addCleanup(archive_patch.stop)
+        contract_patch = patch.object(accepted_module, "_CONTRACT", synthetic_contract)
+        contract_patch.start()
+        self.addCleanup(contract_patch.stop)
+        synthetic_images = tuple(
+            accepted_module.AcceptedImage(*row) for row in synthetic_contract
+        )
+        for module, name in (
+            (accepted_module, "ACCEPTED_IMAGES"),
+            (evidence_module, "ACCEPTED_IMAGES"),
+        ):
+            image_patch = patch.object(module, name, synthetic_images)
+            image_patch.start()
+            self.addCleanup(image_patch.stop)
         self.paths = ControllerPaths(
             repository=root,
             profile=root / "deploy/kind/v3b2-profile.json",
@@ -427,8 +719,25 @@ class V3B2ControllerTest(unittest.TestCase):
             public=root / "artifacts/generated/v3b2-kind-calico",
         )
         self.runner = FakeRunner()
+        self.runner.kil_manifest_digest = SYNTHETIC_MANIFEST_DIGEST
+        self.runner.kil_config_id = SYNTHETIC_CONFIG_ID
         self.controller = V3B2Controller(self.paths, self.runner)
         self.runner.profile_paths = self.controller.profile_paths
+        self.runner.bound_kubeconfig = str(self.controller.kubeconfig)
+        self.runner.bound_calico_path = str(self.paths.private / "calico-v3.32.0.yaml")
+        self.runner.bound_docker_environment = (("DOCKER_CONFIG", str(self.controller.docker_config)),
+                                                ("DOCKER_HOST", self.controller.docker_host))
+        from kil.v3b2_proofs import calico_objects
+        calico_source = root / "deploy/kind/calico-v3.32.0.yaml"
+        self.runner.calico_expected = calico_objects(
+            calico_source.read_bytes(),
+            calico_source.with_suffix(".objects.json").read_bytes(),
+        )
+        self.runner.policy_expected = lambda: {"apiVersion": "v1", "kind": "List", "items": [
+            row for row in json.loads(render_objects(self.controller.profile, WorkloadIdentity(
+                self.controller.run_id, "sha256:" + SYNTHETIC_MANIFEST_DIGEST,
+                "docker.io/envoyproxy/envoy@sha256:" + ENVOY_MANIFEST_DIGEST)))["items"]
+            if row["kind"] in {"Namespace", "NetworkPolicy"}]}
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -470,14 +779,292 @@ class V3B2ControllerTest(unittest.TestCase):
             self.controller.preflight()
         self.assertFalse(any(command.mutating for command in self.runner.commands))
 
+    def test_preflight_binds_actual_synthetic_archive_size_hash_and_image_descriptors(self):
+        self.controller.preflight()
+        inputs = json.loads(self.controller.expected_inputs_path.read_bytes())
+        self.assertEqual(inputs["archive_byte_count"], len(SYNTHETIC_ARCHIVE))
+        self.assertEqual(inputs["archive_sha256"], sha256(SYNTHETIC_ARCHIVE).hexdigest())
+        self.assertEqual(inputs["images"][0]["manifest_digest"], "sha256:" + SYNTHETIC_MANIFEST_DIGEST)
+        self.assertEqual(inputs["images"][0]["config_digest"], SYNTHETIC_CONFIG_ID)
+        self.assertEqual(inputs["images"][0].get("target_media_type"),
+                         "application/vnd.oci.image.manifest.v1+json")
+        self.assertEqual(inputs["images"][0]["allowed_repo_tags"],
+                         ["kil.local/kil-v3b2:sha256-" + SYNTHETIC_MANIFEST_DIGEST])
+        self.assertEqual(inputs["images"][0]["allowed_repo_digests"],
+                         ["kil.local/kil-v3b2@sha256:" + SYNTHETIC_MANIFEST_DIGEST])
+        self.assertEqual(inputs["images"][1]["allowed_repo_tags"], [])
+        self.assertEqual(inputs["images"][1].get("target_media_type"),
+                         "application/vnd.oci.image.index.v1+json")
+        self.assertEqual(inputs["images"][1]["allowed_repo_digests"],
+                         ["docker.io/envoyproxy/envoy@sha256:" + ENVOY_MANIFEST_DIGEST])
+
+    def test_preflight_rejects_changed_archive_bytes_without_digest_mock(self):
+        archive_path = self.paths.tools.parent / "v3b2-input/kil-image.tar"
+        archive_path.write_bytes(SYNTHETIC_ARCHIVE[:-1] + b"x")
+        with self.assertRaisesRegex(ControllerError, "kil_image_archive_unavailable"):
+            self.controller.preflight()
+        self.assertFalse(any(command.mutating for command in self.runner.commands))
+
+    def test_preflight_rejects_repaired_manifest_claims(self):
+        replacement = SYNTHETIC_ARCHIVE + b"changed"
+        (self.paths.tools.parent / "v3b2-input/kil-image.tar").write_bytes(replacement)
+        manifest = json.loads(self.accepted_manifest_path.read_bytes())
+        manifest["immutable_images"]["kil_archive_sha256"] = sha256(replacement).hexdigest()
+        from tools.v3b1_local_envoy import _public_commitment_from_output
+        manifest["public_commitment_sha256"] = _public_commitment_from_output(
+            self.accepted_manifest_path.parent, manifest)
+        self.accepted_manifest_path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ControllerError, "content_identity_failed"):
+            self.controller.preflight()
+        self.assertFalse(any(command.mutating for command in self.runner.commands))
+
+    def test_import_proof_rejects_wrong_archive_size_with_correct_hash(self):
+        from dataclasses import asdict
+        from kil.v3b2_proofs import ExpectedContext, RawObservation, canonical, decide
+        self.controller.preflight()
+        inputs = json.loads(self.controller.expected_inputs_path.read_bytes())
+        inputs["owned_identity"] = asdict(self.controller._identity)
+        observations = [RawObservation("image_archive", (), (), 0, canonical({
+            "path": inputs["archive_path"], "sha256": inputs["archive_sha256"],
+            "byte_count": len(SYNTHETIC_ARCHIVE)}), b"")]
+        for index, expected in enumerate(inputs["images"]):
+            observations.append(RawObservation("image_" + str(index),
+                ("docker", "image", "inspect", expected["reference"]),
+                (("DOCKER_HOST", inputs["owned_identity"]["docker_host"]),), 0,
+                canonical([{"Id": expected["config_digest"],
+                            "RepoTags": [expected["reference"]], "RepoDigests": []}]), b""))
+        context = ExpectedContext(self.controller.run_digest, 1, "image_import", b"{}\n", canonical(inputs))
+        self.assertEqual(decide(context, tuple(observations)).outcome, "complete")
+        measured = json.loads(observations[0].stdout)
+        measured["byte_count"] += 1
+        observations[0] = RawObservation("image_archive", (), (), 0, canonical(measured), b"")
+        self.assertEqual(decide(context, tuple(observations)).outcome, "unknown")
+
+    def test_image_load_fixture_completes_only_exact_bound_node_store_proof(self):
+        from kil import v3b2_proofs as proofs
+        from kil.v3b2_controller import render_kind_config
+        self.controller.preflight()
+        inputs = json.loads(self.controller.expected_inputs_path.read_bytes())
+        docker_host = self.controller.docker_host
+        node_id = "a" * 64
+        inputs["owned_identity"].update(node_container_id=node_id,
+                                        cluster_incarnation_uid="11111111-1111-4111-8111-111111111111")
+        self.controller.kind_config.write_bytes(render_kind_config(self.controller.profile))
+        self.runner.cluster_exists = True
+        intent = {"image": inputs["images"][0]["reference"],
+                  "envoy_image": inputs["images"][1]["reference"]}
+        context = proofs.ExpectedContext(self.controller.run_digest, 1, "image_load", proofs.canonical(intent),
+                                         proofs.canonical(inputs))
+        observations = self.controller._collect_observations(context)
+        self.assertEqual([row.label for row in observations],
+                         ["node_before", "cri_image_0", "cri_image_1", "node_images",
+                          "node", "cluster_namespace", "kind_configuration"])
+        self.assertEqual(proofs.decide(context, observations).outcome, "complete")
+        argv = proofs.node_images_argv(node_id)
+        env = (("DOCKER_CONFIG", str(self.controller.docker_config)),
+               ("DOCKER_HOST", docker_host))
+        result = self.runner.run(Command(argv, 60, env=env))
+        poisons = (
+            (proofs.node_images_argv("b" * 64), env, result.stdout),
+            (argv, (("DOCKER_CONFIG", str(self.controller.docker_config)),
+                    ("DOCKER_HOST", "unix:///tmp/foreign/docker.sock")), result.stdout),
+            (argv, env, result.stdout.replace("sha256:" + SYNTHETIC_MANIFEST_DIGEST,
+                                              SYNTHETIC_CONFIG_ID, 1)),
+            (argv, env, result.stdout.replace("complete (2/2)", "incomplete (1/2)", 1)),
+            (argv, env, "\n".join(result.stdout.splitlines()[:2]) + "\n"),
+        )
+        for poisoned_argv, poisoned_env, stdout in poisons:
+            with self.subTest(argv=poisoned_argv[2], host=dict(poisoned_env)["DOCKER_HOST"]):
+                poisoned = proofs.RawObservation("node_images", poisoned_argv,
+                                                 poisoned_env, 0, stdout.encode(), b"")
+                altered = (*observations[:3], poisoned, *observations[4:])
+                self.assertNotEqual(proofs.decide(context, altered).outcome,
+                                    "complete")
+
+    def test_image_load_and_calico_apply_complete_before_application_gate(self):
+        from kil.v3b2_journal import load_expected_context
+        with self.assertRaisesRegex(ControllerError, "operation_postcondition_unproved:invalid_or_missing_observation"):
+            self.controller._up_lifecycle()
+        events = load_journal(self.controller.journal_path)["events"]
+        self.assertTrue(any(row["event"] == "image_load_complete" for row in events))
+        self.assertTrue(any(row["event"] == "calico_apply_complete" for row in events))
+        self.assertFalse(any(row["event"] == "application_apply_complete" for row in events))
+        command_count = len(self.runner.commands)
+        replayed = json.loads(load_expected_context(self.controller.journal_path).inputs)
+        self.assertEqual(len(self.runner.commands), command_count)
+        references = replayed["prior_node_image_references"]
+        self.assertEqual([row["expected"]["config_digest"] for row in references],
+                         [SYNTHETIC_CONFIG_ID, ENVOY_CONFIG_ID])
+        self.assertEqual([row["image_ref"] for row in references],
+                         [SYNTHETIC_CONFIG_ID, "docker.io/envoyproxy/envoy@sha256:" + ENVOY_MANIFEST_DIGEST])
+        self.assertIs(replayed["runtime_contract_complete"], False)
+
+    def test_policy_checkpoint_is_durable_before_any_workload_dispatch(self):
+        checked = []
+        def check():
+            from kil.v3b2_journal import load_expected_context
+            from kil.v3b2_policy_stage_checkpoint import read_policy_stage_checkpoint
+            context = load_expected_context(self.controller.journal_path)
+            proof = read_policy_stage_checkpoint(self.controller.journal_path, context)
+            self.assertEqual(len(proof.bindings), 18)
+            checked.append(context.intent_sequence)
+        self.runner.workload_dispatch_check = check
+        with self.assertRaisesRegex(ControllerError, "operation_postcondition_unproved"):
+            self.controller._up_lifecycle()
+        self.assertEqual(len(checked), 2)
+
+    def test_application_terminal_collector_reads_strict_checkpoint_as_five_record_registry(self):
+        from kil.v3b2_policy_stage_checkpoint import read_policy_stage_checkpoint_bytes
+        from kil.v3b2_proofs import OPERATIONS
+        captured = []
+        def read(path, context):
+            payload = read_policy_stage_checkpoint_bytes(path, context)
+            captured.append((context, payload))
+            return payload
+        with patch("kil.v3b2_policy_stage_checkpoint.read_policy_stage_checkpoint_bytes",
+                   side_effect=read) as reader:
+            with self.assertRaisesRegex(ControllerError, "operation_postcondition_unproved"):
+                self.controller._up_lifecycle()
+        self.assertEqual(reader.call_count, 1)
+        context, expected = captured[0]
+        requests = OPERATIONS["application_apply"].requests(context)
+        self.assertEqual([row.label for row in requests], ["policy_stage_checkpoint",
+                         "applied_objects", "node", "cluster_namespace", "kind_configuration"])
+        self.assertTrue(expected.startswith(b'{"context_commitment":'))
+
+    def test_invalid_policy_observation_prevents_workloads_and_latches_teardown(self):
+        self.runner.policy_observation_invalid = True
+        self.runner.workload_dispatch_check = lambda: self.fail("workload dispatched before checkpoint")
+        with self.assertRaisesRegex(ControllerError, "policy_stage_checkpoint_failed"):
+            self.controller._up_lifecycle()
+        journal = load_journal(self.controller.journal_path)
+        self.assertIsNotNone(journal["teardown_from_sequence"])
+        self.assertFalse(list(self.paths.private.glob("policy-stage-*.json")))
+
+    def test_policy_checkpoint_publication_failure_prevents_workload_dispatch(self):
+        self.runner.workload_dispatch_check = lambda: self.fail("workload dispatched after publication failure")
+        with patch("kil.v3b2_policy_stage_checkpoint._publish_observed_proof", side_effect=OSError("fsync failed")):
+            with self.assertRaisesRegex(ControllerError, "policy_stage_checkpoint_failed"):
+                self.controller._up_lifecycle()
+        journal = load_journal(self.controller.journal_path)
+        self.assertIsNotNone(journal["teardown_from_sequence"])
+        self.assertFalse(list(self.paths.private.glob("policy-stage-*.json")))
+
+    def test_calico_apply_fixture_uses_pinned_set_and_shared_proof_fails_closed(self):
+        from kil import v3b2_proofs as proofs
+        expected = self.runner.calico_expected
+        inputs = {"owned_identity": {
+                      "kubeconfig": str(self.controller.kubeconfig),
+                      "docker_host": self.controller.docker_host,
+                  },
+                  "kind_config_path": str(self.controller.kind_config),
+                  "applied_objects": expected}
+        context = proofs.ExpectedContext("a" * 64, 1, "calico_apply", b"{}\n",
+                                         proofs.canonical(inputs))
+        request = proofs.OPERATIONS["calico_apply"].requests(context)[0].command
+        before = self.runner.run(request)
+        self.assertEqual(before.stdout, "{}\n")
+        from kil.v3b2_journal import kubectl_apply_calico_command
+        apply = kubectl_apply_calico_command(
+            self.controller._identity, self.paths.private / "calico-v3.32.0.yaml")
+        self.assertEqual(self.runner.run(apply).returncode, 0)
+        result = self.runner.run(request)
+        observed = proofs.RawObservation("applied_objects", request.argv, request.env,
+                                         0, result.stdout_bytes, b"")
+        self.assertEqual(proofs._applied(context, (observed,)).outcome, "complete")
+        poisons = []
+        missing = self.runner.calico_observed(); missing["items"].pop(); poisons.append(missing)
+        extra = self.runner.calico_observed()
+        foreign = json.loads(json.dumps(extra["items"][0]))
+        foreign["metadata"].update(name="foreign-calico-object",
+                                   uid="00000000-0000-4000-8000-ffffffffffff",
+                                   resourceVersion="9999")
+        extra["items"].append(foreign); poisons.append(extra)
+        changed = self.runner.calico_observed()
+        next(item for item in changed["items"] if item["kind"] == "ConfigMap")["data"]["foreign"] = "x"
+        poisons.append(changed)
+        no_uid = self.runner.calico_observed(); no_uid["items"][0]["metadata"].pop("uid"); poisons.append(no_uid)
+        bad_rv = self.runner.calico_observed(); bad_rv["items"][0]["metadata"]["resourceVersion"] = ""; poisons.append(bad_rv)
+        for document in poisons:
+            poison = proofs.RawObservation("applied_objects", request.argv, request.env,
+                                           0, proofs.canonical(document), b"")
+            with self.assertRaises(proofs.ProofError):
+                proofs._applied(context, (poison,))
+        wrong_get = Command(
+            ("kubectl", "--kubeconfig", "/tmp/foreign-kubeconfig", "get",
+             "--filename", "-", "--output", "json"), 60,
+            stdin=request.stdin,
+        )
+        self.assertEqual(self.runner.run(wrong_get).stdout, "{}\n")
+        foreign_apply = Command(
+            ("kubectl", "--kubeconfig", str(self.controller.kubeconfig), "apply",
+             "-f", "/tmp/foreign/calico-v3.32.0.yaml"), 60, mutating=True,
+        )
+        self.runner.calico_applied = False
+        self.runner.run(foreign_apply)
+        self.assertFalse(self.runner.calico_applied)
+        noncanonical = SimpleNamespace(
+            argv=request.argv, env=request.env, stdin=b'{ "apiVersion": "v1" }\n',
+            mutating=False,
+        )
+        self.runner.calico_applied = True
+        self.assertEqual(self.runner.run(noncanonical).stdout, "{}\n")
+
     def test_import_uses_preflight_verified_archive_bytes_not_reopened_path(self) -> None:
         archive_path = self.paths.tools.parent / "v3b2-input/kil-image.tar"
         verified = archive_path.read_bytes()
         self.controller.preflight()
         archive_path.write_bytes(b"replacement")
-        self.controller.up()
+        with self.assertRaisesRegex(ControllerError, "operation_postcondition_unproved:invalid_or_missing_observation"):
+            self.controller._up_lifecycle()
         load = next(command for command in self.runner.commands if command.argv == ("docker", "load"))
         self.assertEqual(load.stdin, verified)
+        events = load_journal(self.controller.journal_path)["events"]
+        self.assertTrue(any(row["event"] == "image_import_complete" for row in events))
+        self.assertTrue(any(row["event"] == "image_load_complete" for row in events))
+        self.assertTrue(any(row["event"] == "calico_apply_complete" for row in events))
+        self.assertFalse(any(row["event"] == "application_apply_complete" for row in events))
+        self.assertTrue(any(command.argv[-3:] == ("apply", "-f", "-")
+                            and command.stdin is not None
+                            for command in self.runner.commands))
+
+    def test_fake_import_inspection_preserves_distinct_manifest_and_config_identities(self) -> None:
+        references = (
+            "kil.local/kil-v3b2:sha256-" + SYNTHETIC_MANIFEST_DIGEST,
+            "docker.io/envoyproxy/envoy@sha256:" + ENVOY_MANIFEST_DIGEST,
+        )
+        expected_ids = (SYNTHETIC_CONFIG_ID, ENVOY_CONFIG_ID)
+        for reference, expected_id in zip(references, expected_ids):
+            result = self.runner.run(Command(
+                ("docker", "image", "inspect", reference), 60,
+                env=(("DOCKER_CONFIG", str(self.controller.docker_config)),
+                     ("DOCKER_HOST", self.controller.docker_host)),
+            ))
+            row = json.loads(result.stdout)[0]
+            self.assertEqual(row["Id"], expected_id)
+            self.assertNotEqual(row["Id"].removeprefix("sha256:"), reference.rsplit(":", 1)[1].removeprefix("sha256-"))
+
+    def test_fake_cri_image_inspection_is_exact_node_local_and_preserves_reference_domains(self):
+        references = ("kil.local/kil-v3b2:sha256-" + SYNTHETIC_MANIFEST_DIGEST,
+                      "docker.io/envoyproxy/envoy@sha256:" + ENVOY_MANIFEST_DIGEST)
+        environment = (("DOCKER_CONFIG", str(self.controller.docker_config)),
+                       ("DOCKER_HOST", self.controller.docker_host))
+        for index, reference in enumerate(references):
+            argv = ("docker", "exec", "a" * 64, "/usr/local/bin/crictl",
+                    "--runtime-endpoint", "unix:///run/containerd/containerd.sock",
+                    "--image-endpoint", "unix:///run/containerd/containerd.sock",
+                    "--timeout", "10s", "inspecti", "--quiet", "--output", "json", reference)
+            result = self.runner.run(Command(argv, 30, env=environment))
+            self.assertTrue(result.stdout.startswith("{"), "missing CRI JSON response")
+            document = json.loads(result.stdout)
+            self.assertIn("status", document)
+            self.assertEqual(document["status"]["id"], (SYNTHETIC_CONFIG_ID, ENVOY_CONFIG_ID)[index])
+            self.assertEqual(document["status"]["repoTags"], [reference] if index == 0 else [])
+            self.assertEqual(document["status"]["repoDigests"], [] if index == 0 else [reference])
+            wrong_node = (*argv[:2], "b" * 64, *argv[3:])
+            self.assertNotIn('"status"', self.runner.run(Command(wrong_node, 30, env=environment)).stdout)
+            wrong_config = (("DOCKER_CONFIG", "/tmp/foreign/docker-config"), environment[1])
+            self.assertNotIn('"status"', self.runner.run(Command(argv, 30, env=wrong_config)).stdout)
 
     def test_import_rejects_right_tag_with_wrong_realized_image_id_and_cleans_up(self) -> None:
         self.runner.wrong_image_id = True

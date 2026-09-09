@@ -34,8 +34,8 @@ class StrSubclass(str):
     pass
 
 
-def fixture():
-    profile, workload, _, services = service_fixture()
+def fixture(*, profile=None, workload=None):
+    profile, workload, _, services = service_fixture(profile=profile, workload=workload)
     deployments, replica_sets, owned_pods = deployment_observation()
     deployment_proof = validate_deployment_ownership(
         deployments=deployments,

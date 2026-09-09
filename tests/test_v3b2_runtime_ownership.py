@@ -18,7 +18,7 @@ def encode(value):
     return (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode()
 
 
-def fixture():
+def fixture(*, profile=PROFILE, workload=WORKLOAD, owned_identity=IDENTITY):
     # The existing independent literal owner records are placed into actual API
     # paths here. They are candidate data, never supplied as expected authority.
     deployments, replicas, generated = observation()
@@ -42,14 +42,14 @@ def fixture():
             metadata["annotations"] = {"kubernetes.io/config.source": record["configSource"],
                 "kubernetes.io/config.hash": record["configHash"], "kubernetes.io/config.mirror": record["mirrorHash"]}
         rows.append(row)
-    for index, row in enumerate(json.loads(render_objects(PROFILE, WORKLOAD))["items"]):
+    for index, row in enumerate(json.loads(render_objects(profile, workload))["items"]):
         if row["kind"] == "Pod":
             row["metadata"].update(uid=f"direct-{index}", resourceVersion="10")
             rows.append(row)
     rows.append({"apiVersion": "v1", "kind": "Namespace", "metadata": {
-        "name": "kube-system", "uid": IDENTITY.cluster_incarnation_uid, "resourceVersion": "99"}})
-    return dict(profile=PROFILE, workload=WORKLOAD, rendered_objects=render_objects(PROFILE, WORKLOAD),
-                owned_identity=IDENTITY, runtime_objects=encode({"apiVersion": "v1", "kind": "List",
+        "name": "kube-system", "uid": owned_identity.cluster_incarnation_uid, "resourceVersion": "99"}})
+    return dict(profile=profile, workload=workload, rendered_objects=render_objects(profile, workload),
+                owned_identity=owned_identity, runtime_objects=encode({"apiVersion": "v1", "kind": "List",
                     "metadata": {"resourceVersion": ""}, "items": rows}))
 
 

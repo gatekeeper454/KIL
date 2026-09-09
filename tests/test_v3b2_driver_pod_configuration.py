@@ -19,8 +19,8 @@ IDENTITY = OwnedIdentity("kil-v3-lab", "unix:///tmp/owned/kil-v3-lab/docker.sock
 MODULE = "kil.v3b2_driver_pod_configuration"
 
 
-def fixture():
-    rendered = render_objects(PROFILE, WORKLOAD)
+def fixture(*, profile=PROFILE, workload=WORKLOAD, owned_identity=IDENTITY):
+    rendered = render_objects(profile, workload)
     pods = [row for row in json.loads(rendered)["items"] if row["kind"] == "Pod"]
     for index, row in enumerate(pods):
         row["metadata"].update(uid=f"driver-{index}", resourceVersion=str(100 + index),
@@ -32,8 +32,8 @@ def fixture():
             terminationGracePeriodSeconds=30, serviceAccount="driver")
         row["spec"]["containers"][0].update(terminationMessagePath="/dev/termination-log",
                                              terminationMessagePolicy="File")
-    return dict(profile=PROFILE, workload=WORKLOAD, rendered_objects=rendered,
-                owned_identity=IDENTITY, pods=pods)
+    return dict(profile=profile, workload=workload, rendered_objects=rendered,
+                owned_identity=owned_identity, pods=pods)
 
 
 class DriverPodConfigurationTest(unittest.TestCase):

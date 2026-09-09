@@ -12,11 +12,17 @@ from tests.test_v3b2_generated_kil_pod_configuration import fixture as generated
 from tests.test_v3b2_driver_pod_configuration import fixture as driver_fixture
 
 
-def fixture():
-    args=endpoint_fixture(); document=json.loads(args["runtime_objects"]); rows=document["items"]
-    generated=json.loads(generated_fixture()["runtime_objects"])
+def fixture(*, profile=None, workload=None, owned_identity=None,
+            kil_config_digest="sha256:" + "c" * 64,
+            envoy_config_digest="sha256:" + "e" * 64):
+    options = {}
+    if profile is not None: options["profile"] = profile
+    if workload is not None: options["workload"] = workload
+    if owned_identity is not None: options["owned_identity"] = owned_identity
+    args=endpoint_fixture(**options); document=json.loads(args["runtime_objects"]); rows=document["items"]
+    generated=json.loads(generated_fixture(**options)["runtime_objects"])
     source={(r["metadata"].get("namespace",""),r["metadata"]["name"]):r for r in generated["items"] if r["kind"]=="Pod"}
-    drivers={r["metadata"]["namespace"]:r for r in driver_fixture()["pods"]}
+    drivers={r["metadata"]["namespace"]:r for r in driver_fixture(**options)["pods"]}
     kil=[r for r in rows if r["kind"]=="Pod" and r["metadata"].get("namespace","").startswith("kil-")]
     for index,row in enumerate(kil,1):
         key=(row["metadata"]["namespace"],row["metadata"]["name"]); status=row.get("status")
@@ -38,12 +44,12 @@ def fixture():
     configuration=validate_generated_kil_pod_configuration(ownership=ownership)
     endpoints=validate_runtime_endpoints(ownership=ownership)
     identity=ownership.owned_identity; workload=ownership.workload
-    expected=(ExpectedNodeImage("kil","kil.local/kil-v3b2:sha256-"+workload.kil_image_id[7:],"sha256:"+"c"*64,
+    expected=(ExpectedNodeImage("kil","kil.local/kil-v3b2:sha256-"+workload.kil_image_id[7:],kil_config_digest,
               workload.kil_image_id,"application/vnd.oci.image.manifest.v1+json",
-              ("kil.local/kil-v3b2:sha256-"+workload.kil_image_id[7:],),(),"sha256:"+"c"*64),
-             ExpectedNodeImage("envoy",workload.envoy_image_digest,"sha256:"+"e"*64,
+              ("kil.local/kil-v3b2:sha256-"+workload.kil_image_id[7:],),(),kil_config_digest),
+             ExpectedNodeImage("envoy",workload.envoy_image_digest,envoy_config_digest,
               "sha256:"+workload.envoy_image_digest.rsplit(":",1)[1],"application/vnd.oci.image.index.v1+json",
-              (),(workload.envoy_image_digest,),"sha256:"+"e"*64))
+              (),(workload.envoy_image_digest,),envoy_config_digest))
     env=(("DOCKER_CONFIG","/tmp/owned/docker-config"),("DOCKER_HOST",identity.docker_host)); inspections=[]; table=["REF TYPE DIGEST STATUS SIZE UNPACKED"]
     for i,e in enumerate(expected):
         status={"id":e.config_digest,"repoTags":list(e.allowed_repo_tags),"repoDigests":list(e.allowed_repo_digests),"size":"1","username":"","pinned":False}

@@ -15,8 +15,12 @@ from tests.test_v3b2_service_bindings import fixture as service_fixture
 MODULE = "kil.v3b2_runtime_endpoints"
 
 
-def fixture():
-    arguments = ownership_fixture()
+def fixture(*, profile=None, workload=None, owned_identity=None):
+    options = {}
+    if profile is not None: options["profile"] = profile
+    if workload is not None: options["workload"] = workload
+    if owned_identity is not None: options["owned_identity"] = owned_identity
+    arguments = ownership_fixture(**options)
     document = json.loads(arguments["runtime_objects"])
     rows = document["items"]
     by_key = {(row["kind"], row["metadata"].get("namespace", ""), row["metadata"]["name"]): row for row in rows}
@@ -30,7 +34,8 @@ def fixture():
         if type(value) is dict: return {key: remap(item) for key, item in value.items()}
         return uid_map.get(value, value) if type(value) is str else value
     platform = {key: remap(value) if type(value) in (dict, list) else value for key, value in platform.items()}
-    _, _, _, kil_pods, kil_slices = kil_fixture()
+    _, _, _, kil_pods, kil_slices = kil_fixture(
+        profile=arguments["profile"], workload=arguments["workload"])
     for projection in [*platform["coredns_pods"], *kil_pods]:
         actual = by_key[("Pod", projection["namespace"], projection["name"])]
         actual["metadata"]["creationTimestamp"] = "2026-09-07T01:02:03Z"
@@ -41,7 +46,8 @@ def fixture():
     node["metadata"]["creationTimestamp"] = "2026-09-07T01:02:03Z"
     node["status"] = {"addresses": [{"type": "InternalIP", "address": "192.168.5.2"},
                                     {"type": "Hostname", "address": node["metadata"]["name"]}]}
-    rows.extend(service_fixture()[3])
+    rows.extend(service_fixture(
+        profile=arguments["profile"], workload=arguments["workload"])[3])
     for projection in platform["services"]:
         metadata = {key: deepcopy(projection[key]) for key in
                     ("namespace", "name", "uid", "resourceVersion", "creationTimestamp", "labels", "annotations")}

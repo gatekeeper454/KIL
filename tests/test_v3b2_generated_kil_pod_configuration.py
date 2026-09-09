@@ -11,8 +11,12 @@ from tests.test_v3b2_runtime_ownership import fixture as ownership_fixture, enco
 MODULE = "kil.v3b2_generated_kil_pod_configuration"
 
 
-def fixture():
-    args = ownership_fixture()
+def fixture(*, profile=None, workload=None, owned_identity=None):
+    options = {}
+    if profile is not None: options["profile"] = profile
+    if workload is not None: options["workload"] = workload
+    if owned_identity is not None: options["owned_identity"] = owned_identity
+    args = ownership_fixture(**options)
     document = json.loads(args["runtime_objects"])
     templates = {(row["metadata"]["namespace"], row["metadata"]["name"]): row["spec"]["template"]
                  for row in json.loads(args["rendered_objects"])["items"] if row["kind"] == "Deployment"}

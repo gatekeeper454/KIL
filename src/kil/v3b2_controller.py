@@ -81,7 +81,7 @@ from kil.v3b2_manifests import (
 from kil.v3b2_inventory import (
     InventoryError,
     parse_calico_runtime_workload,
-    parse_runtime_inventory,
+    parse_proved_runtime_inventory,
     parse_runtime_pod_identity,
     parse_ready_endpoint_slice,
 )
@@ -104,6 +104,7 @@ _ACCEPTED_V3B1_RUN = "v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b
 _ACCEPTED_V3B1_MANIFEST_SHA256 = "fa39212f1ffad95a1b5a674021ac5ce4ed9458025ce0dcc80077070355141cd0"
 _ACCEPTED_V3B1_COMMITMENT = "8d5ea5e8e12913945006af636bd674c39681a96b6d09a045e1b071ca77429ec2"
 _ACCEPTED_KIL_ARCHIVE_SHA256 = "07c12f338c7d764812ef6271ec8942f0535d05019288f4df1e1b54f6cd75e4b6"
+_ACCEPTED_KIL_CONFIG_DIGEST = "sha256:f21285be21c8f691b9b60b7e38bb309564a5cc238512c7455eb7759f4d922ddb"
 # Reserved synthetic transport statuses, never an observed process exit or
 # POSIX signal. Both remain unsuccessful to every operation validator.
 # -1000 retains all bytes captured up to timeout (not a complete process run).
@@ -611,6 +612,25 @@ class V3B2Controller:
             raise ControllerError(family + "_postcondition_unproved")
         return result
 
+    def _pending_runtime_image_authority(self, workload):
+        """Authenticate image source while application_apply still owns the intent."""
+        from kil.v3b2_proofs import reconstruct_prior_node_image_references
+        try:
+            context = load_expected_context(self.journal_path)
+            inputs = decode(context.inputs)
+            if (type(self.profile) is not V3B2Profile or type(workload) is not WorkloadIdentity
+                    or type(self._identity) is not OwnedIdentity
+                    or context.family != 'application_apply'
+                    or V3B2Profile.from_mapping(inputs['profile']) != self.profile
+                    or WorkloadIdentity(**inputs['workload']) != workload
+                    or OwnedIdentity(**inputs['owned_identity']) != self._identity):
+                raise ControllerError('runtime_image_authority_context_mismatch')
+            return reconstruct_prior_node_image_references(context)
+        except ControllerError:
+            raise
+        except (ValueError, TypeError, KeyError, AttributeError, OSError, RecursionError) as error:
+            raise ControllerError('runtime_image_authority_invalid') from error
+
     def _abandon_for_teardown(self, family: str, intent: dict[str, object]) -> None:
         latch_teardown(self.journal_path)
         context = load_expected_context(self.journal_path)
@@ -620,6 +640,23 @@ class V3B2Controller:
 
     def _start_profile(self) -> CommandResult:
         return self._run(colima_start_command(), "profile_start_failed")
+
+    def _preflight_application_evidence(self, details):
+        from kil.v3b2_application_evidence_budget import validate_application_dispatch_budget
+        try:
+            value = load_journal(self.journal_path)
+            prospective = {**value, 'events': [*value['events'], {
+                'sequence': len(value['events']) + 1, 'event': 'application_apply_intent',
+                'details': details}]}
+            context = load_expected_context(self.journal_path, prospective)
+            if validate_application_dispatch_budget(context):
+                requests = OPERATIONS['application_apply'].requests(context)
+                observations = tuple(RawObservation(request.label,
+                    () if request.command is None else request.command.argv,
+                    () if request.command is None else request.command.env, 0, b'', b'') for request in requests)
+                validate_application_dispatch_budget(context, observations)
+        except (OSError, ValueError, TypeError, KeyError) as error:
+            raise ControllerError('application_evidence_budget_failed') from error
 
     def _collect_observations(self, context, *, requests=None):
         observations = []
@@ -637,7 +674,19 @@ class V3B2Controller:
                     raw = RawObservation(request.label, argv, env, result.returncode,
                                          result.stdout_bytes, result.stderr_bytes)
                 else:
-                    if request.source in {'profile_state', 'profile_roster'}:
+                    if request.source == 'pre_driver_checkpoint':
+                        from kil.v3b2_pre_driver_checkpoint import read_pre_driver_checkpoint_bytes
+                        from kil.v3b2_application_evidence_budget import MAX_APPLICATION_CHECKPOINT_BYTES
+                        if context.family != 'application_apply':
+                            raise ControllerError('pre_driver_checkpoint_source_invalid')
+                        payload = read_pre_driver_checkpoint_bytes(self.journal_path, context,
+                            maximum=MAX_APPLICATION_CHECKPOINT_BYTES)
+                    elif request.source == "policy_stage_checkpoint":
+                        from kil.v3b2_policy_stage_checkpoint import read_policy_stage_checkpoint_bytes
+                        if context.family != "application_apply":
+                            raise ControllerError("policy_checkpoint_source_invalid")
+                        payload = read_policy_stage_checkpoint_bytes(self.journal_path, context)
+                    elif request.source in {'profile_state', 'profile_roster'}:
                         from kil.v3b2_profile_state import capture, _paths
                         from kil.v3b2_colima_inventory import capture_roster
                         authority = decode(context.inputs)['profile_paths']
@@ -712,6 +761,54 @@ class V3B2Controller:
             latch_teardown(self.journal_path)
             raise ControllerError("operation_postcondition_unproved:" + decision.category)
         return decision
+
+    def _checkpoint_application_policy(self):
+        """Normal-dispatch barrier only; recovery never recollects this stage."""
+        from kil.v3b2_application_policy_stage import application_policy_observation_specs, policy_request_bytes
+        from kil.v3b2_policy_stage_checkpoint import publish_policy_stage_checkpoint
+        from kil.v3b2_proofs import ObservationRequest
+        try:
+            context = load_expected_context(self.journal_path)
+            inputs = decode(context.inputs)
+            identity = OwnedIdentity(**inputs["owned_identity"])
+            profile = V3B2Profile.from_mapping(inputs["profile"])
+            workload = WorkloadIdentity(**inputs["workload"])
+            requests = tuple(
+                ObservationRequest(label, source="file", paths=(inputs["kind_config_path"],))
+                if label == "kind_configuration" else ObservationRequest(label,
+                    Command(argv, 60, env=env,
+                            stdin=policy_request_bytes(profile, workload) if label == "policy_objects" else None))
+                for label, argv, env in application_policy_observation_specs(identity))
+            observations = self._collect_observations(context, requests=requests)
+            publish_policy_stage_checkpoint(self.journal_path, context, observations)
+        except (OSError, ValueError, TypeError, KeyError, ControllerError) as error:
+            raise ControllerError("policy_stage_checkpoint_failed") from error
+
+    def _checkpoint_pre_driver_runtime(self):
+        """Fresh normal-dispatch barrier; recovery never recollects this stage."""
+        from kil.v3b2_pre_driver_checkpoint import pre_driver_observation_specs, publish_pre_driver_checkpoint
+        from kil.v3b2_proofs import ObservationRequest
+        try:
+            context = load_expected_context(self.journal_path)
+            inputs = decode(context.inputs)
+            if (context.family != "application_apply"
+                    or type(self.profile) is not V3B2Profile
+                    or type(self._workload) is not WorkloadIdentity
+                    or type(self._identity) is not OwnedIdentity
+                    or V3B2Profile.from_mapping(inputs["profile"]) != self.profile
+                    or WorkloadIdentity(**inputs["workload"]) != self._workload
+                    or OwnedIdentity(**inputs["owned_identity"]) != self._identity
+                    or inputs["kind_config_path"] != str(self.kind_config)):
+                raise ControllerError("pre_driver_context_mismatch")
+            requests = tuple(
+                ObservationRequest(label, source="file", paths=(str(self.kind_config),))
+                if label == "kind_configuration" else ObservationRequest(label,
+                    Command(argv, 300 if label == "runtime_inventory" else 60, env=env))
+                for label, argv, env in pre_driver_observation_specs(self._identity))
+            observations = self._collect_observations(context, requests=requests)
+            publish_pre_driver_checkpoint(self.journal_path, context, observations)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError, ControllerError) as error:
+            raise ControllerError("pre_driver_checkpoint_failed") from error
 
     @staticmethod
     def _profiles(payload: str) -> tuple[tuple[str, str], ...]:
@@ -867,21 +964,34 @@ class V3B2Controller:
         retained_archive = self.paths.private / "kil-image.tar"
         _write_exclusive(retained_archive, self._kil_archive_bytes)
         expected_inputs = {
-            "run_id": self.run_digest, "owned_identity": asdict(self._identity),
+            "run_id": self.run_digest, "node_image_source_version": 1, "application_source_version": 1,
+            "owned_identity": asdict(self._identity),
             "profile": json.loads(profile_bytes), "profile_sha256": _digest(profile_bytes),
             "profile_configuration": {"name": LAB_IDENTITY, "arch": "aarch64", "runtime": "docker",
                                       "cpus": 4, "memory": 8589934592, "disk": 64424509440},
             "workload": asdict(workload), "kind_node_image": self.profile.kind_node_image,
             "kind_config_path": str(self.kind_config), "kind_config_sha256": _digest(render_kind_config(self.profile)),
             "archive_path": str(retained_archive), "archive_sha256": _ACCEPTED_KIL_ARCHIVE_SHA256,
-            "archive_byte_count": 48647168,
+            "archive_byte_count": len(self._kil_archive_bytes),
             "images": [
                 {"reference": "kil.local/kil-v3b2:sha256-" + workload.kil_image_id.removeprefix("sha256:"),
                  "manifest_digest": workload.kil_image_id,
-                 "config_digest": "sha256:f21285be21c8f691b9b60b7e38bb309564a5cc238512c7455eb7759f4d922ddb"},
+                 "config_digest": _ACCEPTED_KIL_CONFIG_DIGEST,
+                 # Media type is verified from the accepted archive's index
+                 # and hash-matched manifest, never from a node observation.
+                 "target_media_type": "application/vnd.oci.image.manifest.v1+json",
+                 "allowed_repo_tags": ["kil.local/kil-v3b2:sha256-" + workload.kil_image_id.removeprefix("sha256:")],
+                 # Optional content-addressed alias must join this exact
+                 # independently accepted target; its presence is not assumed.
+                 "allowed_repo_digests": ["kil.local/kil-v3b2@" + workload.kil_image_id]},
                 {"reference": workload.envoy_image_digest,
                  "manifest_digest": "sha256:" + workload.envoy_image_digest.rsplit(":", 1)[1],
-                 "config_digest": "sha256:ef846ec85aabf01a2ff7176a185260e476ca43d20478f57281d88f7a66d5671f"}],
+                 "config_digest": "sha256:ef846ec85aabf01a2ff7176a185260e476ca43d20478f57281d88f7a66d5671f",
+                 # Pinned registry body SHA, descriptor header, and body
+                 # mediaType independently agree on this OCI index type.
+                 "target_media_type": "application/vnd.oci.image.index.v1+json",
+                 "allowed_repo_tags": [],
+                 "allowed_repo_digests": [workload.envoy_image_digest]}],
             "calico_objects": calico_expected,
             "application_objects": json.loads(render_objects(self.profile, workload))["items"],
             "runtime_contract_complete": False,
@@ -1061,11 +1171,15 @@ class V3B2Controller:
         drivers = [item for item in rendered["items"] if item["kind"] == "Pod"]
         payloads = tuple(_canonical_bytes({"apiVersion": "v1", "kind": "List", "items": items}) for items in (namespaces, policies, workloads))
         app_details = {"manifest_sha256": _digest(render_objects(self.profile, workload))}
+        self._preflight_application_evidence(app_details)
         append_event(self.journal_path, "application_apply_intent", app_details)
         self._events.append(("application_apply_intent", dict(app_details)))
         try:
-            for payload in payloads:
+            node_image_authority = self._pending_runtime_image_authority(workload)
+            for payload in payloads[:2]:
                 self._run(kubectl_apply_command(self._identity, payload), "application_apply_failed")
+            self._checkpoint_application_policy()
+            self._run(kubectl_apply_command(self._identity, payloads[2]), "application_apply_failed")
             for _attempt in range(60):
                 results = [
                     self._observe(
@@ -1096,6 +1210,7 @@ class V3B2Controller:
                     continue
             else:
                 raise ControllerError("application_readiness_failed")
+            self._checkpoint_pre_driver_runtime()
             self._run(
                 kubectl_apply_command(
                     self._identity,
@@ -1112,7 +1227,7 @@ class V3B2Controller:
             projection = self._observe(
                 Command((
                     "kubectl", "--kubeconfig", str(self.kubeconfig), "get",
-                    "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies",
+                    "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies,nodes,replicasets",
                     "--all-namespaces", "--output", "json",
                 ), 300),
                 "runtime_inventory_failed",
@@ -1120,13 +1235,11 @@ class V3B2Controller:
             if projection.returncode != 0:
                 continue
             try:
-                candidate = parse_runtime_inventory(
-                projection.stdout.encode("utf-8", errors="strict"),
-                profile=self.profile,
-                workload=workload,
-                node_container_id=str(self._identity.node_container_id),
-                docker_host=self.docker_host,
-            )
+                candidate = parse_proved_runtime_inventory(
+                    projection.stdout.encode("utf-8", errors="strict"),
+                    profile=self.profile, workload=workload,
+                    owned_identity=self._identity, node_images=node_image_authority,
+                )
                 snapshot = candidate
                 break
             except (InventoryError, UnicodeError, TypeError):
@@ -1533,6 +1646,9 @@ class V3B2Controller:
         append_event(self.journal_path, "publication_intent", details)
         self._events.append(("publication_intent", dict(details)))
         try:
+            from kil.v3b2_public_image_provenance import validate_public_image_provenance
+            context = load_expected_context(self.journal_path)
+            validate_public_image_provenance(context, dict(prepared.payloads)['manifest.json'])
             published = publish_prepared(prepared)
             verify_publication_identity(
                 published,
