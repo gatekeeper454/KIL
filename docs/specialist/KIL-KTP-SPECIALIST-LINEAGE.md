@@ -7651,6 +7651,55 @@ redirected the task toward artifact availability.
 **Next gate:** Regenerate and verify the lineage partner, commit the evidence,
 push `codex/self-contained-html-readers`, verify the remote branch hash, and
 report the exact artifact locations and the dirty-`main` integration blocker.
+### T-125 — 2026-09-03 — KIL receives an observed OTCS coordinate record
+
+**Input:** Fill the repository copy of the Open Trust Coordinate System (OTCS)
+0.1 coordinate-record template with KIL data, using the KTP coordinate-map page
+as the reference for the coordinate meanings and chart constraints.
+
+**Interpretation:** This is an observed reading of KIL at immutable repository
+revision `ab2667941b9328739c8201d626694770e2387fe9`, not a normative
+self-declaration by KIL and not a validation result. The coordinate system's
+sparse-record rule requires omitting capabilities, environmental conditions,
+and interfaces that the published project does not explicitly support. Function
+weights describe operational emphasis; the evidence block separately describes
+claim maturity.
+
+**Decision status:** Confirmed artifact creation. The record identifies KIL as
+an implementation of KTP, places its declared enforcement point at the local
+Envoy `ext_authz` transport boundary, and records specification and
+implementation at M2 because reproducible source, schemas, tests, and run
+contracts exist. Independent validation remains explicitly M0. The particular
+coordinate selection and weights are a reviewable observed reading, not an
+approved KIL or KTP registry position.
+
+**Rationale:** KIL governs AI-agent and service actions through signed,
+authority-class-bound state; interprets identity binding, local divergence,
+freshness, and class history; reduces authority without expanding it; issues
+permit/constrain/deny decisions; enforces at a declared pre-upstream Envoy
+boundary; and preserves canonical evidence records. The environmental list is
+limited to identity confidence, threat pressure, uncertainty, and cumulative
+trajectory. System and dependency health are exercised by the validation
+harness but are not inputs to the current action decision, so they are not
+claimed. Repair and learning are also omitted because teardown/retry behavior
+is not capacity restoration and no outcome-to-model learning loop is
+implemented. Registry interfaces remain empty because no mutually agreed seam
+identifier is available from this observed reading.
+
+**Affected artifacts:**
+
+- `Inputs/coordinate-record-template.yaml`
+- `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`
+
+**Unresolved questions:** KIL maintainers may revise the observed weights,
+choose a registry-specific identifier for the KTP lineage target, or coordinate
+matching `provides`/`consumes` seam identifiers with KTP. The central V3B-1
+enforcement run and external validation remain pending and must not be inferred
+from this map record.
+
+**Next gate:** Validate the YAML against the OTCS 0.1 map parser and obtain
+maintainer review before presenting the coordinates as KIL's own declaration or
+registering any inter-project seam.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
@@ -7800,5 +7849,2090 @@ maintainer-confirmed current-file scope.
 **Next gate:** Regenerate all readers, verify zero current-file references,
 repeat the full repository validation, commit and push the correction, then
 fast-forward `main` while preserving the uncommitted OTCS work.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-151 — 2026-09-05 — V3B-1 testing started at the prerequisite gate
+
+**Input:** Begin V3B-1 testing and auto-approve in-scope prompts.
+
+**Interpretation:** Start with the exact synchronized public source and execute
+only the non-requesting static and host-preflight gates. Preserve the
+maintainer's unrelated uncommitted OTCS/lineage work in the normal checkout.
+Do not invoke the central request-bearing `run` while the repository's durable
+before/after foreign-resource snapshot prerequisite remains unimplemented.
+
+**Decision status:** Confirmed test-start result. An isolated
+`codex/v3b1-testing` worktree at
+`b7f1f1565943ee6a06c64051949a1b465a83e527` matched `origin/main`. The full
+static gate passed 538 tests, verified all 49 Markdown readers, and passed
+`git diff --check`. The pinned Docker, Kind, and kubectl content lock verified,
+and controller `preflight` passed with ports 18080–18082 free. The only observed
+Colima profile was the stopped foreign `default` profile with
+`aarch64/containerd`, 4 CPUs, 4 GiB memory, and 20 GiB disk. No `up`,
+`readiness`, `run`, `collect`, or `down` command was invoked.
+
+**Rationale:** The Task 11 contract expressly prohibits the consequential run
+until a tested, reviewed, merged, and synchronized evidence extension durably
+binds and verifies exact foreign-resource snapshots before and after the
+lifecycle. Passing static validation and preflight establishes that the current
+source, pinned tools, host versions, profile allowlist, and fixed ports are
+ready without weakening that gate or creating request evidence.
+
+**Affected artifacts:** This lineage source; isolated ignored worktree
+`.worktrees/v3b1-testing`. Runtime checks confirmed the dedicated
+`kil-v3-lab` Docker endpoint, active state, active journal, and readiness poison
+were absent after preflight. Existing maintainer changes in `Inputs/` and the
+lineage pair remain otherwise untouched.
+
+**Unresolved questions:** The exact before/after foreign-resource snapshot
+schema, journal events, public commitment fields, and offline verifier equality
+checks still require design and implementation before request-bearing live
+testing can begin.
+
+**Next gate:** Design and implement the foreign-resource snapshot extension
+with tests, pass review and complete static validation, merge and synchronize
+the prerequisite, then begin one fresh Task 11 lifecycle with `preflight` and
+`up`. Invoke the central `run` exactly once only after those conditions pass.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-152 — 2026-09-05 — V3B-1 foreign-resource prerequisite implemented and approved
+
+**Input:** Advance to the next V3B-1 testing phase with in-scope prompts
+auto-approved.
+
+**Interpretation:** Resolve the Task 11 prerequisite before any request-bearing
+run: design, implement, test, document, and independently review durable exact
+before/after snapshots of foreign Colima profiles. Continue in the isolated
+`codex/v3b1-testing` worktree so the maintainer's unrelated normal-checkout
+changes remain untouched.
+
+**Decision status:** Confirmed implementation on the isolated branch, not yet
+integrated into `main`. Eight commits from `22c750f` through `5ebf21a` add the
+approved design and plan, closed snapshot and comparison contracts, lifecycle
+journal authority, nonce-keyed public projections, V3 evidence bindings,
+offline verification, recovery hardening, and synchronized operator guidance.
+Independent code review initially found four important issues; all were fixed
+with regressions and the re-review approved the branch with no remaining
+findings. Final `make validate` passed 561 tests, verified all 51 generated
+Markdown readers, and passed `git diff --check`.
+
+**Rationale:** The extension now proves whether every non-owned Colima profile
+is unchanged across the owned lab lifecycle without publishing raw profile
+names. It fails closed on reordered or incomplete journal authority, a same-name
+dedicated-profile race, sensitive public fields, and crash recovery after a
+foreign-profile mismatch. A mismatch can publish only deterministic,
+nonpromotable failure evidence. This meets the prerequisite gate without
+issuing a central request or weakening the one-attempt protocol.
+
+**Affected artifacts:** Isolated branch `codex/v3b1-testing`; foreign snapshot,
+journal, evidence, publication, recovery, and verifier logic in
+`tools/v3b1_local_envoy.py`; controller and documentation regressions; V3B-1
+README, adapter, progress, Task 10, design, and execution-plan source/reader
+pairs; and this lineage source. No `up`, `readiness`, `run`, `collect`, or live
+`down` lifecycle command was invoked during this phase.
+
+**Unresolved questions:** The reviewed branch still requires an explicit
+integration choice. The normal checkout contains unrelated uncommitted lineage
+and `Inputs/` work that must be preserved. A live request-free V3 lifecycle
+must begin only from merged, synchronized `main`; the central `run` remains
+prohibited until its pre-request gates pass.
+
+**Next gate:** Choose local merge, pull-request publication, or branch
+preservation. After integration and synchronization, start one fresh V3
+lifecycle with `preflight` and `up`, complete request-free readiness checks,
+and invoke the central `run` exactly once only if every gate remains green.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-153 — 2026-09-05 — V3B-1 prerequisite fast-forwarded into local main
+
+**Input:** Select local merge for the completed `codex/v3b1-testing` branch.
+
+**Interpretation:** Fast-forward local `main` only after refreshing
+`origin/main`, confirming the branch base and non-overlap with the maintainer's
+uncommitted lineage and `Inputs/` work, then verify the exact merged commit
+before removing the isolated worktree and feature branch.
+
+**Decision status:** Confirmed local integration. `main` advanced by fast-forward
+from `b7f1f15` to reviewed commit `5ebf21a`. Post-merge validation of that exact
+commit passed 561 tests, verified all 51 Markdown readers, and passed
+`git diff --check`. The clean `.worktrees/v3b1-testing` worktree was removed,
+its registration pruned, and the merged local branch deleted.
+
+**Rationale:** A fast-forward preserves the reviewed commit identities and
+avoids an unreviewed merge result. Verifying in the clean isolated checkout at
+the same commit prevented the maintainer's unrelated uncommitted files from
+being rewritten or folded into the validation result.
+
+**Affected artifacts:** Local `main` now contains commits `22c750f` through
+`5ebf21a`; this lineage source records the integration. The pre-existing
+uncommitted lineage pair and `Inputs/` directory remain present. No V3B-1 live
+lifecycle or central request was invoked.
+
+**Unresolved questions:** Local `main` is eight commits ahead of `origin/main`;
+the merge choice did not authorize a push. The generated lineage reader remains
+part of the maintainer's pre-existing uncommitted work and was not regenerated
+or overwritten here.
+
+**Next gate:** Explicitly synchronize local `main` with the remote, then begin
+one fresh request-free V3 lifecycle from synchronized source using `preflight`
+and `up`. The central `run` remains a later, exactly-once action gated on all
+request-free checks passing.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-154 — 2026-09-05 — V3B-1 request-free V3 gate completed and published
+
+**Input:** Execute and finish the next V3B-1 testing phase with all in-scope
+prompts approved.
+
+**Interpretation:** First synchronize the reviewed foreign-resource snapshot
+prerequisite to public `main`, then execute exactly the request-free lifecycle
+`preflight` → `up` → `readiness` → `down` from that source. Do not invoke
+`run` or `collect`. Verify the resulting nonpromotable V3 diagnostic bundle,
+correct any specification inconsistency exposed by the real run, obtain
+independent review and public CI, merge the publication checkpoint, and
+synchronize local `main` without disturbing unrelated maintainer work.
+
+**Decision status:** Confirmed gate completion. Public `main` first advanced to
+prerequisite commit `5ebf21a`. The isolated lifecycle produced run
+`v3b1-4ac0b6eef70b0483f7883c8a26753d15a007f612953b25e23b8ecb6afd021a8f`
+from that exact source. All three drivers reached readiness and were cancelled;
+the private journal contains no request-attempt, instruction, result, or request
+record. Teardown proved all 15 owned containers and all 6 owned networks absent.
+The V3 foreign-profile attestation reports exact before/after equality for the
+one observed foreign profile while exposing only its pseudonymous public
+reference; its retained tuple is stopped, `aarch64/containerd`, 4 CPUs, 4 GiB
+memory, and 20 GiB disk. The public manifest is schema
+`kil.v3b1-public-manifest.v3`, `run_complete: false`, class
+`intermediate_provisional_failure_local_boundary`, and `not_promoted`, with
+manifest SHA-256
+`3572ad5b9f7a2da66ce8b5cf13c020179283c5b1635aef8302977e8c562bb475`.
+All published checksums and the offline failure-bundle verifier passed. The
+final tree passed 562 tests, verified 51 Markdown readers, and passed
+`git diff --check`; independent specification review returned PASS and quality
+review returned APPROVE. PR #20 passed public CI and merged as `6e7ee57`, and
+local `main` was fast-forwarded to the same commit.
+
+**Rationale:** The real request-free run demonstrated that the V3 snapshot,
+journal, teardown, privacy, and recovery contracts operate together on the
+approved host without crossing the exactly-once request boundary. The run also
+exposed a documentation contradiction: the request-free diagnostic bundle was
+incorrectly required to pass the completed-run public `view` command. The
+published correction requires the dedicated failure-bundle verifier for this
+nonpromotable evidence and reserves public `view --bundle` for completed central
+evidence. A regression test now keeps that distinction consistent.
+
+**Affected artifacts:** PR #20 updates the README, Envoy adapter guide, V3
+progress record, Task 10 gate record, request-driver plan, foreign-resource
+snapshot design, all paired generated readers, and
+`tests/test_v3b1_documentation.py`. The ignored public bundle and archived
+private journal remain in the isolated
+`.worktrees/v3b1-request-free-v3` worktree for an explicit offline-backup
+decision. This lineage source records the checkpoint; the maintainer's existing
+lineage reader edit and `Inputs/` directory remain otherwise preserved.
+
+**Unresolved questions:** No request was issued, so the central Task 11
+exactly-once run and its completed promotable evidence remain outstanding. A
+destination and retention policy for the ignored request-free bundle and
+private journal have not yet been selected.
+
+**Next gate:** Choose the offline-backup disposition for the retained private
+evidence. Then start a new clean synchronized lifecycle, repeat `preflight`,
+`up`, and request-free readiness checks, and invoke the central `run` exactly
+once only if every documented Task 11 gate remains green; follow with
+`collect`, `down`, verification, independent review, and publication.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-155 — 2026-09-05 — Task 11 exactly-once attempt failed closed
+
+**Input:** Complete the next V3B-1 testing phase.
+
+**Interpretation:** Execute Task 11 from newly synchronized public `main` in a
+separate clean worktree: pass static and host gates, create one fresh topology,
+invoke the central `run` exactly once, then collect, tear down, and publish only
+if the complete proof passes its closed verifier. After request intent, never
+retry the consequential request under the same authorization.
+
+**Decision status:** Confirmed terminal failed-closed result; the accepted-proof
+phase is not complete. The clean worktree at public commit `6e7ee57` passed 562
+tests and all 51 Markdown readers. A first sandbox-blocked `up` stopped before
+profile creation or request activity and was closed through the controller's
+pre-profile `down` recovery. A new lifecycle then created run
+`v3b1-f8152ed1b52e33264b9f3339f4eeb8255260703f6c2c62824c3cb2379c76b4b1`.
+Immediately before the central command, all three request states were
+`not_attempted`. Exactly one `run` was invoked. Its three in-network drivers
+each completed one attempt with no retry and observed HTTP `200 / 200 / 403`
+with the expected decision digests and target-marker cardinality `1 / 1 / 0`.
+The command then failed during its internal evidence collection when a direct
+Docker copy reported one authorization ledger path absent. The consequential
+request was not retried. Exactly one `down` completed owned teardown and
+published a nonpromotable V3 failure bundle. Post-teardown preflight passed,
+the exact pseudonymous foreign-resource arrays remained equal, all 15 owned
+containers and 6 networks were absent, active state/journal/poison paths were
+absent, every published checksum passed, and the offline failure-bundle
+verifier accepted `live.html`.
+
+**Rationale:** Durable teardown evidence exposed a real-runtime contract gap
+that the synthetic tests did not model. The stopped authorization ledgers and
+Envoy logs each contained one valid JSON record, but the current closed parsers
+rejected them. Envoy injected the fixed transport headers
+`x-envoy-expected-rq-timeout-ms` and `x-envoy-internal`; the decision validator
+currently permits only the adversarial-header names even though those client
+headers are correctly stripped before authorization. Envoy's JSON access log
+also emitted numeric response codes and `null` denial upstream fields, while
+the evidence validator requires string response codes and `"-"` sentinels.
+Those deterministic mismatches prevent complete joins and make the observed
+run ineligible for promotion even though the enforcement response tuple itself
+matched expectations.
+
+**Affected artifacts:** Ignored live board
+`artifacts/generated/v3b1-task6-live-status.md`; ignored nonpromotable bundle
+`artifacts/generated/v3b1-local-envoy/v3b1-f8152ed1b52e33264b9f3339f4eeb8255260703f6c2c62824c3cb2379c76b4b1`;
+the archived private central-run journal, raw driver results, and frozen source
+bytes under `.tools/v3b1-private/` in worktree
+`.worktrees/v3b1-central-proof-v3`; and this lineage source. No failed bundle or
+private evidence was staged, committed, or published.
+
+**Unresolved questions:** The evidence contract needs a test-driven correction
+for the observed Envoy-added header names, typed JSON access-log values, and the
+direct live-copy failure boundary. Because request intent was durably crossed,
+a fresh central attempt requires explicit new authorization after that
+correction passes review, CI, merge, and synchronization.
+
+**Next gate:** Preserve the failed-run evidence, implement and independently
+review a source-level correction using the exact observed public-safe record
+shapes, pass the full suite and publication gate, then request explicit approval
+for one new clean exactly-once lifecycle. Do not invoke `run` again under the
+current authorization.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-156 — 2026-09-05 — Runtime evidence source-format design approved
+
+**Input:** Approve the revised correction design after rejecting
+post-collection normalization that would weaken raw-source byte binding.
+
+**Interpretation:** Specify a producer-side correction that preserves the V3
+schema and legacy verification: classify only the two observed fixed
+Envoy-generated headers as transport metadata, make Envoy emit the existing
+canonical string/sentinel JSON record directly, and bound ledger availability
+polling without providing any path to retry the consequential request.
+
+**Decision status:** Confirmed design approval. Commit `5e71d08` on isolated
+branch `codex/v3b1-central-proof-v3` adds the source specification and generated
+reader. The specification fixes a shared five-second monotonic evidence-read
+deadline, clips subprocess timeouts to its remaining budget, uses an injected
+50-millisecond poll interval, preserves exact raw-source attestation, and keeps
+the first failed Task 11 run immutable and nonpromotable. No implementation or
+additional live request was performed at this checkpoint.
+
+**Rationale:** Producer-side canonical output keeps emitted, frozen, parsed,
+joined, published, hashed, and verified bytes identical. A narrow exact
+transport-header classification preserves the client-header exclusion boundary,
+while a bounded read-only ledger wait addresses availability without touching
+drivers, instructions, or HTTP.
+
+**Affected artifacts:**
+`docs/superpowers/specs/2026-09-05-v3b1-runtime-evidence-source-format-design.md`
+and its generated `.htm` reader in the isolated correction worktree; this
+lineage source. The prior failed bundle and private frozen evidence remain
+ignored and unchanged.
+
+**Unresolved questions:** The written specification awaits maintainer review.
+Implementation tasks and tests have not yet been planned or executed.
+
+**Next gate:** Obtain maintainer approval of the written specification, create
+the test-first implementation plan, then execute it through review, CI, merge,
+and synchronization before the separately authorized new exactly-once run.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-157 — 2026-09-05 — Evidence correction merged; clean rerun preflight blocked by foreign runtime
+
+**Input:** Approve the written source-format design and implementation plan,
+publish the correction, then execute the newly authorized Task 11 proof from
+synchronized public `main` with all routine prompts preapproved.
+
+**Interpretation:** Implement the three approved corrections test-first,
+require local validation and public CI before runtime use, synchronize the merge,
+and start a separate clean proof worktree. Preserve the earlier failed evidence,
+never retry its requests, and never mutate a foreign Colima profile.
+
+**Decision status:** Confirmed implementation and publication; runtime proof is
+blocked safely before mutation. The correction classifies only the two exact
+Envoy-generated transport headers, emits canonical JSON text at the Envoy
+producer, and bounds live-ledger availability to one five-second monotonic
+deadline with no-follow descriptor, inode, size, and SHA-256 attestation. The
+focused 52-test gate, complete 257-test controller module, and full 566-test /
+53-reader repository gate passed. Separate specification and quality/security
+reviews found no unresolved Critical or Important issue. PR #21 passed both
+public CI jobs and merged as `514e910ea9427e0497c4fe8a1ec279b554e75176`;
+local `main`, `origin/main`, and the GitHub branch agreed. A clean worktree on
+that exact commit passed the full gate and installed and verified the locked
+toolchain. Its controller `preflight` then rejected the currently `Running`
+foreign non-dedicated profile before creating the dedicated profile, topology,
+driver instruction, request intent, or HTTP request.
+
+**Rationale:** The merged correction preserves source-byte provenance and the
+closed V3 schema instead of normalizing evidence after collection. The live
+controller is also correct to refuse coexistence with a running foreign
+runtime: stopping or changing that profile would violate the explicit
+foreign-resource noninterference boundary.
+
+**Affected artifacts:** Merged correction design, plan, code, tests,
+documentation, and generated readers through PR #21; clean ignored live board
+in `.worktrees/v3b1-central-proof-v3-rerun`; preserved failed-run and
+request-free worktrees; and this lineage source. No new run ID, owned runtime
+object, request instruction, request intent, HTTP action, or public proof bundle
+was created.
+
+**Unresolved questions:** The foreign profile must be returned to `Stopped` by
+its owner or existing workflow. KIL is not authorized to mutate it, and the
+central proof cannot begin while it is running.
+
+**Next gate:** After external confirmation that the foreign profile is stopped,
+rerun the controller's read-only `preflight` in the clean worktree. If it passes,
+continue with exactly one `up`, one central `run`, and mandatory `down`, with no
+request retry.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-158 — 2026-09-05 — Central local-Envoy proof accepted and published with dedicated-profile ownership
+
+**Input:** Complete the newly authorized V3B-1 proof, publish its accepted
+evidence, and make the project safe for manual backup and host shutdown. The
+user further required KIL to own a unique `kil-v3-lab` Colima profile and to
+start or stop only that profile because other profiles serve other projects.
+
+**Interpretation:** Execute the authorized request path once, never retry after
+request intent, complete mandatory teardown under every outcome, publish only
+verified public evidence, and make dedicated-profile isolation an explicit
+durable contract. Do not start, stop, delete, or otherwise mutate any foreign
+Colima profile.
+
+**Decision status:** Confirmed execution and publication. Source
+`514e910ea9427e0497c4fe8a1ec279b554e75176` produced run
+`v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94`.
+The one central `run` reached all three terminal request states and was not
+repeated after a post-request Docker copy visibility error. Mandatory `down`
+froze the authoritative sources and published a complete bundle accepted by
+the offline verifier as an observed intermediate local-Envoy boundary result:
+`permit / permit / deny`, HTTP `200 / 200 / 403`, and target markers
+`1 / 1 / 0`, with exactly one attempt per track and no retry. All nine source
+legs, exact 15-container/6-network teardown, checksums, and equal pseudonymous
+foreign-resource snapshots passed. The result remains `not_promoted` and does
+not establish Kind/Calico or NetworkPolicy validation, historical prevention,
+or production performance. PR #22 passed both public CI jobs and merged as
+`fd3ce6bb24f5c63644c07cfe1e34b244f02ff617`; local and remote `main` were
+synchronized to that commit. Final read-only shutdown checks confirmed that
+the `kil-v3-lab` profile is absent and that the accepted worktree has no active
+lifecycle state, journal, or readiness poison.
+
+**Rationale:** Teardown recovery is authoritative because it froze the same
+owned container sources after the single request sequence and completed before
+publication. The dedicated profile name is fixed and uniquely KIL-owned; every
+other profile is foreign state and remains outside KIL mutation authority. A
+separate foreign profile that appeared after the bundle's bound lifecycle
+window affected only an optional post-teardown readback and did not change the
+accepted evidence or teardown result.
+
+**Affected artifacts:** Accepted public evidence bundle, README and Envoy
+adapter documentation, V3 progress and paper, execution plans, generated HTML
+readers, documentation regression tests, ignored live status, preserved private
+worktrees, and this append-only lineage source. No foreign Colima profile was
+mutated.
+
+**Unresolved questions:** The user will choose and perform the offline backup
+manually, including the retention decision for ignored private failed-run and
+accepted-run worktree evidence.
+
+**Next gate:** The user may perform the manual offline backup and shut down the
+host. After backup and restart, V3B-2 Kind/Calico design or V3C
+repetition/performance remains a separate future gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-159 — 2026-09-06 — Post-backup continuation re-established at the V3B-2/V3C decision gate
+
+**Input:** Continue from the safe-shutdown checkpoint after the accepted V3B-1
+proof was merged and prepared for manual backup.
+
+**Interpretation:** Re-establish repository and runtime state before selecting
+or designing the next experimental increment. Preserve all user-local work and
+private evidence worktrees, and continue enforcing the rule that KIL may mutate
+only its unique `kil-v3-lab` Colima profile.
+
+**Decision status:** Confirmed checkpoint recovery; next-gate selection remains
+open. Local `main` and `origin/main` remain at merged proof commit
+`fd3ce6bb24f5c63644c07cfe1e34b244f02ff617`. The user-local lineage sources and
+`Inputs/` remain present, the preserved V3B-1 worktrees remain registered, and
+the read-only Colima inventory confirms `kil-v3-lab` is absent. Existing design
+records identify V3B-2 Kind/Calico cluster validation and V3C repetition and
+performance as separate future gates.
+
+**Rationale:** The next phase changes experimental architecture and evidence
+scope, so it requires an explicit gate choice and design review rather than
+silently extending the accepted local-Envoy result. Runtime noninterference is
+preserved by keeping all foreign Colima profiles outside KIL authority.
+
+**Affected artifacts:** This append-only lineage source only. No repository
+implementation, lab runtime, Colima profile, or published evidence changed.
+
+**Unresolved questions:** Whether to design V3B-2 Kind/Calico validation next or
+move first to the independent V3C repetition/performance gate; and whether the
+user wants a visual architecture companion during design.
+
+**Next gate:** Resolve the visual-companion preference, then select the next
+experimental increment and compare design approaches before writing a spec.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-160 — 2026-09-06 — Visual design companion approved for next-gate architecture work
+
+**Input:** Approve use of the browser-based visual companion while continuing
+from the V3B-1 completion checkpoint.
+
+**Interpretation:** Use diagrams when spatial architecture or data flow is
+materially clearer visually, while keeping requirements, scope, and technical
+tradeoff decisions in the main conversation.
+
+**Decision status:** Confirmed process preference. No experimental gate has yet
+been selected and no visual server, implementation, runtime, or Colima profile
+has been started.
+
+**Rationale:** The next likely work involves cluster topology and evidence flow,
+which can benefit from diagrams, but the first choice between V3B-2 cluster
+validation and V3C repetition/performance is conceptual and should remain a
+textual decision.
+
+**Affected artifacts:** This append-only lineage source only.
+
+**Unresolved questions:** Which independent gate should be designed next.
+
+**Next gate:** Select V3B-2 or V3C, then compare two or three bounded design
+approaches before presenting the chosen architecture.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-161 — 2026-09-06 — V3B-2 selected before V3C
+
+**Input:** Select V3B-2 Kind/Calico cluster validation next, followed by V3C
+repetition and performance measurement.
+
+**Interpretation:** Treat the phases as dependent gates: first establish the
+cluster transport and NetworkPolicy enforcement boundary, then repeat and
+measure the accepted cluster workload. Do not use the local-Envoy-only result
+as the final performance substrate.
+
+**Decision status:** Confirmed sequence: V3B-2, then V3C. V3B-2 design scope
+and staging remain under discussion; no implementation or runtime action is
+authorized by this sequencing decision.
+
+**Rationale:** Measurements become materially more relevant when they describe
+the intended Kind/Calico enforcement topology. This preserves the evidence
+hierarchy and prevents local-boundary timing from being presented as
+cluster-level performance.
+
+**Affected artifacts:** This append-only lineage source only.
+
+**Unresolved questions:** Whether V3B-2 should accept nominal cluster parity and
+the complete failure matrix in one gate or as two ordered sub-gates.
+
+**Next gate:** Resolve V3B-2 acceptance staging, then compare bounded topology
+and evidence-collection approaches.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-162 — 2026-09-06 — V3B-2 staged-gate topology approaches presented
+
+**Input:** Proceed with the recommended V3B-2 staging after selecting V3B-2
+before V3C.
+
+**Interpretation:** Treat nominal cluster parity and the functional failure
+matrix as two ordered V3B-2 sub-gates, and compare deployment topologies before
+fixing the new cluster evidence contract.
+
+**Decision status:** Confirmed two-sub-gate staging; topology selection is
+pending user review. Three approaches were presented: a recommended
+three-namespace mirror of the frozen V3B-1 tracks in one Kind cluster, a compact
+shared-service topology, and a maximum-isolation per-track multi-cluster
+topology. The first preserves the approved single-cluster contract and provides
+the cleanest V3B-1 parity and NetworkPolicy evidence.
+
+**Rationale:** Separating nominal parity from failure injection prevents a
+failure-case anomaly from obscuring whether the base Kind/Calico deployment is
+sound. Mirrored namespaces preserve comparison independence without expanding
+the Colima ownership boundary beyond `kil-v3-lab`.
+
+**Affected artifacts:** Ignored visual-companion screen under
+`.superpowers/brainstorm/40366-1788698387/` and this append-only lineage source.
+No tracked design, implementation, cluster, or Colima profile changed.
+
+**Unresolved questions:** User selection or revision of the topology approach;
+the exact V3B-2a evidence acquisition boundary remains to be designed.
+
+**Next gate:** Confirm a topology, then present the architecture and nominal
+evidence-flow design section for approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-163 — 2026-09-06 — V3B-2 namespace-isolated mirror selected; architecture section presented
+
+**Input:** Approve topology approach A for V3B-2.
+
+**Interpretation:** Design one `kil-v3-lab` Kind cluster with three
+infrastructure-fixed namespaces that mirror the V3B-1 baseline, signed-state,
+and local-reduction tracks. Keep the controller outside the consequential HTTP
+path and bind nominal parity before designing failure injection.
+
+**Decision status:** Confirmed topology approach; detailed architecture section
+is proposed for review. The proposal uses one digest-pinned Kind node, vendored
+Calico, deny-first NetworkPolicy, one driver/Envoy/authz/target chain per
+namespace, no public Service, one canonical instruction per track through
+`kubectl attach`, bounded pod-evidence freeze, and exact KIL-owned teardown.
+Only `kil-v3-lab` may be created or deleted; all foreign profiles remain outside
+KIL authority.
+
+**Rationale:** This topology gives the strongest causal comparison with the
+accepted V3B-1 result while adding the intended Kubernetes and NetworkPolicy
+boundary. Per-track namespaces avoid shared authorization state, and a
+host-controlled instruction with an in-cluster request keeps the controller out
+of the tested HTTP enforcement path.
+
+**Affected artifacts:** Ignored V3B-2a architecture screen in the approved
+visual-companion session and this append-only lineage source. No tracked spec,
+implementation, runtime, Kind cluster, or Colima profile changed.
+
+**Unresolved questions:** User approval of the architecture section; exact
+evidence schemas, failure behavior, and tests remain to be designed.
+
+**Next gate:** Obtain architecture-section approval, then present the nominal
+evidence contract and acceptance criteria.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-164 — 2026-09-06 — V3B-2a architecture approved; nominal evidence contract presented
+
+**Input:** Approve the one-cluster, three-namespace V3B-2a architecture and
+continue with the next design actions.
+
+**Interpretation:** Fix the selected architecture and define the evidence that
+must be durably cross-bound before teardown, the exact nominal acceptance
+tuple, and the claims that remain excluded until V3B-2b and V3C.
+
+**Decision status:** Confirmed architecture; evidence-contract approval is
+pending. The proposed contract binds reviewed source and tool identities,
+digest-pinned node and Calico assets, cluster/namespace/Pod identities, image
+IDs, Services, policies, the existing driver/decision/Envoy/target proof, exact
+teardown, and pseudonymous foreign-profile equality. Proposed V3B-2a acceptance
+requires one attempt per track with `permit / permit / deny`, HTTP
+`200 / 200 / 403`, and target markers `1 / 1 / 0`. The proposed bundle remains
+`not_promoted` with class `intermediate_provisional_kind_calico_nominal`.
+
+**Rationale:** Nominal traffic plus a closed policy inventory establishes that
+the frozen semantic workload operates through the intended cluster boundary,
+while reserving adversarial policy and component-failure claims for the fresh
+V3B-2b lifecycle. Separate immutable bundles preserve causal clarity.
+
+**Affected artifacts:** Updated ignored visual-companion screen and this
+append-only lineage source. No tracked design, implementation, request, cluster,
+or Colima profile changed.
+
+**Unresolved questions:** User approval or revision of the V3B-2a evidence and
+claim boundary; detailed error handling and V3B-2b case inventory remain to be
+designed.
+
+**Next gate:** Approve the nominal evidence contract, then present failure and
+recovery behavior plus the test strategy.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-165 — 2026-09-06 — V3B-2a evidence contract approved; failure strategy presented
+
+**Input:** Approve the proposed nominal evidence contract and continue with the
+next design section.
+
+**Interpretation:** Freeze the nominal evidence and claim boundary, then define
+the V3B-2 fail-closed lifecycle, ordered V3B-2b case groups, recovery authority,
+and pre-runtime test gates.
+
+**Decision status:** Confirmed V3B-2a evidence contract. Its proposed public
+class remains `intermediate_provisional_kind_calico_nominal` with
+`not_promoted`, exact semantic tuple and Kubernetes/Calico identity joins,
+exact KIL-owned teardown, and foreign-profile equality. The failure/recovery
+section is proposed for review: policy-isolation probes, state/authority
+failures, availability/evidence failures, terminal no-retry behavior after case
+intent, and bounded recovery limited to journal-bound KIL resources.
+
+**Rationale:** The staged contract distinguishes nominal cluster parity from a
+complete failure-matrix result. It also prevents a partial or poisoned case
+from being retried or obscuring an incomplete matrix while ensuring cleanup can
+continue without discovery-based deletion.
+
+**Affected artifacts:** Ignored failure/recovery visual-companion screen and
+this append-only lineage source. No tracked specification, implementation,
+request, cluster, or Colima profile changed.
+
+**Unresolved questions:** User approval of the failure groups, terminal-run
+behavior, recovery authority, and test/publication gates.
+
+**Next gate:** Approve the final design section, then write and self-review the
+complete V3B-2 design specification for explicit user review.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-166 — 2026-09-06 — Complete V3B-2 design specification committed for review
+
+**Input:** Approve the final V3B-2 failure, recovery, and testing section and
+continue with the next action.
+
+**Interpretation:** Consolidate the approved design sections into a complete
+written specification, self-review the closed contracts, generate its reader,
+validate the repository, and stop at the explicit written-spec review gate
+before implementation planning.
+
+**Decision status:** Confirmed design specification committed as `91d1045` on
+the isolated `codex/v3b2-kind-calico-design` branch. The specification fixes
+V3B-2a nominal parity before the V3B-2b failure campaign, one KIL-owned
+`kil-v3-lab` Colima profile, one single-node Kind cluster with three track
+namespaces, an in-cluster one-shot driver, deny-first Calico policy, exact
+Kubernetes and V3B-1 semantic joins, terminal no-retry behavior after intent,
+and exact teardown with foreign-profile noninterference. V3B-2 remains
+immutable and `not_promoted`; a later V3C publication must use a separate
+promotion index.
+
+**Rationale:** Self-review closed ambiguities around coexistence with running
+foreign profiles, the waiting driver Pod, disabled default CNI and fixed CIDRs,
+the system-namespace allowlist, cluster-incarnation identity, clean lifecycle
+isolation for terminal failure cases, immutable promotion semantics, explicit
+schema names, and command-level proof that every Colima mutation names only
+`kil-v3-lab`. Full validation passed 567 tests and verified 55 generated
+Markdown readers; the staged diff was whitespace-clean.
+
+**Affected artifacts:** Added the V3B-2 design source and generated reader under
+`docs/superpowers/specs/` in the isolated design worktree and appended this
+lineage entry in the main checkout. The ignored visual companion remains local.
+No implementation, runtime, Kind cluster, or Colima profile changed; existing
+main-checkout lineage HTML and `Inputs/` changes were not modified.
+
+**Unresolved questions:** User review of the complete written specification.
+The implementation plan has not been written and no implementation has begun.
+
+**Next gate:** Obtain explicit approval of the written specification, then use
+the writing-plans workflow to produce the V3B-2 implementation plan.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-167 — 2026-09-06 — V3B-2a implementation plan committed
+
+**Input:** Approve the complete V3B-2 written specification and proceed to the
+next phase.
+
+**Interpretation:** Apply the writing-plans workflow, split the sequential
+V3B-2 work at its accepted causal gate, and produce a test-first implementation
+plan for V3B-2a static implementation, request-free validation, and the one-shot
+nominal proof. Leave the V3B-2b failure campaign for a separate plan after
+V3B-2a acceptance.
+
+**Decision status:** Confirmed implementation plan committed as `1df30df` on
+`codex/v3b2-kind-calico-design`. The plan defines ten tasks across closed
+profiles and schemas, deterministic manifests, Kubernetes and policy inventory,
+journal-bound recovery, evidence and offline verification, a thin controller,
+documentation, review and synchronization, request-free execution, and nominal
+execution. It preserves `v3b1-central-request` scoped by track and requires
+every Colima mutation to name only `kil-v3-lab`.
+
+**Rationale:** The split makes V3B-2a independently testable and publicly
+reviewable before V3B-2b introduces multi-lifecycle campaign behavior. Planning
+resolved the Calico v3.32.0 upstream manifest at SHA-256
+`bccabc607685551db918f66da724893eca3e69a50c5a3e3077029b02dbab8d35`,
+three Quay index digests, and a deterministic digest-pinned manifest at
+`ac5ab7451dda57cfbf47d584ee901b896b1a9ff388d95b6f01b59f1e1130fdfa`.
+Self-review corrected the application-object count to 60, included Kind's
+`local-path-storage` system namespace, and made Docker/Kind environment binding
+explicit. Fresh validation passed 567 tests and verified 56 readers.
+
+**Affected artifacts:** Added the V3B-2a implementation-plan source and
+generated reader under `docs/superpowers/plans/` in the isolated design
+worktree, and appended this lineage entry in the main checkout. The planning
+fetch used only `/private/tmp`. No implementation, runtime, cluster, or Colima
+profile changed; existing main-checkout lineage HTML and `Inputs/` changes were
+left untouched.
+
+**Unresolved questions:** Execution workflow selection. V3B-2a implementation
+has not started, no runtime authorization has been exercised, and V3B-2b and
+V3C remain closed behind their accepted gates.
+
+**Next gate:** Choose subagent-driven task execution with review between tasks,
+or inline execution in this session with batch checkpoints, then begin Task 1
+test-first in a fresh implementation worktree.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-168 — 2026-09-06 — V3B-2a static implementation through evidence; controller rework paused
+
+**Input:** Execute the approved V3B-2a plan with subagent-driven development,
+continue through successive review gates, preserve the unique `kil-v3-lab`
+Colima boundary, and pause until 19:30 local time before resuming.
+
+**Interpretation:** Implement each static task test-first in the isolated
+`codex/v3b2-kind-calico-implementation` worktree, require independent
+specification and quality acceptance, and keep all Colima, Docker, Kind, and
+Kubernetes actions simulated until the live gates. Pause the active Task 6
+rework without discarding its uncommitted state and schedule the same task to
+resume in this thread.
+
+**Decision status:** Confirmed Tasks 1 through 5 are implemented and accepted.
+The reviewed commits cover the fixed profile/contracts and vendored Calico,
+the exact 60-object manifest and deny-first policy graph, closed runtime
+inventory, durable journal/recovery authority, and bounded semantic evidence
+publication. Task 6's first controller commit was rejected by specification
+review for synthetic live observations and is being reworked. Two confirmed
+design amendments now bind `lifecycle_mode` in the journal and permit closed
+`failed` or permanently nonpromotable `abandoned_for_teardown` transitions
+only under the documented proof and ownership conditions. The lifecycle-mode
+amendment is committed as `dda765c`; the teardown amendment is edited but not
+yet committed pending resumed verification.
+
+**Rationale:** Repeated adversarial reviews closed attach/readiness semantics,
+non-root volume ownership, exact Calico container multiplicity, expected-state
+mirroring, malformed-input totalization, UID-preconditioned deletion,
+concurrent journal appends, symlink ancestry, semantic repaired-hash attacks,
+foreign-name privacy, and post-rename races. Task 6 must consume those trusted
+boundaries directly: strict inventory parsing, real V3B-1 readiness/results,
+stable source capture, exact image import and Calico readiness, postcondition-
+checked recovery, and prepared publication. The latest completed full static
+gate before the controller rework passed 711 tests and 56 Markdown readers;
+the interrupted rework reported 136 focused V3B-2 and 285 V3B-1 tests green.
+
+**Affected artifacts:** In the isolated implementation worktree, Tasks 1–5
+added or changed the V3B-2 contracts, manifests, inventory, journal, evidence,
+vendored Calico/profile, and their tests. Task 6 currently has uncommitted
+integration changes across controller, inventory, journal, evidence, CLI, and
+tests. This entry alone was appended in the main checkout; its existing lineage
+HTML and `Inputs/` changes remain untouched. No live runtime, cluster, Docker
+context, or Colima profile was started, stopped, deleted, or modified.
+
+**Unresolved questions:** Complete and independently review the Task 6
+controller rework, regenerate the two design/plan readers after the amendments,
+then finish Task 7 static acceptance. Request-free and nominal live gates have
+not begun; V3B-2b and V3C remain closed.
+
+**Next gate:** At 19:30 America/Los_Angeles, resume the interrupted Task 6
+implementer from the uncommitted worktree, complete the governed uncertain-
+mutation teardown path and recovery matrix, then repeat specification, Task
+3–5 regression, quality, and full static validation before Task 7.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-169 — 2026-09-07 — Resume Task 6; close real-runtime integration gaps before live testing
+
+**Input:** Resume the paused V3B-2a implementation with the previously approved
+subagent-driven workflow and exclusive ownership of `kil-v3-lab`.
+
+**Interpretation:** Continue the preserved controller rework in the isolated
+implementation worktree. Static implementation and independent review remain
+prerequisites to the request-free lifecycle; resumption does not bypass those
+gates or authorize interference with foreign Colima profiles.
+
+**Decision status:** Resumed Task 6. The implementer reports 78 focused journal
+and controller tests passing at the governed uncertain-mutation teardown
+checkpoint; this is not independent acceptance of the full controller. Root
+regenerated the previously stale plan/design readers, then clarified the source-
+preservation requirements in their Markdown sources. Those later clarifications
+still require reader regeneration. Task 6 remains in progress and uncommitted.
+
+**Rationale:** Read-only inspection identified an exact retained accepted KIL
+image archive with SHA-256
+`07c12f338c7d764812ef6271ec8942f0535d05019288f4df1e1b54f6cd75e4b6`.
+Its OCI manifest identity matches the accepted V3B-1 image, but image identity
+alone does not put bytes into a fresh owned Docker daemon or Kind node.
+Further integration checks require actual raw Kubernetes responses, readiness
+before one-shot driver connections, source-preserving driver cancellation and
+Envoy quiescence, real authorization/target file-ledger reads, and stable
+capture-time workload identities. Empty stdout cannot substitute for those
+ledgers, and deleting their Pods before freeze destroys the required sources.
+An independent in-process smoke check using the real authorization adapter,
+rendered fixtures, and controller-issued instructions returned the expected
+`200 / 200 / 403` and `permit / permit / deny` tuple. This is static semantic
+evidence only, not Kind/Calico or NetworkPolicy validation.
+
+**Affected artifacts:** Controller, journal, inventory, evidence, CLI, and tests
+remain under revision in `.worktrees/v3b2-kind-calico-implementation`; plan and
+design sources there now explicitly preserve evidence through cancellation and
+quiescence. This append is the only main-checkout edit in the resumed turn so
+far; existing lineage HTML and `Inputs/` changes remain untouched. No live
+Colima, Docker, Kind, or Kubernetes mutation was performed at this checkpoint.
+
+**Unresolved questions:** Complete real-runtime integration, regenerate readers,
+then independently review and validate Task 6. The exact archive will be staged
+to a fixed content-verified input path before the eventual live gate, without
+using any foreign Docker daemon. Request-free and nominal live execution,
+V3B-2b acceptance, and V3C remain uncompleted.
+
+**Next gate:** Finish the controller's image-import and source-preserving
+lifecycle integration with representative runtime fixtures; require independent
+specification and quality reviews and full static validation before Task 7.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-170 — 2026-09-07 — Task 6 full static gate rejected; shared-proof corrective pass
+
+**Input:** Continue the resumed V3B-2a implementation through independent review
+without using any Colima profile other than `kil-v3-lab`.
+
+**Interpretation:** Passing simulated tests is necessary but does not establish
+the real-runtime contracts. Preserve the implementation checkpoint, investigate
+repeated review failures at their shared boundaries, and correct those
+boundaries before permitting Task 7 or any live experiment.
+
+**Decision status:** Root independently ran `make validate` in the isolated
+implementation worktree: 753 tests passed in 47.872 seconds, all 56 readers
+were current, and diff hygiene passed. Independent specification review then
+returned **NOT COMPLIANT**. No Task 6 acceptance, merge, or live authorization
+gate was passed. A corrective section was added to the existing approved plan,
+readers were regenerated, and a fresh implementer was assigned that bounded
+correction using the already selected subagent workflow.
+
+**Rationale:** Review confirmed that the raw inventory omitted pinned Calico
+and Kind objects; expected inventory largely mirrored observations; normal and
+recovery paths could record completion without exact postcondition evidence;
+arbitrary command failure could be mislabeled absence; inherited process
+environment could override Docker authority; and failure cleanup could advance
+missing drivers. EOF cancellation incorrectly used a not-applied failure event
+for an observed nonzero terminal mutation. Capture-time identities and full
+bytes were not carried into the bundle. A further verified interface defect
+forwarded real producer records into incompatible reduced schemas; the test
+runner masked this by supplying already-reduced synthetic records.
+
+The common correction is an immutable expected context and operation-specific
+observation validator shared by normal execution and recovery, with durable
+proof-bound terminal events and a permanent teardown-only failure state. Actual
+producer adapters must derive reduced semantic joins while retaining and
+binding raw capture bytes, current UID/resourceVersion/container incarnation,
+and individual source lengths/hashes. The corrective plan enumerates these
+requirements and the per-event proof/recovery matrix. It does not weaken the
+approved semantics or expand the live-testing scope.
+
+**Affected artifacts:** The implementation worktree retains its unstaged
+controller, journal, inventory, manifest, evidence, CLI, and test changes;
+the plan/design sources and generated readers also remain modified. The new
+corrective pass may add a focused proof module and tests. Main-checkout edits
+remain append-only lineage entries; existing lineage HTML and `Inputs/` changes
+are preserved. Read-only source research verified the pinned Envoy drain
+handler, and Bash syntax checks passed without executing control scripts. The
+safety hook flagged the helper's fixed loopback TCP syntax; no guard was
+bypassed and no live control helper was executed.
+
+**Unresolved questions:** Complete and independently review the shared-proof,
+authority, actual-inventory, and raw-source-adapter corrections. The source-
+preserving control path still requires eventual guarded live validation after
+the static/review/merge gates. No live Colima, Docker, Kind, or Kubernetes
+mutation occurred in this turn at this checkpoint.
+
+**Next gate:** Targeted RED/GREEN verification of the corrective pass, a fresh
+complete static gate, independent specification acceptance, and then quality
+review before Task 7. Request-free and nominal live runs remain pending;
+V3B-2b and V3C remain closed.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-171 — 2026-09-07 — Resume bounded Task 6 integration and resolve pinned inputs
+
+**Input:** User requested "resume" after the pause, retaining the exclusive
+`kil-v3-lab` ownership constraint and approved subagent workflow.
+
+**Interpretation:** Continue the unfinished corrective work, not live testing
+or acceptance of the previous simulated checkpoint. Divide the incomplete
+correction into smaller integration and resource-validation slices.
+
+**Decision status:** The prior corrective implementer explicitly returned
+NOT DONE with a partial shared proof kernel and source adapters. It was
+redispatched only to integrate normal/recovery terminal writing, immutable
+expected inputs, and exact teardown authority. Read-only researchers resolved
+pinned ARM64 image identities and the Kind/Kubernetes bootstrap inventory.
+Task 6 remains unaccepted at this checkpoint.
+
+**Rationale:** Root independently verified all 38 canonical Calico JSON
+documents against a safe parse of the checksummed YAML; projection SHA-256 is
+`de76213b8097d55a674cbe88ef9ac349317b067fb3c6fc326d4280d17c7104a8`.
+Registry index, platform-manifest, and container-config digests must remain
+distinct. Tagged source research identified the finite system ConfigMap and
+ServiceAccount sets plus owner-chain requirements absent from earlier fixtures.
+The old V3B-2 profile-only start command omitted explicit non-activation and
+isolation settings. The correction preserves the accepted V3B-1 4-CPU,
+8-GiB-memory, 60-GiB-data-disk configuration and explicitly disables global
+context activation, SSH-config generation, template inheritance, and host
+mounts. V3B-2 transfers inputs through bound command streams, so no shared
+staging mount is required. No foreign profile is to be resized or altered.
+
+**Affected artifacts:** Implementation-worktree plan/design sources now record
+the required teardown latch, proof-bound terminals, immutable expected-input
+commitment, safe Calico projection, isolation settings, and pinned bootstrap
+inventory. Controller/journal/proof integration is still under revision.
+Existing main-checkout lineage HTML and `Inputs/` remain untouched; this entry
+is append-only. No live Colima, Docker, Kind, or Kubernetes mutation occurred.
+
+**Unresolved questions:** Finish integration, explicit server-default and
+generated-owner validation, manifest/config identity use, source-preserving
+quiescence classification, and incomplete-evidence diagnostics. Passing partial
+tests does not resolve these requirements or establish the live boundary.
+
+**Next gate:** Stable corrected Task 6 tree, fresh full static verification,
+independent specification and quality acceptance, then Task 7. Live request-free
+and nominal gates, V3B-2b, and V3C remain pending.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-172 — 2026-09-07 — Shared-proof integration slice verified; whole Task 6 still open
+
+**Input:** Continue the approved resumed implementation through review, with
+all runtime ownership confined to `kil-v3-lab`.
+
+**Interpretation:** Verify a bounded completion/recovery integration slice
+before completing the remaining resource and evidence contracts. Slice
+acceptance does not reopen the live gate or supersede the earlier rejection
+of the whole Task 6 checkpoint.
+
+**Decision status:** Root independently ran the stable contracts, proofs,
+journal, and observed-lifecycle modules: **113 tests passed in 9.615 seconds**.
+All 56 implementation-worktree Markdown readers regenerated and diff hygiene
+passed. Independent specification rereview accepted this bounded slice;
+independent quality review is active. No full-suite or Task 6 acceptance claim
+is made. The older controller suite was stopped after errors and is explicitly
+not a passing checkpoint.
+
+**Rationale:** Normal and recovery completion now share registry-bound actual
+observations, immutable expected inputs, durable proof-before-terminal writes,
+and complete terminal-event revalidation. Repaired journal event labels cannot
+turn failure proofs into success. The permanent teardown latch, profile-only
+cleanup, exact interrupted-creation identity, and same-container cancellation
+have focused regression coverage. Specification review caught discarded output
+from timed-out commands; the fix preserves original bytes, including malformed
+UTF-8, with explicit unsuccessful timeout/prefix-only transport codes. The
+reviewer independently reran that reproducer and four timeout regressions.
+
+Additional tagged-source tracing distinguished Docker/CRI config IDs from
+Kubernetes public Pod imageID, which uses the runtime ImageRef and may contain
+the repository index digest. The plan now records that distinction alongside
+verified ARM64 index/manifest/config chains and kind/path-specific Kubernetes
+defaulting and omission rules.
+
+**Affected artifacts:** Controller, journal, proof/contracts, and focused tests
+in the implementation worktree remain uncommitted. Plan/design sources and
+readers record the new contracts and follow-on inputs. Root alone appends the
+main lineage source; pre-existing main lineage HTML and `Inputs/` are preserved.
+No live Colima, Docker, Kind, or Kubernetes operation was performed.
+
+**Unresolved questions:** Complete saved-profile configuration and actual
+Colima/Lima active-state absence proofs; finite bootstrap and generated-owner
+validation; server-default normalization and image representation joins;
+explicit Envoy refusal evidence and partial-capture diagnostics/publication.
+Readiness is deliberately fail-closed while these contracts are incomplete.
+
+**Next gate:** Quality acceptance of this slice, remaining bounded Task 6
+corrections, a fresh full static gate and whole-task specification/quality
+review, then Task 7. Request-free/nominal live runs, V3B-2b, and V3C remain gated.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-173 — 2026-09-07 — Proof slice accepted; exact profile-state correction underway
+
+**Input:** Continue the user's approved resumed V3B-2a work, preserving the
+exclusive `kil-v3-lab` runtime scope and manual-backup boundary.
+
+**Interpretation:** Finish the bounded Task 6 corrections under the selected
+subagent implementation and independent two-stage review workflow. Approval
+of one slice does not imply approval of the unfinished controller as a whole.
+
+**Decision status:** Independent specification and quality reviewers accepted
+the shared-proof integration slice. Root's fresh focused run passed **118 tests
+in 11.063 seconds**. The quality review's large-proof replay and interrupted
+write findings were fixed and independently reverified. All 56 worktree
+Markdown readers regenerated. Whole Task 6 and its full static gate remain open.
+
+**Rationale:** A consistent proof-envelope bound and atomic no-replace
+publication prevent successful writes that cannot later reload and partial
+writes that poison recovery. The next bounded slice must replace ambient-home
+authority with passwd-derived paths, verify both saved profile configurations,
+bind exact VM and disk identities, and require actual owned-state absence after
+deletion. Colima's conditional data-disk deletion makes exit status alone
+insufficient; scoped orphan recovery requires existing creation provenance.
+
+**Affected artifacts:** Implementation worktree proof/controller/journal tests,
+plan section B.3 and generated readers; a fresh implementer owns the new focused
+profile-state module and its integration/tests. Root retains documentation and
+Git ownership. Main's pre-existing lineage HTML and `Inputs/` remain untouched.
+No live Colima, Docker, Kind, or Kubernetes operations were performed.
+
+**Unresolved questions:** Profile-state implementation/review; finite runtime
+resource and default-normalization contracts; producer-instruction joins and
+partial-capture diagnostics. Readiness remains deliberately fail-closed.
+
+**Next gate:** Profile-state specification then quality acceptance, remaining
+Task 6 slices and full static/review gates, then Task 7. Live validation,
+V3B-2b, and V3C remain closed.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-174 — 2026-09-07 — Clarify source-association and partial-diagnostic contracts
+
+**Input:** Continue correcting Task 6's actual producer interfaces while the
+profile-state implementation proceeds; preserve the approved design's complete
+or calibrated failure publication requirement.
+
+**Interpretation:** A valid hexadecimal commitment is not sufficient evidence
+of its relationship to saved instruction bytes, a journal event, or the actual
+captured driver terminal. Missing capture must not become either synthetic empty
+evidence or a permanent obstacle to ownership-proved cleanup.
+
+**Decision status:** Adopted corrective plan sections C.1–C.3 after read-only
+source-contract analysis. These are implementation requirements, not completed
+capabilities. Cases will separately bind actual instruction digests; private
+replay will join persisted instruction, case, attach bytes, journal terminal,
+and captured terminal. The existing shared driver protocol remains unchanged.
+The supported claim is controller/journal-bound association, not a producer
+attestation that it consumed a particular instruction digest.
+
+**Rationale:** Public verification can rederive safe case and terminal
+commitments, but cannot recompute a sensitive private instruction without its
+bytes. Explicit public projection and an honest verification boundary are
+required. Partial capture receives closed per-source statuses and a teardown-only
+classification. A separate nonpromotable public partial-diagnostic result within
+the same eleven files remains required before Task 6 acceptance; an intermediate
+private-only cleanup slice does not discharge that requirement. Exact Envoy
+connection refusal must come from the producer's actual observation, not a
+generic TCP failure; existing four-zero-gauge proof rules remain unchanged.
+
+**Affected artifacts:** Corrective plan C.1–C.3, test-fixture guidance in D, and
+regenerated worktree readers. Main lineage source only is appended here.
+Profile-state implementation is ongoing and not yet reviewed. No live runtime
+operations or Git mutations were performed.
+
+**Unresolved questions:** Complete and review all remaining integrations. For
+the profile slice, an orphan disk with unproved absence of references from other
+Lima instances must require manual recovery; it must not trigger commands
+against those instances. Normal exact owned cleanup must still support unrelated
+profiles being present. This conservative fallback boundary requires explicit
+tests and must not be misreported as a confirmed foreign reference.
+
+**Next gate:** Profile-state integration and independent reviews, remaining
+resource and evidence corrections, whole Task 6 static and review acceptance.
+No live, V3B-2b, or V3C gate is opened.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-175 — 2026-09-07 — Profile integration tested; disk-format review correction required
+
+**Input:** Verify the bounded B.3 profile-state implementation before continuing
+the approved Task 6 correction sequence.
+
+**Interpretation:** Focused tests support implementation progress, but independent
+review must also challenge the exact conditions that authorize owned mutation.
+
+**Decision status:** Root independently passed **139 focused tests in 15.417
+seconds**; the specification reviewer independently passed the same 139 tests in
+15.472 seconds. The reviewer nevertheless rejected slice acceptance for one
+confirmed disk-format defect. Correction is underway; quality review has not
+opened, and neither the slice nor whole Task 6 is accepted.
+
+**Rationale:** The state observer classified every non-QCOW2 header as raw.
+Replacing a creation-bound test disk's initial bytes with a VHDX signature while
+preserving its inode and size left deletion authorized. Pinned Lima recognizes
+additional image-container formats before falling back to raw. Unsupported
+formats must remain manual recovery. This correction concerns image-container
+metadata and unreadable/truncated observations, not a filesystem-content audit
+or hashing a running guest's changing disk.
+
+**Affected artifacts:** New profile-state module/tests and controller, registry,
+journal, and temporary-home fixture integration remain uncommitted. The plan
+records CLI defaults versus template defaults, conservative orphan boundaries,
+and a separate focused API-default normalization module for the next resource
+slice. All 56 worktree readers regenerated; main's prior dirty HTML and `Inputs/`
+remain preserved. No live runtime operations or Git mutations occurred.
+
+**Unresolved questions:** Disk-format correction and specification rereview,
+then independent quality review; finite resource/defaulting and actual producer
+evidence contracts remain incomplete. The Envoy refusal contract may use exact
+bounded C-locale Bash diagnostics, but does not claim numeric errno output or
+unobserved compatibility with the pinned image; unfamiliar live grammar must
+fail closed.
+
+**Next gate:** Correct and independently reverify B.3, then complete remaining
+Task 6 slices and the full static/review gate. Readiness remains fail-closed;
+live testing, V3B-2b, and V3C remain gated.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-176 — 2026-09-07 — Profile disk correction passes specification rereview
+
+**Input:** Correct and reverify the disk-format mutation-authority defect found
+in the bounded profile-state slice.
+
+**Interpretation:** Match the pinned image reader's bounded format probes and
+revalidate their actual retained bytes during recovery. Ordinary raw guest-sector
+changes must not be mistaken for a changed resource identity.
+
+**Decision status:** Independent specification rereview accepted B.3 after the
+correction. Root passed **143 focused tests in 24.781 seconds**; the reviewer
+independently passed 143 tests in 23.970 seconds and confirmed the original
+normal-delete and orphan reproductions both return unknown, issue zero mutations,
+and retain the disk. Independent quality review is now active. Whole Task 6
+remains incomplete and unaccepted.
+
+**Rationale:** Complete 512-byte probes are retained and independently classified
+again during pure proof replay. All seven pinned non-raw format families and ten
+signatures were checked against tagged sources. Unsupported or incomplete probes
+cannot authorize deletion. The pinned stub probes inspect the first sector, not
+a footer; this deliberately remains bounded container-format validation rather
+than a guest filesystem audit. An invalid orphan observation now preserves
+recovery material and returns unknown instead of escaping through cleanup.
+
+**Affected artifacts:** Profile-state module, controller cleanup handling and
+focused regressions; plan source links and regenerated readers. All work remains
+uncommitted. Main's pre-existing HTML and `Inputs/` remain untouched. No live
+Colima, Docker, Kind, or Kubernetes command was executed.
+
+**Unresolved questions:** Quality acceptance of B.3; Kubernetes API defaulting,
+finite generated-resource ownership, source/result association, calibrated
+partial diagnostics, and real Envoy refusal producer behavior remain open.
+
+**Next gate:** Close B.3 quality review, then the remaining bounded Task 6
+corrections and whole-task static/specification/quality gates. No live test,
+V3B-2b, or V3C phase is opened.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-177 — 2026-09-07 — Quality review requires fresh startup and coherent capture checks
+
+**Input:** Independent quality review of the specification-accepted B.3 slice.
+
+**Interpretation:** Keep the slice open until both review stages accept it.
+Ordinary focused success does not override counterexamples to mutation authority
+or retained-proof consistency.
+
+**Decision status:** Quality review returned **With Fixes**, with two Important
+findings and no Critical/Minor findings. Its independent focused run passed
+143 tests in 24.881 seconds. A correction turn is now active; no subsequent
+resource implementation or live phase has started.
+
+**Rationale:** First, pristine state was checked at preflight but not immediately
+before Colima start, so a resumed prepared journal could adopt a footprint created
+in the intervening time. Actual start dispatch must freshly refuse such remnants
+without a mutation or creation binding, while pending-start recovery remains
+observe-first. Second, pure capture validation accepted absent parent directories
+alongside present child files. Both direct absence and the real deletion registry
+could treat that contradictory record as complete. Central parent/child presence
+and membership validation is required even though collector anchor checks already
+protect ordinary filesystem observations.
+
+**Affected artifacts:** Controller startup guard, profile-state pure validation,
+and focused normal/recovery/replay regressions. Root retains documentation/Git
+ownership; previous dirty main HTML and `Inputs/` are preserved. No live runtime
+operation was performed.
+
+**Unresolved questions:** Correct both findings and obtain quality rereview
+acceptance; then finish API normalization, finite owner/resource joins, actual
+producer association and calibrated diagnostics before whole Task 6 acceptance.
+
+**Next gate:** Stable focused verification and B.3 review acceptance. Readiness
+stays fail-closed; Task 7, live validation, V3B-2b, and V3C remain gated.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-178 — 2026-09-07 — Profile slice accepted; static API normalization underway
+
+**Input:** Finish the B.3 quality corrections and continue the approved bounded
+Task 6 correction sequence without opening the live gate.
+
+**Interpretation:** Preserve the accepted filesystem/command boundary while
+separating static Kubernetes default normalization from later dynamic ownership
+and incarnation proofs.
+
+**Decision status:** B.3 passed independent quality rereview after both findings
+were fixed. Root independently passed **148 tests in 26.621 seconds**; the
+reviewer passed 148 in 26.672 seconds and reran the original counterexamples.
+There are no remaining findings in that bounded delta. A fresh implementer is
+now building the focused API-default module; its initial 159-test pass is an
+implementation checkpoint, not review acceptance or whole Task 6 completion.
+
+**Rationale:** Fresh checks guard both startup intent and dispatch. A required,
+nullable, monotonic `profile_start_refused_sequence` prevents a refused intent
+from gaining ownership through error handling or restart; older missing-field
+journals fail closed. Parent/child coherence is independently checked during
+capture validation and replay. These controls do not claim atomic exclusion
+against an uncooperative external Colima invocation.
+
+For API normalization, dynamic Service allocation, actual Pod admission and
+generated-owner additions remain fail-closed until the resource slice supplies
+independent context. Pinned source review clarified that enableServiceLinks is
+defaulted by SetDefaults_Pod, not SetDefaults_PodSpec; template insertion would
+be incorrect. Static metadata validation is not an incarnation proof.
+
+**Affected artifacts:** Profile/journal/proof contracts and focused tests;
+new API-default module/tests and the applied-object wrapper in progress; updated
+corrective plan and regenerated readers. No live runtime operation or Git
+mutation was performed. Main's pre-existing HTML and `Inputs/` remain preserved.
+
+**Unresolved questions:** Root's independent Colima source check found a
+separate compatibility gap: optional foreign address fields and valid runtime
+variants are rejected by the existing duplicate seven-field decoders. Plan B.4
+now requires a shared closed decoder, private full-state comparison, privacy-safe
+keyed public commitments, and roster completeness assessment before live work.
+This is pending implementation, not part of the accepted B.3 claim. Dynamic
+resource joins, source/result associations and calibrated diagnostics also remain
+open.
+
+**Next gate:** Static API-default specification and quality acceptance, then the
+remaining inventory/resource/evidence corrections and whole Task 6 static/review
+gate. Readiness stays false; Task 7, live tests, V3B-2b and V3C remain gated.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-179 — 2026-09-07 — Static Service-family over-admission corrected, rereview pending
+
+**Input:** Continue the approved Task 6 correction sequence and evaluate the
+independent static API-default specification review.
+
+**Interpretation:** Static normalization must not grant the dynamic Service
+allocation authority reserved for B.1, even when the intended cluster is IPv4.
+
+**Decision status:** The initial 169 focused tests and 41 inventory/manifest
+tests passed independently, but specification review found one concrete scope
+violation. The implementer removed the premature IP-family defaults after 14
+regression subcases failed. Its updated 171 focused and 41 inventory/manifest
+tests pass; independent specification rereview is now pending. This is not
+whole Task 6 acceptance.
+
+**Rationale:** `ipFamilies` depends on allocation configuration and
+`ipFamilyPolicy` can depend on prior Service state. Both remain exact until
+the dynamic validator supplies independent context. Only sessionAffinity and
+internalTrafficPolicy are normalized in this static Service slice. Explicit
+desired family fields still require exact equality. The plan now states this
+bounded implementation boundary explicitly.
+
+**Affected artifacts:** API-default module and tests; corrective plan and its
+regenerated reader. Root also reconfirmed Colima's profile-name mapping and
+inventory implementation for the pending B.4 roster-completeness work. No live
+runtime operation or Git mutation occurred. Main's existing HTML and `Inputs/`
+remain untouched.
+
+**Unresolved questions:** Static specification and quality acceptance, then B.4
+inventory compatibility/completeness, B.1 relational resource proofs, actual
+source/result binding and partial diagnostics remain open.
+
+**Next gate:** Close both static review stages, then continue the approved
+bounded corrections. No live phase, V3B-2b or V3C is opened.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-180 — 2026-09-07 — Static API slice accepted; foreign inventory correction dispatched
+
+**Input:** Independent specification rereview and quality review of the corrected
+static API-default slice, followed by the next approved Task 6 correction.
+
+**Interpretation:** Accept only the bounded static comparator, not dynamic
+ownership/readiness or complete Task 6. Continue with B.4 using isolated fixtures.
+
+**Decision status:** Both reviews accepted the static slice with no remaining
+scoped findings. Root freshly passed 171 focused tests in 25.187 seconds; each
+reviewer passed the combined 212-test focused/inventory/manifest suite. Quality
+review also independently assembled all 38 Calico static response documents.
+A fresh B.4 implementer is now active; B.4 is not yet accepted.
+
+**Rationale:** The accepted comparator preserves exact structural paths and
+JSON scalar types while leaving allocated Service and actual Pod additions
+unproved. B.4 must unify the private inventory schema, bind hidden address drift
+with keyed public commitments, and reconcile Colima output against the no-follow
+Lima directory roster. Colima's missing final Scanner error check makes command
+success alone insufficient for a complete inventory. Stable bracketing is not
+an atomic exclusion guarantee against external Colima activity.
+
+**Affected artifacts:** Accepted API-default module/tests and proof wrapper;
+forthcoming shared Colima inventory module, controller/proof/evidence adapters
+and isolated fixtures. Main HTML and `Inputs/` remain preserved; no live runtime
+operation or Git mutation occurred.
+
+**Unresolved questions:** B.4 implementation and both reviews; B.1 resource
+relations, producer associations, calibrated diagnostics, realistic archive
+fixtures and whole Task 6 verification remain outstanding.
+
+**Next gate:** B.4 focused verification and independent specification/quality
+acceptance. Runtime readiness stays fail-closed, with live and later phases gated.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-181 — 2026-09-07 — Foreign inventory implemented; retained-snapshot linkage corrected
+
+**Input:** B.4 implementation report and its self-review concern about separate
+controller and registry samples.
+
+**Interpretation:** Inventory compatibility, completeness, private comparison
+and published commitments must all refer to the actual retained observation.
+A preliminary snapshot cannot supply private evidence for a different proof.
+
+**Decision status:** The implementer reports 278 focused tests passing after
+closing the snapshot-linkage concern. Independent specification review and a
+root rerun are in progress; B.4 is not yet accepted. Its bounded compatibility
+contract is 1024 records, a 32 MiB raw payload, 128-character supported ASCII
+names and positive bounded resources; unsupported names/rosters fail closed.
+
+**Rationale:** The shared decoder admits the seven pinned runtime forms and
+optional IP literals, while owned profile configuration remains strict. Stable
+no-follow directory brackets address incomplete Colima listings without guest
+content inspection. Public state HMACs capture hidden address drift without
+publishing addresses or a low-entropy unkeyed hash. The retained foreign proof
+now derives the after-state, global context, equality and attestation digest;
+normal completion, recovery and hydration restore that same validated state.
+The journal's narrow observed-foreign completion exception permits derived
+results to differ from the preliminary intent without loosening other families.
+
+**Affected artifacts:** New Colima inventory module/tests; focused controller,
+proof, journal, profile-state and evidence adapters/fixtures; plan clarification
+and regenerated reader. Root read pinned bootstrap source for later B.1 work.
+No live runtime operation or Git mutation occurred. Existing main HTML and
+`Inputs/` remain untouched.
+
+**Unresolved questions:** Independent B.4 specification/quality acceptance and
+whole Task 6 resource/source/fixture corrections remain open. Public verifiers
+compare opaque state commitments; they cannot recompute the private HMAC.
+
+**Next gate:** Complete B.4 focused verification and both review stages before
+dispatching the next bounded implementation. Runtime readiness and live/later
+phase gates remain closed.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-182 — 2026-09-07 — Foreign inventory accepted; bounded Service allocation work begins
+
+**Input:** B.4 independent specification and quality verdicts and continuation
+of the approved resource-proof corrections.
+
+**Interpretation:** Accept B.4's inventory and retained-snapshot linkage only.
+Split the next dynamic resource work into a focused Service allocation contract
+before generated-owner, bootstrap, actual-Pod and readiness integration.
+
+**Decision status:** B.4 passed both reviews without remaining scoped findings.
+Root passed 278 tests in 35.179 seconds; specification and quality reviewers
+passed 278 in 35.070 and 35.752 seconds respectively. Quality also checked
+context-only drift and command-free offline hydration. A fresh Service-binding
+implementer is active; this new slice is not yet accepted.
+
+**Rationale:** Nine independently rendered KIL Services require usable, unique
+IPv4 addresses inside the approved Service CIDR and persistent UID/address
+bindings. Kubernetes API and DNS Service offsets 1 and 10 are reserved by the
+pinned bootstrap contract. Static comparison without allocation context remains
+strict. New dynamic bindings must be rederived from raw proofs and survive
+replay; they do not establish Pod owners, admission or readiness. Source review
+also confirmed fresh kubeadm's two CoreDNS replicas and Kind's single-node
+post-init taint/label removal. The plan records these bootstrap expectations
+subject to confirming no overriding generated kubeadm patch.
+
+**Affected artifacts:** Accepted B.4 module/adapters/tests; planned Service
+binding module/tests and focused proof integration; corrective plan and reader.
+No live runtime operation or Git mutation occurred. Existing main HTML and
+`Inputs/` remain preserved.
+
+**Unresolved questions:** Service allocation implementation and two reviews;
+remaining bootstrap/owner/Pod/stage proofs, producer/result associations,
+calibrated partial diagnostics and realistic full-controller fixtures.
+
+**Next gate:** Service slice focused verification and specification/quality
+acceptance. Whole Task 6 and live/later phases remain gated; runtime completeness
+stays false.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-183 — 2026-09-07 — Service allocation implemented; source-capture bounds clarified
+
+**Input:** Service implementer verification and ongoing source review for the
+remaining bootstrap/capture corrections.
+
+**Interpretation:** Service allocation and persistent incarnation checks are a
+bounded step, not a substitute for generated-owner, admission or readiness
+proofs. Later captures must also distinguish bounded reads from complete sources.
+
+**Decision status:** The Service implementer reports 300 focused tests passing
+in 36.105 seconds. Specification review and a root rerun are active; acceptance
+is pending. No controller, journal or static-default behavior was modified by
+this slice. Runtime completeness remains false.
+
+**Rationale:** The new validator derives all nine expected Service configurations
+independently and binds unique UID/address pairs. Shared proof replay supplies
+prior bindings; readiness cannot fall back to static comparison when those
+bindings are missing. ResourceVersion progression remains distinct from object
+replacement. The direct static comparator's root-status treatment is unchanged;
+full settled Service status is part of later readiness work.
+
+Root also confirmed that Kubernetes log reads currently cap output at the same
+1 MiB limit accepted as evidence, while ledger reads already request an overflow
+sentinel byte. Plan C.2 now requires the analogous log overflow check, private
+truncation diagnostics and idempotent derivation of counts from frozen captures.
+These capture changes are planned, not implemented. Read-only source research
+confirmed Kind's iptables default and lack of an injected CoreDNS override;
+remaining pinned bootstrap details are being checked independently.
+
+**Affected artifacts:** New Service binding module/tests and focused proof
+integration; corrective plan and regenerated reader. Main HTML and `Inputs/`
+remain untouched. No live runtime operation or Git mutation occurred.
+
+**Unresolved questions:** Both Service reviews, full bootstrap/owner/Pod/stage
+contracts, source associations/partial diagnostics and realistic full-controller
+fixtures remain open.
+
+**Next gate:** Service specification/quality acceptance, then the next bounded
+resource correction. Whole Task 6 and all live/later phase gates remain closed.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-184 — 2026-09-07 — Service specification accepted; quality review underway
+
+**Input:** Independent Service specification verdict, root verification and
+completed pinned Kind/kubeadm configuration research.
+
+**Interpretation:** Preserve the Service slice's narrow allocation/incarnation
+claim while preparing source-derived bootstrap expectations for a separate
+resource validator.
+
+**Decision status:** Service specification review passed with no scoped finding.
+The reviewer passed 300 tests in 36.223 seconds and root freshly passed 300 in
+36.526 seconds. Independent quality review is active, so the slice is not yet
+fully accepted. No live gate has opened.
+
+**Rationale:** Exact rendered Services, distinct UIDs/addresses and replayed
+prior bindings were independently confirmed. The readiness guard remains false
+first and cannot accept a missing prior allocation binding. Pinned source review
+also confirms no Kind-injected CoreDNS patch for this fixed configuration,
+fresh kubeadm's two CoreDNS replicas, iptables kube-proxy settings, source-level
+CoreDNS/kube-proxy image references and the controller-manager arguments that
+enable service-account clients. Rootless-dependent variants remain observations
+to bind later, not assumptions.
+
+**Affected artifacts:** Service module/tests and proof integration under review;
+bootstrap corrective plan and regenerated reader. No live runtime operation or
+Git mutation occurred. Existing main HTML and `Inputs/` remain untouched.
+
+**Unresolved questions:** Service quality acceptance; exact bootstrap/resource
+ownership implementation; Pod admission, source associations, calibrated
+diagnostics and realistic full-controller fixtures.
+
+**Next gate:** Close Service quality review, then dispatch the next bounded
+resource validator. Whole Task 6, runtime readiness and live/later phases remain
+closed.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-186 — 2026-09-07 — Service slice accepted; bootstrap identity slice dispatched
+
+**Input:** Service test-oracle correction and independent quality rereview.
+
+**Interpretation:** Close Service allocation only after the independent raw
+expected-output assertion passes, then continue with an exact but deliberately
+non-semantic bootstrap identity/cardinality slice.
+
+**Decision status:** The Service slice is accepted by both review stages. The
+corrected focused suite passed 36 tests for the implementer, 36 for root in
+0.698 seconds and 36 for quality rereview in 0.687 seconds; the implementer's
+full 300-test run passed in 33.905 seconds. A fresh bootstrap-identity implementer
+is active. Its work is not yet accepted.
+
+**Rationale:** The corrected test independently retains all non-allocation
+Service fields and compares decoded output exactly. The next slice will replace
+broad Namespace/ServiceAccount/ConfigMap allowances with the exact eight,
+63 and 26 final identity sets respectively, binding UIDs and namespace Active
+state. Platform ConfigMap content remains explicitly unvalidated semantics:
+bounded current digests may support later work but cannot authorize readiness
+or become immutable identity merely because dynamic content was observed.
+
+**Affected artifacts:** Accepted Service binding/proof tests; planned bootstrap
+identity module/tests. No live runtime operation or Git mutation occurred.
+Existing main HTML and `Inputs/` remain untouched.
+
+**Unresolved questions:** Bootstrap identity implementation/reviews, semantic
+platform ConfigMap and component configuration, generated owner/Pod/endpoint
+relations, evidence and full-controller fixture work.
+
+**Next gate:** Bootstrap identity focused verification and both independent
+review stages. Runtime completeness and whole Task 6/live/later gates stay closed.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-185 — 2026-09-07 — Service production contract sound; test independence correction pending
+
+**Input:** Independent Service code-quality review after specification acceptance.
+
+**Interpretation:** A scoped-ready production verdict does not justify carrying
+forward a known avoidable test oracle dependency. Correct it and rereview before
+dispatching another implementation slice.
+
+**Decision status:** Quality review found no Critical or Important issue and
+classified the slice scoped-ready. Its 300-test run passed in 34.278 seconds,
+and 47 independent malformed/type probes rejected correctly. One Minor test
+finding is being corrected; final acceptance remains pending rereview.
+
+**Rationale:** The production validator removes exactly the four independently
+validated Service allocation fields. However, the test then used the production
+static comparator to assess the sanitized result, which could mask a future
+fifth-field removal. The expected sanitized documents will instead be built
+directly and compared byte-for-byte, retaining static fields such as
+sessionAffinity and internalTrafficPolicy.
+
+**Affected artifacts:** Service binding tests only for the correction; bootstrap
+module file routing was added to the plan and readers regenerated. No live
+runtime operation or Git mutation occurred. Existing main HTML and `Inputs/`
+remain untouched.
+
+**Unresolved questions:** Test correction/rereview, then the bootstrap identity
+and configuration slice; later generated ownership, Pod admission, source and
+full-controller work remain open.
+
+**Next gate:** Fresh Service verification and quality rereview, then continue
+the approved bounded resource sequence. Whole Task 6 and live/later gates remain
+closed.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-187 — 2026-09-07 — Bootstrap identities and ConfigMap source contract accepted
+
+**Input:** Completed bootstrap identity implementation, independent specification
+and code-quality reviews, root verification, and pinned-source research for all
+16 fresh platform ConfigMap producers.
+
+**Interpretation:** Accept the exact bootstrap object identities without letting
+current platform configuration bytes become semantic evidence, while recording
+the separate source-derived rules needed for the next configuration slice.
+
+**Decision status:** The standalone bootstrap identity/cardinality slice is
+accepted after both review stages. Specification review first rejected valid
+`binaryData` acceptance; the correction now rejects every such field. Quality
+review then identified a raw lone-surrogate encoding exception and a weak digest
+oracle; both were corrected and rereview passed with no remaining finding. Root
+freshly passed the accepted 313-test suite in 39.229 seconds. The platform
+ConfigMap semantic slice and runtime completeness remain unaccepted.
+
+**Rationale:** The accepted slice binds exactly eight Namespaces, 63
+ServiceAccounts and 26 ConfigMaps, globally distinct UIDs, canonical positive
+resource versions, kube-system cluster incarnation, Namespace Active state and
+prior UID/resource-version continuity. It compares only KIL and Calico static
+configuration. The 16 platform ConfigMaps remain closed-shape observations with
+current-only `unvalidated_configuration_sha256` diagnostics. Pinned producers
+establish exact fresh data-key sets, absence of `binaryData`/`immutable` and
+component hashes, CA/configuration relationships, the four-key Kind local-path
+object, and lifecycle-qualified zero-or-one `cluster-info` JWS signatures; these
+rules were added to the implementation plan for a separate validator.
+
+**Affected artifacts:** Worktree bootstrap module/tests; corrected V3B-2a plan
+and regenerated reader; this lineage entry. Main lineage HTML and `Inputs/`
+remain untouched. No Colima, Docker, Kind or Kubernetes operation and no Git
+mutation occurred.
+
+**Unresolved questions:** Platform ConfigMap semantic implementation/reviews;
+generated owner, Pod, Node and EndpointSlice relations; staged application,
+source associations, calibrated diagnostics, exact Envoy refusal evidence and
+the realistic full-controller archive fixture.
+
+**Next gate:** Implement and independently review the source-derived platform
+ConfigMap configuration slice. Runtime completeness, whole Task 6 and every
+live/later-phase gate remain closed; any future live action is restricted to the
+unique `kil-v3-lab` Colima profile and matching Kind cluster.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-188 — 2026-09-07 — Source-rendered platform ConfigMaps accepted
+
+**Input:** Exact pinned CoreDNS/Kind fixture extraction, TDD implementation,
+independent specification and code-quality reviews, and root verification.
+
+**Interpretation:** Close only the two platform ConfigMaps whose entire fresh
+content is deterministically rendered from pinned public source, leaving private
+CA, token and typed component relationships for separate validators.
+
+**Decision status:** The source-rendered ConfigMap slice is accepted by both
+review stages. Specification review first rejected forgeable exported proof
+digests and indirect duplicate coverage; exact identity-specific digest
+revalidation and direct duplicate cases resolved both. Quality review then
+rejected non-exact API identity strings that could retain mutable equality
+objects; exact built-in-string checks resolved the invariant. Root freshly
+passed 328 accepted tests in 34.702 seconds. Runtime completeness stays false.
+
+**Rationale:** The validator admits exactly `kube-system/coredns` and
+`local-path-storage/local-path-config`, exact producer metadata, canonical
+positive resource versions and bounded UIDs. It compares the 420-byte Corefile
+and all four no-final-LF Kind values byte-for-byte, parses last-applied JSON by
+closed semantics rather than textual order, and produces immutable
+identity-specific canonical source digests. It does not infer readiness,
+ownership, CA/JWS validity or any other platform configuration.
+
+**Affected artifacts:** New worktree source-rendered ConfigMap module/tests;
+V3B-2a plan routing, fixture hashes and regenerated reader; this lineage entry.
+Main lineage HTML and `Inputs/` remain untouched. No live runtime or Git
+mutation occurred.
+
+**Unresolved questions:** Root-CA and extension trust relationships, legacy date
+and cluster-info lifecycle/JWS proof, typed kubeadm/kubelet/kube-proxy content,
+generated ownership/admission, staged application, source/result associations,
+calibrated diagnostics, Envoy refusal and realistic full-controller fixtures.
+
+**Next gate:** Implement and independently review a bounded private
+CA/date/bootstrap-token relationship slice. Whole Task 6 and every live/later
+phase remain closed; any future live action is limited to `kil-v3-lab`.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-189 — 2026-09-07 — Platform trust and legacy-date ConfigMaps accepted
+
+**Input:** TDD implementation and independent specification/quality review of
+the private trust/date ConfigMap slice, including malformed-certificate and
+decoded-tree hardening.
+
+**Interpretation:** Accept only the producer relationships that can be proven
+from independent CA material and API creation time; keep bootstrap-token JWS and
+typed component documents in separate gates.
+
+**Decision status:** The ten-object trust/date slice is accepted by both review
+stages. Specification review required normalization of duplicate X.509
+extensions and immutable exports. Quality review required pre-allocation tree
+bounds and partial forged-object error normalization. All corrections were
+independently rereviewed. Root freshly passed 344 accepted tests in 34.524
+seconds. Runtime completeness remains false.
+
+**Rationale:** Eight `kube-root-ca.crt` objects now bind certificate DER to the
+independent cluster CA, and extension-apiserver data binds distinct cluster and
+front-proxy CA roles plus exact fresh request-header arrays. The legacy tracking
+date is a real UTC date related to its API creation day or the immediately
+preceding midnight-boundary day, never to the current observation date. Input
+traversal is cycle-safe and rejects before unbounded encoding or scheduling;
+proof constructors revalidate exact identities and internal digest relations.
+
+**Affected artifacts:** New worktree trust ConfigMap module/tests; V3B-2a plan
+routing and regenerated reader; this lineage entry. Main lineage HTML and
+`Inputs/` remain untouched. No live infrastructure or Git mutation occurred.
+
+**Unresolved questions:** `cluster-info` internal kubeconfig and token-lifecycle
+JWS; typed kubeadm/kubelet/kube-proxy documents; generated ownership/admission;
+staged application, source/result associations, partial diagnostics, Envoy
+refusal and realistic controller fixtures.
+
+**Next gate:** Implement and independently review the closed `cluster-info`
+kubeconfig/JWS lifecycle proof. Whole Task 6 and every live/later phase remain
+closed; future live action stays restricted to `kil-v3-lab`.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-190 — 2026-09-07 — Cluster-info lifecycle proof accepted
+
+**Input:** TDD implementation and independent specification/quality review of
+the `kube-public/cluster-info` internal kubeconfig, detached bootstrap-token JWS
+and active-to-expired reconciliation contract.
+
+**Interpretation:** Accept a current active signature only after byte-exact JWS
+verification against private token evidence, and accept later signature removal
+only after independently revalidating the earlier raw signed ConfigMap. Keep
+typed component configuration and runtime readiness in later gates.
+
+**Decision status:** The cluster-info slice is accepted by both review stages.
+Specification review closed malformed HTTPS authority, control-character,
+backslash and percent-escape cases. Quality review closed wide-tree and
+pre-encoding allocation amplification, equal-resourceVersion signature drift,
+and a caller-forgeable prior-proof shortcut. The final transition requires the
+prior raw document and revalidates its JWS rather than trusting a proof digest.
+Root freshly passed 367 accepted tests in 37.137 seconds. Runtime completeness
+remains false.
+
+**Rationale:** The validator admits only the closed one-empty-name-cluster
+kubeconfig, binds its HTTPS server and single CA certificate DER to independent
+evidence, and verifies the exact detached HS256 construction with the
+16-character token secret alone. Expiration is `expiration <= captured_at`;
+zero signatures require a strictly advanced resourceVersion and the matching
+prior active observation. Returned immutable proofs retain bindings and digests
+but no token secret, PEM, raw kubeconfig or JWS. Hostile decoded structures and
+private strings are rejected within explicit bounds.
+
+**Affected artifacts:** New worktree cluster-info module/tests; V3B-2a plan
+clarification and regenerated reader; this lineage entry. Main lineage HTML and
+`Inputs/` remain untouched. No live Colima, Docker, Kind or Kubernetes action
+occurred.
+
+**Unresolved questions:** Typed kubeadm, kubelet and kube-proxy ConfigMaps;
+generated ownership and Pod admission; staged application, source/result
+associations, partial diagnostics, exact Envoy refusal evidence and realistic
+full-controller fixtures.
+
+**Next gate:** Implement and independently review the typed platform component
+ConfigMap contract. Whole Task 6 and every live/later phase remain closed; all
+future live actions stay restricted to the unique `kil-v3-lab` Colima profile
+and matching Kind cluster.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-191 — 2026-09-07 — Closed component-YAML decoder accepted
+
+**Input:** TDD implementation plus independent specification and quality review
+of the dependency-free YAML syntax boundary needed by typed kubeadm, kubelet
+and kube-proxy ConfigMap validators.
+
+**Interpretation:** Admit only the deterministic serialization subset required
+by the pinned component documents, not general YAML. Syntax decoding remains a
+supporting proof layer and cannot establish component semantics or readiness.
+
+**Decision status:** The closed-YAML slice is accepted by both review stages.
+Specification review corrected sequence-map indentation, YAML 1.1 boolean and
+sexagesimal ambiguity, trailing-colon scalars, key-node accounting,
+single-quoted backslash semantics, root empty mappings and trailing-dot
+sexagesimal forms. Quality review added bounded integer conversion, escaped BOM
+rejection and early single-quoted scalar accounting. Root freshly passed 396
+accepted tests in 35.944 seconds. Runtime completeness remains false.
+
+**Rationale:** The decoder returns only exact built-in mapping, sequence,
+string, Boolean, integer and null values. It rejects duplicate keys, graph/type
+extensions, comments, directives, document markers, block scalars, non-empty
+flow collections, ambiguous implicit types, controls, surrogates and subclasses.
+It bounds input bytes, lines, depth, semantic nodes, decoded scalar bytes and
+decimal-integer digits before expensive construction or conversion.
+
+**Affected artifacts:** New worktree closed-YAML module/tests; V3B-2a plan
+routing and regenerated reader; this lineage entry. Main lineage HTML and
+`Inputs/` remain untouched. No live infrastructure or Git mutation occurred.
+
+**Unresolved questions:** Typed semantic equality and private relationships for
+the three component ConfigMaps, especially kube-proxy kubeconfig credentials;
+generated ownership and Pod admission; staged application, source/result
+associations, diagnostics, Envoy refusal and realistic controller fixtures.
+
+**Next gate:** Implement and independently review the source-closed typed
+kubeadm/kubelet component ConfigMap semantics, keeping live-derived kube-proxy
+credential relations closed until their evidence shape is established. Whole
+Task 6 and all live/later gates remain closed; future live actions are limited
+to `kil-v3-lab`.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-192 — 2026-09-07 — Typed kubeadm and kubelet ConfigMaps accepted
+
+**Input:** TDD implementation and independent specification/quality review of
+the uploaded kubeadm cluster configuration and generic kubelet configuration
+against trusted generated/defaulted semantic inputs.
+
+**Interpretation:** Accept semantic equality independent of YAML ordering while
+binding the pinned nominal cluster, version, network, DNS and rootful-provider
+relations. Do not conflate the uploaded generic kubelet document with
+node-local CRI patching, and keep kube-proxy credentials separate.
+
+**Decision status:** The two-ConfigMap component slice is accepted by both
+review stages without requested corrections. Root freshly passed 413 accepted
+tests in 35.874 seconds. The proof remains an evidence record rather than an
+unforgeable capability, and runtime completeness remains false.
+
+**Rationale:** Exactly `kube-system/kubeadm-config` and
+`kube-system/kubelet-config` are admitted with closed core/v1 identity,
+metadata and data shapes. Their embedded YAML is decoded through the accepted
+closed subset and compared to bounded exact built-in expected trees without
+attacker-controlled equality. Kubeadm binds the beta-v4 cluster identity,
+control-plane endpoint, subnets, DNS domain and sole Kind hostpath controller
+argument; kubelet binds its beta-v1 type, cluster domain and single DNS address.
+Proofs retain only API identity, UID/resourceVersion and raw/semantic digests.
+
+**Affected artifacts:** New worktree component-ConfigMap module/tests; V3B-2a
+plan routing and regenerated reader; this lineage entry. Main lineage HTML and
+`Inputs/` remain untouched. No live Colima, Docker, Kind or Kubernetes action
+occurred.
+
+**Unresolved questions:** Kube-proxy configuration and kubeconfig credential
+shape/relations; generated ownership and Pod admission; staged application,
+source/result associations, partial diagnostics, exact Envoy refusal and
+realistic full-controller fixtures.
+
+**Next gate:** Establish and implement the pinned kube-proxy configuration and
+private kubeconfig relationship without guessing its credential representation.
+Whole Task 6 and all live/later gates remain closed; future live actions stay
+limited to the unique `kil-v3-lab` profile and matching Kind cluster.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-193 — 2026-09-07 — Kube-proxy ConfigMap relationship accepted
+
+**Input:** Pinned Kubernetes 1.36.1 kubeadm proxy manifest/generator source,
+TDD implementation, independent source/specification review and independent
+quality review.
+
+**Interpretation:** Treat kube-proxy credentials as exact service-account file
+references, not embedded private material, and bind the source-rendered
+kubeconfig separately from the generated/defaulted proxy configuration.
+
+**Decision status:** The kube-proxy ConfigMap slice is accepted by both review
+stages. Quality review found no production defect and required one hostile-width
+test to instrument the actual traversal hook rather than dead code; the revised
+test proves rejection before child visitation. Root freshly passed 425 accepted
+tests in 36.462 seconds. Runtime completeness remains false.
+
+**Rationale:** The validator admits only the labeled `kube-system/kube-proxy`
+core/v1 ConfigMap with exact `config.conf` and `kubeconfig.conf` data. It binds
+the trusted defaulted iptables configuration, pod CIDR, 1-second minimum sync,
+zero max-per-core conntrack setting and rootful selection. The kubeconfig is
+closed to one `default` cluster/context/user, the fixed internal HTTPS endpoint,
+the mounted service-account CA path and token-file path; embedded tokens,
+certificates, keys and alternate authentication are rejected. Proofs retain
+only identity and raw/semantic digests.
+
+**Affected artifacts:** New worktree kube-proxy ConfigMap module/tests; V3B-2a
+plan routing and regenerated reader; this lineage entry. Main lineage HTML and
+`Inputs/` remain untouched. No live infrastructure or Git mutation occurred.
+
+**Unresolved questions:** Generated Deployment/DaemonSet/static-Pod/
+EndpointSlice ownership and Node incarnation; Pod admission, CNI and image
+identity; staged application, source/result associations, partial diagnostics,
+exact Envoy refusal and realistic full-controller fixtures.
+
+**Next gate:** Implement and independently review generated platform ownership
+and resource relationships before any Pod-readiness claim. Whole Task 6 and all
+live/later gates remain closed; future live actions remain restricted to
+`kil-v3-lab`.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-194 — 2026-09-07 — Deployment ownership chains accepted
+
+**Input:** TDD implementation and independent specification/quality review of
+the fresh Deployment to ReplicaSet to Pod ownership projection.
+
+**Interpretation:** Prove generated workload identity through exact controller
+UID relations plus revision, template-hash and generated-name joins; name
+prefixes alone are insufficient. Keep DaemonSet/static ownership and all Pod
+readiness/image claims separate.
+
+**Decision status:** The Deployment ownership slice is accepted by both review
+stages. Quality review required exact collection cardinalities to fail before
+per-key/per-element traversal; the revised tests observe the real paths for
+wide records, Pod tuples and proof bindings. Root freshly passed 448 accepted
+tests in 35.481 seconds. Runtime completeness remains false.
+
+**Rationale:** The validator derives exactly 12 pinned deployments and their
+replica counts, admits one fresh revision-1 ReplicaSet per Deployment and binds
+13 generated Pods through namespace/name/UID owner references. ReplicaSet and
+Pod hashes/names must agree, and all 37 UIDs across the three families are
+globally unique. The immutable proof retains only identities, resourceVersions,
+hashes and canonical Pod triples; no raw projection is retained.
+
+**Affected artifacts:** New worktree deployment-ownership module/tests; V3B-2a
+plan routing and regenerated reader; this lineage entry. Main lineage HTML and
+`Inputs/` remain untouched. No live infrastructure or Git mutation occurred.
+
+**Unresolved questions:** DaemonSet-to-Pod and static mirror-Pod-to-Node
+ownership; EndpointSlice ownership; Pod admission/CNI/images; staged
+application, source/result associations, diagnostics, Envoy refusal and
+realistic full-controller fixtures.
+
+**Next gate:** Implement and independently review the single-node DaemonSet and
+static mirror Pod ownership relations. Whole Task 6 and all live/later gates
+remain closed; future live actions stay limited to `kil-v3-lab`.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-195 — 2026-09-07 — Node, DaemonSet and mirror ownership accepted
+
+**Input:** TDD implementation and independent specification/quality review of
+the single-node DaemonSet Pod and control-plane static mirror Pod ownership
+projection.
+
+**Interpretation:** Bind generated DaemonSet Pods through exact controller UIDs
+and bind mirror Pods through the exact Node incarnation UID plus component,
+file-source and mirror/config hash relations. Keep readiness and image identity
+outside this proof.
+
+**Decision status:** The Node ownership slice is accepted by both review stages.
+An initially contradictory review instruction about digest retention was
+corrected: equal mirror/config digests are required evidence. Quality review
+then found that the validated static owner UID was not retained in the proof;
+the final binding stores it and the proof constructor requires equality with
+the Node UID. Root freshly passed 466 accepted tests in 35.938 seconds. Runtime
+completeness remains false.
+
+**Rationale:** Exactly one named Node, two pinned DaemonSets, two generated
+DaemonSet Pods and four named control-plane mirror Pods are admitted. All nine
+resource UIDs are unique; owner references join exact names and UIDs, and each
+mirror binding preserves the repeated Node owner UID without miscounting it as
+a resource identity. Static hashes are lowercase SHA-256 values and equal, with
+source `file`. The immutable proof retains no raw projection.
+
+**Affected artifacts:** New worktree Node-ownership module/tests; V3B-2a plan
+routing and regenerated reader; this lineage entry. Main lineage HTML and
+`Inputs/` remain untouched. No live infrastructure or Git mutation occurred.
+
+**Unresolved questions:** EndpointSlice owner/manager/port/address/target joins;
+Pod admission, CNI and image identity; staged application, source/result
+associations, diagnostics, Envoy refusal and realistic controller fixtures.
+
+**Next gate:** Implement and independently review EndpointSlice ownership and
+ready Pod-target relations for platform and KIL Services. Whole Task 6 and all
+live/later gates remain closed; future live actions remain limited to
+`kil-v3-lab`.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-196 — 2026-09-07 — KIL ready EndpointSlice ownership accepted
+
+**Input:** TDD implementation and independent specification/quality review of
+the nine KIL Service-to-ready-Pod-to-EndpointSlice relations.
+
+**Interpretation:** Revalidate the accepted Service allocation and Deployment
+ownership evidence, then join each fixed KIL Service to its sole ready owned Pod
+and controller-produced EndpointSlice through exact incarnation identities,
+network addresses and producer fields. Keep platform endpoints, complete Pod
+admission/CNI and image identity outside this focused proof.
+
+**Decision status:** The KIL EndpointSlice slice is accepted by both review
+stages. Specification review required full preservation of the prior Service
+proof's API UID, timestamp and run-ID syntax and corrected EndpointSlice-name
+uniqueness to namespace/name. Quality review then closed permissive UID handling
+across raw, owner, target, upstream-proof and retained-binding paths. Root
+freshly passed 484 accepted tests in 35.649 seconds; all 56 Markdown readers
+were regenerated and verified. Runtime completeness remains false.
+
+**Rationale:** Exactly nine authz/envoy/target relations across the three fixed
+application namespaces are admitted. Each Pod joins its retained Deployment
+proof UID and resourceVersion, uses one unique canonical IPv4 address in the
+pinned Pod subnet, is Running, ready, non-deleting and bound to the sole node.
+Each discovery/v1 EndpointSlice has the exact Service controller owner UID, two
+producer labels, IPv4 type, resolved TCP/8080 port and one endpoint whose three
+conditions, address, node and Pod targetRef are exact. Generated names remain
+supplemental namespace-scoped evidence. The immutable canonical proof cannot
+open the overall runtime contract.
+
+**Affected artifacts:** New worktree KIL EndpointSlice ownership module/tests;
+V3B-2a plan routing and regenerated reader; this lineage entry. Main lineage
+HTML and `Inputs/` remain untouched. No Colima, Docker, Kind or Kubernetes
+runtime was started, stopped or mutated.
+
+**Unresolved questions:** Platform Kubernetes/kube-dns Service and endpoint
+ownership; complete Pod admission, Calico CNI and image identity; staged
+application, source/result associations, diagnostics, Envoy refusal and
+realistic full-controller fixtures.
+
+**Next gate:** Implement and independently review the bounded platform Service
+and endpoint relations, then proceed to complete Pod admission/CNI/image
+evidence. Whole Task 6 and all live/later gates remain closed; future live
+actions remain limited to the unique `kil-v3-lab` Colima profile.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-197 — 2026-09-07 — Platform Service and endpoint relations accepted
+
+**Input:** TDD implementation, pinned Kubernetes v1.36.1 source inspection and
+independent specification/quality review of the `kubernetes` and `kube-dns`
+Service, legacy Endpoints and EndpointSlice relations.
+
+**Interpretation:** Treat the API-server lease adapter and the selector-driven
+DNS controllers as distinct producers. Bind the fixed API endpoint to the
+accepted Node incarnation and InternalIP, while binding both DNS endpoints to
+the exact two CoreDNS Pods already owned by the CoreDNS Deployment proof.
+
+**Decision status:** The platform endpoint slice is accepted by both review
+stages. Specification review corrected the legacy kube-dns Endpoints labels:
+they copy the DNS Service labels and add the endpoint-controller manager,
+whereas only the API-server Endpoints carries skip-mirror. Quality review then
+closed forged address relations, cross-proof UID collisions, constructor
+exception leaks and flattened-UID role confusion. Root freshly passed 503
+accepted tests in 37.537 seconds; all 56 Markdown readers were regenerated and
+verified. Runtime completeness remains false.
+
+**Rationale:** The two Services retain their exact pinned subnet offsets and
+producer configurations. The API-server's same-named EndpointSlice has its
+source-correct service-name-only metadata and one Node-bound ready target; the
+DNS EndpointSlice retains its exact Service owner, manager, three ports and two
+ready CoreDNS targets. The proof revalidates and retains the accepted owner
+proofs, a collision-free 46-resource UID domain and role-preserving CoreDNS
+name/UID/resourceVersion/address records. Node, Service and Pod address spaces
+remain distinct, and direct proof reconstruction reasserts every relation.
+
+**Affected artifacts:** New worktree platform-endpoint module/tests; V3B-2a
+plan routing and regenerated reader; this lineage entry. Main lineage HTML and
+`Inputs/` remain untouched. Read-only pinned upstream source was inspected. No
+Colima, Docker, Kind or Kubernetes runtime was started, stopped or mutated.
+
+**Unresolved questions:** Complete admission/default/CNI/image identity for
+direct, generated, DaemonSet and static Pods; staged application, completion
+registry integration, source/result associations, diagnostics, Envoy refusal
+and realistic full-controller fixtures.
+
+**Next gate:** Implement and independently review bounded actual-Pod admission,
+Calico network annotations and immutable image/container incarnation evidence.
+Whole Task 6 and all live/later gates remain closed; future live actions remain
+limited to the unique `kil-v3-lab` Colima profile.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-198 — 2026-09-08 — V3B-2a checkpoint stop and synchronization authorized
+
+**Input:** The user requested that work stop at the accepted checkpoint, that
+all accepted work be synchronized and committed locally and remotely, and that
+the remaining tasks resume in another session.
+
+**Interpretation:** Interrupt the not-yet-implemented driver-Pod admission
+slice, preserve only reviewed work through the platform endpoint gate, commit
+the dedicated implementation branch, integrate it into local main and publish
+both branch and main. Do not adopt unrelated `Inputs/` content or the separately
+modified lineage HTML, and do not touch any Colima runtime.
+
+**Decision status:** Confirmed checkpoint boundary. The interrupted next slice
+created no files. The accepted 50-file implementation checkpoint was freshly
+verified at 503 tests plus reader/diff checks, committed as `e888a0f`, and
+pushed to `origin/codex/v3b2-kind-calico-implementation`. Local-main lineage
+and implementation synchronization is authorized as the remaining closeout.
+
+**Rationale:** A reviewed Git checkpoint makes the incomplete phase safe to
+resume without presenting Task 6 or V3B-2a as complete. Separating unrelated
+working-tree content prevents the synchronization request from silently
+capturing user-owned artifacts outside the accepted implementation scope.
+
+**Affected artifacts:** The V3B-2a implementation branch and its 50 accepted
+files; this Markdown lineage. `Inputs/` and the modified lineage HTML remain
+uncommitted and untouched. No Colima, Docker, Kind or Kubernetes runtime was
+started, stopped or mutated.
+
+**Unresolved questions:** The remaining Task 6 corrective work, beginning with
+direct-driver Pod admission/CNI/image identity, followed by Tasks 7–10 and the
+later V3C repetition/performance phase.
+
+**Next gate:** In a new session, resume from direct-driver Pod admission using
+the accepted platform endpoint proof as the Node-network authority. Future live
+actions remain limited to the unique `kil-v3-lab` Colima profile.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-199 — 2026-09-08 — V3B-2a checkpoint synchronized and shutdown-safe
+
+**Input:** Completion of the user-authorized checkpoint synchronization and
+host-state verification.
+
+**Interpretation:** Confirm the accepted branch and merged main tips on the
+remote, reverify the merged test tree, and inspect Colima read-only before
+declaring the workstation safe to shut down.
+
+**Decision status:** Confirmed. The accepted checkpoint branch is published at
+`e888a0f0695f5fe01a94478f3144a854db161dbb`; the implementation and prior
+lineage were merged and published on main at
+`b98615e7f114d909eb0201c1089986409012605a`. The merged main tree freshly passed
+503 tests in 42.139 seconds. The `kil-v3-lab` Colima profile is absent, so no
+project-owned runtime needed stopping. The unrelated running `attackswarm`
+profile was not touched.
+
+**Rationale:** Remote-tip readback plus merged-tree verification establishes a
+durable resume point. Read-only Colima inventory confirms shutdown safety
+without broadening authority to another project's profile.
+
+**Affected artifacts:** Remote and local main, the published implementation
+branch, and this Markdown lineage. The unrelated untracked `Inputs/` directory
+and modified lineage HTML remain uncommitted and untouched.
+
+**Unresolved questions:** All remaining Task 6 corrective work and Tasks 7–10;
+V3C remains a later phase.
+
+**Next gate:** Resume in a new session at direct-driver Pod admission/CNI/image
+identity. Any future Colima mutation must target only a newly and uniquely
+validated `kil-v3-lab` profile.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
