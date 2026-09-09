@@ -11461,3 +11461,36 @@ terminal proof, rerun the complete controller and repository gates, then open
 the live `kil-v3-lab` validation gate only after static acceptance.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-237 — 2026-09-09 — Exact pending platform gate proved
+
+**Input:** Resolve the independent final-review finding before pushing the
+implementation branch.
+
+**Interpretation:** Make the controller fixture satisfy every earlier finite-
+image, ownership, configuration, endpoint, and continuity validator, then
+assert the exact remaining platform-admission pending category.
+
+**Decision status:** Confirmed correction. Commit `db681e4` supplies the full
+independently rendered application Deployment specifications in the retained
+API fixture and requires
+`operation_postcondition_unproved:platform_admission_terminal_gate_pending`.
+Both focused controller tests pass and confirm no `application_apply_complete`
+event is emitted.
+
+**Rationale:** The reviewer correctly identified that generic fail-closed
+coverage could conceal an earlier validator regression. The corrected fixture
+now reaches the named terminal gate, preserving the honest incomplete claim
+while proving the accumulated runtime chain beneath it.
+
+**Affected artifacts:** `tests/test_v3b2_controller.py`, this append-only
+lineage entry, and the generated lineage reader. No live runtime or Colima
+profile was touched.
+
+**Unresolved questions:** Composition of the already implemented platform
+configuration validators remains the next development slice.
+
+**Next gate:** Push the clean implementation branch, then resume with the
+platform-admission terminal composition and full static gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
