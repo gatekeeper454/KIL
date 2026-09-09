@@ -114,10 +114,14 @@ def raw_runtime_inventory(
     }
     for item in rendered:
         key = (item["apiVersion"], item["kind"], item["metadata"].get("namespace", ""), item["metadata"]["name"])
-        if any(
+        existing = next((row for row in items if
             (row["apiVersion"], row["kind"], row["metadata"].get("namespace", ""), row["metadata"]["name"]) == key
-            for row in items
-        ):
+        ), None)
+        if existing is not None:
+            if item["kind"] == "Deployment" and item["metadata"].get("namespace", "").startswith("kil-"):
+                existing["metadata"]["labels"] = item["metadata"]["labels"]
+                existing["metadata"]["annotations"].update(item["metadata"]["annotations"])
+                existing["spec"] = item["spec"]
             continue
         if key in policy_identities:
             item["metadata"]["uid"], item["metadata"]["resourceVersion"] = policy_identities[key]
@@ -883,7 +887,9 @@ class V3B2ControllerTest(unittest.TestCase):
 
     def test_image_load_and_calico_apply_complete_before_application_gate(self):
         from kil.v3b2_journal import load_expected_context
-        with self.assertRaisesRegex(ControllerError, "operation_postcondition_unproved:invalid_or_missing_observation"):
+        with self.assertRaisesRegex(
+                ControllerError,
+                "operation_postcondition_unproved:platform_admission_terminal_gate_pending"):
             self.controller._up_lifecycle()
         events = load_journal(self.controller.journal_path)["events"]
         self.assertTrue(any(row["event"] == "image_load_complete" for row in events))
@@ -923,7 +929,9 @@ class V3B2ControllerTest(unittest.TestCase):
             return payload
         with patch("kil.v3b2_pre_driver_checkpoint.read_pre_driver_checkpoint_bytes",
                    side_effect=read) as reader:
-            with self.assertRaisesRegex(ControllerError, "operation_postcondition_unproved"):
+            with self.assertRaisesRegex(
+                    ControllerError,
+                    "operation_postcondition_unproved:platform_admission_terminal_gate_pending"):
                 self.controller._up_lifecycle()
         self.assertEqual(reader.call_count, 1)
         context, expected = captured[0]
