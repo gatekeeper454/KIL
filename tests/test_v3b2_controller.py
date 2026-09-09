@@ -913,23 +913,24 @@ class V3B2ControllerTest(unittest.TestCase):
             self.controller._up_lifecycle()
         self.assertEqual(len(checked), 2)
 
-    def test_application_terminal_collector_reads_strict_checkpoint_as_five_record_registry(self):
-        from kil.v3b2_policy_stage_checkpoint import read_policy_stage_checkpoint_bytes
+    def test_application_terminal_collector_reads_strict_pre_driver_checkpoint_registry(self):
+        from kil.v3b2_pre_driver_checkpoint import read_pre_driver_checkpoint_bytes
         from kil.v3b2_proofs import OPERATIONS
         captured = []
-        def read(path, context):
-            payload = read_policy_stage_checkpoint_bytes(path, context)
+        def read(path, context, *, maximum):
+            payload = read_pre_driver_checkpoint_bytes(path, context, maximum=maximum)
             captured.append((context, payload))
             return payload
-        with patch("kil.v3b2_policy_stage_checkpoint.read_policy_stage_checkpoint_bytes",
+        with patch("kil.v3b2_pre_driver_checkpoint.read_pre_driver_checkpoint_bytes",
                    side_effect=read) as reader:
             with self.assertRaisesRegex(ControllerError, "operation_postcondition_unproved"):
                 self.controller._up_lifecycle()
         self.assertEqual(reader.call_count, 1)
         context, expected = captured[0]
         requests = OPERATIONS["application_apply"].requests(context)
-        self.assertEqual([row.label for row in requests], ["policy_stage_checkpoint",
-                         "applied_objects", "node", "cluster_namespace", "kind_configuration"])
+        self.assertEqual([row.label for row in requests], ["pre_driver_checkpoint",
+                         "node_before", "runtime_inventory", "node",
+                         "cluster_namespace", "kind_configuration"])
         self.assertTrue(expected.startswith(b'{"context_commitment":'))
 
     def test_invalid_policy_observation_prevents_workloads_and_latches_teardown(self):
