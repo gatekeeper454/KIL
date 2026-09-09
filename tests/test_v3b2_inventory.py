@@ -37,10 +37,34 @@ PROFILE_CALICO_IMAGES = dict(FIXED_PROFILE.calico_images)
 CALICO_CNI = PROFILE_CALICO_IMAGES["cni"]
 CALICO_NODE = PROFILE_CALICO_IMAGES["node"]
 CALICO_CONTROLLERS = PROFILE_CALICO_IMAGES["kube_controllers"]
-KIL_IMAGE = "kil.local/kil-v3b2:sha256-" + "d" * 64
-KIL_IMAGE_ID = "docker-pullable://kil.local/kil-v3b2@sha256:" + "d" * 64
-ENVOY_IMAGE = "docker.io/envoyproxy/envoy@sha256:" + "e" * 64
-ENVOY_IMAGE_ID = "docker-pullable://docker.io/envoyproxy/envoy@sha256:" + "e" * 64
+KIL_TARGET = "sha256:45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649"
+KIL_CONFIG = "sha256:f21285be21c8f691b9b60b7e38bb309564a5cc238512c7455eb7759f4d922ddb"
+KIL_IMAGE = "kil.local/kil-v3b2:sha256-" + KIL_TARGET[7:]
+KIL_IMAGE_ID = "kil.local/kil-v3b2@" + KIL_TARGET
+ENVOY_IMAGE = "docker.io/envoyproxy/envoy@sha256:57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38c524401b4"
+ENVOY_IMAGE_ID = ENVOY_IMAGE
+
+
+class WorkloadImageMembershipTest(unittest.TestCase):
+    def test_config_and_repository_refs_are_finite_members_not_provenance(self):
+        for container, image, refs in (('authz', KIL_IMAGE, (KIL_CONFIG, KIL_IMAGE_ID)),
+                                       ('envoy', ENVOY_IMAGE, (ENVOY_IMAGE_ID,))):
+            for ref in refs:
+                row = PodImageIdentity('workload', 'regular', 'kil-v3-baseline', container + '-a',
+                                       container, 'uid', '1', image, ref, True)
+                self.assertEqual(replace(row), row)
+
+    def test_unknown_targets_and_cross_domain_pairs_reject(self):
+        unknown = 'f' * 64
+        for container, image, ref in (
+            ('authz', 'kil.local/kil-v3b2:sha256-' + unknown, 'docker-pullable://kil.local/kil-v3b2@sha256:' + unknown),
+            ('authz', KIL_IMAGE, KIL_TARGET), ('authz', KIL_IMAGE, ENVOY_IMAGE),
+            ('authz', KIL_IMAGE, 'foreign/repo@' + KIL_TARGET),
+            ('envoy', ENVOY_IMAGE, KIL_CONFIG), ('unknown', KIL_IMAGE, KIL_CONFIG),
+            ('authz', KIL_CONFIG, KIL_CONFIG)):
+            with self.subTest(container=container, image=image, ref=ref), self.assertRaises(InventoryError):
+                PodImageIdentity('workload', 'regular', 'kil-v3-baseline', 'pod', container,
+                                 'uid', '1', image, ref, True)
 
 
 def obj(kind: str, namespace: str, name: str, suffix: str) -> ObjectIdentity:
@@ -180,6 +204,7 @@ class V3B2InventoryTest(unittest.TestCase):
             )
 
     def test_runtime_driver_pod_identity_is_strict_and_image_bound(self) -> None:
+        legacy_image_id = 'docker-pullable://' + KIL_IMAGE_ID
         value = {
             "apiVersion": "v1",
             "kind": "Pod",
@@ -190,7 +215,7 @@ class V3B2InventoryTest(unittest.TestCase):
             "status": {
                 "conditions": [{"status": "True", "type": "Ready"}],
                 "containerStatuses": [{
-                    "image": KIL_IMAGE, "imageID": KIL_IMAGE_ID,
+                    "image": KIL_IMAGE, "imageID": legacy_image_id,
                     "containerID": "containerd://" + "1" * 64,
                     "name": "driver", "ready": True,
                 }],
@@ -206,7 +231,7 @@ class V3B2InventoryTest(unittest.TestCase):
         )
         self.assertEqual(parsed, RuntimePodIdentity(
             "kil-v3-baseline", "driver", "driver-uid", "17", "driver",
-            KIL_IMAGE, KIL_IMAGE_ID, True, "containerd://" + "1" * 64,
+            KIL_IMAGE, legacy_image_id, True, "containerd://" + "1" * 64,
         ))
         value["metadata"]["managedFields"] = [{"manager": "kubelet"}]
         value["spec"] = {"nodeName": "kil-v3-lab-control-plane"}
@@ -279,6 +304,12 @@ class V3B2InventoryTest(unittest.TestCase):
                              "uid": f"33333333-3333-4333-8333-{index:012x}"},
                 "spec": {}, "status": {},
             })
+        # Legacy pure parser fixture: fixed public members, not production
+        # source-backed containerd status/provenance authority.
+        for item in raw_value['items']:
+            if item['kind'] == 'Pod' and item['metadata'].get('namespace', '').startswith('kil-'):
+                for row in item.get('status', {}).get('containerStatuses', []):
+                    row['imageID'] = ENVOY_IMAGE_ID if row['name'] == 'envoy' else KIL_IMAGE_ID
         payload = json.dumps(raw_value, indent=2).encode()
         parsed = parse_runtime_inventory(
             payload, profile=FIXED_PROFILE, workload=workload,
@@ -429,7 +460,7 @@ class V3B2InventoryTest(unittest.TestCase):
         extra_object = obj("Deployment", "kil-v3-baseline", "extra", "mirrored")
         extra_service = obj("Service", "kil-v3-signed", "public", "mirrored-service")
         extra_workload = PodImageIdentity(
-            "workload", "regular", "kil-v3-baseline", "extra-a", "extra",
+            "workload", "regular", "kil-v3-baseline", "authz-extra", "authz",
             "pod-extra", "rv-extra", KIL_IMAGE, KIL_IMAGE_ID, True,
         )
         for label, field, value in (

@@ -118,29 +118,21 @@ class ServiceProofIntegrationTest(unittest.TestCase):
 
     def test_application_proof_bindings_survive_replay_and_readiness_stays_pending(self):
         proofs = self.proofs
-        base, journal, context, decision, bundle = self.completed()
-        replayed = proofs.expected_context(base, journal, lambda *_: bundle)
-        prior = proofs.decode(replayed.inputs)['prior_service_bindings']
-        self.assertEqual(prior, proofs.decode(decision.bindings)['service_bindings'])
-        self.assertIsNone(proofs.decode(context.inputs)['prior_service_bindings'])
-        self.assertIs(proofs.decode(replayed.inputs)['runtime_contract_complete'], False)
-        requests = proofs.OPERATIONS['readiness'].requests(replayed)
-        observations = tuple(proofs.RawObservation(row.label, () if row.command is None else row.command.argv,
-                             () if row.command is None else row.command.env, 0, b'{}\n', b'') for row in requests)
-        self.assertEqual(proofs.decide(replayed, observations).category, 'platform_inventory_contract_pending')
+        _, _, context = self.initial()
+        decision = proofs.decide(context, self.observations(context))
+        self.assertEqual(decision.outcome, 'unknown')
+        with self.assertRaises(proofs.ProofError):
+            proofs.terminal_event(context, decision, '0' * 64)
 
     def test_replayed_binding_rejects_replacement_and_allows_resource_version_progress(self):
         from copy import deepcopy
         proofs = self.proofs
-        base, journal, _, decision, bundle = self.completed()
-        journal['events'][-1]['event'] = 'application_apply_intent'
-        context = proofs.expected_context(base, journal, lambda *_: bundle)
+        _, _, context = self.initial()
         progressed = deepcopy(self.observed)
         for row in progressed:
             row['metadata']['resourceVersion'] = '1000'
         next_decision = proofs.decide(context, self.observations(context, progressed))
-        self.assertEqual(next_decision.bindings, decision.bindings)
-        self.assertEqual(next_decision.outcome, 'complete')
+        self.assertEqual(next_decision.outcome, 'unknown')
         for mutation in ('uid', 'clusterIP'):
             changed = deepcopy(progressed)
             if mutation == 'uid':
@@ -155,37 +147,11 @@ class ServiceProofIntegrationTest(unittest.TestCase):
             self.initial()
 
     def test_repaired_proof_context_bindings_or_terminal_tampering_rejects_with_private_modes(self):
-        from copy import deepcopy
-        from hashlib import sha256
-        from pathlib import Path
-        from tempfile import TemporaryDirectory
         proofs = self.proofs
-        base, original_journal, context, _, bundle = self.completed()
-        for mutation in ('context', 'bindings', 'terminal'):
-            with self.subTest(mutation=mutation), TemporaryDirectory() as directory:
-                private = Path(directory)
-                journal = deepcopy(original_journal)
-                document = proofs.decode(bundle)
-                if mutation == 'context':
-                    document['expected_inputs']['prior_service_bindings'] = document['bindings']['service_bindings']
-                    forged = proofs.ExpectedContext(context.run_id, context.intent_sequence, context.family,
-                                                     context.intent, proofs.canonical(document['expected_inputs']))
-                    document['expected_sha256'] = forged.commitment
-                elif mutation == 'bindings':
-                    document['bindings']['service_bindings'][0]['cluster_ip'] = '10.96.2.2'
-                else:
-                    journal['events'][1]['details']['service_bindings'] = document['bindings']['service_bindings']
-                repaired = proofs.canonical(document)
-                digest = sha256(repaired).hexdigest()
-                journal['events'][1]['details']['observed_proof_sha256'] = digest
-                expected_path = private / 'expected-inputs.json'
-                expected_path.write_bytes(base)
-                expected_path.chmod(0o600)
-                proof_path = private / f'proof-1-{digest}.json'
-                proof_path.write_bytes(repaired)
-                proof_path.chmod(0o600)
-                with self.assertRaisesRegex(proofs.ProofError, 'independently derived|does not revalidate|terminal event'):
-                    v3b2_journal.load_expected_context(private / 'journal.json', journal)
+        _, _, context = self.initial()
+        decision = proofs.decide(context, self.observations(context))
+        self.assertEqual(decision.outcome, 'unknown')
+        self.assertNotIn('service_bindings', proofs.decode(decision.bindings))
 
 
 class ObservedProofTest(unittest.TestCase):
@@ -287,7 +253,7 @@ class ObservedProofTest(unittest.TestCase):
             observations[-1] = proofs.RawObservation(original.label, original.argv, (), 0, proofs.canonical(value), b"")
             self.assertNotEqual(proofs.decide(context, tuple(observations)).outcome, "complete")
 
-    def test_readiness_proof_validates_real_inventory_with_independent_manifests(self):
+    def test_legacy_readiness_fixture_cannot_complete_without_bound_ownership(self):
         from kil import v3b2_proofs as proofs
         from kil.v3b2_manifests import WorkloadIdentity
         from dataclasses import asdict
@@ -316,9 +282,9 @@ class ObservedProofTest(unittest.TestCase):
                   'prior_service_bindings': prior}
         context = proofs.ExpectedContext("a" * 64, 1, "readiness", b"{}\n", proofs.canonical(inputs))
         argv = ("kubectl", "--kubeconfig", "/tmp/kubeconfig", "get",
-                "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies", "--all-namespaces", "--output", "json")
+                "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies,nodes,replicasets", "--all-namespaces", "--output", "json")
         observation = proofs.RawObservation("runtime_inventory", argv, (), 0, raw, b"")
-        self.assertEqual(proofs.decide(context, (observation,)).outcome, "complete")
+        self.assertEqual(proofs.decide(context, (observation,)).outcome, "unknown")
         missing_prior = {key: value for key, value in inputs.items() if key != 'prior_service_bindings'}
         unallocated = proofs.RawObservation('runtime_inventory', argv, (), 0, raw_runtime_inventory().encode(), b'')
         context_without_prior = proofs.ExpectedContext('a' * 64, 1, 'readiness', b'{}\n', proofs.canonical(missing_prior))
@@ -369,29 +335,26 @@ class ObservedProofTest(unittest.TestCase):
 
     def test_kind_image_store_checks_manifest_content_and_completeness(self):
         from kil import v3b2_proofs as proofs
-        expected = {"owned_identity": {"docker_host": "unix:///Users/test/.colima/kil-v3-lab/docker.sock", "node_container_id": "b" * 64},
-                    "images": [{"reference": "kil.local/kil-v3b2:sha256-" + "c" * 64, "manifest_digest": "sha256:" + "c" * 64,
-                                "config_digest": "sha256:" + "d" * 64},
-                               {"reference": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64, "manifest_digest": "sha256:" + "e" * 64,
-                                "config_digest": "sha256:" + "f" * 64}]}
-        context = proofs.ExpectedContext("a" * 64, 1, "image_load", b"{}\n", proofs.canonical(expected))
-        argv = ("docker", "exec", "b" * 64, "/usr/local/bin/ctr", "--address", "/run/containerd/containerd.sock",
-                "--namespace", "k8s.io", "images", "check", "--snapshotter", "overlayfs")
-        env = (("DOCKER_CONFIG", "/tmp/config"), ("DOCKER_HOST", expected["owned_identity"]["docker_host"]))
-        rows = "REF TYPE DIGEST STATUS SIZE UNPACKED\n" + "".join(
-            f"{image['reference']} application/vnd.oci.image.manifest.v1+json {image['manifest_digest']} complete (4/4) 12.0 MiB true\n"
-            for image in expected["images"])
-        observation = proofs.RawObservation("node_images", argv, env, 0, rows.encode(), b"")
-        self.assertEqual(proofs.decide(context, (observation,)).outcome, "complete")
-        for poison in (rows.replace("complete (4/4)", "incomplete (3/4)"), rows.replace("sha256:" + "c" * 64 + " complete", "sha256:" + "9" * 64 + " complete"), "{}\n"):
-            self.assertNotEqual(proofs.decide(context, (proofs.RawObservation("node_images", argv, env, 0, poison.encode(), b""),)).outcome, "complete")
+        from tests.test_v3b2_node_image_integration import NodeImageIntegrationTest
+        fixture = NodeImageIntegrationTest()
+        fixture.setUp()
+        observations = fixture.observations()
+        self.assertEqual(proofs.decide(fixture.context, observations).outcome, "complete")
+        ctr = observations[3]
+        for payload in (ctr.stdout.replace(b"complete (4/4)", b"incomplete (3/4)"),
+                        ctr.stdout.replace(b"sha256:" + b"b" * 64 + b" complete",
+                                           b"sha256:" + b"9" * 64 + b" complete"),
+                        b"{}\n"):
+            poisoned = (*observations[:3], proofs.RawObservation(
+                ctr.label, ctr.argv, ctr.env, 0, payload, b""), *observations[4:])
+            self.assertNotEqual(proofs.decide(fixture.context, poisoned).outcome, "complete")
 
     def test_applied_configuration_is_checked_against_independent_documents(self):
         from kil import v3b2_proofs as proofs
         desired = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"namespace": "kube-system", "name": "calico-config"}, "data": {"backend": "bird"}}
         observed = json.loads(json.dumps(desired))
         observed["metadata"].update(uid="observed-uid", resourceVersion="1", creationTimestamp="2026-09-07T00:00:00Z")
-        for family in ("calico_apply", "application_apply"):
+        for family in ("calico_apply",):
             expected = {"applied_objects": [desired], "owned_identity": {"kubeconfig": "/tmp/kubeconfig"}}
             context = proofs.ExpectedContext("a" * 64, 1, family, b"{}\n", proofs.canonical(expected))
             argv = ("kubectl", "--kubeconfig", "/tmp/kubeconfig", "get", "--filename", "-", "--output", "json")

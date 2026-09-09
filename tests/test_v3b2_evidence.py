@@ -46,8 +46,9 @@ HEX_B = "b" * 64
 ROOT = Path(__file__).resolve().parents[1]
 PROFILE = V3B2Profile.load(ROOT / "deploy/kind/v3b2-profile.json")
 RUN_ID = "v3b2-" + "1" * 64
-KIL_IMAGE_ID = "sha256:" + "d" * 64
-ENVOY_DIGEST = "docker.io/envoyproxy/envoy@sha256:" + "e" * 64
+KIL_IMAGE_ID = "sha256:45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649"
+KIL_CONFIG_ID = "sha256:f21285be21c8f691b9b60b7e38bb309564a5cc238512c7455eb7759f4d922ddb"
+ENVOY_DIGEST = "docker.io/envoyproxy/envoy@sha256:57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38c524401b4"
 
 
 def canonical(value: object) -> bytes:
@@ -128,6 +129,11 @@ def private_evidence(*, request_free: bool = False) -> dict[str, object]:
     ]
     object_rows = [asdict(item) for item in inventory.objects]
     image_rows = [asdict(item) for item in inventory.pod_images]
+    # Public finite-membership fixture, not a bypass of the legacy snapshot DTO.
+    for row in image_rows:
+        if row['image_role'] == 'workload':
+            row['image'] = ENVOY_DIGEST if row['container'] == 'envoy' else 'kil.local/kil-v3b2:sha256-' + KIL_IMAGE_ID[7:]
+            row['image_id'] = ENVOY_DIGEST if row['container'] == 'envoy' else KIL_CONFIG_ID
     uid_map: dict[str, str] = {}
     resource_version_map: dict[str, str] = {}
 
@@ -266,6 +272,63 @@ def private_evidence(*, request_free: bool = False) -> dict[str, object]:
 
 
 class V3B2EvidenceTest(unittest.TestCase):
+    def test_accepted_public_image_membership_config_and_digest_alias(self):
+        for image_ref in (KIL_CONFIG_ID, 'kil.local/kil-v3b2@' + KIL_IMAGE_ID):
+            evidence = private_evidence()
+            rows = evidence['runtime_identities']['topology_attestation']['pod_images']
+            for row in rows:
+                if row['image_role'] == 'workload' and row['container'] != 'envoy':
+                    row['image_id'] = image_ref
+            self.assertIsInstance(build_public_bundle(evidence), dict)
+
+    def test_public_image_membership_rejects_domain_swaps_and_foreign_repositories(self):
+        for role, ref in (('authz', KIL_IMAGE_ID), ('authz', ENVOY_DIGEST),
+                          ('authz', 'foreign/repo@' + KIL_IMAGE_ID),
+                          ('envoy', 'sha256:ef846ec85aabf01a2ff7176a185260e476ca43d20478f57281d88f7a66d5671f'),
+                          ('envoy', 'foreign/repo@' + ENVOY_DIGEST.rsplit('@', 1)[1])):
+            evidence = private_evidence()
+            row = next(row for row in evidence['runtime_identities']['topology_attestation']['pod_images'] if row['container'] == role)
+            row['image_id'] = ref
+            with self.subTest(role=role, ref=ref), self.assertRaises(EvidenceError):
+                build_public_bundle(evidence)
+
+    def test_repaired_unknown_content_target_is_not_verifier_acceptance(self):
+        for role in ('kil', 'envoy'):
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as directory:
+                published = publish_bundle(private_evidence(), Path(directory).resolve() / 'public')
+                path = published / 'manifest.json'
+                manifest = json.loads(path.read_bytes())
+                content = manifest['content_identities']
+                target = 'sha256:' + 'f' * 64
+                if role == 'kil':
+                    content['kil_image_id'] = target
+                else:
+                    content['envoy_image_digest'] = 'docker.io/envoyproxy/envoy@' + target
+                workload = WorkloadIdentity(content['run_id'], content['kil_image_id'], content['envoy_image_digest'])
+                content['objects_manifest_sha256'] = sha256(render_objects(PROFILE, workload)).hexdigest()
+                for row in manifest['topology_attestation']['pod_images']:
+                    if row['image_role'] == 'workload' and (row['container'] == 'envoy') == (role == 'envoy'):
+                        row['image'] = content['envoy_image_digest'] if role == 'envoy' else 'kil.local/kil-v3b2:sha256-' + target[7:]
+                        row['image_id'] = row['image'] if role == 'envoy' else target
+                path.chmod(0o600)
+                path.write_bytes(canonical(manifest))
+                self._repair_commitment_and_sums(published)
+                with self.assertRaisesRegex(EvidenceError, 'verifier-owned accepted workload images'):
+                    verify_bundle(published)
+
+    def test_repaired_public_image_ref_does_not_gain_membership(self):
+        with tempfile.TemporaryDirectory() as directory:
+            published = publish_bundle(private_evidence(), Path(directory).resolve() / 'public')
+            path = published / 'manifest.json'
+            manifest = json.loads(path.read_bytes())
+            row = next(row for row in manifest['topology_attestation']['pod_images'] if row['container'] == 'authz')
+            row['image_id'] = 'foreign/repo@' + KIL_IMAGE_ID
+            path.chmod(0o600)
+            path.write_bytes(canonical(manifest))
+            self._repair_commitment_and_sums(published)
+            with self.assertRaisesRegex(EvidenceError, 'Pod image identity is invalid'):
+                verify_bundle(published)
+
     def test_request_free_manifest_retains_twelve_raw_capture_bindings(self):
         public = build_public_bundle(private_evidence(request_free=True))
         self.assertEqual(len(public["source_attestations"]), 12)

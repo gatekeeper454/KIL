@@ -156,6 +156,12 @@ class ObjectIdentity:
 
 @dataclass(frozen=True, slots=True, order=True)
 class PodImageIdentity:
+    """Closed image record; workload pairs establish finite membership only.
+
+    This DTO does not prove observed CRI/node provenance or runtime readiness.
+    Production parsing requires separate reconstructed same-source authority.
+    Calico retains its existing legacy digest representation contract.
+    """
     image_role: str
     container_type: str
     namespace: str
@@ -185,10 +191,20 @@ class PodImageIdentity:
             or _KIL_CONTENT_REFERENCE.fullmatch(self.image)
         ):
             raise InventoryError("image must be an immutable digest or KIL content reference")
-        if type(self.image_id) is not str or _IMAGE_ID.fullmatch(self.image_id) is None:
-            raise InventoryError("imageID must be an immutable realized digest identity")
-        if self.image.rsplit(":", 1)[-1].removeprefix("sha256-") != self.image_id.rsplit(":", 1)[-1]:
-            raise InventoryError("requested and realized image digests differ")
+        if self.image_role == 'workload':
+            from kil.v3b2_accepted_images import validate_accepted_image
+            if self.container not in {'driver', 'authz', 'target', 'envoy'}:
+                raise InventoryError('workload container must be an exact reviewed role')
+            try:
+                validate_accepted_image('envoy' if self.container == 'envoy' else 'kil',
+                                        self.image, self.image_id)
+            except ValueError as error:
+                raise InventoryError('workload image pair is outside accepted finite membership') from error
+        else:
+            if type(self.image_id) is not str or _IMAGE_ID.fullmatch(self.image_id) is None:
+                raise InventoryError("imageID must be an immutable realized digest identity")
+            if self.image.rsplit(":", 1)[-1].removeprefix("sha256-") != self.image_id.rsplit(":", 1)[-1]:
+                raise InventoryError("requested and realized image digests differ")
         if type(self.ready) is not bool:
             raise InventoryError("ready condition must be an exact boolean")
         if self.container_id and re.fullmatch(r"(?:docker|containerd)://[0-9a-f]{64}", self.container_id) is None:
@@ -1085,6 +1101,41 @@ def parse_ready_endpoint_slice(
     return identity, _exact_string("EndpointSlice target UID", target["uid"])
 
 
+def parse_proved_runtime_inventory(payload: bytes, *, profile, workload, owned_identity, node_images) -> InventorySnapshot:
+    """Derive same-source KIL runtime authority before projecting the inventory.
+
+    The caller must authenticate retained node-image evidence against its owned
+    journal context. This composition does not complete all runtime contracts.
+    """
+    from kil.v3b2_node_image_references import NodeImageReferenceProof
+    from kil.v3b2_journal import OwnedIdentity
+    from kil.v3b2_runtime_ownership import validate_runtime_ownership
+    from kil.v3b2_generated_kil_pod_configuration import validate_generated_kil_pod_configuration
+    from kil.v3b2_runtime_endpoints import validate_runtime_endpoints
+    from kil.v3b2_kil_pod_runtime import validate_kil_pod_runtime
+    from kil.v3b2_manifests import render_objects
+    try:
+        if type(node_images) is not NodeImageReferenceProof or type(owned_identity) is not OwnedIdentity:
+            raise InventoryError('runtime image/owned authority types must be exact')
+        owned_identity.__post_init__()
+        node_images.__post_init__()
+        if node_images.identity != owned_identity:
+            raise InventoryError('runtime node images differ from owned identity')
+        ownership = validate_runtime_ownership(profile=profile, workload=workload,
+            rendered_objects=render_objects(profile, workload), owned_identity=owned_identity,
+            runtime_objects=payload)
+        runtime = validate_kil_pod_runtime(
+            configuration=validate_generated_kil_pod_configuration(ownership=ownership),
+            endpoints=validate_runtime_endpoints(ownership=ownership), node_images=node_images)
+        return parse_runtime_inventory(payload, profile=profile, workload=workload,
+            node_container_id=owned_identity.node_container_id, docker_host=owned_identity.docker_host,
+            owned_identity=owned_identity, kil_runtime_proof=runtime)
+    except InventoryError:
+        raise
+    except (ValueError, TypeError, KeyError, AttributeError, IndexError, RecursionError) as error:
+        raise InventoryError('proved runtime inventory source is invalid') from error
+
+
 def parse_runtime_inventory(
     payload: bytes,
     *,
@@ -1092,8 +1143,18 @@ def parse_runtime_inventory(
     workload: object,
     node_container_id: str,
     docker_host: str,
+    owned_identity=None,
+    kil_runtime_proof=None,
 ) -> InventorySnapshot:
-    """Parse the one closed multi-resource kubectl projection into typed inventory."""
+    """Parse one closed raw source, preserving the existing 67-object snapshot.
+
+    Production supplies complete independent owned identity, requiring same-raw
+    ownership validation before admitting Node/ReplicaSet identities, then an
+    exact same-source KIL runtime proof before constructing workload image rows.
+    Omitting both authorities exists only for legacy pure fixtures, makes no
+    provenance claim, and does not admit the additional ownership families.
+    Calico image validation remains unchanged. No complete-runtime claim follows.
+    """
     from kil.v3b2_contracts import V3B2Profile
     from kil.v3b2_manifests import (
         WorkloadIdentity, expected_object_keys, expected_policy_graph, render_objects,
@@ -1103,6 +1164,45 @@ def parse_runtime_inventory(
         raise InventoryError("runtime inventory contracts are not exact")
     if type(payload) is not bytes or len(payload) > _MAX_KUBECTL_BYTES:
         raise InventoryError("runtime inventory response must be bounded bytes")
+    ownership_keys = set()
+    workload_images = ()
+    workload_pod_keys = set()
+    if owned_identity is None and kil_runtime_proof is not None:
+        raise InventoryError('KIL runtime proof requires independent owned identity')
+    if owned_identity is not None:
+        from kil.v3b2_journal import OwnedIdentity
+        from kil.v3b2_runtime_ownership import validate_runtime_ownership
+        try:
+            if type(owned_identity) is not OwnedIdentity:
+                raise InventoryError("runtime owned identity must be exact")
+            owned_identity.__post_init__()
+            if (owned_identity.node_container_id != node_container_id
+                    or owned_identity.docker_host != docker_host):
+                raise InventoryError("runtime node/endpoint arguments differ from owned authority")
+            ownership = validate_runtime_ownership(profile=profile, workload=workload,
+                rendered_objects=render_objects(profile, workload), owned_identity=owned_identity,
+                runtime_objects=payload)
+            ownership_keys.add(("v1", "Node", "", ownership.node_ownership.node_name))
+            ownership_keys.update(("apps/v1", "ReplicaSet", binding.namespace, binding.replica_set_name)
+                                  for binding in ownership.deployment_ownership.bindings)
+        except (ValueError, TypeError, KeyError, AttributeError) as error:
+            raise InventoryError("runtime same-source ownership is invalid") from error
+        try:
+            from dataclasses import asdict
+            from kil.v3b2_kil_pod_runtime import KilPodRuntimeProof
+            from kil.v3b2_kil_image_projection import validate_kil_image_projection
+            if type(kil_runtime_proof) is not KilPodRuntimeProof:
+                raise InventoryError('production runtime requires exact KIL runtime proof')
+            kil_runtime_proof.__post_init__()
+            if kil_runtime_proof.configuration.ownership != ownership:
+                raise InventoryError('KIL runtime proof differs from same-source ownership')
+            projection = validate_kil_image_projection(runtime=kil_runtime_proof)
+            workload_images = tuple(PodImageIdentity(**asdict(row)) for row in projection.rows)
+            workload_pod_keys = {('v1', 'Pod', row.namespace, row.pod) for row in workload_images}
+            if len(workload_images) != 12 or len(workload_pod_keys) != 12:
+                raise InventoryError('KIL runtime image projection is not the exact twelve Pods')
+        except (ValueError, TypeError, KeyError, AttributeError, RecursionError) as error:
+            raise InventoryError('runtime same-source KIL image proof is invalid or missing') from error
     try:
         root = json.loads(
             payload.decode("utf-8", errors="strict"), object_pairs_hook=_closed_object,
@@ -1182,15 +1282,19 @@ def parse_runtime_inventory(
         )
 
     allowed = set(expected_keys)
+    allowed.update(ownership_keys)
     allowed.update(
         key for key in indexed
         if key[0:3] == ("v1", "Namespace", "") and key[3] in profile.system_namespaces
     )
     allowed.update(key for key in indexed if reviewed_platform_object(key))
-    pod_images: list[PodImageIdentity] = []
+    pod_images: list[PodImageIdentity] = list(workload_images)
     expected_kil = "kil.local/kil-v3b2:sha256-" + workload.kil_image_id.removeprefix("sha256:")
     for key, item in sorted(indexed.items()):
         if key[1] != "Pod" or key in expected_keys:
+            continue
+        if key in workload_pod_keys:
+            allowed.add(key)
             continue
         if reviewed_platform_object(key):
             continue
@@ -1233,6 +1337,8 @@ def parse_runtime_inventory(
     # Driver Pods are rendered objects and carry their runtime images directly.
     for namespace in profile.application_namespaces:
         key = ("v1", "Pod", namespace, "driver")
+        if key in workload_pod_keys:
+            continue
         item = indexed[key]
         metadata, status = item.get("metadata"), item.get("status")
         if type(metadata) is not dict or type(status) is not dict or type(status.get("containerStatuses")) is not list or len(status["containerStatuses"]) != 1:
@@ -1415,6 +1521,7 @@ __all__ = (
     "parse_runtime_pod_identity",
     "parse_ready_endpoint_slice",
     "parse_runtime_inventory",
+    "parse_proved_runtime_inventory",
     "stable_source",
     "validate_inventory",
 )

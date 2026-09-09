@@ -14,6 +14,7 @@ from types import MappingProxyType
 from pathlib import Path
 from typing import Callable
 
+from kil.canonical import canonical_json
 from kil.v3b2_contracts import LAB_IDENTITY, TRACK_NAMESPACES
 
 MAX_OBSERVATION_BYTES = 32 * 1024 * 1024
@@ -21,6 +22,7 @@ MAX_OBSERVATION_BYTES = 32 * 1024 * 1024
 # bound expected inputs. Their budget is distinct from each raw observation,
 # and is shared by serialization preflight, file reads, and replay decoding.
 MAX_PROOF_BUNDLE_BYTES = 64 * 1024 * 1024
+MAX_NODE_IMAGE_SOURCE_BYTES = 2 * 1024 * 1024
 CLUSTER_INVENTORY_ARGV = ("docker", "container", "ls", "--all", "--no-trunc", "--format", "{{json .}}")
 PROFILE_INVENTORY_ARGV = ("colima", "list", "--json")
 CALICO_OBJECTS_SHA256 = "de76213b8097d55a674cbe88ef9ac349317b067fb3c6fc326d4280d17c7104a8"
@@ -33,6 +35,69 @@ class ProofError(ValueError):
 
 def canonical(value: object) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
+
+
+def _canonical_bounded(value: object, maximum: int) -> bytes:
+    if type(maximum) is not int or maximum < 1:
+        raise ProofError("canonical byte bound is invalid")
+
+    def string_size(text, budget):
+        if type(text) is not str:
+            raise ProofError("canonical object is not exact JSON data")
+        size = 2
+        for char in text:
+            code = ord(char)
+            size += (2 if char in {'"', '\\'} or char in "\b\f\n\r\t" else
+                     6 if code < 0x20 or code <= 0xffff and code >= 0x7f else
+                     12 if code > 0xffff else 1)
+            if size > budget:
+                raise ProofError("canonical object exceeds its byte bound")
+        return size
+
+    def measured(item, budget, depth=0):
+        if depth > 128:
+            raise ProofError("canonical object nesting exceeds its bound")
+        kind = type(item)
+        if kind is str:
+            return string_size(item, budget)
+        if item is None:
+            return 4
+        if kind is bool:
+            return 4 if item else 5
+        if kind is int:
+            size = len(str(item))
+            if size > budget: raise ProofError("canonical object exceeds its byte bound")
+            return size
+        if kind is float:
+            if not (float("-inf") < item < float("inf")):
+                raise ProofError("canonical object is not finite JSON data")
+            return len(repr(item))
+        if kind is list:
+            size = 2
+            for index, child in enumerate(item):
+                size += (1 if index else 0) + measured(child, budget - size, depth + 1)
+                if size > budget: raise ProofError("canonical object exceeds its byte bound")
+            return size
+        if kind is dict:
+            size = 2
+            for index, (key, child) in enumerate(item.items()):
+                size += (1 if index else 0) + string_size(key, budget - size) + 1
+                size += measured(child, budget - size, depth + 1)
+                if size > budget: raise ProofError("canonical object exceeds its byte bound")
+            return size
+        raise ProofError("canonical object is not exact JSON data")
+
+    if measured(value, maximum - 1) + 1 > maximum:
+        raise ProofError("canonical object exceeds its byte bound")
+    chunks, size = [], 0
+    encoder = json.JSONEncoder(sort_keys=True, separators=(",", ":"), allow_nan=False)
+    for text in encoder.iterencode(value):
+        chunk = text.encode("utf-8"); size += len(chunk)
+        if size + 1 > maximum:
+            raise ProofError("canonical object exceeds its byte bound")
+        chunks.append(chunk)
+    chunks.append(b"\n")
+    return b"".join(chunks)
 
 
 def _object(pairs):
@@ -307,6 +372,10 @@ def validate_applied_objects(expected: list[dict[str, object]], payload: bytes, 
 
 def _applied(context: ExpectedContext, observations: tuple[RawObservation, ...]) -> ProofDecision:
     inputs = decode(context.inputs)
+    from kil.v3b2_application_evidence_budget import application_source_enabled
+    if context.family == 'application_apply' and application_source_enabled(inputs):
+        from kil.v3b2_application_terminal import validate_application_terminal
+        return validate_application_terminal(context, observations)
     argv = ("kubectl", "--kubeconfig", inputs["owned_identity"]["kubeconfig"], "get", "--filename", "-", "--output", "json")
     result = _one(observations, "applied_objects", argv)
     service_context = {}
@@ -316,6 +385,31 @@ def _applied(context: ExpectedContext, observations: tuple[RawObservation, ...])
         service_context = {"profile": V3B2Profile.from_mapping(inputs["profile"]),
                            "workload": WorkloadIdentity(**inputs["workload"]),
                            "prior_service_bindings": inputs["prior_service_bindings"]}
+    if context.family == "application_apply":
+        from kil.v3b2_application_boundary import validate_application_boundary
+        from kil.v3b2_application_configuration import validate_application_configuration
+        from kil.v3b2_contracts import V3B2Profile
+        from kil.v3b2_journal import OwnedIdentity
+        from kil.v3b2_manifests import WorkloadIdentity, render_objects
+        profile = V3B2Profile.from_mapping(inputs["profile"])
+        workload = WorkloadIdentity(**inputs["workload"])
+        if _cluster(context, observations).outcome != "complete":
+            raise ProofError("current application cluster bracket did not complete")
+        configuration = validate_application_configuration(
+            profile=profile, workload=workload, rendered_objects=render_objects(profile, workload),
+            owned_identity=OwnedIdentity(**inputs["owned_identity"]), applied_objects=result.stdout)
+        from kil.v3b2_service_bindings import validate_service_allocations
+        observed = decode(result.stdout)
+        continuity = validate_service_allocations(
+            [row for row in observed["items"] if row.get("kind") == "Service"],
+            profile=profile, workload=workload,
+            prior_bindings=inputs["prior_service_bindings"])
+        if configuration.service_bindings != continuity.bindings:
+            raise ProofError("application Service bindings differ across validators")
+        checkpoint = _one(observations, "policy_stage_checkpoint", ()).stdout
+        boundary = validate_application_boundary(context=context, checkpoint_bytes=checkpoint,
+                                                   configuration=configuration)
+        return ProofDecision("unknown", "generated_ownership_terminal_gate_pending", boundary.summary())
     bindings = validate_applied_objects(inputs["applied_objects"], result.stdout, **service_context)
     return ProofDecision("complete", "exact_applied_configuration",
                          canonical({"service_bindings": decode(bindings)}) if bindings is not None else b"{}\n")
@@ -326,32 +420,98 @@ def node_images_argv(node_id: str) -> tuple[str, ...]:
             "--namespace", "k8s.io", "images", "check", "--snapshotter", "overlayfs")
 
 
-def _image_load(context: ExpectedContext, observations: tuple[RawObservation, ...]) -> ProofDecision:
+def _image_expectations(inputs):
+    images = inputs.get("images")
+    if type(images) is not list or len(images) != 2 or any(type(row) is not dict for row in images):
+        raise ProofError("image-load expectations are not an exact pair")
+    return images
+
+
+def _image_load_intent(context, images):
+    intent = decode(context.intent)
+    expected = {"image": images[0]["reference"], "envoy_image": images[1]["reference"]}
+    if type(intent) is not dict or intent.keys() != expected.keys() or any(
+            type(intent[key]) is not str or intent[key] != value for key, value in expected.items()):
+        raise ProofError("image-load intent differs from immutable references")
+
+
+def reconstruct_node_image_references(context: ExpectedContext,
+                                      observations: tuple[RawObservation, ...]):
+    """Purely reconstruct full node-image evidence from an independent context.
+
+    This does not authenticate a historical journal or prove temporal stability;
+    callers must separately establish the provenance of ``context``.
+    """
+    if (type(context) is not ExpectedContext or type(context.family) is not str
+            or context.family != "image_load"):
+        raise ProofError("node image reconstruction requires exact image-load context")
+    context.__post_init__()
+    if (type(observations) is not tuple or len(observations) != 7
+            or any(type(row) is not RawObservation for row in observations)):
+        raise ProofError("node image reconstruction requires exactly seven raw observations")
+    for row in observations:
+        row.__post_init__()
+        if (type(row.label) is not str or type(row.argv) is not tuple
+                or any(type(value) is not str for value in row.argv)
+                or type(row.env) is not tuple
+                or any(type(pair) is not tuple or len(pair) != 2
+                       or any(type(value) is not str for value in pair) for pair in row.env)
+                or row.returncode != 0 or row.stderr):
+            raise ProofError("node image observation primitive types or transport differ")
     inputs = decode(context.inputs)
+    images = _image_expectations(inputs)
+    _image_load_intent(context, images)
+    expected_requests = _image_load_requests(context)
+    if tuple((row.label, row.argv, row.env) for row in observations) != tuple(
+            (request.label, () if request.command is None else request.command.argv,
+             () if request.command is None else request.command.env) for request in expected_requests):
+        raise ProofError("image-load observation registry is not exact")
+    cluster = _cluster(context, observations)
     identity = inputs["owned_identity"]
-    observed = _one(observations, "node_images", node_images_argv(identity["node_container_id"]))
-    if dict(observed.env).get("DOCKER_HOST") != identity["docker_host"]:
-        raise ProofError("image store endpoint differs from the bound node")
-    lines = observed.stdout.decode("utf-8", errors="strict").splitlines()
-    if not lines or lines[0].split() != ["REF", "TYPE", "DIGEST", "STATUS", "SIZE", "UNPACKED"]:
-        raise ProofError("node image check header is invalid")
-    indexed = {}
-    for line in lines[1:]:
-        parts = line.split()
-        if len(parts) < 7 or parts[0] in indexed:
-            raise ProofError("node image check row is malformed or duplicated")
-        indexed[parts[0]] = parts
-    for expected in inputs["images"]:
-        parts = indexed.get(expected["reference"])
-        if parts is None:
-            return ProofDecision("teardown_only", "node_image_missing")
-        counts = re.fullmatch(r"\(([1-9][0-9]*)/([1-9][0-9]*)\)", parts[4])
-        if (parts[1] not in {"application/vnd.oci.image.manifest.v1+json", "application/vnd.oci.image.index.v1+json",
-                             "application/vnd.docker.distribution.manifest.v2+json", "application/vnd.docker.distribution.manifest.list.v2+json"}
-                or parts[2] != expected["manifest_digest"] or parts[3] != "complete" or counts is None
-                or counts.group(1) != counts.group(2) or parts[-1] != "true"):
-            return ProofDecision("teardown_only", "node_image_content_incomplete")
-    return ProofDecision("complete", "bound_node_image_store_complete")
+
+    def node_projection(label):
+        document = decode(_one(observations, label,
+            ("docker", "inspect", "kil-v3-lab-control-plane")).stdout)
+        if type(document) is not list or len(document) != 1 or type(document[0]) is not dict:
+            raise ProofError("node bracket is ambiguous")
+        node = document[0]
+        try:
+            projection = {"Id": node["Id"], "Name": node["Name"], "Image": node["Image"],
+                          "Config.Image": node["Config"]["Image"],
+                          "Config.Labels": node["Config"]["Labels"]}
+        except (KeyError, TypeError):
+            raise ProofError("node bracket is incomplete") from None
+        return projection
+
+    before, after = node_projection("node_before"), node_projection("node")
+    if before != after or before["Id"] != identity["node_container_id"]:
+        raise ProofError("node incarnation changed across image observations")
+
+    from kil.v3b2_journal import OwnedIdentity
+    from kil.v3b2_node_image_references import ExpectedNodeImage, validate_node_image_references
+    retained_identity = OwnedIdentity(**identity)
+    expected_images = tuple(ExpectedNodeImage(
+        role, row["reference"], row["config_digest"], row["manifest_digest"],
+        row["target_media_type"], tuple(row["allowed_repo_tags"]),
+        tuple(row["allowed_repo_digests"]), row["config_digest"])
+        for role, row in zip(("kil", "envoy"), images))
+    image_proof = validate_node_image_references(
+        identity=retained_identity,
+        docker_config=str(Path(identity["kubeconfig"]).parent / "docker-config"),
+        expected_images=expected_images,
+        inspections=tuple(_one(observations, "cri_image_" + str(index)) for index in range(2)),
+        node_images=_one(observations, "node_images"))
+    if cluster.outcome != "complete":
+        raise ProofError("owned cluster bracket did not complete")
+    return image_proof
+
+
+def _image_load(context: ExpectedContext, observations: tuple[RawObservation, ...]) -> ProofDecision:
+    image_proof = reconstruct_node_image_references(context, observations)
+    return ProofDecision("complete", "bound_node_image_references_complete", canonical({
+        "node_image_references": [asdict(binding) for binding in image_proof.bindings],
+        "runtime_contract_complete": False,
+    }))
 
 
 def _cluster(context: ExpectedContext, observations: tuple[RawObservation, ...]) -> ProofDecision:
@@ -415,13 +575,14 @@ def _image_import(context: ExpectedContext, observations: tuple[RawObservation, 
     return ProofDecision("complete", "owned_image_contents_resolved")
 
 
-RUNTIME_RESOURCES = "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies"
+RUNTIME_RESOURCES = "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies,nodes,replicasets"
 
 
 def _readiness(context: ExpectedContext, observations: tuple[RawObservation, ...]) -> ProofDecision:
+    from kil.v3b2_journal import OwnedIdentity
     from kil.v3b2_contracts import V3B2Profile
     from kil.v3b2_manifests import WorkloadIdentity, render_objects
-    from kil.v3b2_inventory import parse_runtime_inventory
+    from kil.v3b2_inventory import parse_proved_runtime_inventory
     inputs = decode(context.inputs)
     if inputs.get("runtime_contract_complete") is False:
         return ProofDecision("unknown", "platform_inventory_contract_pending")
@@ -432,8 +593,9 @@ def _readiness(context: ExpectedContext, observations: tuple[RawObservation, ...
     workload = WorkloadIdentity(**inputs["workload"])
     argv = ("kubectl", "--kubeconfig", identity["kubeconfig"], "get", RUNTIME_RESOURCES, "--all-namespaces", "--output", "json")
     observed = _one(observations, "runtime_inventory", argv)
-    snapshot = parse_runtime_inventory(observed.stdout, profile=profile, workload=workload,
-                                       node_container_id=identity["node_container_id"], docker_host=identity["docker_host"])
+    node_images = reconstruct_prior_node_image_references(context)
+    snapshot = parse_proved_runtime_inventory(observed.stdout, profile=profile, workload=workload,
+                                             owned_identity=OwnedIdentity(**identity), node_images=node_images)
     if snapshot.cluster_incarnation_uid != identity["cluster_incarnation_uid"]:
         raise ProofError("readiness cluster incarnation changed")
     desired = decode(render_objects(profile, workload))["items"]
@@ -538,6 +700,8 @@ def _publication(context: ExpectedContext, observations: tuple[RawObservation, .
         raise ProofError("publication semantics differ from the bound run")
     if inputs["teardown_only"] and verified.result_class not in {"diagnostic_foreign_state_mismatch"}:
         raise ProofError("failed lifecycle cannot publish nominal or readiness success")
+    from kil.v3b2_public_image_provenance import validate_public_image_provenance
+    validate_public_image_provenance(context, payloads['manifest.json'])
     return ProofDecision("complete", "complete_publication_reverified")
 
 
@@ -600,15 +764,36 @@ def _image_import_requests(context):
 
 def _image_load_requests(context):
     inputs = decode(context.inputs)
-    return (_command("node_images", node_images_argv(inputs["owned_identity"]["node_container_id"]), inputs),
+    images = _image_expectations(inputs)
+    _image_load_intent(context, images)
+    from kil.v3b2_node_image_references import node_image_inspect_argv
+    node = ("docker", "inspect", LAB_IDENTITY + "-control-plane")
+    return (_command("node_before", node, inputs),
+            *(_command("cri_image_" + str(index),
+                       node_image_inspect_argv(inputs["owned_identity"]["node_container_id"], row["reference"]), inputs)
+              for index, row in enumerate(images)),
+            _command("node_images", node_images_argv(inputs["owned_identity"]["node_container_id"]), inputs),
             *_cluster_requests(context))
 
 
 def _applied_requests(context):
     inputs = decode(context.inputs)
+    from kil.v3b2_application_evidence_budget import application_source_enabled
+    if context.family == 'application_apply' and application_source_enabled(inputs):
+        from kil.v3b2_pre_driver_checkpoint import pre_driver_observation_specs
+        from kil.v3b2_journal import OwnedIdentity, Command
+        if type(inputs.get('node_image_source_version')) is not int or inputs['node_image_source_version'] != 1:
+            raise ProofError('application source requires node image source version one')
+        return (ObservationRequest('pre_driver_checkpoint', source='pre_driver_checkpoint'),
+            *(ObservationRequest(label, Command(argv, 60, env=env)) if argv else
+              ObservationRequest(label, source='file', paths=(inputs['kind_config_path'],))
+              for label, argv, env in pre_driver_observation_specs(OwnedIdentity(**inputs['owned_identity']))))
     # The exact static reviewed list is sent as stdin; no discovery-selected names.
-    manifest = canonical({"apiVersion": "v1", "kind": "List", "items": inputs["applied_objects"]})
-    return (_command("applied_objects", ("kubectl", "--kubeconfig", inputs["owned_identity"]["kubeconfig"],
+    manifest = (canonical_json({"apiVersion": "v1", "kind": "List",
+                                "items": inputs["applied_objects"]}) + "\n").encode("utf-8")
+    checkpoint = ((ObservationRequest("policy_stage_checkpoint", source="policy_stage_checkpoint"),)
+                  if context.family == "application_apply" else ())
+    return (*checkpoint, _command("applied_objects", ("kubectl", "--kubeconfig", inputs["owned_identity"]["kubeconfig"],
                      "get", "--filename", "-", "--output", "json"), inputs, stdin=manifest),
             *_cluster_requests(context))
 
@@ -794,13 +979,26 @@ def decide(context: ExpectedContext, observations: tuple[RawObservation, ...]) -
 
 def _expected_for_intent(base, journal, intent, prior, established):
     """No candidate argument: dynamic authority comes only from preceding proofs."""
-    if {"service_bindings", "prior_service_bindings"} & base.keys():
+    if {"service_bindings", "prior_service_bindings", "node_image_references",
+            "prior_node_image_references", "policy_stage_checkpoint",
+            "policy_stage_checkpoint_bytes", "policy_stage_checkpoint_path",
+            "pre_driver_checkpoint", "pre_driver_checkpoint_bytes", "pre_driver_checkpoint_path",
+            "prior_node_image_source"} & base.keys():
         raise ProofError("immutable inputs cannot claim runtime Service allocation bindings")
+    version = base.get("node_image_source_version")
+    from kil.v3b2_application_evidence_budget import application_source_enabled
+    if application_source_enabled(base) and (type(version) is not int or version != 1):
+        raise ProofError('application source requires node image source version one')
+    if "node_image_source_version" in base and (type(version) is not int or version != 1):
+        raise ProofError("node image source version is invalid")
     inputs = {**base, "owned_identity": {**base["owned_identity"], **established.get("cluster", {})},
               "expected_inputs_sha256": journal["expected_inputs_sha256"], "history": prior,
               "profile_start_refused_sequence": journal["profile_start_refused_sequence"],
               "teardown_only": journal["teardown_from_sequence"] is not None}
     inputs["prior_service_bindings"] = established.get("service_bindings")
+    inputs["prior_node_image_references"] = established.get("node_image_references")
+    if version == 1 and "node_image_source" in established:
+        inputs["prior_node_image_source"] = established["node_image_source"]
     if 'profile_binding' in established:
         inputs['profile_binding'] = established['profile_binding']
     if 'foreign_comparison' in established:
@@ -819,7 +1017,11 @@ def _expected_for_intent(base, journal, intent, prior, established):
     if family == "envoy_quiesce":
         inputs["envoy_bindings"] = [dict(row) for _track, namespace in TRACK_NAMESPACES
                                    for row in images if row["namespace"] == namespace and row["container"] == "envoy"]
-    return ExpectedContext(journal["run_id"], intent["sequence"], family, canonical(intent["details"]), canonical(inputs))
+    from kil.v3b2_application_evidence_budget import MAX_APPLICATION_INPUT_BYTES
+    maximum = (MAX_APPLICATION_INPUT_BYTES if family == 'application_apply' and
+               application_source_enabled(base) else MAX_OBSERVATION_BYTES)
+    return ExpectedContext(journal["run_id"], intent["sequence"], family, canonical(intent["details"]),
+                           _canonical_bounded(inputs, maximum))
 
 
 def terminal_event(context: ExpectedContext, decision: ProofDecision, digest: str):
@@ -873,12 +1075,19 @@ def expected_context(base_payload: bytes, journal: dict, read_proof: Callable) -
         if type(digest) is not str or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
             raise ProofError("runtime binding lacks a durable observed proof")
         payload = read_proof(pending["sequence"], digest)
+        if (base.get("node_image_source_version") == 1
+                and event["event"] == "image_load_complete"
+                and len(payload) > MAX_NODE_IMAGE_SOURCE_BYTES):
+            raise ProofError("node image source exceeds its byte bound")
         if sha256(payload).hexdigest() != digest:
             raise ProofError("runtime proof bytes changed")
         document = decode_proof_bundle(payload)
         historical = {**journal, "teardown_from_sequence": journal["teardown_from_sequence"]
                       if journal["teardown_from_sequence"] is not None and journal["teardown_from_sequence"] <= event["sequence"] else None}
         context = _expected_for_intent(base, historical, pending, prior[:-1], established)
+        from kil.v3b2_application_evidence_budget import application_source_enabled, validate_application_encoded_budget
+        if context.family == 'application_apply' and application_source_enabled(decode(context.inputs)):
+            validate_application_encoded_budget(context, document)
         if (document["expected_sha256"] != context.commitment or document["expected_inputs"] != decode(context.inputs)
                 or document["intent"] != decode(context.intent) or document["family"] != context.family):
             raise ProofError("runtime proof expected inputs were not independently derived")
@@ -898,6 +1107,14 @@ def expected_context(base_payload: bytes, journal: dict, read_proof: Callable) -
             established["runtime_snapshot"] = bindings["runtime_snapshot"]
         if context.family == "application_apply" and decision.outcome == "complete" and "service_bindings" in bindings:
             established["service_bindings"] = bindings["service_bindings"]
+        if context.family == "image_load" and decision.outcome == "complete":
+            established["node_image_references"] = bindings["node_image_references"]
+            if base.get("node_image_source_version") == 1:
+                if len(payload) > MAX_NODE_IMAGE_SOURCE_BYTES:
+                    raise ProofError("node image source exceeds its byte bound")
+                if "prior_node_image_source" in document.get("expected_inputs", {}):
+                    raise ProofError("nested node image source is invalid")
+                established["node_image_source"] = document
         if context.family == 'foreign_snapshot_comparison' and decision.outcome == 'complete':
             established['foreign_comparison'] = bindings
         prior.append(event)
@@ -907,12 +1124,79 @@ def expected_context(base_payload: bytes, journal: dict, read_proof: Callable) -
     return _expected_for_intent(base, journal, pending, prior[:-1], established)
 
 
+def reconstruct_prior_node_image_references(context: ExpectedContext):
+    """Revalidate a lossless prior image-load source committed by replay.
+
+    The caller remains responsible for authenticating ``context`` against the
+    journal; this pure helper does not establish temporal stability.
+    """
+    if type(context) is not ExpectedContext:
+        raise ProofError("node image source context is invalid")
+    context.__post_init__()
+    current = decode(context.inputs)
+    if current.get("node_image_source_version") != 1 or type(current.get("node_image_source_version")) is not int:
+        raise ProofError("node image source version is invalid")
+    source = current.get("prior_node_image_source")
+    encoded = _canonical_bounded(source, MAX_NODE_IMAGE_SOURCE_BYTES)
+    document = decode_proof_bundle(encoded)
+    if canonical(document) != encoded or type(document) is not dict or document.get("family") != "image_load":
+        raise ProofError("node image source envelope is invalid")
+    historical_inputs = document.get("expected_inputs")
+    if (type(historical_inputs) is not dict or "prior_node_image_source" in historical_inputs
+            or historical_inputs.get("node_image_source_version") != 1
+            or type(historical_inputs.get("node_image_source_version")) is not int):
+        raise ProofError("nested node image source is invalid")
+    historical = ExpectedContext(document["run_id"], document["intent_sequence"], document["family"],
+                                 canonical(document["intent"]), canonical(historical_inputs))
+    if document["run_id"] != context.run_id or document["expected_sha256"] != historical.commitment:
+        raise ProofError("node image source authority differs")
+    observations = tuple(RawObservation(row["label"], tuple(row["argv"]), tuple(tuple(pair) for pair in row["env"]),
+                         row["returncode"], bytes.fromhex(row["stdout_hex"]), bytes.fromhex(row["stderr_hex"]))
+                         for row in document["observations"])
+    proof = reconstruct_node_image_references(historical, observations)
+    decision = decide(historical, observations)
+    if (decision.outcome != "complete" or document["outcome"] != "complete"
+            or encoded != observation_bundle(historical, observations, decision)):
+        raise ProofError("node image source does not revalidate")
+    digest = sha256(encoded).hexdigest()
+    expected_terminal = terminal_event(historical, decision, digest)
+    history = current.get("history")
+    intent_event = {"sequence": historical.intent_sequence, "event": "image_load_intent",
+                    "details": decode(historical.intent)}
+    if (type(history) is not list or any(type(row) is not dict or set(row) != {"sequence", "event", "details"}
+            or type(row["sequence"]) is not int or type(row["event"]) is not str
+            or type(row["details"]) is not dict for row in history)):
+        raise ProofError("node image source history is invalid")
+    intent_bytes, terminal_bytes = canonical(intent_event), canonical(expected_terminal)
+    intent_positions = [i for i, row in enumerate(history) if canonical(row) == intent_bytes]
+    terminal_positions = [i for i, row in enumerate(history) if canonical(row) == terminal_bytes]
+    generations = [row for row in (history or []) if type(row) is dict
+                   and row.get("event") in {"image_load_intent", "image_load_complete"}]
+    if (len(intent_positions) != 1 or len(terminal_positions) != 1
+            or intent_positions[0] + 1 != terminal_positions[0] or len(generations) != 2
+            or expected_terminal["sequence"] >= context.intent_sequence):
+        raise ProofError("node image source terminal is not in current history")
+    for key in ("expected_inputs_sha256", "owned_identity", "workload", "images", "kind_node_image",
+                "kind_config_path", "kind_config_sha256"):
+        if ((key in current) != (key in historical_inputs)
+                or (key in current and canonical(current[key]) != canonical(historical_inputs[key]))):
+            raise ProofError("node image source inputs differ from current authority")
+    return proof
+
+
 def observation_bundle(context: ExpectedContext, observations: tuple[RawObservation, ...], decision: ProofDecision) -> bytes:
     """Canonical, lossless private proof bytes persisted before a terminal event."""
+    from kil.v3b2_application_evidence_budget import application_source_enabled, validate_application_bundle_budget
+    if context.family == 'application_apply' and application_source_enabled(decode(context.inputs)):
+        validate_application_bundle_budget(context, observations, decision)
     # Reject an already-too-large lower bound before allocating hex strings.
     # The exact final check also includes labels, argv/env and envelope fields.
     lower_bound = (2 * sum(len(row.stdout) + len(row.stderr) for row in observations)
                    + len(context.inputs) + len(context.intent) + len(decision.bindings))
+    opted_source = (context.family == "image_load" and decision.outcome == "complete"
+                    and decode(context.inputs).get("node_image_source_version") == 1)
+    if opted_source and lower_bound > MAX_NODE_IMAGE_SOURCE_BYTES:
+        raise ProofError("node image source exceeds its byte bound")
     if lower_bound > MAX_PROOF_BUNDLE_BYTES:
         raise ProofError("durable observation bundle exceeds its bound")
     payload = canonical({
@@ -927,4 +1211,6 @@ def observation_bundle(context: ExpectedContext, observations: tuple[RawObservat
     })
     if len(payload) > MAX_PROOF_BUNDLE_BYTES:
         raise ProofError("durable observation bundle exceeds its bound")
+    if opted_source and len(payload) > MAX_NODE_IMAGE_SOURCE_BYTES:
+        raise ProofError("node image source exceeds its byte bound")
     return payload

@@ -48,8 +48,10 @@ _APPLICATION_NAMESPACES = (
     "kil-v3-local-reduce",
     "kil-v3-signed",
 )
-_ENVOY_DRAIN_SCRIPT = "exec 3<>/dev/tcp/127.0.0.1/9901; printf 'POST /drain_listeners HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n' >&3; IFS= read -r status <&3; [ \"$status\" = $'HTTP/1.1 200 OK\\r' ] || exit 10; while IFS= read -r line <&3; do [ \"$line\" = $'\\r' ] && break; done; printf '{\"drain_requested\":true}\\n'"
-_ENVOY_STATS_SCRIPT = "if exec 4<>/dev/tcp/127.0.0.1/8080 2>/dev/null; then exit 9; fi; exec 3<>/dev/tcp/127.0.0.1/9901; printf 'GET /stats?format=json HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3; IFS= read -r status <&3; [ \"$status\" = $'HTTP/1.1 200 OK\\r' ] || exit 10; body=0; while IFS= read -r line <&3; do if [ \"$body\" = 1 ]; then printf '%s\\n' \"$line\"; elif [ \"$line\" = $'\\r' ]; then body=1; fi; done"
+from kil.v3b2_envoy_quiescence import (
+    ENVOY_DRAIN_SCRIPT as _ENVOY_DRAIN_SCRIPT,
+    ENVOY_STATS_SCRIPT as _ENVOY_STATS_SCRIPT,
+)
 
 
 class JournalError(ValueError):
@@ -239,11 +241,21 @@ class Command:
                 and self.argv[3:] == ("/usr/local/bin/ctr", "--address", "/run/containerd/containerd.sock",
                     "--namespace", "k8s.io", "images", "check", "--snapshotter", "overlayfs")
             )
+            node_cri_image_read = (
+                len(self.argv) == 15 and self.argv[:2] == ("docker", "exec")
+                and _HEX64.fullmatch(self.argv[2]) is not None
+                and self.argv[3:14] == (
+                    "/usr/local/bin/crictl", "--runtime-endpoint", "unix:///run/containerd/containerd.sock",
+                    "--image-endpoint", "unix:///run/containerd/containerd.sock", "--timeout", "10s",
+                    "inspecti", "--quiet", "--output", "json")
+                and (_KIL_IMAGE.fullmatch(self.argv[14]) is not None
+                     or _ENVOY_IMAGE.fullmatch(self.argv[14]) is not None)
+            )
             if self.argv not in {
                 ("docker", "inspect", f"{LAB_IDENTITY}-control-plane"),
                 ("docker", "context", "show"),
                 ("docker", "container", "ls", "--all", "--no-trunc", "--format", "{{json .}}"),
-            } and not image_mutation and not image_read and not node_image_read:
+            } and not image_mutation and not image_read and not node_image_read and not node_cri_image_read:
                 raise JournalError("Docker command is outside the closed argv grammar")
             if self.mutating is not image_mutation:
                 raise JournalError("Docker command mutation classification is invalid")
@@ -286,13 +298,19 @@ class Command:
                 ("get", "namespace", "kube-system", "--output", "json"),
                 (
                     "get",
-                    "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies",
+                    "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies,nodes,replicasets",
                     "--all-namespaces",
                     "--output",
                     "json",
                 ),
             }
             reviewed_read = arguments in fixed_reads
+            if len(arguments) == 6 and arguments[:2] == ("get", "pods,deployments,replicasets"):
+                reviewed_read = (
+                    arguments[2] == "--namespace"
+                    and arguments[3] in _APPLICATION_NAMESPACES
+                    and arguments[4:] == ("--output", "json")
+                )
             if len(arguments) == 7 and arguments[:2] == ("get", "pod"):
                 pod = arguments[2]
                 reviewed_read = (
@@ -368,7 +386,7 @@ class Command:
                 len(arguments) == 10 and arguments[0] == "exec"
                 and re.fullmatch(r"pod/envoy-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?", arguments[1]) is not None
                 and arguments[2] == "--namespace" and arguments[3] in _APPLICATION_NAMESPACES
-                and arguments[4:9] == ("--container", "envoy", "--", "/bin/bash", "-ceu")
+                and arguments[4:9] == ("--container", "envoy", "--", "/bin/bash", "-pceu")
                 and arguments[9] in {_ENVOY_DRAIN_SCRIPT, _ENVOY_STATS_SCRIPT}
             )
             envoy_drain = envoy_control and arguments[9] == _ENVOY_DRAIN_SCRIPT
@@ -1432,7 +1450,7 @@ def _publish_observed_proof(private: Path, name: str, payload: bytes) -> None:
     staged_identity = None
 
     def verify_existing():
-        existing = os.open(name, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0), dir_fd=parent)
+        existing = os.open(name, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0), dir_fd=parent)
         try:
             before = os.fstat(existing)
             named = os.stat(name, dir_fd=parent, follow_symlinks=False)
@@ -1783,7 +1801,7 @@ def kubectl_envoy_quiesce_commands(identity: OwnedIdentity, namespace: str, pod:
     kubectl_source_pod_command(identity, namespace, pod)
     if not pod.startswith("envoy-"):
         raise JournalError("Envoy quiescence Pod is not exact")
-    prefix = ("exec", f"pod/{pod}", "--namespace", namespace, "--container", "envoy", "--", "/bin/bash", "-ceu")
+    prefix = ("exec", f"pod/{pod}", "--namespace", namespace, "--container", "envoy", "--", "/bin/bash", "-pceu")
     return (
         _kubectl(identity, *prefix, _ENVOY_DRAIN_SCRIPT, mutating=True),
         _kubectl(identity, *prefix, _ENVOY_STATS_SCRIPT),
@@ -1968,7 +1986,7 @@ def _evidence_freeze_commands(
         _kubectl(
             identity,
             "get",
-            "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies",
+            "namespaces,pods,services,endpoints,endpointslices,serviceaccounts,configmaps,deployments,daemonsets,networkpolicies,nodes,replicasets",
             "--all-namespaces",
             "--output",
             "json",

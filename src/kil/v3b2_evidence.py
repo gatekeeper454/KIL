@@ -33,6 +33,8 @@ from kil.v3b2_inventory import (
     PolicyEdge,
     _EXPECTED_OBJECT_KEYS,
 )
+from kil.v3b2_accepted_images import ACCEPTED_IMAGES, validate_accepted_image
+from kil.v3b2_kil_image_projection import KilImageRow
 from kil.v3b2_manifests import (
     WorkloadIdentity,
     expected_object_keys,
@@ -745,6 +747,9 @@ def _validate_content_identities(
     expected_calico = {name: image for name, image in profile.calico_images}
     if type(content["calico_images"]) is not dict or content["calico_images"] != expected_calico:
         raise EvidenceError("content identities do not bind the approved Calico images")
+    if (content['kil_image_id'] != ACCEPTED_IMAGES[0].target_digest
+            or content['envoy_image_digest'] != ACCEPTED_IMAGES[1].requested_image):
+        raise EvidenceError('content identities do not bind the verifier-owned accepted workload images')
     try:
         workload = WorkloadIdentity(
             content["run_id"],
@@ -821,7 +826,7 @@ def _validate_pod_images(
 ) -> None:
     if type(value) is not list or len(value) != 17:
         raise EvidenceError("Pod image inventory cardinality is invalid")
-    records: list[PodImageIdentity] = []
+    records: list[PodImageIdentity | KilImageRow] = []
     fields = frozenset({"image_role", "container_type", "namespace", "pod", "container", "uid", "resource_version", "image", "image_id", "ready", "container_id"})
     for raw in value:
         item = _closed_record("Pod image identity", raw, fields)
@@ -835,10 +840,22 @@ def _validate_pod_images(
         ):
             raise EvidenceError("Pod image runtime identity grammar is invalid")
         try:
-            records.append(PodImageIdentity(**item))
+            if item['image_role'] == 'workload':
+                # Finite public membership only. Private publication still needs
+                # the separate same-source raw-provenance comparison.
+                record = KilImageRow(**item)
+                validate_accepted_image('envoy' if record.container == 'envoy' else 'kil',
+                                        record.image, record.image_id)
+                records.append(record)
+            else:
+                records.append(PodImageIdentity(**item))
         except (TypeError, ValueError):
             raise EvidenceError("Pod image identity is invalid") from None
-    if tuple(sorted(records)) != tuple(records) or len(set(records)) != len(records) or any(item.ready is not True for item in records):
+    # Identical wire/declaration order across distinct exact record types.
+    order = ('image_role', 'container_type', 'namespace', 'pod', 'container', 'uid',
+             'resource_version', 'image', 'image_id', 'ready', 'container_id')
+    keys = tuple(tuple(getattr(item, field) for field in order) for item in records)
+    if tuple(sorted(keys)) != keys or len(set(keys)) != len(keys) or any(item.ready is not True for item in records):
         raise EvidenceError("Pod image identities are not unique, sorted, and ready")
     calico_pins = {"calico-cni": dict(profile.calico_images)["cni"], "calico-node": dict(profile.calico_images)["node"], "calico-kube-controllers": dict(profile.calico_images)["kube_controllers"]}
     expected_calico = {("calico-cni", "init", "install-cni"), ("calico-cni", "init", "upgrade-ipam"), ("calico-node", "init", "ebpf-bootstrap"), ("calico-node", "regular", "calico-node"), ("calico-kube-controllers", "regular", "calico-kube-controllers")}
