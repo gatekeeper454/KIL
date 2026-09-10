@@ -52,6 +52,31 @@ class V3B1PublicationStatusTest(unittest.TestCase):
         self.assertIn("Post-publication · V4 Future", text)
         self.assertNotIn("Future · V3B-2 Kind/Calico", text)
 
+    def test_publication_status_and_roadmap_fit_narrow_layouts(self):
+        html = self.source("docs/architecture/hybrid-two-timescale-architecture.html")
+        self.assertIn(
+            "#kil-hybrid-architecture .kil-status code { overflow-wrap: anywhere; }",
+            html,
+        )
+
+        svg = self.source("docs/architecture/v3-publication-roadmap.svg")
+        self.assertIn('width="1040" height="78"', svg)
+        self.assertIn(
+            '<tspan x="105" y="633">The accepted observed local-Envoy run is immutable not_promoted evidence, not proof of</tspan>',
+            svg,
+        )
+        self.assertIn(
+            '<tspan x="105" y="653">historical prevention, production behavior, Kubernetes, or performance.</tspan>',
+            svg,
+        )
+        for label in (
+            '<text x="670" y="242" fill="#ffffff" font-size="16" font-weight="700">V3B-1 Complete</text>',
+            '<text x="880" y="164" fill="#ffffff" font-size="16" font-weight="700">Publication</text>',
+            '<text x="1080" y="84" fill="#ffffff" font-size="16" font-weight="700">V4 Future</text>',
+        ):
+            with self.subTest(label=label):
+                self.assertIn(label, svg)
+
 
 if __name__ == "__main__":
     unittest.main()
