@@ -11606,3 +11606,37 @@ after repository acceptance.
 external publication or release.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-241 — 2026-09-10 — Whole-branch publication consistency review resolved
+
+**Input:** Final whole-branch review found that the current embedded
+`v3-envoy-live-validation.svg` and adapter README still used pending/V3B-2
+labels after the V3B-1 publication transition.
+
+**Interpretation:** Resolve the remaining current-facing label drift without
+altering the accepted evidence boundary or the depicted topology: V3B-1
+Complete leads to Publication, followed by post-publication **V4 Future**.
+
+**Decision status:** Confirmed. Commit `c222a3e` updates the embedded SVG and
+adapter README to the V3B-1 Complete → Publication → post-publication **V4
+Future** sequence, preserving topology and claim limitations. Spec and quality
+re-review approved the resolution with no Critical or Important issues. Six
+focused tests pass.
+
+**Rationale:** The final reader surfaces must agree with the accepted
+`local_envoy_boundary` completion and reserve Kind/Calico, NetworkPolicy,
+cluster transport, and measurement for **V4 Future**. Retaining the topology
+and limitations keeps the correction presentational rather than evidentiary.
+
+**Affected artifacts:** Focused test, `v3-envoy-live-validation.svg`, adapter
+README, generated adapter and lineage readers, and this append-only lineage
+record. No evidence bytes, runtime, production code, Colima state, or V4 Future
+implementation changed.
+
+**Unresolved questions:** External publication deployment or release mechanism
+after repository acceptance.
+
+**Next gate:** Full publication verification, final whole-branch re-review,
+push `codex/v3b1-publication`, then external release.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
