@@ -19,7 +19,11 @@ KTP-Transport, KTP-Enforce, KTP-Gravity, or Vector Identity constructs.
 KIL has accepted observed evidence at the `local_envoy_boundary`. The accepted
 run is `v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94`.
 It reproduced `permit / permit / deny`, HTTP `200 / 200 / 403`, and target
-markers `1 / 1 / 0`, with one attempt per track and no retry.
+markers `1 / 1 / 0`, with one request-driver attempt per track and no retry.
+Historical static-validation records remain part of the V3B-1 detail: Task 8
+passed its 466-test non-runtime repository suite, and the fresh Task 9 complete
+static gate passed 474 tests. These are preserved historical validation counts,
+not fresh verification claims.
 
 This is not proof that KIL would have prevented the historical Hugging Face
 incident. Publication follows this bounded completion. Kind/Calico,
@@ -40,6 +44,7 @@ containers plus three transient validators and proves all fifteen containers
 and all six networks absent during exact teardown. Docker attach/stdin is only
 the host control channel that gives a driver one canonical instruction; the
 consequential path is `driver -> Envoy -> authorization -> target or withhold`.
+No host publication exists.
 The driver is a laboratory transport witness, not KIL enforcement. The current
 evidence scope is `local_envoy_boundary`.
 

@@ -11562,3 +11562,47 @@ to pass, independently review the publication claims, and push the isolated
 publication branch.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-240 — 2026-09-10 — V3B-1 publication record finalized
+
+**Input:** Fast-forward publication, mark V3B-1 complete, preserve validation
+detail, and rename deferred V3B-2/V3C work as post-publication **V4 Future**.
+
+**Interpretation:** V3B-1 is complete only at its accepted
+`local_envoy_boundary`; publication now follows that bounded result. The
+immutable evidence bundle remains `not_promoted`. This does not claim
+Kubernetes validation, historical prevention, production behavior, or
+performance.
+
+**Decision status:** Confirmed. Accepted run
+`v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94`
+reproduced `permit / permit / deny`, HTTP `200 / 200 / 403`, and target markers
+`1 / 1 / 0`, with one attempt per track and no retry. All nine authoritative
+sources joined; exact teardown removed 15 owned containers and six networks;
+checksums and the offline verifier passed. Current-facing README, V3 progress,
+paper, architecture HTML, and durable repository-owned SVG now present the
+bounded completion before Publication and **V4 Future**. The five focused
+publication tests protect those statements. Responsive review found that the
+long status run ID could overflow narrow layouts and that the roadmap claim
+panel needed fixed readable wrapping; the architecture status code now wraps
+anywhere and the SVG claim is split into durable two-line text, with the focused
+layout test covering both corrections.
+
+**Rationale:** The accepted observed local-Envoy result is sufficient for the
+declared V3B-1 boundary, while retaining its exact validation facts and
+non-promotion state makes publication auditable without extending the claim.
+Moving deferred cluster and later work to **V4 Future** preserves its history
+without making it a prerequisite for this publication.
+
+**Affected artifacts:** README, V3 progress, paper, architecture HTML, SVG,
+focused test, generated readers, and this lineage record. No evidence bytes,
+production code, live runtime, Colima, Docker, Kind, Kubernetes, or V4 Future
+implementation branch changed.
+
+**Unresolved questions:** External publication deployment or release mechanism
+after repository acceptance.
+
+**Next gate:** Final independent review, push `codex/v3b1-publication`, then
+external publication or release.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
