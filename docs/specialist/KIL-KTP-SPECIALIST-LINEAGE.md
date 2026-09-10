@@ -11531,3 +11531,34 @@ the implementation plan and update the bounded publication surfaces without
 merging V4 Future implementation code.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-239 — 2026-09-10 — V3B-1 publication implementation planned
+
+**Input:** Approve the V3B-1 publication-boundary specification.
+
+**Interpretation:** Convert the approved claim and milestone decision into a
+minimal test-first plan covering current status, retained validation detail,
+paper language, a durable roadmap visual, verification, review, and push.
+
+**Decision status:** Confirmed plan. Four dependency-ordered tasks define the
+publication contract test, canonical status changes, paper/presentation update,
+and final reader/lineage/review delivery gate.
+
+**Rationale:** The plan makes claim limitations executable documentation
+requirements, preserves the immutable `not_promoted` experiment record, and
+keeps V4 Future implementation code out of the publication branch. A new
+repository-owned SVG replaces reliance on the supplied screenshot's absent
+repository source.
+
+**Affected artifacts:** New implementation plan and generated reader; this
+append-only lineage entry and generated lineage reader. No production code,
+evidence bundle, runtime, Colima profile, or remote branch was changed.
+
+**Unresolved questions:** Selection of subagent-driven versus inline plan
+execution; external publication deployment remains after repository acceptance.
+
+**Next gate:** Execute the approved plan, require the exact V3B-1 boundary tests
+to pass, independently review the publication claims, and push the isolated
+publication branch.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
