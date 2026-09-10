@@ -26,6 +26,8 @@ incident. Publication follows this bounded completion. Kind/Calico,
 NetworkPolicy, cluster transport, repetition, and performance are
 post-publication **V4 Future** work.
 
+![KIL V3 publication roadmap](docs/architecture/v3-publication-roadmap.svg)
+
 Each track has a frontend configured only for its driver and Envoy, and a
 backend containing only Envoy, authorization service, and harmless target.
 Physical membership is derived from fresh container state: only a `running`

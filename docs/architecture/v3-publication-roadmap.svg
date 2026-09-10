@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" role="img" aria-labelledby="roadmap-title roadmap-desc">
+  <title id="roadmap-title">KIL publication roadmap</title>
+  <desc id="roadmap-desc">A six-step ascending roadmap from deterministic work to a bounded publication and later cluster validation. The accepted local Envoy result remains an observed, non-promoted boundary result.</desc>
+  <rect width="1200" height="680" fill="#0b1220"/>
+  <g fill="none" stroke="#334155" stroke-width="1">
+    <path d="M80 550H1140"/>
+    <path d="M80 450H1140"/>
+    <path d="M80 350H1140"/>
+    <path d="M80 250H1140"/>
+    <path d="M80 150H1140"/>
+  </g>
+  <path d="M110 500 L290 440 L470 370 L670 290 L880 210 L1080 130" fill="none" stroke="#38bdf8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <g font-family="system-ui, sans-serif" text-anchor="middle">
+    <g>
+      <circle cx="110" cy="500" r="28" fill="#0ea5e9" stroke="#e0f2fe" stroke-width="3"/>
+      <text x="110" y="507" fill="#ffffff" font-size="19" font-weight="700">V1</text>
+      <text x="110" y="552" fill="#cbd5e1" font-size="15">deterministic kernel</text>
+    </g>
+    <g>
+      <circle cx="290" cy="440" r="28" fill="#0ea5e9" stroke="#e0f2fe" stroke-width="3"/>
+      <text x="290" y="447" fill="#ffffff" font-size="19" font-weight="700">V2</text>
+      <text x="290" y="492" fill="#cbd5e1" font-size="15">historical replay</text>
+    </g>
+    <g>
+      <circle cx="470" cy="370" r="28" fill="#0ea5e9" stroke="#e0f2fe" stroke-width="3"/>
+      <text x="470" y="377" fill="#ffffff" font-size="19" font-weight="700">V3A</text>
+      <text x="470" y="422" fill="#cbd5e1" font-size="15">process contract</text>
+    </g>
+    <g>
+      <circle cx="670" cy="290" r="33" fill="#0284c7" stroke="#e0f2fe" stroke-width="4"/>
+      <text x="670" y="296" fill="#ffffff" font-size="16" font-weight="700">V3B-1 Complete</text>
+      <text x="670" y="342" fill="#bae6fd" font-size="14">accepted local Envoy boundary</text>
+    </g>
+    <g>
+      <circle cx="880" cy="210" r="31" fill="#0369a1" stroke="#e0f2fe" stroke-width="3"/>
+      <text x="880" y="216" fill="#ffffff" font-size="16" font-weight="700">Publication</text>
+      <text x="880" y="259" fill="#cbd5e1" font-size="14">bounded argument and limitations</text>
+    </g>
+    <g>
+      <circle cx="1080" cy="130" r="31" fill="#075985" stroke="#e0f2fe" stroke-width="3"/>
+      <text x="1080" y="136" fill="#ffffff" font-size="16" font-weight="700">V4 Future</text>
+      <text x="1040" y="179" fill="#cbd5e1" font-size="14">Kind/Calico and measurement</text>
+    </g>
+  </g>
+  <g font-family="system-ui, sans-serif">
+    <rect x="80" y="585" width="1040" height="58" rx="10" fill="#172033" stroke="#38bdf8" stroke-width="1"/>
+    <text x="105" y="611" fill="#e0f2fe" font-size="16" font-weight="700">Current claim boundary</text>
+    <text x="105" y="633" fill="#cbd5e1" font-size="15">The accepted observed local-Envoy run is immutable not_promoted evidence, not proof of historical prevention, production behavior, Kubernetes, or performance.</text>
+  </g>
+</svg>
