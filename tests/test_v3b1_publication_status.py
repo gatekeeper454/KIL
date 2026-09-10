@@ -77,6 +77,24 @@ class V3B1PublicationStatusTest(unittest.TestCase):
             with self.subTest(label=label):
                 self.assertIn(label, svg)
 
+    def test_embedded_topology_uses_completed_publication_roadmap(self):
+        svg = self.source("docs/architecture/v3-envoy-live-validation.svg")
+        for expected in (
+            "V3B-1 Complete",
+            "Publication next",
+            "V4 Future",
+            "CURRENT · V3B-1 Complete",
+            "POST-PUBLICATION · V4 FUTURE",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, svg)
+        for stale in ("FUTURE · V3B-2", "LIVE GATES PENDING"):
+            with self.subTest(stale=stale):
+                self.assertNotIn(stale, svg)
+
+        adapter = self.source("adapters/envoy/README.md")
+        self.assertIn("post-publication V4 Future", adapter)
+
 
 if __name__ == "__main__":
     unittest.main()
