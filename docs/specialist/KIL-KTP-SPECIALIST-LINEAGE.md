@@ -11640,3 +11640,37 @@ after repository acceptance.
 push `codex/v3b1-publication`, then external release.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-242 — 2026-09-10 — V3B-1 publication integration authorized
+
+**Input:** Create the publication pull request and merge the approved V3B-1
+publication branch into `main`.
+
+**Interpretation:** Integrate the already reviewed publication-only change set
+through GitHub after a fresh local verification and required remote checks. Do
+not merge the separate V4 Future implementation branch, alter immutable
+evidence, or touch any local runtime or Colima profile.
+
+**Decision status:** Confirmed authorization. Branch
+`codex/v3b1-publication` is the sole integration source. Its publication claim
+remains bounded to the accepted V3B-1 `local_envoy_boundary`; cluster validation,
+repetition, and performance remain post-publication **V4 Future** work.
+
+**Rationale:** A pull request provides a reviewable, check-gated path from the
+approved and independently reviewed publication branch to `main`, while keeping
+the deferred implementation history and the user's dirty local `main` checkout
+isolated.
+
+**Affected artifacts:** This append-only lineage record and its generated
+reader; the publication pull request and `main` only after checks and merge. No
+evidence bytes, runtime, Colima state, or V4 Future implementation is changed.
+
+**Unresolved questions:** Required GitHub checks and mergeability must be
+confirmed before integration completes; external publication deployment remains
+a later release action.
+
+**Next gate:** Regenerate readers, rerun the full publication verification,
+push this checkpoint, create the pull request, wait for checks, and merge into
+`main`.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
