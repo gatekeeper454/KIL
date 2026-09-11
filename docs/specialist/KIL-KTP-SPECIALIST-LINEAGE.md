@@ -11674,3 +11674,39 @@ push this checkpoint, create the pull request, wait for checks, and merge into
 `main`.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-243 — 2026-09-11 — Narrow V4 publication CI boundary confirmed
+
+**Input:** Authorization to repair the narrow V4 CI/proof blocker before
+merging publication pull request 23.
+
+**Interpretation:** Exclude exactly the 16 unfinished V4 controller lifecycle
+integration methods from default publication discovery while retaining every
+completed controller and proof test. Keep the unfinished lifecycle suite
+explicitly runnable through `make v4-future-controller-test`; do not claim that
+opt-in suite passes.
+
+**Decision status:** Confirmed. The exact deferred set is locked by an
+independent guard test and cannot silently expand. The default gate retains the
+remaining controller coverage, while setting `KIL_RUN_V4_FUTURE_TESTS=1`
+executes the deferred cases and currently exposes their pending proof failures.
+
+**Rationale:** Both failed GitHub validation runs traced all 34 failures and
+subfailures to these 16 lifecycle methods. Completing them requires the larger
+post-publication V4 proof graph; importing that work would violate the approved
+publication-only boundary. An exact, opt-in quarantine makes the boundary
+auditable without hiding or deleting the unfinished work.
+
+**Affected artifacts:** `Makefile`, `tests/test_v3b2_controller.py`,
+`tests/test_v4_future_controller_gate.py`, the V4 CI boundary specification and
+plan, this append-only lineage record and generated readers, and publication
+pull request 23. No accepted evidence bytes, runtime, Colima profile, or V4
+production implementation changed.
+
+**Unresolved questions:** The explicit V4 future target remains red at pending
+proof stages and must be completed when post-publication V4 work resumes.
+
+**Next gate:** Run full local validation, push the repaired publication branch,
+require green GitHub checks, and merge pull request 23 into `main`.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

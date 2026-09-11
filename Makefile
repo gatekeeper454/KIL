@@ -1,4 +1,4 @@
-.PHONY: help check-python test v4-future-controller-test docs-html docs-html-check validate replay v3a-demo v3b-tools v3b-preflight
+.PHONY: help check-python test docs-html docs-html-check validate replay v3a-demo v3b-tools v3b-preflight v4-future-controller-test
 
 PYTHON ?= python3
 
