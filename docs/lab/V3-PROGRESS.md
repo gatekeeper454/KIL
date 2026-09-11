@@ -43,7 +43,7 @@ forwarding, target invocation, and evidence joining. It does not run Envoy or
 Kubernetes and therefore does not establish a `validated` cluster result.
 Synthetic charge, threshold, and local-divergence values remain modeled.
 
-## V3B-1 current status
+## V3B-1 Complete
 
 The corrected in-network request-driver mechanism is implemented and statically
 approved at commits `75161f0` and `48bd81a`. Independent specification and
@@ -54,6 +54,15 @@ complete 466-test non-runtime repository suite. The fresh Task 9 complete static
 gate passes 474 tests, including eight documentation tests, together with Python
 compilation and diff hygiene. No Docker, Colima, network, or live laboratory
 runtime was invoked by that verification.
+
+### Additional validation detail
+
+The accepted run remains an observed intermediate result under immutable
+`promotion_status=not_promoted` evidence. Phase completion does not rewrite that
+record. It preserves all nine authoritative service sources, one attempt per
+track with no retry, exact absence of all 15 owned containers and six networks
+before publication, equal pseudonymous foreign-resource snapshots, passing
+checksums, and offline-presenter acceptance. It is not proof that KIL would have prevented the historical Hugging Face incident.
 
 ### Implemented topology and traffic boundary
 
@@ -229,8 +238,8 @@ attempt and `retry_observed=false`. All nine sources are attested, all 15 owned
 containers and six networks were absent before publication, the dedicated
 profile was deleted, and the pseudonymous foreign-resource arrays are exactly
 equal. Every checksum passes. The bundle remains `not_promoted`: Kind/Calico
-and NetworkPolicy validation are future work, historical prevention is not
-established, and performance is not established.
+and NetworkPolicy validation, repetition, and performance are
+post-publication **V4 Future** work. Historical prevention is not established.
 
 The controller owns only the uniquely named `kil-v3-lab` Colima profile. Future
 lifecycle commands may start, stop, or delete only that profile; all other
@@ -240,11 +249,8 @@ caused only an optional post-teardown readback to reject its unfamiliar shape;
 KIL did not mutate it, and it does not alter the bundle's already verified exact
 teardown and foreign-snapshot equality.
 
-V3B-1 remains limited to the local Envoy boundary. V3B-2 is the future isolated
-Kind/Calico topology; its NetworkPolicy behavior, cluster-level transport,
-failure matrix, and measurements are unexecuted. V3C repetition and performance
-promotion are also future work. No historical-prevention or performance claim
-is made.
+V3B-1 remains limited to the local Envoy boundary. No historical-prevention or
+performance claim is made.
 
 ### Historical pre-driver topology records
 
@@ -322,8 +328,8 @@ Within the retired pre-driver topology, this result accepted the zero-request
 lifecycle and evidence-freeze gate. The offline presenter correctly rejected
 the smoke because it was not an accepted local-boundary enforcement run. Those
 facts remain valid historical records, but they do not authorize or substitute
-for the now-passed driver-era Task 10 lifecycle gate or the still-pending
-central enforcement gate.
+for the now-passed driver-era Task 10 lifecycle gate or the subsequently
+completed central enforcement gate.
 
 ## Architecture
 
@@ -336,9 +342,9 @@ and the complete approved specification is
 
 ## Next gate
 
-Preserve the failed and accepted private worktrees for the user's manual offline
-backup. The next experimental gates are the separately designed V3B-2
-Kind/Calico boundary and V3C repetition/performance; neither is implied by this
-result, and all V3A output remains explicitly modeled.
+Publication proceeds from this accepted local-Envoy boundary. The isolated
+Kind/Calico, NetworkPolicy, cluster failure-matrix, repetition, and performance
+work previously planned as V3B-2/V3C is now post-publication **V4 Future**.
+Historical records retain their original phase names.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

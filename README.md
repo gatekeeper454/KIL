@@ -7,26 +7,30 @@ publishable technical paper with two executable demonstrations:
 1. a deterministic counterfactual replay of the July 2026 Hugging Face agent
    intrusion; and
 2. a staged live proof that first applies the same decision model at a local
-   Envoy boundary, with Kind/Calico cluster validation reserved for a later
-   gate.
+   Envoy boundary, with Kind/Calico cluster validation reserved for
+   post-publication **V4 Future** work.
 
 The narrow extension proposal will specify only what KTP v2.0.0 does not yet
 make sufficiently concrete for this use case. KIL will not rename existing
 KTP-Transport, KTP-Enforce, KTP-Gravity, or Vector Identity constructs.
 
-## Status
+## Status — V3B-1 Complete
 
-The deterministic V1 decision kernel, V2 historical replay, and V3A signed-
-state authorization core remain locally executable modeled assets. The
-corrected V3B-1 local-Envoy mechanism is implemented and statically approved at
-commits `75161f0` and `48bd81a`: three one-shot request drivers communicate with
-three fixed Envoy `ext_authz` tracks over six internal networks without a host
-TCP publication. The Task 8 implementation checkpoint passed 466 non-runtime
-tests. The fresh Task 9 complete static gate passes 474 tests, including eight
-documentation tests. The stopped-endpoint recovery correction merged through
-PR #16 after its
-232-test controller suite, complete 484-test repository gate, and both public
-CI jobs passed.
+KIL has accepted observed evidence at the `local_envoy_boundary`. The accepted
+run is `v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94`.
+It reproduced `permit / permit / deny`, HTTP `200 / 200 / 403`, and target
+markers `1 / 1 / 0`, with one request-driver attempt per track and no retry.
+Historical static-validation records remain part of the V3B-1 detail: Task 8
+passed its 466-test non-runtime repository suite, and the fresh Task 9 complete
+static gate passed 474 tests. These are preserved historical validation counts,
+not fresh verification claims.
+
+This is not proof that KIL would have prevented the historical Hugging Face
+incident. Publication follows this bounded completion. Kind/Calico,
+NetworkPolicy, cluster transport, repetition, and performance are
+post-publication **V4 Future** work.
+
+![KIL V3 publication roadmap](docs/architecture/v3-publication-roadmap.svg)
 
 Each track has a frontend configured only for its driver and Envoy, and a
 backend containing only Envoy, authorization service, and harmless target.
@@ -40,6 +44,7 @@ containers plus three transient validators and proves all fifteen containers
 and all six networks absent during exact teardown. Docker attach/stdin is only
 the host control channel that gives a driver one canonical instruction; the
 consequential path is `driver -> Envoy -> authorization -> target or withhold`.
+No host publication exists.
 The driver is a laboratory transport witness, not KIL enforcement. The current
 evidence scope is `local_envoy_boundary`.
 
@@ -70,8 +75,8 @@ result remains private and nonpromotable, and no request was retried. The
 source-format correction was implemented and locally verified; at that
 checkpoint a new live attempt remained prohibited until review, public CI,
 merge, and exact synchronization. Existing v1 and v2 bundles remain
-independently verifiable. Kind/Calico validation (V3B-2), repetition, and
-performance promotion (V3C) remain future work.
+independently verifiable. The later Kind/Calico validation, repetition, and
+performance work is post-publication **V4 Future** work.
 
 The correction merged as source
 `514e910ea9427e0497c4fe8a1ec279b554e75176`. Its newly authorized Task 11
@@ -83,8 +88,9 @@ an accepted observed intermediate local-Envoy boundary result. It records
 and joined all nine authoritative sources, proved all 15 owned containers and
 six networks absent, and bound exactly equal pseudonymous foreign-resource
 arrays. Checksums and offline presenter verification pass. The bundle remains
-`not_promoted`; Kind/Calico and NetworkPolicy validation are future work,
-historical prevention is not established, and performance is not established.
+`not_promoted`; Kind/Calico and NetworkPolicy validation, repetition, and
+performance are post-publication **V4 Future** work. Historical prevention is
+not established.
 
 Historical pre-driver records remain available for provenance. The rejected
 nine-service/three-network smoke ran from public source
@@ -210,8 +216,8 @@ without accepting mixed schemas. The fresh request-free v3 lifecycle passed
 from reviewed, merged, synchronized public `main` with exact foreign-resource
 equality and zero HTTP requests, and the accepted central result is identified
 above. The controller owns and may start, stop, or delete only the unique
-`kil-v3-lab` profile; it does not mutate other projects' Colima profiles. V3B-2
-Kind/Calico validation remains a later gate.
+`kil-v3-lab` profile; it does not mutate other projects' Colima profiles.
+Kind/Calico validation is post-publication **V4 Future** work.
 
 ## Historical replay
 

@@ -2,8 +2,9 @@
 
 V3B-1 implements three independently configured local Envoy `ext_authz` routes
 in front of harmless target workloads. Each authorization service instance
-fixes one track at startup. V3B-2 may reuse the same fixed tracks in a future
-Kind/Calico topology. The historical driver-era request-free lifecycle gate is
+fixes one track at startup. The post-publication V4 Future topology may reuse
+the same fixed tracks for Kind/Calico. The historical driver-era request-free
+lifecycle gate is
 accepted as a lifecycle result. One central V3B-1 proof is now accepted as an
 observed intermediate local-Envoy boundary result, but it is not promoted or
 labeled as Kind/Calico validation:

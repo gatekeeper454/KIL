@@ -6,7 +6,7 @@
 <title>Gate V3 implementation progress</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/lab/V3-PROGRESS.md">
-<meta name="source-sha256" content="bda71765e929b0cbedec70e966e9bd794a2af9138928ea3c25ade1ab9a35489f">
+<meta name="source-sha256" content="630bba6a05a0fc46ca92261aa949da809e6a27eb6b6362ab651a15265e1f87e8">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,14 +55,14 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>bda71765e929b0cbedec70e966e9bd794a2af9138928ea3c25ade1ab9a35489f</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>630bba6a05a0fc46ca92261aa949da809e6a27eb6b6362ab651a15265e1f87e8</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Gate V3 implementation progress</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>bda71765e929b0cbedec70e966e9bd794a2af9138928ea3c25ade1ab9a35489f</code>); edit the Markdown source, not this reader.</p></div>
-<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#gate-v3-implementation-progress">Gate V3 implementation progress</a></li><li class="level-2"><a href="#v3a-status">V3A status</a></li><li class="level-2"><a href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a href="#v3b-1-current-status">V3B-1 current status</a></li><li class="level-3"><a href="#implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</a></li><li class="level-3"><a href="#request-and-evidence-contracts">Request and evidence contracts</a></li><li class="level-3"><a href="#live-status-and-historical-boundary">Live status and historical boundary</a></li><li class="level-3"><a href="#historical-pre-driver-topology-records">Historical pre-driver topology records</a></li><li class="level-2"><a href="#architecture">Architecture</a></li><li class="level-2"><a href="#next-gate">Next gate</a></li></ol></nav></details><div class="reader-layout">
-<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="gate-v3-implementation-progress" href="#gate-v3-implementation-progress">Gate V3 implementation progress</a></li><li class="level-2"><a data-section-id="v3a-status" href="#v3a-status">V3A status</a></li><li class="level-2"><a data-section-id="evidence-boundary" href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a data-section-id="v3b-1-current-status" href="#v3b-1-current-status">V3B-1 current status</a></li><li class="level-3"><a data-section-id="implemented-topology-and-traffic-boundary" href="#implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</a></li><li class="level-3"><a data-section-id="request-and-evidence-contracts" href="#request-and-evidence-contracts">Request and evidence contracts</a></li><li class="level-3"><a data-section-id="live-status-and-historical-boundary" href="#live-status-and-historical-boundary">Live status and historical boundary</a></li><li class="level-3"><a data-section-id="historical-pre-driver-topology-records" href="#historical-pre-driver-topology-records">Historical pre-driver topology records</a></li><li class="level-2"><a data-section-id="architecture" href="#architecture">Architecture</a></li><li class="level-2"><a data-section-id="next-gate" href="#next-gate">Next gate</a></li></ol></nav>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/lab/V3-PROGRESS.md</code> (<code>630bba6a05a0fc46ca92261aa949da809e6a27eb6b6362ab651a15265e1f87e8</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#gate-v3-implementation-progress">Gate V3 implementation progress</a></li><li class="level-2"><a href="#v3a-status">V3A status</a></li><li class="level-2"><a href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a href="#v3b-1-complete">V3B-1 Complete</a></li><li class="level-3"><a href="#additional-validation-detail">Additional validation detail</a></li><li class="level-3"><a href="#implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</a></li><li class="level-3"><a href="#request-and-evidence-contracts">Request and evidence contracts</a></li><li class="level-3"><a href="#live-status-and-historical-boundary">Live status and historical boundary</a></li><li class="level-3"><a href="#historical-pre-driver-topology-records">Historical pre-driver topology records</a></li><li class="level-2"><a href="#architecture">Architecture</a></li><li class="level-2"><a href="#next-gate">Next gate</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="gate-v3-implementation-progress" href="#gate-v3-implementation-progress">Gate V3 implementation progress</a></li><li class="level-2"><a data-section-id="v3a-status" href="#v3a-status">V3A status</a></li><li class="level-2"><a data-section-id="evidence-boundary" href="#evidence-boundary">Evidence boundary</a></li><li class="level-2"><a data-section-id="v3b-1-complete" href="#v3b-1-complete">V3B-1 Complete</a></li><li class="level-3"><a data-section-id="additional-validation-detail" href="#additional-validation-detail">Additional validation detail</a></li><li class="level-3"><a data-section-id="implemented-topology-and-traffic-boundary" href="#implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</a></li><li class="level-3"><a data-section-id="request-and-evidence-contracts" href="#request-and-evidence-contracts">Request and evidence contracts</a></li><li class="level-3"><a data-section-id="live-status-and-historical-boundary" href="#live-status-and-historical-boundary">Live status and historical boundary</a></li><li class="level-3"><a data-section-id="historical-pre-driver-topology-records" href="#historical-pre-driver-topology-records">Historical pre-driver topology records</a></li><li class="level-2"><a data-section-id="architecture" href="#architecture">Architecture</a></li><li class="level-2"><a data-section-id="next-gate" href="#next-gate">Next gate</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
 <h1 id="gate-v3-implementation-progress">Gate V3 implementation progress</h1>
 <h2 id="v3a-status">V3A status</h2>
@@ -102,7 +102,7 @@ software contracts for signature verification, fixed-mode authorization,
 forwarding, target invocation, and evidence joining. It does not run Envoy or
 Kubernetes and therefore does not establish a <code>validated</code> cluster result.
 Synthetic charge, threshold, and local-divergence values remain modeled.</p>
-<h2 id="v3b-1-current-status">V3B-1 current status</h2>
+<h2 id="v3b-1-complete">V3B-1 Complete</h2>
 <p>The corrected in-network request-driver mechanism is implemented and statically
 approved at commits <code>75161f0</code> and <code>48bd81a</code>. Independent specification and
 quality review approved the complete lifecycle, recovery, evidence, and exact
@@ -112,6 +112,13 @@ complete 466-test non-runtime repository suite. The fresh Task 9 complete static
 gate passes 474 tests, including eight documentation tests, together with Python
 compilation and diff hygiene. No Docker, Colima, network, or live laboratory
 runtime was invoked by that verification.</p>
+<h3 id="additional-validation-detail">Additional validation detail</h3>
+<p>The accepted run remains an observed intermediate result under immutable
+<code>promotion_status=not_promoted</code> evidence. Phase completion does not rewrite that
+record. It preserves all nine authoritative service sources, one attempt per
+track with no retry, exact absence of all 15 owned containers and six networks
+before publication, equal pseudonymous foreign-resource snapshots, passing
+checksums, and offline-presenter acceptance. It is not proof that KIL would have prevented the historical Hugging Face incident.</p>
 <h3 id="implemented-topology-and-traffic-boundary">Implemented topology and traffic boundary</h3>
 <p>V3B-1 fixes three separate tracks:</p>
 <ol>
@@ -271,8 +278,8 @@ attempt and <code>retry_observed=false</code>. All nine sources are attested, al
 containers and six networks were absent before publication, the dedicated
 profile was deleted, and the pseudonymous foreign-resource arrays are exactly
 equal. Every checksum passes. The bundle remains <code>not_promoted</code>: Kind/Calico
-and NetworkPolicy validation are future work, historical prevention is not
-established, and performance is not established.</p>
+and NetworkPolicy validation, repetition, and performance are
+post-publication <strong>V4 Future</strong> work. Historical prevention is not established.</p>
 <p>The controller owns only the uniquely named <code>kil-v3-lab</code> Colima profile. Future
 lifecycle commands may start, stop, or delete only that profile; all other
 profiles belong to other projects and must remain untouched. A separate foreign
@@ -280,11 +287,8 @@ profile appeared after the bundle's bound before/after lifecycle window and
 caused only an optional post-teardown readback to reject its unfamiliar shape;
 KIL did not mutate it, and it does not alter the bundle's already verified exact
 teardown and foreign-snapshot equality.</p>
-<p>V3B-1 remains limited to the local Envoy boundary. V3B-2 is the future isolated
-Kind/Calico topology; its NetworkPolicy behavior, cluster-level transport,
-failure matrix, and measurements are unexecuted. V3C repetition and performance
-promotion are also future work. No historical-prevention or performance claim
-is made.</p>
+<p>V3B-1 remains limited to the local Envoy boundary. No historical-prevention or
+performance claim is made.</p>
 <h3 id="historical-pre-driver-topology-records">Historical pre-driver topology records</h3>
 <p>The records in this section preserve the earlier nine-service/three-network
 host-published lifecycle exactly as development history. That topology is
@@ -354,8 +358,8 @@ Running/containerd/arm64/4 CPU/4 GiB/20 GiB.</p>
 lifecycle and evidence-freeze gate. The offline presenter correctly rejected
 the smoke because it was not an accepted local-boundary enforcement run. Those
 facts remain valid historical records, but they do not authorize or substitute
-for the now-passed driver-era Task 10 lifecycle gate or the still-pending
-central enforcement gate.</p>
+for the now-passed driver-era Task 10 lifecycle gate or the subsequently
+completed central enforcement gate.</p>
 <h2 id="architecture">Architecture</h2>
 <p><img src="../architecture/v3-envoy-live-validation.svg" alt="Approved V3 Envoy live-validation architecture" /></p>
 <p>The source diagram is
@@ -363,10 +367,10 @@ central enforcement gate.</p>
 and the complete approved specification is
 <a href="../superpowers/specs/2026-08-29-v3-envoy-live-validation-design.htm"><code>docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md</code></a>.</p>
 <h2 id="next-gate">Next gate</h2>
-<p>Preserve the failed and accepted private worktrees for the user's manual offline
-backup. The next experimental gates are the separately designed V3B-2
-Kind/Calico boundary and V3C repetition/performance; neither is implied by this
-result, and all V3A output remains explicitly modeled.</p>
+<p>Publication proceeds from this accepted local-Envoy boundary. The isolated
+Kind/Calico, NetworkPolicy, cluster failure-matrix, repetition, and performance
+work previously planned as V3B-2/V3C is now post-publication <strong>V4 Future</strong>.
+Historical records retain their original phase names.</p>
 <p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
 </article></main>
 </div></div>
