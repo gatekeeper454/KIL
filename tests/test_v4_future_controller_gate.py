@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 
 from tests import test_v3b2_controller as controller_tests
@@ -38,6 +39,15 @@ class V4FutureControllerGateTest(unittest.TestCase):
             "__unittest_skip__",
             False,
         ))
+
+    def test_makefile_exposes_the_explicit_v4_future_target(self) -> None:
+        makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text()
+        self.assertIn("v4-future-controller-test: check-python", makefile)
+        self.assertIn("KIL_RUN_V4_FUTURE_TESTS=1", makefile)
+        self.assertIn(
+            "tests.test_v3b2_controller.V3B2ControllerTest -v",
+            makefile,
+        )
 
 
 if __name__ == "__main__":
