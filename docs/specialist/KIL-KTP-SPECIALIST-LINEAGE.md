@@ -11710,3 +11710,44 @@ proof stages and must be completed when post-publication V4 work resumes.
 require green GitHub checks, and merge pull request 23 into `main`.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-244 — 2026-09-11 — External publication visibility gate selected
+
+**Input:** Proceed to the next action after publication pull request 23 merged
+into `main`.
+
+**Interpretation:** Use public GitHub repository visibility as KIL's first
+external publication surface. Do not invent a semantic release version or
+enable an unconfigured Pages site in the same action. Preserve the accepted
+V3B-1 claim boundary and the separate post-publication **V4 Future** branch.
+
+**Decision status:** Confirmed authorization to advance to external
+publication. A read-only readiness audit found that the repository is still
+private, has no releases or Pages configuration, and has 25 remote branches,
+including three tips not merged into `main`. A pattern scan found only the
+deliberately synthetic credential strings used by rejection tests, not a
+likely live credential. Publication will also disclose two commit-author email
+identities, historical absolute-path provenance, and the incomplete V4 Future
+branch.
+
+**Rationale:** Changing repository visibility is the narrowest established
+mechanism that makes the merged paper, generated readers, code, and accepted
+evidence accessible without creating a new unreviewed deployment artifact or
+assigning an unsupported version. Recording the complete-repository exposure
+before the change keeps the action deliberate and auditable.
+
+**Affected artifacts:** This append-only lineage record and generated reader;
+GitHub repository visibility after the audit record is integrated. No source
+behavior, evidence bytes, release tag, Pages configuration, runtime, Colima
+profile, or V4 Future branch content changes.
+
+**Unresolved questions:** A future release needs an explicitly selected tag and
+version. A future hosted paper surface needs an approved Pages or other hosting
+design. Historical branch and path provenance remain visible after public
+conversion unless separately curated.
+
+**Next gate:** Regenerate and verify readers, integrate this audit record, set
+the GitHub repository to public, and verify unauthenticated access to `main`
+and the bounded V3B-1 publication surfaces.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
