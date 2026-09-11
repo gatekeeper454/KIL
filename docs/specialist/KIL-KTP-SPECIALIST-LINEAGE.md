@@ -11751,3 +11751,37 @@ the GitHub repository to public, and verify unauthenticated access to `main`
 and the bounded V3B-1 publication surfaces.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-245 — 2026-09-11 — Public visibility declined; repository remains private
+
+**Input:** Keep the KIL GitHub repository private after reviewing the
+repository-wide disclosure implications of public conversion.
+
+**Interpretation:** Supersede T-244's proposed public-visibility next gate. The
+merged V3B-1 publication boundary remains the authoritative repository state,
+but it is not externally published through public repository visibility,
+GitHub Pages, or a GitHub release.
+
+**Decision status:** Confirmed. `gatekeeper454/KIL` remains private. No public
+visibility change completed, and no workaround publication surface is
+authorized.
+
+**Rationale:** Public conversion would expose all remote branches and commit
+history, including author identities, historical local-path provenance, and
+the incomplete post-publication V4 Future branch. The explicit privacy
+decision takes precedence over the earlier proposal to use repository
+visibility as the first external surface.
+
+**Affected artifacts:** This append-only lineage record and generated reader.
+No GitHub visibility, release, Pages, source behavior, evidence bytes, runtime,
+Colima profile, or V4 Future content changed.
+
+**Unresolved questions:** Any later external publication requires a new,
+explicitly scoped choice of audience and surface that preserves the private
+repository boundary.
+
+**Next gate:** Keep the repository private and await either a separately
+approved publication mechanism or resumption of post-publication V4 Future
+work.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
