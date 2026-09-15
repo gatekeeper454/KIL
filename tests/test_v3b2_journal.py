@@ -1272,6 +1272,53 @@ class V3B2JournalTest(unittest.TestCase):
                         JournalError, "delete|absence|teardown|phase|order"):
                     self._append("image_load_intent", image)
 
+    def test_cluster_live_teardown_intents_cannot_begin_after_cluster_absence(self) -> None:
+        from kil.v3b2_journal import latch_teardown
+
+        delete = {"kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig}
+        absence = {"kind_cluster": "kil-v3-lab", "node_container_id": NODE_ID}
+        driver = {"namespace": "kil-v3-baseline", "pod": "driver", "uid": "driver-uid"}
+
+        for family, details in (
+            ("evidence_freeze", {"evidence_sha256": "5" * 64}),
+            ("envoy_quiesce", {"attestation_sha256": "8" * 64}),
+            ("driver_cancel", driver),
+        ):
+            with self.subTest(family=family):
+                self.path = self.private / f"post-absence-{family}.json"
+                self._journal()
+                self._ready()
+                if family == "driver_cancel":
+                    self._freeze()
+                else:
+                    self._append("driver_start_intent", driver)
+                    self._append("driver_start_abandoned_for_teardown", {
+                        **driver,
+                        "abandoned_family": "driver_start",
+                        "stage_category": "uncertain_or_partial",
+                        "observation_sha256": "7" * 64,
+                        "promotion_forbidden": True,
+                    })
+                self._append("cluster_delete_intent", delete)
+                self._append("cluster_delete_complete", delete)
+                self._append("cluster_absence_proof_intent", absence)
+                self._append("cluster_absence_proof_complete", absence)
+                if family == "driver_cancel":
+                    latch_teardown(self.path)
+                try:
+                    accepted = self._append(f"{family}_intent", details)
+                except JournalError:
+                    continue
+                plan = recovery_plan(accepted)
+                live = tuple(command for command in plan.commands
+                             if command.argv and command.argv[0] == "kubectl")
+                self.assertEqual(
+                    live,
+                    (),
+                    f"accepted post-absence {family} produced live recovery commands",
+                )
+                self.fail(f"accepted post-absence {family} intent")
+
     def test_manifest_source_requires_cluster_and_accepts_only_exact_kind_pair(self) -> None:
         self._journal()
         with self.assertRaisesRegex(JournalError, "cluster|order|phase"):

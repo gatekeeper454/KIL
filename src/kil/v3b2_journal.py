@@ -1147,7 +1147,7 @@ def _validate_history(events: object, lifecycle_mode: str, teardown_from_sequenc
     forward_families = {
         "control_plane_manifest_source", "image_import", "image_load",
         "calico_apply", "application_apply", "readiness", "driver_start",
-        "request",
+        "request", "evidence_freeze", "envoy_quiesce", "driver_cancel",
     }
 
     def done(family: str) -> bool:
