@@ -13186,3 +13186,69 @@ execute Task 3's controller capture and recovery wiring under TDD. Preserve the
 static-only boundary and do not open a live gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-273 — 2026-09-15 — V4 Task 2 specification review found non-exact lifecycle order
+
+**Input:** Independent specification-compliance review of V4 Task 2 from base
+`346e3c75f10f6fe5e09854c4b46a9e04f54be07c` through implementation commit
+`cf7cd68ae61303b75f310e7fd60bde712a4790a3`, with implementation-lineage
+commit `aa7c5c57c58d9683b9749e55a69ac1800760f282`. The review was restricted to
+static inspection and focused tests; live cluster/runtime commands and all
+Colima inspection or mutation were prohibited.
+
+**Interpretation:** Task 2 acceptance requires every persistence, replay, and
+journal item in the approved contract, including an exact lifecycle sequence:
+`cluster_create_complete` must be followed by the source intent/completion
+barrier before `image_import_intent`. A mere historical `done(...)` predicate
+is insufficient if cluster deletion or another terminal lifecycle branch can
+intervene and the journal still accepts forward work.
+
+**Decision status:** Not approved. The canonical checkpoint, exact retained
+context/proof reconstruction, four MiB bound, safe write-once publication,
+deterministic local observation request, immutable version plumbing, terminal
+proof binding, injection rejection, teardown-only source failure, retained-byte
+reconstruction, and zero-live-read recovery surface were present and their
+focused tests passed. One Important specification gap remains: the journal
+accepts `cluster_delete_intent`/`cluster_delete_complete` between cluster
+creation and the source pair, then accepts `image_import_intent` after the
+source pair.
+
+**Rationale:** In `src/kil/v3b2_journal.py`, source intent checks only
+`done("cluster_create")`, while image-import intent checks only
+`done("cluster_create") and done("control_plane_manifest_source")`. Completed
+cluster deletion does not latch teardown and neither predicate requires the
+immediately preceding exact phase. An adversarial static construction was
+accepted with event order `profile_start` pair, `cluster_create` pair,
+`cluster_delete` pair, `control_plane_manifest_source` pair, then
+`image_import_intent`. This widens the accepted lifecycle beyond the Task 2
+contract and could represent source capture and forward mutation after the
+owned cluster was already deleted. The current tests assert relative ordering
+but do not cover this interposition.
+
+**Verification:** The required five-module focused suite passed all 143 tests
+in 27.914 seconds under the repository's Python 3.12 lab environment. A
+separate no-runtime Python construction using the real journal create/append/
+load boundary reproduced the invalid accepted sequence above. Static diff
+inspection confirmed that implementation scope was otherwise limited to the
+new record module/test, proofs and journal plumbing/tests, the immutable
+controller version field, and the necessary observed-lifecycle fixture update.
+`git diff --check` passed. No Colima, Docker, Kind, kubectl, Kubernetes, or
+other live runtime command was invoked.
+
+**Affected artifacts:** This append-only specification-review entry and its
+regenerated HTML reader. Production code and tests were not modified by the
+review. The reviewed implementation remains at `cf7cd68`; its prior lineage
+record remains at `aa7c5c5`.
+
+**Unresolved questions:** Task 2 needs one narrow journal-order correction and
+a regression that rejects cluster deletion or any other lifecycle interposition
+between `cluster_create_complete`, the source pair, and `image_import_intent`.
+Independent code-quality review remains separate. Task 3 controller capture
+and recovery wiring remains explicitly out of scope until Task 2 is accepted.
+
+**Next gate:** Correct the lifecycle validator and add the adversarial
+interposition regression, rerun the required focused suite and Markdown reader
+checks, then obtain independent Task 2 specification re-review before starting
+Task 3.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
