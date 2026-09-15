@@ -813,10 +813,9 @@ class V3B2ControllerTest(unittest.TestCase):
         self.assertEqual(application, [])
 
     def manifest_cat_commands(self):
-        return [command for command in self.runner.commands if
-                len(command.argv) == 6
-                and command.argv[:2] == ("docker", "exec")
-                and command.argv[3:5] == ("/bin/cat", "--")]
+        return [command for command in self.runner.commands
+                if command.argv[:2] == ("docker", "exec")
+                and "/bin/cat" in command.argv]
 
     def leave_persisted_manifest_source_without_terminal(self) -> Path:
         import kil.v3b2_controller as module
@@ -988,6 +987,18 @@ class V3B2ControllerTest(unittest.TestCase):
                         labels.index("control_plane_manifest_source_complete"))
         self.assertLess(labels.index("control_plane_manifest_source_complete"),
                         labels.index("image_import_intent"))
+        manifest_reads = self.manifest_cat_commands()
+        self.assertEqual([command.argv[-1] for command in manifest_reads], [
+            "/etc/kubernetes/manifests/kube-apiserver.yaml",
+            "/etc/kubernetes/manifests/kube-controller-manager.yaml",
+        ])
+        commands = self.runner.commands
+        first_read = commands.index(manifest_reads[0])
+        second_read = commands.index(manifest_reads[1])
+        expected_inspect = ("docker", "inspect", "kil-v3-lab-control-plane")
+        self.assertEqual(second_read, first_read + 1)
+        self.assertEqual(commands[first_read - 1].argv, expected_inspect)
+        self.assertEqual(commands[second_read + 1].argv, expected_inspect)
         self.assertTrue(any(row["event"] == "image_load_complete" for row in events))
         self.assertTrue(any(row["event"] == "calico_apply_complete" for row in events))
         self.assertFalse(any(row["event"] == "application_apply_complete" for row in events))
