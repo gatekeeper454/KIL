@@ -47,6 +47,28 @@ def adjacent_pairs(values: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
 
 
 class V3B2JournalTest(unittest.TestCase):
+    def test_exact_control_plane_manifest_reads_are_the_only_cat_grammar(self):
+        environment = (
+            ("DOCKER_CONFIG", str(self.private / "docker-config")),
+            ("DOCKER_HOST", self.identity.docker_host),
+        )
+        paths = (
+            "/etc/kubernetes/manifests/kube-apiserver.yaml",
+            "/etc/kubernetes/manifests/kube-controller-manager.yaml",
+        )
+        for path in paths:
+            command = Command(("docker", "exec", NODE_ID, "/bin/cat", "--", path),
+                              60, env=environment)
+            self.assertFalse(command.mutating)
+        rejected = (
+            ("docker", "exec", NODE_ID, "/bin/cat", "--", "/etc/kubernetes/manifests/kube-scheduler.yaml"),
+            ("docker", "exec", NODE_ID, "/bin/cat", "--", paths[0], "extra"),
+            ("docker", "exec", NODE_ID, "/bin/sh", "-c", "cat " + paths[0]),
+        )
+        for argv in rejected:
+            with self.subTest(argv=argv), self.assertRaises(JournalError):
+                Command(argv, 60, env=environment)
+
     def test_teardown_latch_forbids_late_request_result_promotion(self):
         from kil.v3b2_journal import latch_teardown
         self._journal()

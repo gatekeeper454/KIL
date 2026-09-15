@@ -251,11 +251,24 @@ class Command:
                 and (_KIL_IMAGE.fullmatch(self.argv[14]) is not None
                      or _ENVOY_IMAGE.fullmatch(self.argv[14]) is not None)
             )
+            control_plane_manifest_read = (
+                len(self.argv) == 6
+                and self.argv[:2] == ("docker", "exec")
+                and _HEX64.fullmatch(self.argv[2]) is not None
+                and self.argv[3:5] == ("/bin/cat", "--")
+                and self.argv[5] in {
+                    "/etc/kubernetes/manifests/kube-apiserver.yaml",
+                    "/etc/kubernetes/manifests/kube-controller-manager.yaml",
+                }
+            )
+            if (control_plane_manifest_read
+                    and Path(environment["DOCKER_CONFIG"]).name != "docker-config"):
+                raise JournalError("control-plane manifest read requires private Docker configuration")
             if self.argv not in {
                 ("docker", "inspect", f"{LAB_IDENTITY}-control-plane"),
                 ("docker", "context", "show"),
                 ("docker", "container", "ls", "--all", "--no-trunc", "--format", "{{json .}}"),
-            } and not image_mutation and not image_read and not node_image_read and not node_cri_image_read:
+            } and not image_mutation and not image_read and not node_image_read and not node_cri_image_read and not control_plane_manifest_read:
                 raise JournalError("Docker command is outside the closed argv grammar")
             if self.mutating is not image_mutation:
                 raise JournalError("Docker command mutation classification is invalid")

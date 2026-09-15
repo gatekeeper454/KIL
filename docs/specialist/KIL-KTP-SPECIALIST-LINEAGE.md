@@ -12948,3 +12948,73 @@ control-plane manifest source proof under TDD, then obtain independent
 specification and quality review before starting durable persistence.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-269 — 2026-09-15 — V4 control-plane manifest source proof implemented
+
+**Input:** Execute Task 1 of the approved V4 control-plane static-manifest
+source plan: add the exact two-command Docker read surface, a four-observation
+owned-node identity bracket, bounded closed-YAML Pod decoding, immutable source
+bindings and reconstruction, and focused journal grammar coverage. Keep the
+work static-only, preserve foreign profiles, retain strict false completion
+flags, and commit a local checkpoint without pushing.
+
+**Interpretation:** This checkpoint authenticates only the transport envelope,
+retained raw observations, node-identity bracket, and independent raw and
+canonical semantic commitments for the two literal kubeadm manifest paths.
+Component-specific producer configuration, conditional CA subsets, disk-to-API
+mirror transformation, runtime readiness, and application completion remain
+outside Task 1 and belong to later V4 gates.
+
+**Decision status:** Confirmed static implementation checkpoint; no live claim.
+The command grammar admits only nonmutating, stdin-free `/bin/cat --` reads for
+the kube-apiserver and kube-controller-manager manifest paths through the
+journaled isolated Docker endpoint and private Docker configuration. The pure
+proof retains exactly four ordered observations and two sorted bindings while
+both `runtime_complete` and `application_complete` remain exact `False`.
+
+**Rationale:** Reading the two effective files from the exact owned Kind node
+closes the missing source boundary without accepting caller-selected paths,
+shell evaluation, current-context discovery, API Pod fields, or foreign Docker
+authority. Reconstructing the proof from canonical retained observation bytes
+and separately hashing raw and parsed Pod content makes later private
+checkpoint replay deterministic while preventing source or identity
+substitution.
+
+**Verification:** Test-first development witnessed the missing module and
+Docker grammar fail before implementation, then witnessed the proof boundary
+fail before validation was added. Independent review identified and the
+implementation corrected a coordinated constructor-forgery gap by retaining
+and reconstructing the exact expected context and owned identity. The 4 MiB
+guard now measures the planned complete `{schema, context, proof}` checkpoint
+envelope. Independent re-review then found no remaining Critical, Important,
+or Minor issue. The required focused and neighboring suite passed 112 tests
+covering command closure, authority drift, transport failure,
+the exact 1 MiB boundary, closed-YAML ambiguity, digest independence,
+constructor forgery, detached Pod access, the 4 MiB proof bound, and unchanged
+existing journal/image-command behavior. No Colima, Docker, Kind, kubectl, or
+live runtime command was invoked.
+
+**Affected artifacts:** Added
+`src/kil/v3b2_control_plane_manifest_source.py` and
+`tests/test_v3b2_control_plane_manifest_source.py`; extended only the Docker
+read grammar in `src/kil/v3b2_journal.py` and its focused test; appended this
+lineage entry and regenerated its HTML reader. No foreign profile, live
+cluster, evidence bundle, publication, or repository-visibility state changed.
+
+**Unresolved questions:** Durable no-follow checkpoint encoding, lifecycle
+ordering and replay wiring, controller capture/recovery behavior, both
+component-specific disk/API configuration proofs, platform
+image/status/readiness composition, the all-ten-Pod terminal, request-free
+lifecycle, and nominal lifecycle remain open. This checkpoint does not claim
+that either parsed Pod has the final reviewed producer configuration or CA
+subset. Task 3 must use a bounded successful-output capture path so an
+oversized manifest is marked truncated before unbounded process output can be
+retained; Task 1's pure post-capture validator does not claim that controller
+transport property.
+
+**Next gate:** Implement Task 2's canonical 4 MiB private source checkpoint and
+replay-safe journal family from retained bytes only, followed by Task 3's
+bounded capture and recovery wiring. Keep all completion flags false and do not
+open any live gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
