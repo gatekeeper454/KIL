@@ -8,9 +8,10 @@
 
 **Protocol baseline:** Kinetic Trust Protocol v2.0.0
 
-**Evidence state:** Architecture and model proposed; historical example modeled;
-local-Envoy mechanism implemented and statically verified; live acceptance
-pending
+**Evidence state:** V3B-1 Complete — accepted observed local-Envoy boundary.
+The immutable accepted run is
+`v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94`
+at `local_envoy_boundary`; it remains `not_promoted`.
 
 ## Executive summary
 
@@ -52,7 +53,8 @@ The V3B-1 request-driver mechanism has passed static review, request-free
 readiness, and one central local-Envoy proof. The accepted bundle is an observed
 intermediate local-boundary result, not a promoted Kind/Calico or production
 result. Accordingly, this paper reports no Kind/Calico validation, historical
-prevention, or performance result.
+prevention, or performance result. It is not proof that KIL would have prevented
+the historical incident.
 
 ## 1. Introduction
 
@@ -412,11 +414,11 @@ intent before one instruction per track, and never retried after intent. The
 driver does not evaluate authority; Envoy and its authorization service
 constitute the tested enforcement boundary.
 
-V3B-2 is a future isolated Kind/Calico rail. Its NetworkPolicy behavior,
-cluster-level transport, failure matrix, and measurements remain unexecuted.
-The project will not imply Kubernetes, eBPF, SmartNIC, SDN, historical
-prevention, or production performance unless the relevant substrate is built
-and measured.
+After publication, V4 Future is the isolated Kind/Calico and measurement rail.
+Its NetworkPolicy behavior, cluster-level transport, failure matrix, repetition,
+and performance measurements remain unexecuted. The project will not imply
+Kubernetes, eBPF, SmartNIC, SDN, historical prevention, or production
+performance unless the relevant substrate is built and measured.
 
 ### 6.3 Validation gates
 
@@ -425,15 +427,15 @@ and measured.
 | V1 — deterministic kernel | Arithmetic boundaries, decay, class isolation, monotonic reduction, coupling, freshness, and non-expansion invariants pass automated tests. |
 | V2 — historical replay | Observed events are cited, synthetic inputs are modeled, modes share action facts, and decision provenance is complete. |
 | V3A — process contract | The modeled three-track authorization, forwarding, harmless target, and evidence joins remain explicit process-level results. |
-| V3B-1 — local Envoy boundary | The accepted observed intermediate proof joins exact driver, decision, Envoy, and target records and satisfies exact teardown; promotion remains separate. |
-| V3B-2 — future Kind/Calico boundary | NetworkPolicy isolation, cluster transport, failure cases, and measurements require a separate future execution. |
-| V4 — publication promotion | Every `validated` statement points to a passing immutable run bundle; negative and ambiguous results remain visible. |
+| V3B-1 Complete — local Envoy boundary | Accepted observed evidence joins driver, decision, Envoy, target, and exact teardown; it remains immutable `not_promoted`. |
+| Publication | Publish the bounded V1–V3B-1 argument, artifacts, detail, and limitations. |
+| V4 Future — Kind/Calico and measurement | NetworkPolicy, cluster transport, failure cases, repetition, and performance require future execution. |
 
 Run bundles contain the manifest, normalized scenario, signed states, decisions,
 metrics, summary, and SHA-256 integrity record. Paper tables, figures, and
 validated statements cite immutable run IDs.
 
-### 6.4 Current V3B-1 gate state
+### 6.4 Current V3B-1 Complete gate state
 
 The corrected request-driver mechanism and recovery contract are implemented
 and statically approved at commits `75161f0` and `48bd81a`. The Task 8
@@ -454,8 +456,9 @@ foreign-resource arrays are exactly equal, and all checksums pass. The
 controller owns and may start, stop, or delete only the unique `kil-v3-lab`
 profile; every other Colima profile belongs to another project and remains
 untouched. The result is `not_promoted`. Kind/Calico and NetworkPolicy
-validation remain future work, historical prevention is not established, and
-performance is not established.
+validation, cluster transport, repetition, and performance are V4 Future work.
+This observed intermediate result is not proof that KIL would have prevented the
+historical incident; historical prevention is not established.
 
 ## 7. Safety, failure, and governance
 

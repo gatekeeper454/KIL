@@ -11422,8 +11422,371 @@ post-merge verification, review the final branch diff, and push only
 `codex/v3b2-kind-calico-implementation`.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+### T-236 — 2026-09-09 — Proved-runtime checkpoint integrated
 
-### T-236 — 2026-09-14 — Turnkey Blue Zone strategy proposed
+**Input:** Finish and commit the paused accumulated work as quickly as possible,
+including integration of the three newer `main` commits and publication of the
+implementation branch.
+
+**Interpretation:** Complete the bounded proved-runtime checkpoint honestly,
+without weakening the deliberate platform-admission terminal gate, then
+synchronize the implementation branch. Do not touch any Colima profile.
+
+**Decision status:** Confirmed checkpoint. Commit `af5e7cf` binds the controller
+to the finite accepted image contract, policy and pre-driver checkpoints,
+proved runtime inventory, and public image provenance. Commit `0c4bac4` updates
+the controller assertion to the six-record pre-driver terminal registry. The
+three newer `main` commits (`2cfce8e`, `b98615e`, and `f238cd4`) were merged
+cleanly, and the chronological T-200 through T-235 append was transferred.
+
+**Rationale:** Fresh post-merge verification passed 133 affected proof,
+runtime, endpoint, ownership, public-provenance, and observed-lifecycle tests,
+plus two focused controller checkpoint tests. Compilation and whitespace
+validation passed. The legacy nominal continuation correctly remains blocked
+at `platform_admission_terminal_gate_pending`; treating that deliberate unknown
+decision as success would overclaim the current implementation.
+
+**Affected artifacts:** `src/kil/v3b2_controller.py`; its controller and
+observed-lifecycle tests; parameterized runtime fixture helpers; new proved-
+runtime glue and public-image-provenance tests; merged and appended specialist
+lineage Markdown and generated HTML. No Colima, Docker, Kind, or Kubernetes
+runtime was invoked, and the main-checkout `Inputs/` directory was untouched.
+
+**Unresolved questions:** The platform configuration validators are present but
+are not yet composed into the application terminal, so the full nominal
+lifecycle and complete controller suite are intentionally not claimed green.
+
+**Next gate:** Compose the reviewed platform-admission validators into one
+terminal proof, rerun the complete controller and repository gates, then open
+the live `kil-v3-lab` validation gate only after static acceptance.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-237 — 2026-09-09 — Exact pending platform gate proved
+
+**Input:** Resolve the independent final-review finding before pushing the
+implementation branch.
+
+**Interpretation:** Make the controller fixture satisfy every earlier finite-
+image, ownership, configuration, endpoint, and continuity validator, then
+assert the exact remaining platform-admission pending category.
+
+**Decision status:** Confirmed correction. Commit `db681e4` supplies the full
+independently rendered application Deployment specifications in the retained
+API fixture and requires
+`operation_postcondition_unproved:platform_admission_terminal_gate_pending`.
+Both focused controller tests pass and confirm no `application_apply_complete`
+event is emitted.
+
+**Rationale:** The reviewer correctly identified that generic fail-closed
+coverage could conceal an earlier validator regression. The corrected fixture
+now reaches the named terminal gate, preserving the honest incomplete claim
+while proving the accumulated runtime chain beneath it.
+
+**Affected artifacts:** `tests/test_v3b2_controller.py`, this append-only
+lineage entry, and the generated lineage reader. No live runtime or Colima
+profile was touched.
+
+**Unresolved questions:** Composition of the already implemented platform
+configuration validators remains the next development slice.
+
+**Next gate:** Push the clean implementation branch, then resume with the
+platform-admission terminal composition and full static gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-238 — 2026-09-10 — V3B-1 publication boundary approved
+
+**Input:** Fast-forward KIL to publication, mark V3B-1 complete, rename and move
+V3B-2 to the post-publication future as **V4 Future**, and preserve V3B-1 detail
+as additional validation.
+
+**Interpretation:** Publish from the accepted observed local-Envoy result while
+keeping its claim boundary explicit. Preserve all V3B-2 implementation and
+history, but remove that work from the current publication dependency chain.
+
+**Decision status:** Confirmed design. The public sequence is V1, V2, V3A,
+V3B-1 Complete, Publication, then V4 Future. The accepted V3B-1 run remains
+visible with its exact outcome tuple, source, teardown, and verification facts.
+The immutable bundle remains `not_promoted`; publication status does not rewrite
+experiment evidence.
+
+**Rationale:** V3B-1 already supplies accepted observed evidence at its declared
+local Envoy boundary. Deferring cluster validation permits publication now
+without claiming Kubernetes behavior, historical prevention, or performance.
+Retaining the detailed evidence makes the narrower claim auditable rather than
+turning completion into an unsupported label.
+
+**Affected artifacts:** New publication-boundary design specification; carried-
+forward T-200 through T-237 lineage history; regenerated lineage reader. No
+runtime, evidence bundle, Colima profile, V3B-2 implementation branch, or
+external publication target was mutated.
+
+**Unresolved questions:** Implementation of the approved current-facing status,
+paper, timeline, and tests; resolution of the screenshot's repository source;
+final publication deployment mechanism after repository validation.
+
+**Next gate:** User reviews the written specification. After approval, produce
+the implementation plan and update the bounded publication surfaces without
+merging V4 Future implementation code.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-239 — 2026-09-10 — V3B-1 publication implementation planned
+
+**Input:** Approve the V3B-1 publication-boundary specification.
+
+**Interpretation:** Convert the approved claim and milestone decision into a
+minimal test-first plan covering current status, retained validation detail,
+paper language, a durable roadmap visual, verification, review, and push.
+
+**Decision status:** Confirmed plan. Four dependency-ordered tasks define the
+publication contract test, canonical status changes, paper/presentation update,
+and final reader/lineage/review delivery gate.
+
+**Rationale:** The plan makes claim limitations executable documentation
+requirements, preserves the immutable `not_promoted` experiment record, and
+keeps V4 Future implementation code out of the publication branch. A new
+repository-owned SVG replaces reliance on the supplied screenshot's absent
+repository source.
+
+**Affected artifacts:** New implementation plan and generated reader; this
+append-only lineage entry and generated lineage reader. No production code,
+evidence bundle, runtime, Colima profile, or remote branch was changed.
+
+**Unresolved questions:** Selection of subagent-driven versus inline plan
+execution; external publication deployment remains after repository acceptance.
+
+**Next gate:** Execute the approved plan, require the exact V3B-1 boundary tests
+to pass, independently review the publication claims, and push the isolated
+publication branch.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-240 — 2026-09-10 — V3B-1 publication record finalized
+
+**Input:** Fast-forward publication, mark V3B-1 complete, preserve validation
+detail, and rename deferred V3B-2/V3C work as post-publication **V4 Future**.
+
+**Interpretation:** V3B-1 is complete only at its accepted
+`local_envoy_boundary`; publication now follows that bounded result. The
+immutable evidence bundle remains `not_promoted`. This does not claim
+Kubernetes validation, historical prevention, production behavior, or
+performance.
+
+**Decision status:** Confirmed. Accepted run
+`v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94`
+reproduced `permit / permit / deny`, HTTP `200 / 200 / 403`, and target markers
+`1 / 1 / 0`, with one attempt per track and no retry. All nine authoritative
+sources joined; exact teardown removed 15 owned containers and six networks;
+checksums and the offline verifier passed. Current-facing README, V3 progress,
+paper, architecture HTML, and durable repository-owned SVG now present the
+bounded completion before Publication and **V4 Future**. The five focused
+publication tests protect those statements. Responsive review found that the
+long status run ID could overflow narrow layouts and that the roadmap claim
+panel needed fixed readable wrapping; the architecture status code now wraps
+anywhere and the SVG claim is split into durable two-line text, with the focused
+layout test covering both corrections.
+
+**Rationale:** The accepted observed local-Envoy result is sufficient for the
+declared V3B-1 boundary, while retaining its exact validation facts and
+non-promotion state makes publication auditable without extending the claim.
+Moving deferred cluster and later work to **V4 Future** preserves its history
+without making it a prerequisite for this publication.
+
+**Affected artifacts:** README, V3 progress, paper, architecture HTML, SVG,
+focused test, generated readers, and this lineage record. No evidence bytes,
+production code, live runtime, Colima, Docker, Kind, Kubernetes, or V4 Future
+implementation branch changed.
+
+**Unresolved questions:** External publication deployment or release mechanism
+after repository acceptance.
+
+**Next gate:** Final independent review, push `codex/v3b1-publication`, then
+external publication or release.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-241 — 2026-09-10 — Whole-branch publication consistency review resolved
+
+**Input:** Final whole-branch review found that the current embedded
+`v3-envoy-live-validation.svg` and adapter README still used pending/V3B-2
+labels after the V3B-1 publication transition.
+
+**Interpretation:** Resolve the remaining current-facing label drift without
+altering the accepted evidence boundary or the depicted topology: V3B-1
+Complete leads to Publication, followed by post-publication **V4 Future**.
+
+**Decision status:** Confirmed. Commit `c222a3e` updates the embedded SVG and
+adapter README to the V3B-1 Complete → Publication → post-publication **V4
+Future** sequence, preserving topology and claim limitations. Spec and quality
+re-review approved the resolution with no Critical or Important issues. Six
+focused tests pass.
+
+**Rationale:** The final reader surfaces must agree with the accepted
+`local_envoy_boundary` completion and reserve Kind/Calico, NetworkPolicy,
+cluster transport, and measurement for **V4 Future**. Retaining the topology
+and limitations keeps the correction presentational rather than evidentiary.
+
+**Affected artifacts:** Focused test, `v3-envoy-live-validation.svg`, adapter
+README, generated adapter and lineage readers, and this append-only lineage
+record. No evidence bytes, runtime, production code, Colima state, or V4 Future
+implementation changed.
+
+**Unresolved questions:** External publication deployment or release mechanism
+after repository acceptance.
+
+**Next gate:** Full publication verification, final whole-branch re-review,
+push `codex/v3b1-publication`, then external release.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-242 — 2026-09-10 — V3B-1 publication integration authorized
+
+**Input:** Create the publication pull request and merge the approved V3B-1
+publication branch into `main`.
+
+**Interpretation:** Integrate the already reviewed publication-only change set
+through GitHub after a fresh local verification and required remote checks. Do
+not merge the separate V4 Future implementation branch, alter immutable
+evidence, or touch any local runtime or Colima profile.
+
+**Decision status:** Confirmed authorization. Branch
+`codex/v3b1-publication` is the sole integration source. Its publication claim
+remains bounded to the accepted V3B-1 `local_envoy_boundary`; cluster validation,
+repetition, and performance remain post-publication **V4 Future** work.
+
+**Rationale:** A pull request provides a reviewable, check-gated path from the
+approved and independently reviewed publication branch to `main`, while keeping
+the deferred implementation history and the user's dirty local `main` checkout
+isolated.
+
+**Affected artifacts:** This append-only lineage record and its generated
+reader; the publication pull request and `main` only after checks and merge. No
+evidence bytes, runtime, Colima state, or V4 Future implementation is changed.
+
+**Unresolved questions:** Required GitHub checks and mergeability must be
+confirmed before integration completes; external publication deployment remains
+a later release action.
+
+**Next gate:** Regenerate readers, rerun the full publication verification,
+push this checkpoint, create the pull request, wait for checks, and merge into
+`main`.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-243 — 2026-09-11 — Narrow V4 publication CI boundary confirmed
+
+**Input:** Authorization to repair the narrow V4 CI/proof blocker before
+merging publication pull request 23.
+
+**Interpretation:** Exclude exactly the 16 unfinished V4 controller lifecycle
+integration methods from default publication discovery while retaining every
+completed controller and proof test. Keep the unfinished lifecycle suite
+explicitly runnable through `make v4-future-controller-test`; do not claim that
+opt-in suite passes.
+
+**Decision status:** Confirmed. The exact deferred set is locked by an
+independent guard test and cannot silently expand. The default gate retains the
+remaining controller coverage, while setting `KIL_RUN_V4_FUTURE_TESTS=1`
+executes the deferred cases and currently exposes their pending proof failures.
+
+**Rationale:** Both failed GitHub validation runs traced all 34 failures and
+subfailures to these 16 lifecycle methods. Completing them requires the larger
+post-publication V4 proof graph; importing that work would violate the approved
+publication-only boundary. An exact, opt-in quarantine makes the boundary
+auditable without hiding or deleting the unfinished work.
+
+**Affected artifacts:** `Makefile`, `tests/test_v3b2_controller.py`,
+`tests/test_v4_future_controller_gate.py`, the V4 CI boundary specification and
+plan, this append-only lineage record and generated readers, and publication
+pull request 23. No accepted evidence bytes, runtime, Colima profile, or V4
+production implementation changed.
+
+**Unresolved questions:** The explicit V4 future target remains red at pending
+proof stages and must be completed when post-publication V4 work resumes.
+
+**Next gate:** Run full local validation, push the repaired publication branch,
+require green GitHub checks, and merge pull request 23 into `main`.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-244 — 2026-09-11 — External publication visibility gate selected
+
+**Input:** Proceed to the next action after publication pull request 23 merged
+into `main`.
+
+**Interpretation:** Use public GitHub repository visibility as KIL's first
+external publication surface. Do not invent a semantic release version or
+enable an unconfigured Pages site in the same action. Preserve the accepted
+V3B-1 claim boundary and the separate post-publication **V4 Future** branch.
+
+**Decision status:** Confirmed authorization to advance to external
+publication. A read-only readiness audit found that the repository is still
+private, has no releases or Pages configuration, and has 25 remote branches,
+including three tips not merged into `main`. A pattern scan found only the
+deliberately synthetic credential strings used by rejection tests, not a
+likely live credential. Publication will also disclose two commit-author email
+identities, historical absolute-path provenance, and the incomplete V4 Future
+branch.
+
+**Rationale:** Changing repository visibility is the narrowest established
+mechanism that makes the merged paper, generated readers, code, and accepted
+evidence accessible without creating a new unreviewed deployment artifact or
+assigning an unsupported version. Recording the complete-repository exposure
+before the change keeps the action deliberate and auditable.
+
+**Affected artifacts:** This append-only lineage record and generated reader;
+GitHub repository visibility after the audit record is integrated. No source
+behavior, evidence bytes, release tag, Pages configuration, runtime, Colima
+profile, or V4 Future branch content changes.
+
+**Unresolved questions:** A future release needs an explicitly selected tag and
+version. A future hosted paper surface needs an approved Pages or other hosting
+design. Historical branch and path provenance remain visible after public
+conversion unless separately curated.
+
+**Next gate:** Regenerate and verify readers, integrate this audit record, set
+the GitHub repository to public, and verify unauthenticated access to `main`
+and the bounded V3B-1 publication surfaces.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-245 — 2026-09-11 — Public visibility declined; repository remains private
+
+**Input:** Keep the KIL GitHub repository private after reviewing the
+repository-wide disclosure implications of public conversion.
+
+**Interpretation:** Supersede T-244's proposed public-visibility next gate. The
+merged V3B-1 publication boundary remains the authoritative repository state,
+but it is not externally published through public repository visibility,
+GitHub Pages, or a GitHub release.
+
+**Decision status:** Confirmed. `gatekeeper454/KIL` remains private. No public
+visibility change completed, and no workaround publication surface is
+authorized.
+
+**Rationale:** Public conversion would expose all remote branches and commit
+history, including author identities, historical local-path provenance, and
+the incomplete post-publication V4 Future branch. The explicit privacy
+decision takes precedence over the earlier proposal to use repository
+visibility as the first external surface.
+
+**Affected artifacts:** This append-only lineage record and generated reader.
+No GitHub visibility, release, Pages, source behavior, evidence bytes, runtime,
+Colima profile, or V4 Future content changed.
+
+**Unresolved questions:** Any later external publication requires a new,
+explicitly scoped choice of audience and surface that preserves the private
+repository boundary.
+
+**Next gate:** Keep the repository private and await either a separately
+approved publication mechanism or resumption of post-publication V4 Future
+work.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-246 — 2026-09-14 — Turnkey Blue Zone strategy proposed
 
 **Input:** Use the KTP website and RFC series, the Martherus and Tamed Autonomy
 implementation repositories, KIL evidence, and current real-world autonomous-
@@ -11476,7 +11839,7 @@ that design gate passes.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-237 — 2026-09-14 — Self-contained HTML review contract confirmed
+### T-247 — 2026-09-14 — Self-contained HTML review contract confirmed
 
 **Input:** Ensure that every file presented for review is a self-contained HTML
 file that can be shared easily.
@@ -11513,7 +11876,7 @@ strategy decisions are approved.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-238 — 2026-09-14 — Frontier Zero Trust thesis created
+### T-248 — 2026-09-14 — Frontier Zero Trust thesis created
 
 **Input:** Develop a complete thesis that modern Zero Trust must evolve from
 authenticated access to continuously earned, action-specific authority for
@@ -11565,7 +11928,7 @@ proof.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-239 — 2026-09-14 — Frontier Zero Trust pacing thesis proposed
+### T-249 — 2026-09-14 — Frontier Zero Trust pacing thesis proposed
 
 **Input:** Create a version of the Frontier Zero Trust thesis that specifically
 addresses the current safety and capability-pacing debate initiated by Dario
@@ -11622,7 +11985,7 @@ current validated-counterfactual level until matched replay succeeds.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-240 — 2026-09-14 — Deep Blue journey and v3 federation correction scoped
+### T-250 — 2026-09-14 — Deep Blue journey and v3 federation correction scoped
 
 **Input:** Revise the Turnkey Blue Zone strategy so readers understand Blue
 Zones as a maturity spectrum and a journey toward Deep Blue, and recognize that
@@ -11670,7 +12033,7 @@ completed revision in a new lineage entry.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-241 — 2026-09-14 — Context-shaped Blue Zone journey adopted in strategy
+### T-251 — 2026-09-14 — Context-shaped Blue Zone journey adopted in strategy
 
 **Input:** After reviewing three visual treatments, select option C: present
 zone assurance depth and operational rollout as two independent axes. Emphasize
@@ -11724,7 +12087,7 @@ satisfied.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-242 — 2026-09-14 — Wide review-reader layout implemented
+### T-252 — 2026-09-14 — Wide review-reader layout implemented
 
 **Input:** Make the Turnkey Blue Zone strategy page wider because its dense
 tables and preformatted material were difficult to read within the existing
@@ -11776,7 +12139,7 @@ repository publication-contract check no longer reports them as unexpected.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-243 — 2026-09-14 — Dario Amodei Kinetic Zero Trust briefing package designed
+### T-253 — 2026-09-14 — Dario Amodei Kinetic Zero Trust briefing package designed
 
 **Input:** Create all three consumable formats—a one-page executive brief, a
 direct two-page memo, and a technical proposal—for private delivery to Dario
@@ -11833,7 +12196,7 @@ claims beyond declared, non-bypassable Blue Zone coverage.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-244 — 2026-09-14 — Kinetic Enforcement adopted as the ultimate fail-safe frame
+### T-254 — 2026-09-14 — Kinetic Enforcement adopted as the ultimate fail-safe frame
 
 **Input:** Clarify that Kinetic Enforcement is the ultimate fail-safe and that
 Ambient Enforcement, Kinetic Zero Trust, Kinetic Trust, KTP, and Blue Zones are
@@ -11881,7 +12244,7 @@ boundaries.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-245 — 2026-09-14 — Sendable email added to the private-briefing package
+### T-255 — 2026-09-14 — Sendable email added to the private-briefing package
 
 **Input:** Ensure that one package item is an email that can be sent directly
 to Dario Amodei.
@@ -11920,7 +12283,7 @@ the email or attachments without explicit authorization.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-246 — 2026-09-14 — Kinetic Enforcement private-briefing package completed
+### T-256 — 2026-09-14 — Kinetic Enforcement private-briefing package completed
 
 **Input:** Build the approved package and ensure that it includes an email that
 can be sent directly to Dario Amodei. Make Kinetic Enforcement the ultimate
@@ -11994,7 +12357,7 @@ publish any material without explicit authorization.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-247 — 2026-09-14 — Concise Dario email revision scoped
+### T-257 — 2026-09-14 — Concise Dario email revision scoped
 
 **Input:** Make the sendable email more concise and avoid repeating material
 Dario Amodei already stated in *We Must Pace the Frontier*.
@@ -12035,7 +12398,7 @@ authorization.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-248 — 2026-09-14 — Concise Dario email implemented
+### T-258 — 2026-09-14 — Concise Dario email implemented
 
 **Input:** Proceed with the recommended approximately 170-word email revision.
 
@@ -12085,7 +12448,7 @@ without explicit authorization.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-249 — 2026-09-14 — Existing-infrastructure and mathematical-enforcement claim scoped
+### T-259 — 2026-09-14 — Existing-infrastructure and mathematical-enforcement claim scoped
 
 **Input:** State in the Dario email that Kinetic Enforcement operates “on your
 existing infrastructure”; it is not a product or a policy but physics, math,
@@ -12130,7 +12493,7 @@ explicit authorization.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-250 — 2026-09-14 — Infrastructure-level enforcement invariant added to Dario email
+### T-260 — 2026-09-14 — Infrastructure-level enforcement invariant added to Dario email
 
 **Input:** Approve adding the recommended existing-infrastructure, physics,
 math, immutable-enforcement, and enablement paragraph to the sendable email.
@@ -12179,7 +12542,7 @@ without explicit authorization.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-251 — 2026-09-14 — Complete working-tree publication authorized
+### T-261 — 2026-09-14 — Complete working-tree publication authorized
 
 **Input:** Commit and push all current repository changes.
 
@@ -12234,7 +12597,7 @@ changing unrelated runtime state.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-251 — 2026-09-14 — Coordinate-record conversation transcript exported
+### T-262 — 2026-09-14 — Coordinate-record conversation transcript exported
 
 **Input:** Export the full conversation transcript into a Markdown file in the
 KIL project folder.
@@ -12267,7 +12630,7 @@ outside this snapshot and would require a subsequent append or re-export.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-252 — 2026-09-14 — KIL architecture task transcript exported
+### T-263 — 2026-09-14 — KIL architecture task transcript exported
 
 **Input:** Export the full conversation/transcript for the active “KIL
 architecture” Codex task into a Markdown file in the KIL project folder.
@@ -12302,5 +12665,45 @@ workflow.
 
 **Next gate:** User review of the transcript export. Refresh or automate only
 if explicitly requested.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-264 — 2026-09-14 — Parallel lineage histories reconciled for non-force publication
+
+**Input:** Integrate the local complete-working-tree publication checkpoint with
+19 newer commits already present on `origin/main`, after a non-fast-forward
+push was rejected and the append-only specialist lineage conflicted.
+
+**Interpretation:** Use the already published remote lineage as the authoritative
+numbering base through T-245. Preserve the complete text and order of all 18
+local entries, but reassign only their colliding heading identifiers from their
+local T-236–T-252 range to T-246–T-263. Record the reconciliation explicitly
+rather than silently dropping, overwriting, or duplicating entries.
+
+**Decision status:** Confirmed merge resolution. Remote V3B-1 publication and
+privacy entries remain T-236–T-245. The local Turnkey Blue Zone, Frontier Zero
+Trust, Dario briefing, transcript-export, and publication-authorization entries
+are preserved as T-246–T-263. No substantive entry body or decision was removed.
+
+**Rationale:** The two branches independently appended valid history after
+T-235. Chronological, unique identifiers are required for a legible lineage and
+deterministic HTML anchors. Retaining the published remote sequence and
+renumbering the later, previously unpublished local sequence is the least
+surprising merge rule.
+
+**Affected artifacts:** Reconciled
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`; its HTML reader will be
+regenerated from this resolved source. All other merge results are the ordinary
+content of the 19 remote commits plus local commit `41a9c13`. No email,
+repository-visibility change, release, Pages publication, runtime, laboratory,
+enforcement, briefing, or pilot action was performed.
+
+**Unresolved questions:** The existing ignored live-board freshness failure and
+V3B-2 `image_import_identity_invalid` test cluster remain separate follow-up
+work. They are not altered by this merge resolution.
+
+**Next gate:** Regenerate all Markdown readers, validate the merged staged tree,
+complete the merge commit, push `main` without force, and verify that
+`origin/main` resolves to the local merge commit.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

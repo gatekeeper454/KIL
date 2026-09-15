@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1360" viewBox="0 0 1600 1360" role="img" aria-labelledby="title desc">
-  <title id="title">KIL Gate V3 architecture: current V3B-1 local Envoy boundary and future V3B-2 Kind and Calico boundary</title>
-  <desc id="desc">The implemented V3B-1 mechanism uses three isolated tracks and six internal networks. In each track a request driver and Envoy are configured on a frontend network, while Envoy, authorization, and a harmless target share a backend network. Physical membership contains only running roles: with Envoy running, a created, exited, or dead driver yields Envoy-only membership and a running driver yields driver plus Envoy; a stopped Envoy contributes no endpoint. Envoy is the sole configured dual-homed service. Host Docker attach and standard input control are dotted and distinct from solid consequential request traffic. The transport witness does not change authorization semantics and is not KIL enforcement. credential_policy_baseline is a credential-policy control and does not consume signed composite KTP state; only signed_state_only and signed_plus_local_reduce consume signed composite KTP state. Three driver results and nine service sources enter a visible evidence join independently before the verifier. Request-free readiness and one central live gate remain pending. A separate future panel reserves Kind/Calico for V3B-2.</desc>
+  <title id="title">KIL Gate V3 architecture: V3B-1 Complete accepted local Envoy boundary; Publication next; post-publication V4 Future for Kind, Calico, NetworkPolicy, cluster transport, and measurement</title>
+  <desc id="desc">The V3B-1 Complete accepted observed local Envoy boundary uses three isolated tracks and six internal networks. In each track a request driver and Envoy are configured on a frontend network, while Envoy, authorization, and a harmless target share a backend network. Physical membership contains only running roles: with Envoy running, a created, exited, or dead driver yields Envoy-only membership and a running driver yields driver plus Envoy; a stopped Envoy contributes no endpoint. Envoy is the sole configured dual-homed service. Host Docker attach and standard input control are dotted and distinct from solid consequential request traffic. The transport witness does not change authorization semantics and is not KIL enforcement. credential_policy_baseline is a credential-policy control and does not consume signed composite KTP state; only signed_state_only and signed_plus_local_reduce consume signed composite KTP state. Three driver results and nine service sources enter a visible evidence join independently before the verifier. The accepted observed result remains not_promoted and is not proof of historical prevention, Kubernetes behavior, or performance. Publication is next. A post-publication V4 Future panel reserves Kind/Calico, NetworkPolicy, cluster transport, failure cases, repetition, and measurement.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#07121e"/>
@@ -39,15 +39,15 @@
 
   <rect width="1600" height="1360" fill="url(#bg)"/>
   <text x="60" y="58" class="title">KIL Gate V3 · From Signed State to an In-Network Enforcement Boundary</text>
-  <text x="60" y="88" class="subtitle">Implemented/static mechanism only · request-free readiness and one central live proof are pending</text>
+  <text x="60" y="88" class="subtitle">V3B-1 Complete · accepted observed local Envoy boundary · immutable not_promoted · Publication next</text>
 
   <g filter="url(#shadow)">
     <rect x="40" y="120" width="1520" height="880" rx="24" class="current"/>
   </g>
-  <rect x="65" y="143" width="188" height="28" rx="14" class="badgeCurrent"/>
-  <text x="82" y="162" class="badgeText">CURRENT · V3B-1</text>
+  <rect x="65" y="143" width="220" height="28" rx="14" class="badgeCurrent"/>
+  <text x="82" y="162" class="badgeText">CURRENT · V3B-1 Complete</text>
   <text x="275" y="163" class="panelTitle">Local Envoy boundary · six internal networks · no host publication</text>
-  <text x="1180" y="162" class="status">MECHANISM IMPLEMENTED · LIVE GATES PENDING</text>
+  <text x="1180" y="162" class="status">ACCEPTED OBSERVED · NOT PROMOTED</text>
 
   <g filter="url(#shadow)">
     <rect x="65" y="205" width="240" height="550" rx="16" class="control"/>
@@ -165,10 +165,10 @@
   <g filter="url(#shadow)">
     <rect x="40" y="1030" width="1520" height="200" rx="24" class="futurePanel"/>
   </g>
-  <rect x="65" y="1053" width="176" height="28" rx="14" class="badgeFuture"/>
-  <text x="81" y="1072" class="badgeText">FUTURE · V3B-2</text>
-  <text x="265" y="1073" class="panelTitle">Kind/Calico cluster boundary</text>
-  <text x="1163" y="1072" class="future">NOT IMPLEMENTED OR RUN IN THIS PHASE</text>
+  <rect x="65" y="1053" width="245" height="28" rx="14" class="badgeFuture"/>
+  <text x="81" y="1072" class="badgeText">POST-PUBLICATION · V4 FUTURE</text>
+  <text x="335" y="1073" class="panelTitle">Kind/Calico, NetworkPolicy, cluster, and measurement</text>
+  <text x="1163" y="1072" class="future">REQUIRES FUTURE EXECUTION</text>
   <rect x="70" y="1100" width="330" height="92" rx="12" class="authz"/>
   <text x="92" y="1129" class="boxTitle">Kind namespaces</text>
   <text x="92" y="1153" class="body">three isolated track deployments</text>
@@ -179,13 +179,13 @@
   <text x="522" y="1175" class="body">separate future failure matrix</text>
   <rect x="930" y="1100" width="565" height="92" rx="12" class="control"/>
   <text x="952" y="1129" class="boxTitle">Claim boundary</text>
-  <text x="952" y="1153" class="body">No Kind, Calico, NetworkPolicy, prevention, or performance result</text>
-  <text x="952" y="1175" class="body">may be inferred from the current V3B-1 static implementation.</text>
+  <text x="952" y="1153" class="body">No Kind, Calico, NetworkPolicy, cluster, prevention, or performance result</text>
+  <text x="952" y="1175" class="body">may be inferred from accepted observed V3B-1 local Envoy evidence.</text>
   <path d="M400 1146 H500" class="dotted"/><path d="M830 1146 H930" class="dotted"/>
 
   <rect x="40" y="1260" width="1520" height="66" rx="14" class="control"/>
   <text x="65" y="1286" class="small">STATUS</text>
-  <text x="128" y="1286" class="body">Implemented/static only · request-free readiness gate pending · central live gate pending · no validated, prevention, or performance claim</text>
+  <text x="128" y="1286" class="body">V3B-1 Complete · accepted observed local Envoy boundary · immutable not_promoted · Publication next · no prevention, Kubernetes, or performance claim</text>
   <text x="65" y="1310" class="small">KTP FOUNDATION</text>
   <text x="190" y="1310" class="link">Canonical Kinetic Trust Protocol citation · https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff</text>
 </svg>

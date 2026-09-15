@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V3B-1 Publication Boundary Implementation Plan</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/plans/2026-09-10-v3b1-publication-boundary.md">
+<meta name="source-sha256" content="8332882073b8e70cac82c81f16abee99ec89f82c665a57df887c023691bf9e5d">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-10-v3b1-publication-boundary.md</code> (<code>8332882073b8e70cac82c81f16abee99ec89f82c665a57df887c023691bf9e5d</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">V3B-1 Publication Boundary Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-10-v3b1-publication-boundary.md</code> (<code>8332882073b8e70cac82c81f16abee99ec89f82c665a57df887c023691bf9e5d</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v3b-1-publication-boundary-implementation-plan">V3B-1 Publication Boundary Implementation Plan</a></li><li class="level-3"><a href="#task-1-lock-the-publication-contract-with-failing-tests">Task 1: Lock the publication contract with failing tests</a></li><li class="level-3"><a href="#task-2-update-canonical-repository-and-validation-status">Task 2: Update canonical repository and validation status</a></li><li class="level-3"><a href="#task-3-update-the-paper-and-durable-milestone-visual">Task 3: Update the paper and durable milestone visual</a></li><li class="level-3"><a href="#task-4-regenerate-readers-record-lineage-verify-review-and-push">Task 4: Regenerate readers, record lineage, verify, review, and push</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v3b-1-publication-boundary-implementation-plan" href="#v3b-1-publication-boundary-implementation-plan">V3B-1 Publication Boundary Implementation Plan</a></li><li class="level-3"><a data-section-id="task-1-lock-the-publication-contract-with-failing-tests" href="#task-1-lock-the-publication-contract-with-failing-tests">Task 1: Lock the publication contract with failing tests</a></li><li class="level-3"><a data-section-id="task-2-update-canonical-repository-and-validation-status" href="#task-2-update-canonical-repository-and-validation-status">Task 2: Update canonical repository and validation status</a></li><li class="level-3"><a data-section-id="task-3-update-the-paper-and-durable-milestone-visual" href="#task-3-update-the-paper-and-durable-milestone-visual">Task 3: Update the paper and durable milestone visual</a></li><li class="level-3"><a data-section-id="task-4-regenerate-readers-record-lineage-verify-review-and-push" href="#task-4-regenerate-readers-record-lineage-verify-review-and-push">Task 4: Regenerate readers, record lineage, verify, review, and push</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="v3b-1-publication-boundary-implementation-plan">V3B-1 Publication Boundary Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Make V3B-1 complete at its accepted local-Envoy boundary, place publication immediately after it, and present the deferred V3B-2 work as post-publication <strong>V4 Future</strong> while retaining detailed V3B-1 validation evidence.</p>
+<p><strong>Architecture:</strong> Documentation tests define one current-facing milestone and claim contract. Canonical Markdown status and paper sources plus the hand-authored architecture presentation implement that contract; a repository-owned SVG replaces the untracked screenshot as the durable milestone visual. Historical evidence, plans, schemas, implementation branches, and bundle bytes remain unchanged.</p>
+<p><strong>Tech Stack:</strong> Python <code>unittest</code>, Markdown, self-contained generated HTML readers, HTML/CSS, SVG, Git.</p>
+<hr />
+<h3 id="task-1-lock-the-publication-contract-with-failing-tests">Task 1: Lock the publication contract with failing tests</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>tests/test_v3b1_publication_status.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Add the current-facing source and milestone assertions</strong></p>
+</li>
+</ul>
+<pre><code class="language-python">from pathlib import Path
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+RUN_ID = &quot;v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94&quot;
+
+
+class V3B1PublicationStatusTest(unittest.TestCase):
+    def source(self, relative):
+        return (ROOT / relative).read_text(encoding=&quot;utf-8&quot;)
+
+    def test_current_status_declares_the_bounded_completion(self):
+        for relative in (&quot;README.md&quot;, &quot;docs/lab/V3-PROGRESS.md&quot;,
+                         &quot;docs/paper/kinetic-infrastructure.md&quot;):
+            with self.subTest(relative=relative):
+                text = self.source(relative)
+                self.assertIn(&quot;V3B-1 Complete&quot;, text)
+                self.assertIn(&quot;local_envoy_boundary&quot;, text)
+                self.assertIn(RUN_ID, text)
+                self.assertIn(&quot;not proof that KIL would have prevented&quot;, text)
+
+    def test_milestone_visual_places_publication_before_v4_future(self):
+        text = self.source(&quot;docs/architecture/v3-publication-roadmap.svg&quot;)
+        labels = [text.index(label) for label in
+                  (&quot;V1&quot;, &quot;V2&quot;, &quot;V3A&quot;, &quot;V3B-1 Complete&quot;, &quot;Publication&quot;, &quot;V4 Future&quot;)]
+        self.assertEqual(labels, sorted(labels))
+        self.assertNotIn(&quot;V3B-2&quot;, text)
+
+    def test_additional_validation_retains_exact_accepted_facts(self):
+        text = self.source(&quot;docs/lab/V3-PROGRESS.md&quot;)
+        for fact in (RUN_ID, &quot;permit / permit / deny&quot;, &quot;200 / 200 / 403&quot;,
+                     &quot;1 / 1 / 0&quot;, &quot;all nine authoritative&quot;, &quot;15 owned containers&quot;,
+                     &quot;six networks&quot;, &quot;not_promoted&quot;):
+            with self.subTest(fact=fact):
+                self.assertIn(fact, text)
+
+    def test_current_architecture_calls_cluster_work_v4_future(self):
+        text = self.source(&quot;docs/architecture/hybrid-two-timescale-architecture.html&quot;)
+        self.assertIn(&quot;Current · V3B-1 Complete&quot;, text)
+        self.assertIn(&quot;Post-publication · V4 Future&quot;, text)
+        self.assertNotIn(&quot;Future · V3B-2 Kind/Calico&quot;, text)
+
+
+if __name__ == &quot;__main__&quot;:
+    unittest.main()
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the test and verify RED</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest \
+  tests.test_v3b1_publication_status -v
+</code></pre>
+<p>Expected: FAIL because the new SVG is absent and current sources do not yet use
+the approved exact milestone language.</p>
+<ul>
+<li>[ ] <strong>Step 3: Commit the failing contract test</strong></li>
+</ul>
+<pre><code class="language-bash">git add tests/test_v3b1_publication_status.py
+git commit -m &quot;test: define V3B-1 publication status&quot;
+</code></pre>
+<h3 id="task-2-update-canonical-repository-and-validation-status">Task 2: Update canonical repository and validation status</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>README.md:15-90</code></p>
+</li>
+<li>
+<p>Modify: <code>README.md:191-215</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/lab/V3-PROGRESS.md:46-55</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/lab/V3-PROGRESS.md:219-247</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/lab/V3-PROGRESS.md:332-344</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Replace the repository status lead</strong></p>
+</li>
+</ul>
+<p>Use this bounded status language in <code>README.md</code>:</p>
+<pre><code class="language-markdown">## Status — V3B-1 Complete
+
+KIL has accepted observed evidence at the `local_envoy_boundary`. The accepted
+run is `v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94`.
+It reproduced `permit / permit / deny`, HTTP `200 / 200 / 403`, and target
+markers `1 / 1 / 0`, with one attempt per track and no retry.
+
+This is not proof that KIL would have prevented the historical Hugging Face
+incident. Publication follows this bounded completion. Kind/Calico,
+NetworkPolicy, cluster transport, repetition, and performance are
+post-publication **V4 Future** work.
+</code></pre>
+<p>Retain the existing detailed topology, evidence, and historical paragraphs
+below the lead; replace only contradictory pending/current-future sentences.</p>
+<ul>
+<li>[ ] <strong>Step 2: Mark the validation record complete without changing evidence</strong></li>
+</ul>
+<p>Change the V3 progress heading to <code>## V3B-1 Complete</code> and insert:</p>
+<pre><code class="language-markdown">### Additional validation detail
+
+The accepted run remains an observed intermediate result under immutable
+`promotion_status=not_promoted` evidence. Phase completion does not rewrite that
+record. It preserves all nine authoritative service sources, one attempt per
+track with no retry, exact absence of all 15 owned containers and six networks
+before publication, equal pseudonymous foreign-resource snapshots, passing
+checksums, and offline-presenter acceptance.
+</code></pre>
+<p>Replace the current-facing closing roadmap with:</p>
+<pre><code class="language-markdown">Publication proceeds from this accepted local-Envoy boundary. The isolated
+Kind/Calico, NetworkPolicy, cluster failure-matrix, repetition, and performance
+work previously planned as V3B-2/V3C is now post-publication **V4 Future**.
+Historical records retain their original phase names.
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Run the focused content assertions</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest \
+  tests.test_v3b1_publication_status.V3B1PublicationStatusTest.test_current_status_declares_the_bounded_completion \
+  tests.test_v3b1_publication_status.V3B1PublicationStatusTest.test_additional_validation_retains_exact_accepted_facts -v
+</code></pre>
+<p>Expected: the additional-validation assertion passes; the full current-status
+assertion remains RED until the paper changes in Task 3.</p>
+<ul>
+<li>[ ] <strong>Step 4: Commit repository and validation status</strong></li>
+</ul>
+<pre><code class="language-bash">git add README.md docs/lab/V3-PROGRESS.md
+git commit -m &quot;docs: mark V3B-1 boundary complete&quot;
+</code></pre>
+<h3 id="task-3-update-the-paper-and-durable-milestone-visual">Task 3: Update the paper and durable milestone visual</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>docs/paper/kinetic-infrastructure.md:1-60</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/paper/kinetic-infrastructure.md:400-465</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/architecture/hybrid-two-timescale-architecture.html:270-410</code></p>
+</li>
+<li>
+<p>Create: <code>docs/architecture/v3-publication-roadmap.svg</code></p>
+</li>
+<li>
+<p>Modify: <code>README.md:15-45</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Update the paper status and gate table</strong></p>
+</li>
+</ul>
+<p>Set the paper status to <code>V3B-1 Complete — accepted observed local-Envoy boundary</code>. In the current-results section include the accepted run ID,
+<code>local_envoy_boundary</code>, and the sentence:</p>
+<pre><code class="language-markdown">This result is not proof that KIL would have prevented the historical incident;
+cluster validation and performance remain post-publication V4 Future work.
+</code></pre>
+<p>Replace the gate-table tail with:</p>
+<pre><code class="language-markdown">| V3B-1 Complete — local Envoy boundary | Accepted observed evidence joins exact driver, decision, Envoy, and target records and satisfies exact teardown. |
+| Publication | Publish the bounded V1–V3B-1 argument, artifacts, validation detail, and limitations. |
+| V4 Future — Kind/Calico and measurement | NetworkPolicy isolation, cluster transport, failure cases, repetition, and performance require future execution. |
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Update the existing architecture presentation</strong></li>
+</ul>
+<p>Replace stale pending text with the accepted run outcome and change the two rail
+cards to:</p>
+<pre><code class="language-html">&lt;strong&gt;Current · V3B-1 Complete&lt;/strong&gt;
+&lt;span&gt;Accepted observed local-Envoy evidence; publication boundary reached.&lt;/span&gt;
+&lt;strong&gt;Post-publication · V4 Future&lt;/strong&gt;
+&lt;span&gt;Kind/Calico, NetworkPolicy, cluster failures, repetition, and performance.&lt;/span&gt;
+</code></pre>
+<p>Keep <code>V3B-2</code> only where the HTML explicitly labels historical plan provenance;
+the current-facing future card must use <code>V4 Future</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Create the durable roadmap SVG</strong></li>
+</ul>
+<p>Create a self-contained SVG with six ordered nodes and accessible text:</p>
+<pre><code class="language-xml">&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 1400 720&quot; role=&quot;img&quot;
+     aria-labelledby=&quot;title description&quot;&gt;
+  &lt;title id=&quot;title&quot;&gt;KIL evidence and publication roadmap&lt;/title&gt;
+  &lt;desc id=&quot;description&quot;&gt;V1, V2, V3A, V3B-1 Complete, Publication, then V4 Future.&lt;/desc&gt;
+  &lt;style&gt;
+    .background { fill: #0f151d; }
+    .path { fill: none; stroke: #63adf2; stroke-width: 6; }
+    .complete { fill: #63adf2; stroke: #8ec7ff; stroke-width: 3; }
+    .future { fill: #0f151d; stroke: #526273; stroke-width: 3; }
+    .label { fill: #f2f6fa; font: 700 22px system-ui, sans-serif; text-anchor: middle; }
+    .caption { fill: #b8c5d1; font: 16px system-ui, sans-serif; text-anchor: middle; }
+  &lt;/style&gt;
+  &lt;rect class=&quot;background&quot; width=&quot;1400&quot; height=&quot;720&quot;/&gt;
+  &lt;path class=&quot;path&quot; d=&quot;M150 570 L370 470 L590 370 L810 270 L1030 170 L1250 90&quot;/&gt;
+  &lt;g&gt;&lt;circle class=&quot;complete&quot; cx=&quot;150&quot; cy=&quot;570&quot; r=&quot;48&quot;/&gt;&lt;text class=&quot;label&quot; x=&quot;150&quot; y=&quot;578&quot;&gt;V1&lt;/text&gt;&lt;text class=&quot;caption&quot; x=&quot;150&quot; y=&quot;642&quot;&gt;model invariants&lt;/text&gt;&lt;/g&gt;
+  &lt;g&gt;&lt;circle class=&quot;complete&quot; cx=&quot;370&quot; cy=&quot;470&quot; r=&quot;48&quot;/&gt;&lt;text class=&quot;label&quot; x=&quot;370&quot; y=&quot;478&quot;&gt;V2&lt;/text&gt;&lt;text class=&quot;caption&quot; x=&quot;370&quot; y=&quot;542&quot;&gt;historical replay&lt;/text&gt;&lt;/g&gt;
+  &lt;g&gt;&lt;circle class=&quot;complete&quot; cx=&quot;590&quot; cy=&quot;370&quot; r=&quot;48&quot;/&gt;&lt;text class=&quot;label&quot; x=&quot;590&quot; y=&quot;378&quot;&gt;V3A&lt;/text&gt;&lt;text class=&quot;caption&quot; x=&quot;590&quot; y=&quot;442&quot;&gt;modeled authorization&lt;/text&gt;&lt;/g&gt;
+  &lt;g&gt;&lt;circle class=&quot;complete&quot; cx=&quot;810&quot; cy=&quot;270&quot; r=&quot;58&quot;/&gt;&lt;text class=&quot;label&quot; x=&quot;810&quot; y=&quot;264&quot;&gt;V3B-1 Complete&lt;/text&gt;&lt;text class=&quot;caption&quot; x=&quot;810&quot; y=&quot;286&quot;&gt;local Envoy&lt;/text&gt;&lt;/g&gt;
+  &lt;g&gt;&lt;circle class=&quot;complete&quot; cx=&quot;1030&quot; cy=&quot;170&quot; r=&quot;58&quot;/&gt;&lt;text class=&quot;label&quot; x=&quot;1030&quot; y=&quot;178&quot;&gt;Publication&lt;/text&gt;&lt;text class=&quot;caption&quot; x=&quot;1030&quot; y=&quot;244&quot;&gt;current boundary&lt;/text&gt;&lt;/g&gt;
+  &lt;g&gt;&lt;circle class=&quot;future&quot; cx=&quot;1250&quot; cy=&quot;90&quot; r=&quot;58&quot;/&gt;&lt;text class=&quot;label&quot; x=&quot;1250&quot; y=&quot;98&quot;&gt;V4 Future&lt;/text&gt;&lt;text class=&quot;caption&quot; x=&quot;1250&quot; y=&quot;164&quot;&gt;cluster + measurement&lt;/text&gt;&lt;/g&gt;
+&lt;/svg&gt;
+</code></pre>
+<p>Use only inline SVG shapes and text; do not embed scripts, remote content, fonts,
+or raster data. Link the visual from the README status section.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run the complete publication-status test</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest \
+  tests.test_v3b1_publication_status -v
+</code></pre>
+<p>Expected: 4 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit paper and presentation changes</strong></li>
+</ul>
+<pre><code class="language-bash">git add README.md docs/paper/kinetic-infrastructure.md \
+  docs/architecture/hybrid-two-timescale-architecture.html \
+  docs/architecture/v3-publication-roadmap.svg
+git commit -m &quot;docs: move cluster validation to V4 Future&quot;
+</code></pre>
+<h3 id="task-4-regenerate-readers-record-lineage-verify-review-and-push">Task 4: Regenerate readers, record lineage, verify, review, and push</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: generated <code>.htm</code> readers corresponding to changed tracked Markdown</p>
+</li>
+<li>
+<p>Modify: <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Append the implementation decision to specialist lineage</strong></p>
+</li>
+</ul>
+<p>Add a dated append-only entry recording the input, bounded interpretation,
+confirmed status, claim rationale, exact affected artifacts, unresolved external
+deployment mechanism, and the next publication gate. State that no live runtime
+or evidence bundle was changed.</p>
+<ul>
+<li>[ ] <strong>Step 2: Regenerate all required readers</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">../../.venv/bin/python tools/render_markdown.py
+../../.venv/bin/python tools/render_markdown.py --check
+</code></pre>
+<p>Expected: all tracked Markdown files have current generated <code>.htm</code> siblings.</p>
+<ul>
+<li>[ ] <strong>Step 3: Run the bounded publication gate</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest \
+  tests.test_v3b1_publication_status tests.test_v3b1_documentation \
+  tests.test_markdown_html tests.test_document_citation -v
+git diff --check
+git status --short
+</code></pre>
+<p>Expected: all tests pass; diff hygiene is clean; only reviewed publication,
+generated-reader, test, plan, and lineage files are present.</p>
+<ul>
+<li>[ ] <strong>Step 4: Commit generated readers and lineage</strong></li>
+</ul>
+<pre><code class="language-bash">git add README.htm docs/lab/V3-PROGRESS.htm \
+  docs/paper/kinetic-infrastructure.htm \
+  docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md \
+  docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm
+git commit -m &quot;docs: finalize V3B-1 publication record&quot;
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 5: Request independent review</strong></li>
+</ul>
+<p>Review <code>main..HEAD</code> for claim overreach, contradictory current-facing phase
+labels, missing V3B-1 detail, accidental evidence changes, and any V4 Future
+work merged into the publication branch. Resolve every Critical or Important
+finding and rerun Step 3.</p>
+<ul>
+<li>[ ] <strong>Step 6: Push the publication branch and verify synchronization</strong></li>
+</ul>
+<pre><code class="language-bash">git push -u origin codex/v3b1-publication
+git rev-parse HEAD
+git rev-parse origin/codex/v3b1-publication
+git status --short
+</code></pre>
+<p>Expected: local and remote hashes match and the publication worktree is clean.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>
