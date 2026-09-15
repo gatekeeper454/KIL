@@ -38,6 +38,38 @@ ENVOY_MANIFEST_DIGEST = "57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38
 ENVOY_CONFIG_ID = "sha256:ef846ec85aabf01a2ff7176a185260e476ca43d20478f57281d88f7a66d5671f"
 
 
+def control_plane_node(*, node_id: str = "a" * 64,
+                       running: bool = True) -> str:
+    return json.dumps([{
+        "Id": node_id,
+        "Name": "/kil-v3-lab-control-plane",
+        "Image": "sha256:" + "9" * 64,
+        "Config": {
+            "Image": ("kindest/node:v1.36.1@sha256:"
+                      "3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"),
+            "Labels": {
+                "io.x-k8s.kind.cluster": "kil-v3-lab",
+                "io.x-k8s.kind.role": "control-plane",
+            },
+        },
+        "State": {"Running": running},
+    }], sort_keys=True, separators=(",", ":")) + "\n"
+
+
+def control_plane_manifest(component: str) -> str:
+    return (
+        "apiVersion: v1\n"
+        "kind: Pod\n"
+        "metadata:\n"
+        f"  name: {component}\n"
+        "  namespace: kube-system\n"
+        "spec:\n"
+        "  containers:\n"
+        f"  - name: {component}\n"
+        f"    image: registry.k8s.io/{component}:v1.36.1\n"
+    )
+
+
 def synthetic_kil_archive():
     """A deterministic OCI archive whose descriptors hash its actual bytes."""
     encode = lambda value: json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
@@ -254,6 +286,13 @@ class FakeRunner:
         self.cancel_exit_code = 0
         self.swap_envoy_container_after_drain = False
         self.run_id = "v3b2-" + "1" * 64
+        self.node_inspect_count = 0
+        self.control_plane_node_before: CommandResult | None = None
+        self.control_plane_node_after: CommandResult | None = None
+        self.control_plane_manifest_results = {
+            component: CommandResult(0, control_plane_manifest(component), "")
+            for component in ("kube-apiserver", "kube-controller-manager")
+        }
 
     def node_image_check(self):
         return (
@@ -362,13 +401,12 @@ class FakeRunner:
         if argv[:2] == ("docker", "inspect"):
             if not self.cluster_exists:
                 return CommandResult(1, "", "no such object")
-            return CommandResult(0, json.dumps([{
-                "Id": "a" * 64,
-                "Name": "/kil-v3-lab-control-plane",
-                "Image": "sha256:" + "9" * 64,
-                "Config": {"Image": "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5",
-                           "Labels": {"io.x-k8s.kind.cluster": "kil-v3-lab", "io.x-k8s.kind.role": "control-plane"}},
-            }]) + "\n", "")
+            self.node_inspect_count += 1
+            if self.node_inspect_count == 2 and self.control_plane_node_before is not None:
+                return self.control_plane_node_before
+            if self.node_inspect_count == 3 and self.control_plane_node_after is not None:
+                return self.control_plane_node_after
+            return CommandResult(0, control_plane_node(), "")
         if argv[:3] == ("docker", "container", "ls"):
             payload = json.dumps({"ID": "a" * 64, "Names": "kil-v3-lab-control-plane",
                 "Image": "kindest/node:v1.36.1", "Labels": "io.x-k8s.kind.cluster=kil-v3-lab,io.x-k8s.kind.role=control-plane"}) + "\n" if self.cluster_exists else ""
@@ -393,6 +431,11 @@ class FakeRunner:
         if (argv == node_image_argv
                 and dict(command.env).get("DOCKER_HOST") == expected_node_host):
             return CommandResult(0, self.node_image_check(), "")
+        if (len(argv) == 6 and argv[:4] == ("docker", "exec", "a" * 64, "/bin/cat")
+                and argv[4] == "--"):
+            component = Path(argv[5]).stem
+            if component in self.control_plane_manifest_results:
+                return self.control_plane_manifest_results[component]
         cri_prefix = ("docker", "exec", "a" * 64, "/usr/local/bin/crictl",
                       "--runtime-endpoint", "unix:///run/containerd/containerd.sock",
                       "--image-endpoint", "unix:///run/containerd/containerd.sock",
@@ -754,6 +797,46 @@ class V3B2ControllerTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def assert_no_post_manifest_dispatch(self) -> None:
+        image = [command for command in self.runner.commands if
+                 command.argv[:2] in {("docker", "load"), ("docker", "pull"),
+                                      ("docker", "tag")}
+                 or command.argv[:3] == ("kind", "load", "docker-image")]
+        calico = [command for command in self.runner.commands if
+                  command.argv[-3:-1] == ("apply", "-f")
+                  and command.argv[-1].endswith("calico-v3.32.0.yaml")]
+        application = [command for command in self.runner.commands if
+                       command.argv[-3:] == ("apply", "-f", "-")
+                       and command.stdin is not None]
+        self.assertEqual(image, [])
+        self.assertEqual(calico, [])
+        self.assertEqual(application, [])
+
+    def manifest_cat_commands(self):
+        return [command for command in self.runner.commands if
+                len(command.argv) == 6
+                and command.argv[:2] == ("docker", "exec")
+                and command.argv[3:5] == ("/bin/cat", "--")]
+
+    def leave_persisted_manifest_source_without_terminal(self) -> Path:
+        import kil.v3b2_controller as module
+
+        original = module.append_observed_terminal
+
+        def crash_before_terminal(path, context, observations):
+            if context.family == "control_plane_manifest_source":
+                raise OSError("injected terminal persistence failure")
+            return original(path, context, observations)
+
+        with patch.object(module, "append_observed_terminal",
+                          side_effect=crash_before_terminal):
+            with self.assertRaisesRegex(OSError, "terminal persistence"):
+                self.controller._up_lifecycle()
+        checkpoints = list(self.paths.private.glob(
+            "control-plane-manifest-source-*.json"))
+        self.assertEqual(len(checkpoints), 1)
+        return checkpoints[0]
+
     def test_controller_paths_are_frozen_slotted_absolute_and_contained(self) -> None:
         with self.assertRaises(FrozenInstanceError):
             self.paths.repository = Path("/")  # type: ignore[misc]
@@ -900,6 +983,11 @@ class V3B2ControllerTest(unittest.TestCase):
                 "operation_postcondition_unproved:platform_admission_terminal_gate_pending"):
             self.controller._up_lifecycle()
         events = load_journal(self.controller.journal_path)["events"]
+        labels = [row["event"] for row in events]
+        self.assertLess(labels.index("cluster_create_complete"),
+                        labels.index("control_plane_manifest_source_complete"))
+        self.assertLess(labels.index("control_plane_manifest_source_complete"),
+                        labels.index("image_import_intent"))
         self.assertTrue(any(row["event"] == "image_load_complete" for row in events))
         self.assertTrue(any(row["event"] == "calico_apply_complete" for row in events))
         self.assertFalse(any(row["event"] == "application_apply_complete" for row in events))
@@ -912,6 +1000,120 @@ class V3B2ControllerTest(unittest.TestCase):
         self.assertEqual([row["image_ref"] for row in references],
                          [SYNTHETIC_CONFIG_ID, "docker.io/envoyproxy/envoy@sha256:" + ENVOY_MANIFEST_DIGEST])
         self.assertIs(replayed["runtime_contract_complete"], False)
+
+    def test_manifest_source_rejects_changed_before_node_identity_before_downstream_dispatch(self):
+        from kil.v3b2_control_plane_manifest_source import ControlPlaneManifestSourceError
+        self.runner.control_plane_node_before = CommandResult(
+            0, control_plane_node(node_id="b" * 64), "")
+        with self.assertRaises(ControlPlaneManifestSourceError):
+            self.controller._up_lifecycle()
+        self.assertEqual(len(self.manifest_cat_commands()), 2)
+        self.assert_no_post_manifest_dispatch()
+
+    def test_manifest_source_rejects_changed_after_node_identity_before_downstream_dispatch(self):
+        from kil.v3b2_control_plane_manifest_source import ControlPlaneManifestSourceError
+        self.runner.control_plane_node_after = CommandResult(
+            0, control_plane_node(node_id="b" * 64), "")
+        with self.assertRaises(ControlPlaneManifestSourceError):
+            self.controller._up_lifecycle()
+        self.assertEqual(len(self.manifest_cat_commands()), 2)
+        self.assert_no_post_manifest_dispatch()
+
+    def test_manifest_source_rejects_stopped_node_before_downstream_dispatch(self):
+        from kil.v3b2_control_plane_manifest_source import ControlPlaneManifestSourceError
+        self.runner.control_plane_node_before = CommandResult(
+            0, control_plane_node(running=False), "")
+        with self.assertRaises(ControlPlaneManifestSourceError):
+            self.controller._up_lifecycle()
+        self.assertEqual(len(self.manifest_cat_commands()), 2)
+        self.assert_no_post_manifest_dispatch()
+
+    def test_manifest_source_rejects_nonzero_read_before_downstream_dispatch(self):
+        from kil.v3b2_control_plane_manifest_source import ControlPlaneManifestSourceError
+        self.runner.control_plane_manifest_results["kube-apiserver"] = CommandResult(
+            9, "", "injected read failure")
+        with self.assertRaises(ControlPlaneManifestSourceError):
+            self.controller._up_lifecycle()
+        self.assertEqual(len(self.manifest_cat_commands()), 2)
+        self.assert_no_post_manifest_dispatch()
+
+    def test_manifest_source_rejects_truncated_read_before_downstream_dispatch(self):
+        from kil.v3b2_control_plane_manifest_source import ControlPlaneManifestSourceError
+        self.runner.control_plane_manifest_results["kube-controller-manager"] = CommandResult(
+            -1001, control_plane_manifest("kube-controller-manager")[:64],
+            "output truncated")
+        with self.assertRaises(ControlPlaneManifestSourceError):
+            self.controller._up_lifecycle()
+        self.assertEqual(len(self.manifest_cat_commands()), 2)
+        self.assert_no_post_manifest_dispatch()
+
+    def test_manifest_source_publication_failure_prevents_downstream_dispatch(self):
+        from kil.v3b2_control_plane_manifest_source import (
+            validate_control_plane_manifest_source,
+        )
+        with patch(
+                "kil.v3b2_control_plane_manifest_source."
+                "validate_control_plane_manifest_source",
+                wraps=validate_control_plane_manifest_source) as validator:
+            with patch(
+                    "kil.v3b2_control_plane_manifest_source_record."
+                    "publish_control_plane_manifest_source_record",
+                    side_effect=OSError("injected publication failure")):
+                with self.assertRaisesRegex(OSError, "publication failure"):
+                    self.controller._up_lifecycle()
+        authority = validator.call_args.kwargs
+        self.assertEqual(authority["owned_identity"], self.controller._identity)
+        self.assertEqual(json.loads(authority["context"].inputs)["owned_identity"],
+                         {field: getattr(authority["owned_identity"], field)
+                          for field in (
+                              "colima_profile", "docker_host", "kind_cluster",
+                              "kubeconfig", "cluster_incarnation_uid",
+                              "node_container_id",
+                          )})
+        self.assert_no_post_manifest_dispatch()
+
+    def test_manifest_source_recovery_revalidates_persisted_checkpoint_without_live_reads(self):
+        self.leave_persisted_manifest_source_without_terminal()
+        before = len(self.manifest_cat_commands())
+        from kil.v3b2_control_plane_manifest_source_record import (
+            read_control_plane_manifest_source_record,
+        )
+        with patch(
+                "kil.v3b2_control_plane_manifest_source_record."
+                "read_control_plane_manifest_source_record",
+                wraps=read_control_plane_manifest_source_record) as reader:
+            result = V3B2Controller(self.paths, self.runner).recover()
+        self.assertEqual(result["completed"], "control_plane_manifest_source")
+        self.assertEqual(result["proof_outcome"], "complete")
+        self.assertEqual(reader.call_count, 1)
+        self.assertEqual(len(self.manifest_cat_commands()), before)
+        self.assert_no_post_manifest_dispatch()
+
+    def test_manifest_source_recovery_rejects_missing_checkpoint_without_live_reads(self):
+        with patch(
+                "kil.v3b2_control_plane_manifest_source_record."
+                "publish_control_plane_manifest_source_record",
+                side_effect=OSError("injected publication failure")):
+            with self.assertRaisesRegex(OSError, "publication failure"):
+                self.controller._up_lifecycle()
+        self.assertEqual(list(self.paths.private.glob(
+            "control-plane-manifest-source-*.json")), [])
+        before = len(self.manifest_cat_commands())
+        result = V3B2Controller(self.paths, self.runner).recover()
+        self.assertEqual(result["proof_outcome"], "teardown_only")
+        self.assertIsNone(result["completed"])
+        self.assertEqual(len(self.manifest_cat_commands()), before)
+        self.assert_no_post_manifest_dispatch()
+
+    def test_manifest_source_recovery_rejects_corrupt_checkpoint_without_live_reads(self):
+        checkpoint = self.leave_persisted_manifest_source_without_terminal()
+        checkpoint.write_bytes(b'{"corrupt":true}\n')
+        before = len(self.manifest_cat_commands())
+        result = V3B2Controller(self.paths, self.runner).recover()
+        self.assertEqual(result["proof_outcome"], "teardown_only")
+        self.assertIsNone(result["completed"])
+        self.assertEqual(len(self.manifest_cat_commands()), before)
+        self.assert_no_post_manifest_dispatch()
 
     def test_policy_checkpoint_is_durable_before_any_workload_dispatch(self):
         checked = []

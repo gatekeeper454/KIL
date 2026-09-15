@@ -686,6 +686,21 @@ class V3B2Controller:
                         if context.family != "application_apply":
                             raise ControllerError("policy_checkpoint_source_invalid")
                         payload = read_policy_stage_checkpoint_bytes(self.journal_path, context)
+                    elif request.source == "control_plane_manifest_source":
+                        from kil.v3b2_control_plane_manifest_source_record import (
+                            encode_control_plane_manifest_source_record,
+                            read_control_plane_manifest_source_record,
+                        )
+                        if context.family != "control_plane_manifest_source":
+                            raise ControllerError(
+                                "control_plane_manifest_source_invalid")
+                        proof = read_control_plane_manifest_source_record(
+                            path=self._control_plane_manifest_checkpoint_path(context),
+                            context=context,
+                        )
+                        payload = encode_control_plane_manifest_source_record(
+                            proof=proof, context=context,
+                        )
                     elif request.source in {'profile_state', 'profile_roster'}:
                         from kil.v3b2_profile_state import capture, _paths
                         from kil.v3b2_colima_inventory import capture_roster
@@ -783,6 +798,40 @@ class V3B2Controller:
             publish_policy_stage_checkpoint(self.journal_path, context, observations)
         except (OSError, ValueError, TypeError, KeyError, ControllerError) as error:
             raise ControllerError("policy_stage_checkpoint_failed") from error
+
+    def _control_plane_manifest_checkpoint_path(self, context) -> Path:
+        return self.paths.private / (
+            f"control-plane-manifest-source-{context.intent_sequence}.json"
+        )
+
+    def _checkpoint_control_plane_manifest_source(self) -> CommandResult:
+        from kil.v3b2_control_plane_manifest_source import (
+            control_plane_manifest_observation_specs,
+            validate_control_plane_manifest_source,
+        )
+        from kil.v3b2_control_plane_manifest_source_record import (
+            publish_control_plane_manifest_source_record,
+        )
+
+        context = load_expected_context(self.journal_path)
+        identity = OwnedIdentity(**decode(context.inputs)["owned_identity"])
+        observations = []
+        for spec in control_plane_manifest_observation_specs(identity):
+            result = self._observe(
+                spec.command, "control_plane_manifest_source_invalid")
+            observations.append(RawObservation(
+                spec.label, spec.command.argv, spec.command.env,
+                result.returncode, result.stdout_bytes, result.stderr_bytes,
+            ))
+        proof = validate_control_plane_manifest_source(
+            context=context, owned_identity=identity,
+            observations=tuple(observations),
+        )
+        publish_control_plane_manifest_source_record(
+            path=self._control_plane_manifest_checkpoint_path(context),
+            proof=proof, context=context,
+        )
+        return CommandResult(0, "", "")
 
     def _checkpoint_pre_driver_runtime(self):
         """Fresh normal-dispatch barrier; recovery never recollects this stage."""
@@ -1078,6 +1127,11 @@ class V3B2Controller:
         cluster_details = {"kind_cluster": LAB_IDENTITY, "kubeconfig": str(self.kubeconfig)}
         self._journal_pair("cluster_create", cluster_details,
                            lambda: self._run(kind_create_command(self._identity), "cluster_create_failed"))
+        self._journal_pair(
+            "control_plane_manifest_source",
+            {"kind_cluster": LAB_IDENTITY},
+            self._checkpoint_control_plane_manifest_source,
+        )
         workload = self._workload
         if workload is None:
             raise ControllerError("content_identity_failed")
