@@ -13692,3 +13692,80 @@ preserving the accepted durable-checkpoint and irreversible-teardown
 boundaries.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-281 — 2026-09-15 — V4 Task 2 final holistic review approved
+
+**Input:** Fresh final holistic review of V4 Task 2 from base
+`346e3c75f10f6fe5e09854c4b46a9e04f54be07c` through implementation commits
+`cf7cd68ae61303b75f310e7fd60bde712a4790a3`,
+`6a9e0e218de77c3848e39203e4fcddc4d7db2548`,
+`977ffac6cfbf3aefaef23b9b91d1412922d53ea9`, and
+`f44921940ebfacb88b876aca9664614ba3938357`. Intervening documentation
+commits were treated as append-only governance records. The review did not
+rely on the earlier specification or quality verdicts and did not modify
+production code or tests.
+
+**Interpretation:** Final acceptance required one exact-context canonical
+four-MiB durable record; owned mode-0600 single-link no-follow write-once,
+no-replace publication with file and parent durability and stable parent
+identity; a deterministic path derived from immutable private path, version,
+and intent sequence; one local checkpoint observation; terminal commitment;
+retained-byte replay and prior-source injection rejection; exact
+`cluster_create` to source to `image_import` ordering; an irreversible
+cluster-deletion/absence boundary for all new cluster-live intents;
+teardown-only source failure; no recovery recollection or live Docker
+manifest reads; strict false completion flags; and only version plumbing in
+the controller while Task 3 capture remains absent.
+
+**Decision status:** Approved. No Critical, Important, or Minor finding was
+identified in Task 2. This is approval of the deliberately static,
+non-integrated Task 2 checkpoint only. It is not approval of Task 3 controller
+capture, a live V4 run, or the later component and platform proof graph.
+
+**Rationale:** The checkpoint encoder and decoder reconstruct the exact
+context and nested source proof under the shared four-MiB bound. Publication
+anchors an owned private directory, stages an exclusive mode-0600 regular
+file, uses an exclusive no-replace rename, reopens and byte-compares the final
+single-link file without following links, fsyncs file and parent, and checks
+parent identity before and after the critical operations. The path is
+accepted only when its parent equals immutable `private_path`, version is
+exactly one, and its basename contains the exact intent sequence. The proof
+registry admits one local checkpoint source; validation redecodes the retained
+record; the observed-proof terminal cryptographically commits those bytes;
+offline replay propagates only a reconstructed prior source and rejects both
+base injection and nested prior sources. The journal requires the source pair
+after cluster creation and before image import, maps invalid source evidence to
+teardown-only, and rejects every new cluster-live family once cluster deletion
+or absence has begun. Pending-source recovery schedules no Docker command.
+Strict false runtime and application flags are reconstructed by the source
+proof itself. The only controller change is the immutable version-one preflight
+field, as required before Task 3.
+
+**Verification:** The prescribed five-module focused suite passed all 150
+tests in 27.556 seconds using the repository Python 3.12 environment.
+`git diff --check` passed. A full default discovery run executed 1,537 tests:
+it reported seven controller errors at the new `image_import_intent` barrier,
+all because Task 3 has intentionally not yet inserted
+`control_plane_manifest_source_complete`; the implementation plan explicitly
+names this boundary as Task 3's expected RED and defers full-repository green
+status to a later gate. The same run also reported seven unrelated
+Envoy-producer failures because the restricted review sandbox denied
+`/dev/fd/62`; those files are outside the reviewed implementation range. No
+Colima, Docker, Kind, kubectl, Kubernetes, or other live runtime command was
+invoked.
+
+**Affected artifacts:** This append-only final-review entry and its regenerated
+HTML reader only. Production code and tests remain unchanged.
+
+**Unresolved questions:** None within Task 2. Task 3 must implement the bounded
+one-shot controller capture, deterministic checkpoint publication and retained
+readback, crash-boundary terminal completion, and fail-closed recovery without
+live recollection. The seven currently active controller tests that stop at
+the new barrier should return to green as part of that integration; they are
+not evidence that the barrier should be weakened or bypassed in Task 2.
+
+**Next gate:** Begin Task 3 under test-first development, preserve the accepted
+checkpoint and irreversible teardown boundaries, and restore the controller
+integration tests without introducing live recovery reads.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
