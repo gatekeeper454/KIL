@@ -13355,3 +13355,80 @@ also approves, begin Task 3 controller capture and recovery wiring under TDD
 without reopening live recovery reads.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-276 — 2026-09-15 — V4 Task 2 quality review found location and teardown gaps
+
+**Input:** Independent code-quality review of V4 Task 2 from base
+`346e3c75f10f6fe5e09854c4b46a9e04f54be07c` through implementation commits
+`cf7cd68ae61303b75f310e7fd60bde712a4790a3` and
+`6a9e0e218de77c3848e39203e4fcddc4d7db2548`. Documentation commits
+`aa7c5c5`, `2cd6d90`, `970fcf5`, and `4a92382` were treated as governance
+records rather than implementation. The review covered correctness, races,
+exception totalization, authority closure, retained-byte replay, test strength,
+maintainability, and scope without running a live cluster/runtime command or
+inspecting or mutating Colima.
+
+**Interpretation:** Quality acceptance requires the checkpoint's filesystem
+location to be derived from its immutable context, not merely its basename, and
+requires cluster deletion or proved absence to remain a one-way boundary for
+all subsequent forward mutation. Task 3's intentionally absent producer and
+collector wiring is not itself a Task 2 defect, but it must not become the sole
+place that supplies either security invariant.
+
+**Decision status:** Not approved. No Critical finding was identified, but two
+Important findings remain. First, checkpoint encoding accepts a source context
+without `control_plane_manifest_source_version` or `private_path`, while
+`_checkpoint_name` validates only the sequence-derived basename and any owned
+0700 parent. A proof whose immutable `private_path` was
+`/the/immutable/private` was successfully published and read from an unrelated
+temporary directory. The lifecycle operation validates `private_path` but does
+not bind that path into its observation request or retained observation.
+Second, the post-deletion correction protects only source and image-import
+intent. After a valid source and image-import pair, the real journal accepted
+`image_load_intent` after `cluster_delete_complete`, and accepted it again after
+`cluster_absence_proof_complete`. This retains a forward-mutation resumption
+path after the owned cluster is gone.
+
+**Rationale:** A caller-selected alternate parent can substitute a copy of the
+checkpoint when the immutable private checkpoint is missing or corrupt, so the
+proof layer does not itself establish the claimed single deterministic local
+source. The current record fixture masks this because it constructs its
+checkpoint context without the production version or private path. Separately,
+historical completion predicates remain true after teardown; applying the new
+`begun(...)` guard only to the first two forward families leaves later
+prerequisite-based phases admissible. The post-delete regression stops after
+checking source and image import, so it does not exercise image load or the
+proved-absence boundary. Minor quality issues also remain: record encoding uses
+unbounded `canonical(...)` followed by a post-allocation four MiB length check,
+and `read_control_plane_manifest_source_record` dereferences
+`context.intent_sequence` before exact context validation, allowing malformed
+public input to escape as raw `AttributeError` rather than the record error.
+
+**Verification:** The required source, checkpoint, proofs, journal, and
+observed-lifecycle suite passed all 144 tests in 28.072 seconds using the bundled
+Python runtime. `git diff --check` passed for the implementation range. Two
+separate no-runtime scripts using production APIs reproduced the Important
+findings: alternate-parent publication/readback returned the original proof,
+and both post-delete and post-absence image-load intents printed `ACCEPTED`.
+Malformed record-reader context independently raised raw `AttributeError`.
+No Colima, Docker, Kind, kubectl, Kubernetes, request, evidence, or publication
+command was invoked.
+
+**Affected artifacts:** This append-only quality-review entry and its
+regenerated HTML reader. Production code and tests were not modified. The
+reviewed implementation remains in `cf7cd68` and `6a9e0e2`; earlier lineage and
+specification-review records remain unchanged.
+
+**Unresolved questions:** The checkpoint must require version one, derive and
+bind its exact filename and parent from immutable `private_path`, and totalize
+malformed public inputs. The lifecycle must reject image load and every later
+forward family after cluster deletion or absence, with regressions for pending
+and completed teardown boundaries. Bounded encoding should use the existing
+bounded canonical encoder or an equivalent pre-allocation guard. Task 3
+controller capture/recovery wiring and all later V4 proof gates remain open.
+
+**Next gate:** Correct both Important findings and add adversarial regressions,
+rerun the five-module focused suite and reader checks, then obtain independent
+quality re-review before starting Task 3.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
