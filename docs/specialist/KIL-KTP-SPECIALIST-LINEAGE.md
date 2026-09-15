@@ -12897,3 +12897,54 @@ remaining platform authority composes and do not open the live gate before the
 entire static suite passes from synchronized private `main`.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-268 — 2026-09-15 — V4 static-manifest execution plan opened
+
+**Input:** After synchronizing the V4 Future implementation branch, begin
+execution with the same evidence-first discipline as V3B-1 and minimize
+external approval pauses.
+
+**Interpretation:** Convert the approved control-plane static-manifest source
+design into a test-first implementation sequence and begin with the smallest
+closed static slice. The work remains confined to repository code and tests;
+it does not authorize a live Kind/Calico lifecycle or any Colima mutation.
+
+**Decision status:** Confirmed. The implementation plan is split into a pure
+two-command/four-observation source proof, a deterministic private checkpoint
+and replay-safe journal family, controller ordering, independent
+kube-apiserver and kube-controller-manager disk/API proofs, and a final static
+acceptance checkpoint. Each implementation task requires specification review,
+quality review, focused tests, and a logical commit.
+
+**Rationale:** The two missing static-mirror configurations depend on evidence
+that cannot truthfully be inferred from API Pod fields or a predicted Kind
+root filesystem. Capturing only the two literal manifest paths from the exact
+identity-bracketed owned node establishes the narrow missing authority while
+keeping foreign profiles, arbitrary paths, shell input, live readiness, and
+application completion outside the claim.
+
+**Verification:** The synchronization checkpoint `13ccd07` was pushed to the
+private `codex/v3b2-kind-calico-implementation` branch and the local and remote
+revisions matched. The definitive post-merge validation passed 1,492 tests
+with exactly 16 intentional V4 lifecycle skips, verified 75 Markdown readers,
+and reported no diff-format errors. Independent review found no Critical,
+Important, or Minor issue in the two merge-fixture reconciliations; production
+validators were unchanged. Shell-sensitive Envoy tests separately passed all
+10 cases under their normal local execution boundary.
+
+**Affected artifacts:** Added
+`docs/superpowers/plans/2026-09-15-v4-control-plane-static-manifest-source.md`
+and this lineage entry. The approved design status remains implementation-ready.
+No Colima, Docker, Kind, Kubernetes, request, evidence, or repository-visibility
+state changed.
+
+**Unresolved questions:** The pure manifest source, durable checkpoint,
+journal/controller wiring, both component proofs, platform image/status/readiness
+composition, all-ten-Pod terminal, request-free lifecycle, and nominal lifecycle
+remain to be implemented and accepted. The live input archive remains absent.
+
+**Next gate:** Implement Task 1's exact Docker command grammar and pure
+control-plane manifest source proof under TDD, then obtain independent
+specification and quality review before starting durable persistence.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

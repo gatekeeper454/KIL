@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V4 Control-Plane Static-Manifest Source Implementation Plan</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/plans/2026-09-15-v4-control-plane-static-manifest-source.md">
+<meta name="source-sha256" content="4de3387d90b0d1765a08e2f0ef3189c8f46b8a1f29f0de4afb46827b4893050f">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-15-v4-control-plane-static-manifest-source.md</code> (<code>4de3387d90b0d1765a08e2f0ef3189c8f46b8a1f29f0de4afb46827b4893050f</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">V4 Control-Plane Static-Manifest Source Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-15-v4-control-plane-static-manifest-source.md</code> (<code>4de3387d90b0d1765a08e2f0ef3189c8f46b8a1f29f0de4afb46827b4893050f</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v4-control-plane-static-manifest-source-implementation-plan">V4 Control-Plane Static-Manifest Source Implementation Plan</a></li><li class="level-2"><a href="#file-map-and-fixed-boundaries">File map and fixed boundaries</a></li><li class="level-3"><a href="#task-1-closed-command-and-pure-source-proof">Task 1: Closed command and pure source proof</a></li><li class="level-3"><a href="#task-2-durable-source-checkpoint-and-replay-safe-lifecycle-family">Task 2: Durable source checkpoint and replay-safe lifecycle family</a></li><li class="level-3"><a href="#task-3-controller-capture-ordering-and-recovery">Task 3: Controller capture ordering and recovery</a></li><li class="level-3"><a href="#task-4-kube-apiserver-disk-and-api-mirror-proof">Task 4: Kube-apiserver disk and API mirror proof</a></li><li class="level-3"><a href="#task-5-kube-controller-manager-disk-and-api-mirror-proof">Task 5: Kube-controller-manager disk and API mirror proof</a></li><li class="level-3"><a href="#task-6-static-acceptance-checkpoint">Task 6: Static acceptance checkpoint</a></li><li class="level-2"><a href="#plan-self-review">Plan self-review</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v4-control-plane-static-manifest-source-implementation-plan" href="#v4-control-plane-static-manifest-source-implementation-plan">V4 Control-Plane Static-Manifest Source Implementation Plan</a></li><li class="level-2"><a data-section-id="file-map-and-fixed-boundaries" href="#file-map-and-fixed-boundaries">File map and fixed boundaries</a></li><li class="level-3"><a data-section-id="task-1-closed-command-and-pure-source-proof" href="#task-1-closed-command-and-pure-source-proof">Task 1: Closed command and pure source proof</a></li><li class="level-3"><a data-section-id="task-2-durable-source-checkpoint-and-replay-safe-lifecycle-family" href="#task-2-durable-source-checkpoint-and-replay-safe-lifecycle-family">Task 2: Durable source checkpoint and replay-safe lifecycle family</a></li><li class="level-3"><a data-section-id="task-3-controller-capture-ordering-and-recovery" href="#task-3-controller-capture-ordering-and-recovery">Task 3: Controller capture ordering and recovery</a></li><li class="level-3"><a data-section-id="task-4-kube-apiserver-disk-and-api-mirror-proof" href="#task-4-kube-apiserver-disk-and-api-mirror-proof">Task 4: Kube-apiserver disk and API mirror proof</a></li><li class="level-3"><a data-section-id="task-5-kube-controller-manager-disk-and-api-mirror-proof" href="#task-5-kube-controller-manager-disk-and-api-mirror-proof">Task 5: Kube-controller-manager disk and API mirror proof</a></li><li class="level-3"><a data-section-id="task-6-static-acceptance-checkpoint" href="#task-6-static-acceptance-checkpoint">Task 6: Static acceptance checkpoint</a></li><li class="level-2"><a data-section-id="plan-self-review" href="#plan-self-review">Plan self-review</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="v4-control-plane-static-manifest-source-implementation-plan">V4 Control-Plane Static-Manifest Source Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Authenticate the two effective kubeadm control-plane manifests from the exact owned Kind node, preserve them as replay-safe private evidence, and prove the kube-apiserver and kube-controller-manager API mirror configurations without widening the V4 claim boundary.</p>
+<p><strong>Architecture:</strong> Add one identity-bracketed, read-only Docker source proof immediately after <code>cluster_create</code>, persist it as a deterministic private checkpoint, and make the journal require that checkpoint before any image or apply mutation. Two later pure validators consume the same source plus the exact runtime-ownership proof to validate disk configuration, conditional CA mounts, and the independently transformed API mirror Pods.</p>
+<p><strong>Tech Stack:</strong> Python 3.12 standard library, existing KIL frozen proof records and journal grammar, the repository's closed YAML decoder, <code>unittest</code>, Markdown reader generation.</p>
+<hr />
+<h2 id="file-map-and-fixed-boundaries">File map and fixed boundaries</h2>
+<ul>
+<li>Create <code>src/kil/v3b2_control_plane_manifest_source.py</code>: closed read command builder, four-observation identity bracket, raw manifest parsing, immutable source bindings and proof reconstruction.</li>
+<li>Create <code>tests/test_v3b2_control_plane_manifest_source.py</code>: independent literal fixtures and command/source adversarial matrix.</li>
+<li>Create <code>src/kil/v3b2_control_plane_manifest_source_record.py</code>: canonical 4 MiB private checkpoint encoding, no-follow write-once publication, and bounded replay.</li>
+<li>Create <code>tests/test_v3b2_control_plane_manifest_source_record.py</code>: persistence, file-safety, replay, corruption, and context-binding tests.</li>
+<li>Modify <code>src/kil/v3b2_journal.py</code>, <code>src/kil/v3b2_proofs.py</code>, and their tests: add the <code>control_plane_manifest_source</code> lifecycle family and require it between cluster creation and image import.</li>
+<li>Modify <code>src/kil/v3b2_controller.py</code> and <code>tests/test_v3b2_controller.py</code>: capture once after cluster creation and recover only from retained bytes.</li>
+<li>Create <code>src/kil/v3b2_kube_apiserver_mirror_configuration.py</code> and its test module: fixed disk configuration, all 32 CA subsets, owned Node InternalIP, and disk-to-API proof.</li>
+<li>Create <code>src/kil/v3b2_kube_controller_manager_mirror_configuration.py</code> and its test module: independent fixed disk configuration, all 32 CA subsets, and disk-to-API proof.</li>
+<li>Modify <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code> and regenerate its <code>.htm</code> reader at every accepted checkpoint.</li>
+</ul>
+<p>The implementation remains static-only until the later V4 controller gate explicitly authorizes a live run. It must not start, stop, inspect, or delete any Colima profile while executing this plan.</p>
+<h3 id="task-1-closed-command-and-pure-source-proof">Task 1: Closed command and pure source proof</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>src/kil/v3b2_control_plane_manifest_source.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_v3b2_control_plane_manifest_source.py</code></p>
+</li>
+<li>
+<p>Modify: <code>src/kil/v3b2_journal.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b2_journal.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing tests for the exact command surface</strong></p>
+</li>
+</ul>
+<p>Add tests that require these public constants and command builder:</p>
+<pre><code class="language-python">COMPONENT_PATHS = (
+    (&quot;kube-apiserver&quot;, &quot;/etc/kubernetes/manifests/kube-apiserver.yaml&quot;),
+    (&quot;kube-controller-manager&quot;, &quot;/etc/kubernetes/manifests/kube-controller-manager.yaml&quot;),
+)
+MAX_MANIFEST_BYTES = 1024 * 1024
+MAX_SOURCE_RECORD_BYTES = 4 * 1024 * 1024
+
+def test_read_argv_is_closed_to_two_literal_paths(self):
+    node_id = &quot;a&quot; * 64
+    self.assertEqual(
+        control_plane_manifest_read_argv(node_id, &quot;kube-apiserver&quot;),
+        (&quot;docker&quot;, &quot;exec&quot;, node_id, &quot;/bin/cat&quot;, &quot;--&quot;,
+         &quot;/etc/kubernetes/manifests/kube-apiserver.yaml&quot;),
+    )
+    with self.assertRaises(ControlPlaneManifestSourceError):
+        control_plane_manifest_read_argv(node_id, &quot;../kube-scheduler&quot;)
+</code></pre>
+<p>Also reject short/uppercase/nonhex container IDs, caller paths, extra arguments, stdin, mutating classification, foreign Docker endpoints, missing private Docker configuration, shell forms, and path substitutions through <code>Command</code>.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run the command tests and confirm RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b2_control_plane_manifest_source tests.test_v3b2_journal -v</code></p>
+<p>Expected: import or command-grammar failures because the module and the two admitted Docker forms do not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the minimal command API and journal grammar</strong></li>
+</ul>
+<p>Create the module export surface and exact builder:</p>
+<pre><code class="language-python">__all__ = (
+    &quot;COMPONENT_PATHS&quot;, &quot;MAX_MANIFEST_BYTES&quot;, &quot;MAX_SOURCE_RECORD_BYTES&quot;,
+    &quot;ControlPlaneManifestBinding&quot;, &quot;ControlPlaneManifestSourceError&quot;,
+    &quot;ControlPlaneManifestSourceProof&quot;, &quot;control_plane_manifest_observation_specs&quot;,
+    &quot;control_plane_manifest_pod&quot;, &quot;control_plane_manifest_read_argv&quot;,
+    &quot;validate_control_plane_manifest_source&quot;,
+)
+
+def control_plane_manifest_read_argv(node_container_id: str, component: str) -&gt; tuple[str, ...]:
+    if type(node_container_id) is not str or re.fullmatch(r&quot;[0-9a-f]{64}&quot;, node_container_id) is None:
+        raise ControlPlaneManifestSourceError(&quot;owned node container ID is invalid&quot;)
+    paths = dict(COMPONENT_PATHS)
+    if type(component) is not str or component not in paths:
+        raise ControlPlaneManifestSourceError(&quot;control-plane component is not reviewed&quot;)
+    return (&quot;docker&quot;, &quot;exec&quot;, node_container_id, &quot;/bin/cat&quot;, &quot;--&quot;, paths[component])
+</code></pre>
+<p>Extend <code>Command.__post_init__</code> with exactly the two forms above. Keep them non-mutating, stdin-free, and bound to the already journaled isolated Docker endpoint and private <code>DOCKER_CONFIG</code>.</p>
+<ul>
+<li>[ ] <strong>Step 4: Write failing tests for the four-observation proof</strong></li>
+</ul>
+<p>Test one independent literal pair of <code>v1/Pod</code> YAML documents and require:</p>
+<pre><code class="language-python">proof = validate_control_plane_manifest_source(
+    context=context,
+    owned_identity=owned_identity,
+    observations=(before, apiserver_read, controller_manager_read, after),
+)
+self.assertEqual(tuple(binding.component for binding in proof.bindings),
+                 (&quot;kube-apiserver&quot;, &quot;kube-controller-manager&quot;))
+self.assertFalse(proof.runtime_complete)
+self.assertFalse(proof.application_complete)
+</code></pre>
+<p>Cover exact before/read/read/after order; identical 64hex container/config IDs; exact cluster, node, role and control-plane labels; running state; cluster-incarnation UID; nonzero/truncated/invalid UTF-8 reads; the 1 MiB boundary; absent/extra/duplicated sources; multiple YAML documents; tags, aliases, duplicate keys and ambiguous scalars; non-<code>v1/Pod</code> roots; raw and semantic digest changes; forged constructors; and strict false completion flags.</p>
+<ul>
+<li>[ ] <strong>Step 5: Run the source tests and confirm RED at the proof boundary</strong></li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b2_control_plane_manifest_source -v</code></p>
+<p>Expected: failures because the proof records and validator are absent.</p>
+<ul>
+<li>[ ] <strong>Step 6: Implement the pure source proof</strong></li>
+</ul>
+<p>Use frozen/slotted records and reconstruct every field in <code>__post_init__</code>:</p>
+<pre><code class="language-python">@dataclass(frozen=True, slots=True)
+class ControlPlaneManifestBinding:
+    component: str
+    path: str
+    byte_count: int
+    sha256: str
+    semantic_sha256: str
+
+@dataclass(frozen=True, slots=True)
+class ControlPlaneManifestSourceProof:
+    run_id: str
+    cluster_uid: str
+    node_container_id: str
+    node_config_id: str
+    raw_observations: tuple[bytes, ...]
+    bindings: tuple[ControlPlaneManifestBinding, ...]
+    runtime_complete: bool = False
+    application_complete: bool = False
+</code></pre>
+<p><code>validate_control_plane_manifest_source</code> must decode each successful stdout with strict UTF-8, call <code>decode_closed_yaml</code>, require an exact <code>apiVersion: v1</code>, <code>kind: Pod</code>, <code>metadata</code> and <code>spec</code> root, and hash <code>canonical(parsed_pod)</code> independently from the raw bytes. <code>control_plane_manifest_pod</code> must revalidate the exact proof and return a fresh decoded Pod only for the two literal component names.</p>
+<ul>
+<li>[ ] <strong>Step 7: Run focused and neighboring proof tests</strong></li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b2_control_plane_manifest_source tests.test_v3b2_closed_yaml tests.test_v3b2_node_image_commands tests.test_v3b2_journal -v</code></p>
+<p>Expected: all tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 8: Commit Task 1</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/v3b2_control_plane_manifest_source.py src/kil/v3b2_journal.py tests/test_v3b2_control_plane_manifest_source.py tests/test_v3b2_journal.py
+git commit -m &quot;feat: add closed control-plane manifest source proof&quot;
+</code></pre>
+<h3 id="task-2-durable-source-checkpoint-and-replay-safe-lifecycle-family">Task 2: Durable source checkpoint and replay-safe lifecycle family</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>src/kil/v3b2_control_plane_manifest_source_record.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_v3b2_control_plane_manifest_source_record.py</code></p>
+</li>
+<li>
+<p>Modify: <code>src/kil/v3b2_proofs.py</code></p>
+</li>
+<li>
+<p>Modify: <code>src/kil/v3b2_journal.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b2_proofs.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b2_journal.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing checkpoint tests</strong></p>
+</li>
+</ul>
+<p>Require these functions:</p>
+<pre><code class="language-python">encoded = encode_control_plane_manifest_source_record(proof=proof, context=context)
+published = publish_control_plane_manifest_source_record(
+    path=checkpoint_path, proof=proof, context=context)
+self.assertEqual(published, encoded)
+self.assertEqual(
+    read_control_plane_manifest_source_record(path=checkpoint_path, context=context),
+    proof,
+)
+</code></pre>
+<p>Test canonical bytes, exact context reconstruction, the 4 MiB boundary, write-once idempotence, existing altered bytes, symlink/hardlink/FIFO/non-0600 rejection, parent replacement, corruption, unknown fields, forged nested proof, and file/parent fsync.</p>
+<ul>
+<li>[ ] <strong>Step 2: Confirm checkpoint tests are RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b2_control_plane_manifest_source_record -v</code></p>
+<p>Expected: import failure because no durable source record exists.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement canonical checkpoint encoding and safe publication</strong></li>
+</ul>
+<p>Use one closed envelope:</p>
+<pre><code class="language-python">{
+    &quot;schema&quot;: &quot;kil.v4.control-plane-manifest-source.v1&quot;,
+    &quot;context&quot;: expected_context,
+    &quot;proof&quot;: encoded_proof,
+}
+</code></pre>
+<p>Reuse the existing no-follow, owned regular file, 0600, single-link, exclusive/no-replace, flush/fsync, atomic-publication, and parent-fsync helpers. The deterministic controller path is <code>control-plane-manifest-source-&lt;intent_sequence&gt;.json</code>; the reader must never discover or substitute another filename.</p>
+<ul>
+<li>[ ] <strong>Step 4: Write failing lifecycle tests</strong></li>
+</ul>
+<p>Add <code>control_plane_manifest_source</code> to the tested operation set and require:</p>
+<pre><code class="language-python">self.assertLess(event_names.index(&quot;cluster_create_complete&quot;),
+                event_names.index(&quot;control_plane_manifest_source_intent&quot;))
+self.assertLess(event_names.index(&quot;control_plane_manifest_source_complete&quot;),
+                event_names.index(&quot;image_import_intent&quot;))
+</code></pre>
+<p>Test one deterministic local checkpoint observation request, exact <code>kind_cluster</code> pair details, source completion only after <code>cluster_create_complete</code>, rejection of <code>image_import_intent</code> before source completion, failure-to-teardown-only behavior, terminal digest binding, <code>prior_control_plane_manifest_source</code> injection rejection, reconstruction from retained bytes, and recovery that never issues live Docker reads.</p>
+<ul>
+<li>[ ] <strong>Step 5: Confirm lifecycle tests are RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b2_proofs tests.test_v3b2_journal -v</code></p>
+<p>Expected: failures for the missing family, operation, expected-input version, and reconstruction API.</p>
+<ul>
+<li>[ ] <strong>Step 6: Implement the operation and journal order</strong></li>
+</ul>
+<p>Add:</p>
+<pre><code class="language-python">Operation(
+    family=&quot;control_plane_manifest_source&quot;,
+    requests=(ObservationRequest(
+        &quot;control_plane_manifest_source&quot;,
+        source=&quot;control_plane_manifest_source&quot;,
+    ),),
+)
+</code></pre>
+<p>Add <code>control_plane_manifest_source_version: 1</code> to immutable preflight inputs; add <code>reconstruct_prior_control_plane_manifest_source(context)</code>; reserve caller injection of <code>prior_control_plane_manifest_source</code>; and enforce <code>cluster_create_complete -&gt; control_plane_manifest_source_complete -&gt; image_import_intent</code>. A persisted checkpoint missing only its terminal may be revalidated and completed; a missing or invalid checkpoint after cluster creation becomes teardown-only and never triggers recollection.</p>
+<ul>
+<li>[ ] <strong>Step 7: Run focused lifecycle and persistence tests</strong></li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b2_control_plane_manifest_source tests.test_v3b2_control_plane_manifest_source_record tests.test_v3b2_proofs tests.test_v3b2_journal tests.test_v3b2_observed_lifecycle -v</code></p>
+<p>Expected: all tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 8: Commit Task 2</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/v3b2_control_plane_manifest_source_record.py src/kil/v3b2_proofs.py src/kil/v3b2_journal.py tests/test_v3b2_control_plane_manifest_source_record.py tests/test_v3b2_proofs.py tests/test_v3b2_journal.py
+git commit -m &quot;feat: persist V4 control-plane manifest evidence&quot;
+</code></pre>
+<h3 id="task-3-controller-capture-ordering-and-recovery">Task 3: Controller capture ordering and recovery</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>src/kil/v3b2_controller.py</code></p>
+</li>
+<li>
+<p>Modify: <code>tests/test_v3b2_controller.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write failing controller tests</strong></p>
+</li>
+</ul>
+<p>Require an exact successful order:</p>
+<pre><code class="language-python">self.assertLess(labels.index(&quot;cluster_create_complete&quot;),
+                labels.index(&quot;control_plane_manifest_source_complete&quot;))
+self.assertLess(labels.index(&quot;control_plane_manifest_source_complete&quot;),
+                labels.index(&quot;image_import_intent&quot;))
+</code></pre>
+<p>Add failure cases for changed before/after node identity, stopped node, nonzero or truncated reads, invalid checkpoint publication, and missing/corrupt recovery checkpoint. Assert every failure dispatches zero image-load, Calico, and application apply commands. Add crash-boundary tests proving a persisted source with a missing terminal is revalidated from disk and that recovery executes zero <code>docker exec ... /bin/cat</code> commands.</p>
+<ul>
+<li>[ ] <strong>Step 2: Confirm controller tests are RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b2_controller.V3B2ControllerTest.test_image_load_and_calico_apply_complete_before_application_gate -v</code></p>
+<p>Expected: failure because the source checkpoint is not yet inserted between cluster creation and image import.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement capture and replay branches</strong></li>
+</ul>
+<p>Add a controller producer with the fixed shape:</p>
+<pre><code class="language-python">def _checkpoint_control_plane_manifest_source(self) -&gt; CommandResult:
+    context = load_expected_context(self.paths.journal)
+    identity = OwnedIdentity.from_context(context)
+    observations = tuple(
+        self._observe(spec.command, &quot;control_plane_manifest_source_invalid&quot;)
+        for spec in control_plane_manifest_observation_specs(identity)
+    )
+    proof = validate_control_plane_manifest_source(
+        context=context, owned_identity=identity, observations=observations)
+    publish_control_plane_manifest_source_record(
+        path=self._control_plane_manifest_checkpoint_path(context),
+        proof=proof, context=context)
+    return CommandResult(0, &quot;&quot;, &quot;&quot;)
+</code></pre>
+<p>Insert <code>_journal_pair(&quot;control_plane_manifest_source&quot;, {&quot;kind_cluster&quot;: LAB_IDENTITY}, self._checkpoint_control_plane_manifest_source)</code> immediately after <code>cluster_create</code> and before any image or apply work. Add a <code>_collect_observations</code> branch that reads only the deterministic retained checkpoint. Do not add a recovery path that issues the four live capture commands.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run controller, journal, and proof integration tests</strong></li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b2_controller tests.test_v3b2_journal tests.test_v3b2_proofs tests.test_v3b2_control_plane_manifest_source_record -v</code></p>
+<p>Expected: all default-gate tests pass; the existing 16 V4 lifecycle methods remain explicitly deferred.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit Task 3</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/v3b2_controller.py tests/test_v3b2_controller.py
+git commit -m &quot;feat: checkpoint control-plane manifests after cluster creation&quot;
+</code></pre>
+<h3 id="task-4-kube-apiserver-disk-and-api-mirror-proof">Task 4: Kube-apiserver disk and API mirror proof</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>src/kil/v3b2_kube_apiserver_mirror_configuration.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_v3b2_kube_apiserver_mirror_configuration.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write the exhaustive independent fixture tests</strong></p>
+</li>
+</ul>
+<p>Define the candidate set literally and run all masks:</p>
+<pre><code class="language-python">CA_CANDIDATES = (
+    (&quot;etc-ca-certificates&quot;, &quot;/etc/ca-certificates&quot;),
+    (&quot;etc-pki-ca-trust&quot;, &quot;/etc/pki/ca-trust&quot;),
+    (&quot;etc-pki-tls-certs&quot;, &quot;/etc/pki/tls/certs&quot;),
+    (&quot;usr-local-share-ca-certificates&quot;, &quot;/usr/local/share/ca-certificates&quot;),
+    (&quot;usr-share-ca-certificates&quot;, &quot;/usr/share/ca-certificates&quot;),
+)
+
+for mask in range(32):
+    selected = tuple(pair for bit, pair in enumerate(CA_CANDIDATES)
+                     if mask &amp; (1 &lt;&lt; bit))
+    proof = validate_kube_apiserver_mirror_configuration(
+        ownership=literal_runtime_fixture(selected),
+        source=literal_source_fixture(selected),
+    )
+    self.assertEqual(proof.bindings[0].conditional_volume_names,
+                     tuple(name for name, _ in selected))
+</code></pre>
+<p>Build disk and API candidates independently. Cover the two unconditional <code>ca-certs</code> and <code>k8s-certs</code> volumes/mounts; exact lexicographic order; partial/duplicate/renamed/unexpected candidates; wrong path, <code>DirectoryOrCreate</code>, or <code>readOnly</code>; all fixed Pod/container fields; owned Node InternalIP binding; dynamic address drift; API default/metadata drift; arbitrary status retention; coordinated retained-proof tampering; constructors; and strict false flags. Run a second 32-mask loop in which API-side candidates differ from the authenticated disk subset and require rejection.</p>
+<ul>
+<li>[ ] <strong>Step 2: Confirm apiserver tests are RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b2_kube_apiserver_mirror_configuration -v</code></p>
+<p>Expected: import failure because the component proof does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the apiserver proof</strong></li>
+</ul>
+<p>Expose:</p>
+<pre><code class="language-python">def kube_apiserver_mirror_api_spec(
+    *, source: ControlPlaneManifestSourceProof, node_internal_ip: str,
+) -&gt; dict:
+    source.__post_init__()
+    disk_pod = control_plane_manifest_pod(
+        source=source, component=&quot;kube-apiserver&quot;)
+    return _expected_api_pod(
+        disk_pod=disk_pod, node_internal_ip=node_internal_ip)
+
+def validate_kube_apiserver_mirror_configuration(
+    *, ownership: RuntimeOwnershipProof,
+    source: ControlPlaneManifestSourceProof,
+) -&gt; KubeAPIServerMirrorConfigurationProof:
+    binding = _compute(ownership=ownership, source=source)
+    return KubeAPIServerMirrorConfigurationProof(
+        ownership=ownership, source=source, bindings=(binding,))
+</code></pre>
+<p>Reconstruct both dependency proofs before use. Validate the fixed disk document and derive only the conditional subset from it. Independently transform the expected disk Pod with reviewed kubelet/API defaults, then compare the one owned API mirror without copying candidate API fields into the expectation. Derive the InternalIP using the same retained owned-Node rules as etcd, but keep apiserver-specific errors local.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run apiserver and adjacent static-mirror tests</strong></li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b2_kube_apiserver_mirror_configuration tests.test_v3b2_etcd_mirror_configuration tests.test_v3b2_scheduler_mirror_configuration tests.test_v3b2_api_defaults -v</code></p>
+<p>Expected: all tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit Task 4</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/v3b2_kube_apiserver_mirror_configuration.py tests/test_v3b2_kube_apiserver_mirror_configuration.py
+git commit -m &quot;feat: prove kube-apiserver mirror configuration&quot;
+</code></pre>
+<h3 id="task-5-kube-controller-manager-disk-and-api-mirror-proof">Task 5: Kube-controller-manager disk and API mirror proof</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Create: <code>src/kil/v3b2_kube_controller_manager_mirror_configuration.py</code></p>
+</li>
+<li>
+<p>Create: <code>tests/test_v3b2_kube_controller_manager_mirror_configuration.py</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Write exhaustive independent controller-manager tests</strong></p>
+</li>
+</ul>
+<p>Run the same literal five-pair, 32-mask acceptance matrix and a 32-mask disk/API mismatch rejection matrix, but use an independently written controller-manager disk fixture. Require unconditional <code>ca-certs</code>, <code>k8s-certs</code>, and <code>kubeconfig</code> volumes/mounts, controller-manager-specific command/options and probes, lexicographic ordering, exact mirror metadata/defaults, arbitrary status retention, dependency reconstruction, and strict false flags.</p>
+<pre><code class="language-python">proof = validate_kube_controller_manager_mirror_configuration(
+    ownership=literal_runtime_fixture(selected),
+    source=literal_source_fixture(selected),
+)
+self.assertEqual(proof.bindings[0].component, &quot;kube-controller-manager&quot;)
+self.assertFalse(proof.runtime_complete)
+self.assertFalse(proof.application_complete)
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Confirm controller-manager tests are RED</strong></li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b2_kube_controller_manager_mirror_configuration -v</code></p>
+<p>Expected: import failure because the component proof does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the independent controller-manager proof</strong></li>
+</ul>
+<p>Expose:</p>
+<pre><code class="language-python">def kube_controller_manager_mirror_api_spec(
+    *, source: ControlPlaneManifestSourceProof,
+) -&gt; dict:
+    source.__post_init__()
+    disk_pod = control_plane_manifest_pod(
+        source=source, component=&quot;kube-controller-manager&quot;)
+    return _expected_api_pod(disk_pod=disk_pod)
+
+def validate_kube_controller_manager_mirror_configuration(
+    *, ownership: RuntimeOwnershipProof,
+    source: ControlPlaneManifestSourceProof,
+) -&gt; KubeControllerManagerMirrorConfigurationProof:
+    binding = _compute(ownership=ownership, source=source)
+    return KubeControllerManagerMirrorConfigurationProof(
+        ownership=ownership, source=source, bindings=(binding,))
+</code></pre>
+<p>Keep the full fixed expectation local to this module. Reconstruct the source and ownership proofs, validate the controller-manager disk document, derive only its conditional subset, apply only reviewed kubelet/API defaults, and require the sole owned API mirror to match. Do not import apiserver expected factories or conditional decisions.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run both new component suites and all static mirrors</strong></li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b2_kube_apiserver_mirror_configuration tests.test_v3b2_kube_controller_manager_mirror_configuration tests.test_v3b2_etcd_mirror_configuration tests.test_v3b2_scheduler_mirror_configuration -v</code></p>
+<p>Expected: all tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit Task 5</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/kil/v3b2_kube_controller_manager_mirror_configuration.py tests/test_v3b2_kube_controller_manager_mirror_configuration.py
+git commit -m &quot;feat: prove controller-manager mirror configuration&quot;
+</code></pre>
+<h3 id="task-6-static-acceptance-checkpoint">Task 6: Static acceptance checkpoint</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>
+<p>Modify: <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code></p>
+</li>
+<li>
+<p>Modify: <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm</code></p>
+</li>
+<li>
+<p>[ ] <strong>Step 1: Run the combined static gate</strong></p>
+</li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ../../.venv/bin/python -m unittest tests.test_v3b2_control_plane_manifest_source tests.test_v3b2_control_plane_manifest_source_record tests.test_v3b2_kube_apiserver_mirror_configuration tests.test_v3b2_kube_controller_manager_mirror_configuration tests.test_v3b2_controller tests.test_v3b2_journal tests.test_v3b2_proofs -v</code></p>
+<p>Expected: all default tests pass and exactly the existing 16 V4 lifecycle methods remain deferred.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run full repository validation</strong></li>
+</ul>
+<p>Run: <code>PYTHONDONTWRITEBYTECODE=1 make validate PYTHON=../../.venv/bin/python</code></p>
+<p>Expected: the full test suite and Markdown reader check pass with only the recorded V4 lifecycle skips.</p>
+<ul>
+<li>[ ] <strong>Step 3: Record the accepted evidence boundary</strong></li>
+</ul>
+<p>Append a dated lineage entry stating the exact test counts, accepted source/disk/API claims, unchanged false runtime/application flags, absence of live Colima/Kind execution, unresolved platform image/status/readiness composition, and the next gate.</p>
+<p>Read the final existing <code>### T-&lt;number&gt;</code> heading, increment it by one, and append a heading named “V4 control-plane static-manifest source accepted.” Record these exact fields: the approved design and plan as input; “Confirmed static implementation checkpoint; no live claim” as decision status; the two identity-bracketed private manifest sources and their two reconstructable API mirror configurations as the accepted claim boundary; runtime, readiness, application completion, V4 completion, and V3C as explicitly unclaimed; and all-ten-platform-Pod configuration/image/status/readiness composition as the next gate.</p>
+<ul>
+<li>[ ] <strong>Step 4: Regenerate and verify readers</strong></li>
+</ul>
+<p>Run: <code>make docs-html PYTHON=../../.venv/bin/python</code></p>
+<p>Run: <code>make docs-html-check PYTHON=../../.venv/bin/python</code></p>
+<p>Expected: all tracked Markdown readers are current.</p>
+<ul>
+<li>[ ] <strong>Step 5: Request specification and quality review, then commit</strong></li>
+</ul>
+<p>After an independent reviewer reports no unresolved Critical or Important findings:</p>
+<pre><code class="language-bash">git add docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm
+git commit -m &quot;docs: record V4 control-plane manifest acceptance&quot;
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 6: Push the private implementation branch and verify synchronization</strong></li>
+</ul>
+<pre><code class="language-bash">git push origin codex/v3b2-kind-calico-implementation
+git rev-parse HEAD
+git rev-parse origin/codex/v3b2-kind-calico-implementation
+git status --short
+</code></pre>
+<p>Expected: both revisions are identical and status output is empty.</p>
+<h2 id="plan-self-review">Plan self-review</h2>
+<ul>
+<li>Spec coverage: Tasks 1–3 cover closed capture, private persistence, lifecycle ordering, crash recovery, and no recollection; Tasks 4–5 cover both fixed disk documents, all 32 conditional subsets, independent disk-to-API transformations, dynamic apiserver address binding, reconstruction, and false completion flags; Task 6 records the bounded static acceptance.</li>
+<li>Type consistency: every later component validator consumes the exact <code>ControlPlaneManifestSourceProof</code> and <code>RuntimeOwnershipProof</code> defined or already present; public function and record names are stable across tasks.</li>
+<li>Claim containment: this plan authorizes no live cluster execution, no foreign-profile mutation, no readiness or application claim, and no V3C work.</li>
+</ul>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>
