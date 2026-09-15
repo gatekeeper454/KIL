@@ -10,6 +10,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import tarfile
+import time
 import unittest
 import importlib.util
 from unittest.mock import patch
@@ -1057,6 +1058,230 @@ class V3B2ControllerTest(unittest.TestCase):
             self.controller._up_lifecycle()
         self.assertEqual(len(self.manifest_cat_commands()), 2)
         self.assert_no_post_manifest_dispatch()
+
+    def test_successful_manifest_subprocess_capture_is_bounded_in_flight(self):
+        import subprocess
+        from kil.v3b2_control_plane_manifest_source import (
+            MAX_MANIFEST_BYTES,
+            ControlPlaneManifestSourceError,
+        )
+
+        self.controller.preflight()
+        node = control_plane_node().encode()
+        controller_manager = control_plane_manifest(
+            "kube-controller-manager").encode()
+        docker = self.paths.tools / "docker"
+        docker.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os, sys\n"
+            f"node = {node!r}\n"
+            f"controller_manager = {controller_manager!r}\n"
+            f"oversized = b'x' * {MAX_MANIFEST_BYTES + 1}\n"
+            "payload = (node if sys.argv[1] == 'inspect' else "
+            "oversized if sys.argv[-1].endswith('kube-apiserver.yaml') "
+            "else controller_manager)\n"
+            "while payload:\n"
+            "    written = os.write(1, payload)\n"
+            "    payload = payload[written:]\n"
+        )
+        docker.chmod(0o755)
+        process_runner = SubprocessCommandRunner(
+            repository=self.paths.repository, tools=self.paths.tools)
+        manifest_results = []
+        fake = self.runner
+
+        class SourceProcessRunner:
+            def run(_self, command):
+                source = (
+                    command.argv == (
+                        "docker", "inspect", "kil-v3-lab-control-plane")
+                    or "/bin/cat" in command.argv
+                )
+                if not source:
+                    return fake.run(command)
+                fake.commands.append(command)
+                result = process_runner.run(command)
+                if "/bin/cat" in command.argv:
+                    manifest_results.append(result)
+                return result
+
+        self.controller.runner = SourceProcessRunner()
+        with patch("kil.v3b2_controller.subprocess.run",
+                   wraps=subprocess.run) as unbounded_capture:
+            with self.assertRaises(ControlPlaneManifestSourceError):
+                self.controller._up_lifecycle()
+        self.assertEqual(len(manifest_results), 2)
+        self.assertEqual(manifest_results[0].returncode, -1001)
+        self.assertEqual(len(manifest_results[0].stdout_bytes),
+                         MAX_MANIFEST_BYTES)
+        self.assertEqual(manifest_results[0].stderr_bytes, b"")
+        self.assertEqual(manifest_results[1].returncode, 0)
+        self.assertLessEqual(len(manifest_results[1].stdout_bytes),
+                             MAX_MANIFEST_BYTES)
+        self.assertEqual(unbounded_capture.call_count, 0)
+        self.assert_no_post_manifest_dispatch()
+
+    def test_manifest_subprocess_timeout_preserves_bounded_raw_prefixes(self):
+        from kil.v3b2_control_plane_manifest_source import (
+            control_plane_manifest_read_argv,
+        )
+
+        docker = self.paths.tools / "docker"
+        docker.write_text(
+            "#!/bin/sh\n"
+            "printf 'partial stdout\\377'\n"
+            "printf 'partial stderr\\376' >&2\n"
+            "sleep 2\n"
+        )
+        docker.chmod(0o755)
+        (self.paths.private / "runtime-tmp").mkdir(parents=True)
+        command = Command(
+            control_plane_manifest_read_argv("a" * 64, "kube-apiserver"),
+            1,
+            env=self.runner.bound_docker_environment,
+        )
+        result = SubprocessCommandRunner(
+            repository=self.paths.repository, tools=self.paths.tools).run(command)
+        self.assertEqual(result.returncode, -1000)
+        self.assertEqual(result.stdout_bytes, b"partial stdout\xff")
+        self.assertEqual(result.stderr_bytes, b"partial stderr\xfe")
+
+    def test_manifest_subprocess_timeout_survives_exited_pipe_leader(self):
+        from kil.v3b2_control_plane_manifest_source import (
+            control_plane_manifest_read_argv,
+        )
+
+        docker = self.paths.tools / "docker"
+        docker.write_text(
+            "#!/bin/sh\n"
+            "(sleep 3) &\n"
+            "exit 0\n"
+        )
+        docker.chmod(0o755)
+        (self.paths.private / "runtime-tmp").mkdir(parents=True)
+        command = Command(
+            control_plane_manifest_read_argv("a" * 64, "kube-apiserver"),
+            1,
+            env=self.runner.bound_docker_environment,
+        )
+        started = time.monotonic()
+        result = SubprocessCommandRunner(
+            repository=self.paths.repository, tools=self.paths.tools).run(command)
+        elapsed = time.monotonic() - started
+        self.assertEqual(result.returncode, -1000)
+        self.assertLess(elapsed, 2)
+        self.assertEqual(result.stdout_bytes, b"")
+        self.assertEqual(result.stderr_bytes, b"")
+
+    def test_manifest_subprocess_timeout_closes_escaped_readable_pipe(self):
+        from kil.v3b2_control_plane_manifest_source import (
+            control_plane_manifest_read_argv,
+        )
+
+        docker = self.paths.tools / "docker"
+        docker.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os, signal, time\n"
+            "if os.fork():\n"
+            "    os._exit(0)\n"
+            "os.setsid()\n"
+            "signal.signal(signal.SIGPIPE, signal.SIG_DFL)\n"
+            "deadline = time.monotonic() + 3\n"
+            "while time.monotonic() < deadline:\n"
+            "    os.write(1, b'x')\n"
+            "    time.sleep(0.005)\n"
+        )
+        docker.chmod(0o755)
+        (self.paths.private / "runtime-tmp").mkdir(parents=True)
+        command = Command(
+            control_plane_manifest_read_argv("a" * 64, "kube-apiserver"),
+            1,
+            env=self.runner.bound_docker_environment,
+        )
+        started = time.monotonic()
+        result = SubprocessCommandRunner(
+            repository=self.paths.repository, tools=self.paths.tools).run(command)
+        elapsed = time.monotonic() - started
+        self.assertEqual(result.returncode, -1000)
+        self.assertLess(elapsed, 2)
+        self.assertGreater(len(result.stdout_bytes), 0)
+        self.assertEqual(result.stdout_bytes, b"x" * len(result.stdout_bytes))
+        self.assertEqual(result.stderr_bytes, b"")
+
+    def test_manifest_subprocess_success_uses_bounded_selector_slices(self):
+        import selectors
+        from kil.v3b2_control_plane_manifest_source import (
+            control_plane_manifest_read_argv,
+        )
+
+        docker = self.paths.tools / "docker"
+        docker.write_text(
+            "#!/bin/sh\n"
+            "printf small\n"
+        )
+        docker.chmod(0o755)
+        (self.paths.private / "runtime-tmp").mkdir(parents=True)
+        command = Command(
+            control_plane_manifest_read_argv("a" * 64, "kube-apiserver"),
+            2,
+            env=self.runner.bound_docker_environment,
+        )
+        selector_factory = selectors.DefaultSelector
+        requested_timeouts = []
+
+        class RecordingSelector:
+            def __init__(_self):
+                _self.selector = selector_factory()
+
+            def __getattr__(_self, name):
+                return getattr(_self.selector, name)
+
+            def select(_self, timeout=None):
+                requested_timeouts.append(timeout)
+                return _self.selector.select(timeout)
+
+        with patch("kil.v3b2_controller.selectors.DefaultSelector",
+                   RecordingSelector):
+            result = SubprocessCommandRunner(
+                repository=self.paths.repository,
+                tools=self.paths.tools,
+            ).run(command)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout_bytes, b"small")
+        self.assertEqual(result.stderr_bytes, b"")
+        self.assertTrue(requested_timeouts)
+        self.assertLessEqual(max(requested_timeouts), 0.05)
+
+    def test_successful_manifest_subprocess_stderr_is_bounded_separately(self):
+        from kil.v3b2_control_plane_manifest_source import (
+            MAX_MANIFEST_BYTES,
+            control_plane_manifest_read_argv,
+        )
+
+        manifest = control_plane_manifest("kube-apiserver").encode()
+        docker = self.paths.tools / "docker"
+        docker.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os\n"
+            f"stdout = {manifest!r}\n"
+            f"stderr = b'e' * {MAX_MANIFEST_BYTES + 1}\n"
+            "for descriptor, payload in ((1, stdout), (2, stderr)):\n"
+            "    while payload:\n"
+            "        written = os.write(descriptor, payload)\n"
+            "        payload = payload[written:]\n"
+        )
+        docker.chmod(0o755)
+        (self.paths.private / "runtime-tmp").mkdir(parents=True)
+        command = Command(
+            control_plane_manifest_read_argv("a" * 64, "kube-apiserver"),
+            60,
+            env=self.runner.bound_docker_environment,
+        )
+        result = SubprocessCommandRunner(
+            repository=self.paths.repository, tools=self.paths.tools).run(command)
+        self.assertEqual(result.returncode, -1001)
+        self.assertEqual(result.stdout_bytes, manifest)
+        self.assertEqual(result.stderr_bytes, b"e" * MAX_MANIFEST_BYTES)
 
     def test_manifest_source_publication_failure_prevents_downstream_dispatch(self):
         from kil.v3b2_control_plane_manifest_source import (

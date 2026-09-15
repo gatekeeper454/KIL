@@ -9,6 +9,8 @@ import json
 import os
 from pathlib import Path
 import secrets
+import selectors
+import signal
 import stat
 import subprocess
 import time
@@ -115,6 +117,7 @@ COMMAND_TIMEOUT_TRUNCATED_RETURN_CODE = -1001
 # in the bounded durable proof bundle. Oversized captures retain at most half
 # this allowance from each stream, without prepending or replacing its bytes.
 MAX_TIMEOUT_CAPTURE_BYTES = MAX_OBSERVATION_BYTES // 4
+_CAPTURE_POLL_SECONDS = 0.05
 
 
 class ControllerError(RuntimeError):
@@ -232,6 +235,137 @@ class SubprocessCommandRunner:
         if tools is not None and (not tools.is_absolute() or tools.resolve() != tools):
             raise ControllerError("invalid_runner_paths")
 
+    @staticmethod
+    def _control_plane_manifest_capture_limit(command: Command) -> int | None:
+        from kil.v3b2_control_plane_manifest_source import (
+            COMPONENT_PATHS,
+            MAX_MANIFEST_BYTES,
+        )
+
+        argv = command.argv
+        node_inspect = argv == (
+            "docker", "inspect", "kil-v3-lab-control-plane")
+        manifest_read = (
+            len(argv) == 6
+            and argv[:2] == ("docker", "exec")
+            and argv[3:5] == ("/bin/cat", "--")
+            and argv[5] in {path for _component, path in COMPONENT_PATHS}
+        )
+        return MAX_MANIFEST_BYTES if node_inspect or manifest_read else None
+
+    def _run_bounded_capture(self, argv, command, environment,
+                             maximum: int) -> CommandResult:
+        if command.stdin is not None:
+            raise ControllerError("bounded_capture_stdin_invalid")
+        process = None
+        selector = selectors.DefaultSelector()
+        stdout = bytearray()
+        stderr = bytearray()
+        buffers = {"stdout": stdout, "stderr": stderr}
+        timed_out = False
+        truncated = False
+
+        def kill_process_group() -> None:
+            if process is None:
+                return
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except OSError:
+                if process.poll() is None:
+                    try:
+                        process.kill()
+                    except OSError:
+                        pass
+
+        def stop_capture() -> None:
+            for key in tuple(selector.get_map().values()):
+                selector.unregister(key.fileobj)
+
+        try:
+            process = subprocess.Popen(
+                argv,
+                stdin=None,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=environment,
+                cwd=self.repository,
+                start_new_session=True,
+            )
+            if process.stdout is None or process.stderr is None:
+                raise ControllerError("command_capture_unavailable")
+            selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+            selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+            deadline = time.monotonic() + command.timeout_s
+            while selector.get_map() or process.poll() is None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 and not timed_out:
+                    timed_out = True
+                    kill_process_group()
+                if process.poll() is None and not selector.get_map():
+                    try:
+                        process.wait(timeout=(
+                            _CAPTURE_POLL_SECONDS if timed_out or truncated
+                            else max(0.0, remaining)))
+                    except subprocess.TimeoutExpired:
+                        timed_out = True
+                        kill_process_group()
+                    continue
+                events = selector.select(
+                    _CAPTURE_POLL_SECONDS if timed_out or truncated
+                    else min(_CAPTURE_POLL_SECONDS, max(0.0, remaining)))
+                if not events and (timed_out or truncated):
+                    stop_capture()
+                    continue
+                for key, _mask in events:
+                    retained = buffers[key.data]
+                    available = maximum - len(retained)
+                    read_size = 65536 if available <= 0 else min(65536, available + 1)
+                    chunk = os.read(key.fileobj.fileno(), read_size)
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        continue
+                    if available <= 0 or len(chunk) > available:
+                        if available > 0:
+                            retained.extend(chunk[:available])
+                        truncated = True
+                        kill_process_group()
+                    else:
+                        retained.extend(chunk)
+                if timed_out or truncated:
+                    stop_capture()
+            returncode = process.wait()
+            if truncated:
+                returncode = COMMAND_TIMEOUT_TRUNCATED_RETURN_CODE
+            elif timed_out:
+                returncode = COMMAND_TIMEOUT_RETURN_CODE
+            raw_stdout, raw_stderr = bytes(stdout), bytes(stderr)
+            return CommandResult(
+                returncode,
+                raw_stdout.decode("utf-8", errors="replace"),
+                raw_stderr.decode("utf-8", errors="replace"),
+                raw_stdout,
+                raw_stderr,
+            )
+        except ControllerError:
+            raise
+        except (OSError, subprocess.SubprocessError):
+            raise ControllerError("command_execution_failed") from None
+        finally:
+            capture_open = bool(selector.get_map())
+            if process is not None and (
+                    process.poll() is None or capture_open):
+                kill_process_group()
+            selector.close()
+            if process is not None:
+                try:
+                    process.wait()
+                except (OSError, subprocess.SubprocessError):
+                    pass
+                if process.stdout is not None:
+                    process.stdout.close()
+                if process.stderr is not None:
+                    process.stderr.close()
+
     def run(self, command: Command) -> CommandResult:
         if type(command) is not Command:
             raise ControllerError("invalid_command")
@@ -252,6 +386,10 @@ class SubprocessCommandRunner:
         argv = command.argv
         if self.tools is not None and argv[0] in {"docker", "kind", "kubectl"}:
             argv = (str(self.tools / argv[0]), *argv[1:])
+        capture_limit = self._control_plane_manifest_capture_limit(command)
+        if capture_limit is not None:
+            return self._run_bounded_capture(
+                argv, command, environment, capture_limit)
         try:
             completed = subprocess.run(
                 argv,
