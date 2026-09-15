@@ -13252,3 +13252,50 @@ checks, then obtain independent Task 2 specification re-review before starting
 Task 3.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-274 — 2026-09-15 — V4 Task 2 post-deletion forward-progress gap corrected
+
+**Input:** Correct the Important lifecycle-order gap recorded by specification
+review T-273 under strict test-first development, without pushing, invoking a
+live cluster/runtime command, or inspecting or mutating any Colima profile.
+
+**Interpretation:** The correction must preserve legitimate teardown while
+making cluster teardown a one-way boundary for the two new forward phases.
+Neither `control_plane_manifest_source_intent` nor `image_import_intent` may be
+accepted after cluster deletion or cluster absence has begun, regardless of
+whether that teardown family is pending or terminal.
+
+**Decision status:** Confirmed implementation correction, pending independent
+specification re-review and code-quality review. The history validator now
+distinguishes a family that has ever begun from one that completed, and both
+manifest-source and image-import intent guards require that neither cluster
+deletion nor cluster-absence proof has begun.
+
+**Rationale:** Completion sets establish historical prerequisites but do not
+encode whether the lifecycle has irreversibly entered teardown. Consulting the
+existing per-family state registry closes that gap for pending, completed,
+failed, and abandoned teardown states without latching or reordering the
+legitimate teardown families themselves.
+
+**Verification:** The new adversarial test first failed in both subtests because
+the journal accepted the exact post-delete source sequence and also accepted
+image import after a completed source pair followed by cluster deletion. After
+the narrow validator change, that test passed. The full five-module focused
+suite then passed all 144 tests in 28.424 seconds, and `git diff --check`
+passed. No Colima, Docker, Kind, kubectl, Kubernetes, or other live runtime
+command was invoked.
+
+**Affected artifacts:** Code/test correction commit `6a9e0e2` updates
+`src/kil/v3b2_journal.py` and `tests/test_v3b2_journal.py`. This append-only
+entry and its regenerated HTML reader form a separate documentation checkpoint.
+The T-273 review record remains unchanged.
+
+**Unresolved questions:** Independent Task 2 specification re-review and
+code-quality review remain outstanding. Task 3 controller capture and recovery
+wiring remains out of scope until those acceptance gates pass.
+
+**Next gate:** Re-run the focused verification from the committed state, then
+obtain independent Task 2 specification and code-quality acceptance before
+starting Task 3.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
