@@ -1148,6 +1148,9 @@ def _validate_history(events: object, lifecycle_mode: str, teardown_from_sequenc
     def done(family: str) -> bool:
         return (family, ()) in completed
 
+    def begun(family: str) -> bool:
+        return (family, ()) in states
+
     def require(condition: bool, message: str) -> None:
         if not condition:
             raise JournalError(f"journal lifecycle phase/order violation: {message}")
@@ -1196,13 +1199,22 @@ def _validate_history(events: object, lifecycle_mode: str, teardown_from_sequenc
             elif family == "cluster_create":
                 require(done("profile_start"), "cluster create requires profile start completion")
             elif family == "control_plane_manifest_source":
-                require(done("cluster_create"),
-                        "control-plane manifest source requires cluster create completion")
+                require(
+                    done("cluster_create")
+                    and not begun("cluster_delete")
+                    and not begun("cluster_absence_proof"),
+                    "control-plane manifest source requires cluster create completion before deletion or absence",
+                )
             elif family == "calico_apply":
                 require(done("cluster_create") and done("image_load"), "Calico apply requires cluster and image load completion")
             elif family == "image_import":
-                require(done("cluster_create") and done("control_plane_manifest_source"),
-                        "image import requires control-plane manifest source completion")
+                require(
+                    done("cluster_create")
+                    and done("control_plane_manifest_source")
+                    and not begun("cluster_delete")
+                    and not begun("cluster_absence_proof"),
+                    "image import requires control-plane manifest source completion before cluster deletion or absence",
+                )
             elif family == "image_load":
                 require(done("cluster_create") and done("image_import"), "image load requires cluster and import completion")
             elif family == "application_apply":

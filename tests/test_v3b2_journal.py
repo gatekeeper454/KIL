@@ -1216,6 +1216,35 @@ class V3B2JournalTest(unittest.TestCase):
         self._append("control_plane_manifest_source_complete", details)
         self._append("image_import_intent", image)
 
+    def test_forward_manifest_phases_cannot_resume_after_cluster_deletion(self) -> None:
+        delete = {"kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig}
+        source = {"kind_cluster": "kil-v3-lab"}
+        image = {
+            "archive_sha256": "a" * 64,
+            "image": "kil.local/kil-v3b2:sha256-" + "d" * 64,
+            "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64,
+        }
+
+        with self.subTest(phase="source"):
+            self.path = self.private / "post-delete-source.json"
+            self._journal()
+            self._cluster_created()
+            self._append("cluster_delete_intent", delete)
+            self._append("cluster_delete_complete", delete)
+            with self.assertRaisesRegex(JournalError, "delete|absence|phase|order"):
+                self._append("control_plane_manifest_source_intent", source)
+                self._append("control_plane_manifest_source_complete", source)
+                self._append("image_import_intent", image)
+
+        with self.subTest(phase="image-import"):
+            self.path = self.private / "post-delete-image-import.json"
+            self._journal()
+            self._manifest_sourced()
+            self._append("cluster_delete_intent", delete)
+            self._append("cluster_delete_complete", delete)
+            with self.assertRaisesRegex(JournalError, "delete|absence|phase|order"):
+                self._append("image_import_intent", image)
+
     def test_manifest_source_requires_cluster_and_accepts_only_exact_kind_pair(self) -> None:
         self._journal()
         with self.assertRaisesRegex(JournalError, "cluster|order|phase"):
