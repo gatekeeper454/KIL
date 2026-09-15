@@ -13067,3 +13067,51 @@ checkpoint and replay-safe journal family. Preserve strict false completion
 flags and carry bounded successful-output capture into Task 3.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-271 — 2026-09-15 — V4 manifest source Task 1 independently accepted
+
+**Input:** Complete independent specification and code-quality review of the
+corrected V4 Task 1 implementation before remote synchronization or Task 2.
+
+**Interpretation:** Acceptance requires both the approved source contract and
+the implementation-quality gate to pass after the encoding corrections, with
+no unresolved Critical, Important, or Minor finding and no expansion beyond
+the static source claim.
+
+**Decision status:** Confirmed. Task 1 is accepted as a static implementation
+checkpoint. The exact two-command/four-observation source proof, retained
+authority reconstruction, strict encodings, bounds, hashes, detached Pod
+access, and false completion flags match the approved plan. Task 2 may begin
+after this checkpoint is pushed.
+
+**Rationale:** Separating specification compliance from code-quality review
+tests both whether the correct boundary was implemented and whether it is safe
+to build later persistence and component proofs upon it. Resolving findings
+before push prevents a broader or ambiguous source representation from
+becoming durable evidence authority.
+
+**Verification:** Independent specification re-review reported full compliance
+and adversarially confirmed rejection of UTF-16/UTF-32 node-inspect JSON plus
+uppercase, whitespace-separated, and newline-separated retained hexadecimal.
+Independent quality review reported no Critical, Important, or Minor findings
+and assessed the checkpoint ready to proceed. The focused and neighboring
+suite passed all 114 tests, 76 Markdown readers verified, and the diff check
+was clean. Both earlier safety/plan checkpoints `13ccd07` and `0c222ce` passed
+private remote CI. No live runtime command was invoked.
+
+**Affected artifacts:** Appended this acceptance entry and regenerated the
+lineage reader. Task 1 implementation remains in commits `8ad7011` and
+`5569817`; no Colima profile, Docker endpoint, Kind cluster, Kubernetes state,
+evidence bundle, publication, or repository visibility changed.
+
+**Unresolved questions:** The canonical private checkpoint, journal/replay
+family, bounded controller capture and recovery, both component disk/API
+proofs, platform image/status/readiness composition, all-ten-Pod terminal,
+request-free lifecycle, and nominal lifecycle remain open.
+
+**Next gate:** Push the accepted Task 1 checkpoint to the private implementation
+branch, verify local/remote identity, then begin Task 2 from the documented
+plan. Task 3 remains responsible for bounding successful process output before
+retention.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
