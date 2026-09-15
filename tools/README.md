@@ -6,10 +6,13 @@ and figures from canonical decision records.
 
 ## Markdown reader publication
 
-`render_markdown.py` maps every Git-tracked file whose final suffix is
-lowercase `.md` to exactly one same-directory `.htm` reader. Markdown is the
-source of record; generated readers carry their source path and SHA-256 digest
-and must not be edited directly.
+`render_markdown.py` maps every Git-tracked documentation file whose final
+suffix is lowercase `.md` to exactly one same-directory `.htm` reader. The
+exact `artifacts/generated/**` namespace is excluded because its evidence
+directories are closed by their manifests and checksums; the reader generator
+must not add files there. Markdown is the source of record for reader inputs;
+generated readers carry their source path and SHA-256 digest and must not be
+edited directly.
 
 ```bash
 make docs-html
@@ -30,9 +33,11 @@ therefore require the referenced local files to remain available.
 `make docs-html-check` runs the renderer with `--check`. It performs no repairs
 or removals and returns failure after reporting every missing, stale, or
 unexpected visible reader. `make validate` includes this check, so any future
-tracked lowercase-`.md` addition or removal changes the exact required `.htm`
-set automatically. Regeneration and checking require the pinned `docs`
-dependency set.
+tracked lowercase-`.md` documentation addition or removal changes the exact
+required `.htm` set automatically. A Markdown path beneath the exact
+`artifacts/generated/` root does not become a reader source, and links to it
+retain `.md`. Regeneration and checking require the pinned `docs` dependency
+set.
 
 `v3a_demo.py` runs the three infrastructure-fixed authorization tracks against
 one normalized request, joins each decision to its forwarding outcome and

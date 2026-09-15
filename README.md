@@ -159,9 +159,12 @@ cluster dependency is installed or downloaded by the bootstrap.
 
 ## Offline HTML readers
 
-Every tracked file whose final suffix is lowercase `.md` has a generated
-`.htm` sibling in the same directory. Markdown is the canonical source; do not
-edit generated readers directly.
+Every tracked file whose final suffix is lowercase `.md`, except closed
+evidence under `artifacts/generated/**`, has a generated `.htm` sibling in the
+same directory. Markdown is the canonical source; do not edit generated
+readers directly. Generated evidence directories are manifest-defined closed
+artifact sets, so the general reader generator must neither open their
+Markdown nor add sibling files to them.
 
 ```bash
 make docs-html
@@ -179,7 +182,8 @@ must remain available beside the repository content.
 Regeneration requires the `docs` optional dependency. `make docs-html-check`
 is read-only and reports missing, unexpected, or stale readers; `make validate`
 runs that check and rejects publication drift. Adding or removing a tracked
-lowercase-`.md` file dynamically changes the required sibling set.
+lowercase-`.md` documentation file dynamically changes the required sibling
+set; paths under the exact `artifacts/generated/` root remain excluded.
 
 The V3B-1 tool bootstrap and preflight are separate, opt-in commands:
 

@@ -30,6 +30,7 @@ _CSP = (
     "object-src 'none'; base-uri 'none'; form-action 'none'"
 )
 _WIDE_LAYOUT_DIRECTIVE = "<!-- reader-layout: wide -->\n"
+_GENERATED_EVIDENCE_ROOT = PurePosixPath("artifacts/generated")
 
 _CSS = """
 :root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
@@ -501,8 +502,13 @@ def _validate_sources(
 
 
 def discover_sources(root: Path = ROOT) -> tuple[PurePosixPath, ...]:
-    """Discover every tracked lowercase-.md source through Git."""
-    return _validate_sources(root, _tracked_paths(root, ("*.md",)))
+    """Discover tracked documentation sources without opening evidence bundles."""
+    sources = tuple(
+        source
+        for source in _tracked_paths(root, ("*.md",))
+        if not source.is_relative_to(_GENERATED_EVIDENCE_ROOT)
+    )
+    return _validate_sources(root, sources)
 
 
 def _visible_html(root: Path) -> frozenset[PurePosixPath]:

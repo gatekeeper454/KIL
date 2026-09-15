@@ -12707,3 +12707,130 @@ complete the merge commit, push `main` without force, and verify that
 `origin/main` resolves to the local merge commit.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-265 — 2026-09-14 — Repository and transcript context digested for session continuity
+
+**Input:** "Make sure to digest the transcripts so when I ask you to do
+something - it makes sense," following confirmation that the repository and
+all tracked transcript files were already committed and synchronized with
+`origin/main`.
+
+**Interpretation:** Read the tracked conversation-transcript files, `README.md`,
+the publishable paper, and this lineage log's structure/legend and latest
+entries so that later instructions in this session can be interpreted against
+established KIL/KTP terminology, evidence discipline, and current project
+state, rather than re-deriving context from scratch. This is a context-loading
+action, not a design, implementation, or evidence decision.
+
+**Decision status:** Confirmed as completed for this session. Read in full:
+`CONVERSATION-TRANSCRIPT-2026-09-14.md` (OTCS coordinate-record task),
+`KIL-CONVERSATION-TRANSCRIPT-2026-09-14.md` (Turnkey Blue Zone / Frontier Zero
+Trust / Dario Amodei briefing package), `README.md`, and
+`docs/paper/kinetic-infrastructure.md`. Read in substantial part (opening,
+multiple internal ranges, and the full ending) `KIL-V3B1-CONVERSATION-TRANSCRIPT-2026-09-14.md`
+(V3B-1 live-Envoy testing through the V3B-1 Complete / V4 Future publication
+decision and the confirmed remain-private decision) and
+`docs/transcripts/KIL-architecture-full-transcript-2026-09-14.md` (project
+origin from the Hugging Face incident and KTP through the trust-decay model,
+V1–V3A history, and later presentation-asset promotions). Read this lineage
+log's purpose/convention section and its most recent entries through T-264.
+
+**Rationale:** The repository's own convention treats the specialist lineage
+log and exported transcripts as the durable record of why KIL exists, how its
+architecture evolved, and which claims are confirmed versus proposed. Loading
+that record before further instructions reduces the risk of contradicting
+prior approved decisions (e.g., the non-expansion invariant, the
+`observed`/`modeled`/`validated` evidence contract, the `kil-v3-lab`-only
+Colima ownership rule, the exactly-once central-request rule, the V3B-1
+Complete / V4 Future publication boundary, and the confirmed-private repository
+visibility decision).
+
+**Affected artifacts:** None changed; this entry documents context loaded into
+the current session. No code, evidence, publication claim, or repository
+setting was modified.
+
+**Unresolved questions:** None raised by this review. The V3B-2/V4 Future
+`image_import_identity_invalid` deferred test boundary and the ignored
+live-board freshness follow-up noted in T-264 remain open, pre-existing items
+independent of this digestion.
+
+**Next gate:** None required by this entry; awaiting the user's next
+substantive request.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-266 — 2026-09-15 — V3B-1 completion reverified and closed evidence namespace repaired
+
+**Input:** Finish V3B-1 testing from the prior stopping point, use parallel
+agents, and minimize additional approval prompts.
+
+**Interpretation:** Resolve the request against the synchronized repository
+record before issuing any runtime command. V3B-1 already has one accepted,
+exactly-once Task 11 local-Envoy result, so another live request would be
+repetition/new evidence reserved for post-publication V4 Future. Complete only
+the safe outstanding verification and bookkeeping work: audit runtime absence,
+refresh the ignored status board, close the historical Task 10 checklist, and
+verify the accepted evidence bundle without changing its declared contents.
+
+**Decision status:** Confirmed V3B-1 remains complete at the bounded
+`local_envoy_boundary`. No live lifecycle command or request traffic was
+authorized or executed. Three independent read-only audits confirmed that
+`main` matched `origin/main` at the start, `kil-v3-lab` was absent, no active
+state/journal/readiness-poison/publication-staging marker existed, and the
+foreign `default` and `attackswarm` profiles remained outside KIL ownership and
+untouched. The private live board now records Task 11 completion, exactly one
+attempt per track, no retry, and the V4 Future exclusions. The historical Task
+10 public-record step is marked complete together with its contract assertion.
+
+Offline verification exposed one tracked `summary.htm` inside the accepted run
+directory that was not named by `SHA256SUMS`, the manifest artifact map, or the
+controller's closed authoritative file set. The accepted bundle therefore
+failed closed as designed. The undeclared companion was removed; the general
+Markdown reader now excludes the exact reserved `artifacts/generated/**`
+namespace, and regression coverage proves the exclusion is component-exact,
+links to excluded evidence retain `.md`, similarly named directories remain
+eligible, and an HTML companion inside generated evidence is rejected as
+unexpected. This entry supersedes the blanket reader invariant recorded in
+T-143/T-144 only for the exact generated-evidence namespace; historical entries
+remain unchanged.
+
+**Rationale:** The accepted run is immutable evidence whose directory shape is
+part of its verification contract. A convenience reader not bound by the
+manifest or checksums weakens that closed set even if its own content is
+benign. Keeping ordinary documentation readers outside generated evidence
+preserves both guarantees: repository Markdown remains reviewable through
+deterministic siblings, while evidence directories remain exactly
+manifest-defined. Avoiding a live rerun preserves the exactly-once record and
+the approved V3B-1 Complete / V4 Future publication boundary.
+
+**Verification:** The accepted run
+`v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94`
+again passes every recorded checksum and the offline `view --bundle` verifier,
+which returns its accepted `live.html` presenter. The focused live-board test,
+Task 10 publication-contract test, evidence-namespace renderer tests, and
+tracked reader-set test pass. A fresh 303-test V3B-1 run found only the stale
+Task 10 checkbox expectation before that expectation was corrected; no
+controller, request-driver, evidence, publication-status, or live-board defect
+remained. Independent specification and quality/security reviews reported no
+Critical finding and approved the closed-evidence approach after requiring
+current maintainer guidance, boundary tests, reader regeneration, and this
+lineage entry.
+
+**Affected artifacts:** Updated `tools/render_markdown.py`,
+`tests/test_markdown_html.py`, `tests/test_v3b1_documentation.py`, `README.md`,
+`tools/README.md`, and the Task 10 plan/checklist; removed only the undeclared
+accepted-bundle `summary.htm`; refreshed the ignored private V3B-1 status board;
+and appended this lineage entry plus regenerated documentation readers. The
+accepted checksummed files, KIL/KTP protocol, evidence values, Colima profiles,
+and V4 Future implementation remain unchanged.
+
+**Unresolved questions:** None inside V3B-1. Kind/Calico, NetworkPolicy,
+repetition, and performance remain explicitly deferred to post-publication V4
+Future.
+
+**Next gate:** Regenerate all eligible readers, run the complete repository
+validation from the Python 3.12 environment, obtain final independent
+read-only review, then commit and push this closure checkpoint without running
+the live lab.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

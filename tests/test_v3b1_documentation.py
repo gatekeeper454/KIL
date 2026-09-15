@@ -300,7 +300,7 @@ class V3B1DocumentationTest(unittest.TestCase):
         )[1].split("## Task 11", 1)[0]
         self.assertIn("- [x] **Step 3:", task10_plan)
         self.assertIn("- [x] **Step 4:", task10_plan)
-        self.assertIn("- [ ] **Step 5:", task10_plan)
+        self.assertIn("- [x] **Step 5:", task10_plan)
         task10_value = normalized(task10_plan).lower()
         self.assertNotIn("exact foreign-state restoration", task10_value)
         self.assertRegex(
