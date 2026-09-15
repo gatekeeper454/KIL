@@ -1144,6 +1144,11 @@ def _validate_history(events: object, lifecycle_mode: str, teardown_from_sequenc
     failed_families: set[str] = set()
     abandoned_families: set[str] = set()
     track_namespace = dict(TRACK_NAMESPACES)
+    forward_families = {
+        "control_plane_manifest_source", "image_import", "image_load",
+        "calico_apply", "application_apply", "readiness", "driver_start",
+        "request",
+    }
 
     def done(family: str) -> bool:
         return (family, ()) in completed
@@ -1194,27 +1199,24 @@ def _validate_history(events: object, lifecycle_mode: str, teardown_from_sequenc
                 "publication",
             }:
                 raise JournalError("abandoned request permits only ordered teardown and publication")
+            if family in forward_families:
+                require(
+                    not begun("cluster_delete")
+                    and not begun("cluster_absence_proof"),
+                    "forward phase cannot begin after cluster deletion or absence",
+                )
             if family == "profile_start":
                 require(sequence == 1, "profile start must be first")
             elif family == "cluster_create":
                 require(done("profile_start"), "cluster create requires profile start completion")
             elif family == "control_plane_manifest_source":
-                require(
-                    done("cluster_create")
-                    and not begun("cluster_delete")
-                    and not begun("cluster_absence_proof"),
-                    "control-plane manifest source requires cluster create completion before deletion or absence",
-                )
+                require(done("cluster_create"),
+                        "control-plane manifest source requires cluster create completion")
             elif family == "calico_apply":
                 require(done("cluster_create") and done("image_load"), "Calico apply requires cluster and image load completion")
             elif family == "image_import":
-                require(
-                    done("cluster_create")
-                    and done("control_plane_manifest_source")
-                    and not begun("cluster_delete")
-                    and not begun("cluster_absence_proof"),
-                    "image import requires control-plane manifest source completion before cluster deletion or absence",
-                )
+                require(done("cluster_create") and done("control_plane_manifest_source"),
+                        "image import requires control-plane manifest source completion")
             elif family == "image_load":
                 require(done("cluster_create") and done("image_import"), "image load requires cluster and import completion")
             elif family == "application_apply":

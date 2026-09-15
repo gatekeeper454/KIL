@@ -19,7 +19,7 @@ from kil.v3b2_control_plane_manifest_source_record import (
     publish_control_plane_manifest_source_record,
     read_control_plane_manifest_source_record,
 )
-from kil.v3b2_proofs import canonical
+from kil.v3b2_proofs import ExpectedContext, canonical
 from tests.test_v3b2_control_plane_manifest_source import context, identity, observations
 
 
@@ -30,7 +30,10 @@ class ControlPlaneManifestSourceRecordTest(unittest.TestCase):
         self.private.mkdir(mode=0o700)
         os.chmod(self.private, 0o700)
         self.path = self.private / "control-plane-manifest-source-5.json"
-        self.context = context()
+        self.context = context(
+            private_path=str(self.private),
+            control_plane_manifest_source_version=1,
+        )
         self.proof = validate_control_plane_manifest_source(
             context=self.context, owned_identity=identity(), observations=observations())
 
@@ -98,6 +101,73 @@ class ControlPlaneManifestSourceRecordTest(unittest.TestCase):
             encode_control_plane_manifest_source_record(
                 proof=self.proof, context=changed)
 
+    def test_checkpoint_path_is_bound_to_versioned_immutable_private_parent(self) -> None:
+        unrelated = self.private.with_name("unrelated-private")
+        unrelated.mkdir(mode=0o700)
+        os.chmod(unrelated, 0o700)
+        substituted = unrelated / self.path.name
+        substituted.write_bytes(encode_control_plane_manifest_source_record(
+            proof=self.proof, context=self.context))
+        os.chmod(substituted, 0o600)
+        for action in (
+            lambda: read_control_plane_manifest_source_record(
+                path=substituted, context=self.context),
+            lambda: publish_control_plane_manifest_source_record(
+                path=substituted, proof=self.proof, context=self.context),
+        ):
+            with self.subTest(action=action), self.assertRaisesRegex(
+                    ControlPlaneManifestSourceRecordError, "private|parent|version"):
+                action()
+
+        version_two = context(
+            private_path=str(self.private),
+            control_plane_manifest_source_version=2,
+        )
+        version_two_proof = validate_control_plane_manifest_source(
+            context=version_two, owned_identity=identity(), observations=observations())
+        encoded = encode_control_plane_manifest_source_record(
+            proof=version_two_proof, context=version_two)
+        self.write(encoded)
+        for action in (
+            lambda: read_control_plane_manifest_source_record(
+                path=self.path, context=version_two),
+            lambda: publish_control_plane_manifest_source_record(
+                path=self.path, proof=version_two_proof, context=version_two),
+        ):
+            with self.subTest(action=action), self.assertRaisesRegex(
+                    ControlPlaneManifestSourceRecordError, "version"):
+                action()
+
+    def test_reader_validates_exact_context_before_path_or_filesystem_access(self) -> None:
+        from kil import v3b2_control_plane_manifest_source_record as record
+
+        class ForgedExpectedContext(ExpectedContext):
+            pass
+
+        forged = ForgedExpectedContext(
+            self.context.run_id,
+            self.context.intent_sequence,
+            self.context.family,
+            self.context.intent,
+            self.context.inputs,
+        )
+        with patch.object(
+                record, "_open_parent",
+                side_effect=AssertionError("filesystem reached before context validation"),
+        ) as open_parent:
+            for malformed in (object(), forged):
+                with self.subTest(context=type(malformed).__name__):
+                    try:
+                        read_control_plane_manifest_source_record(
+                            path=self.path, context=malformed)
+                    except ControlPlaneManifestSourceRecordError:
+                        pass
+                    except Exception as error:
+                        self.fail(f"reader leaked {type(error).__name__}: {error}")
+                    else:
+                        self.fail("reader accepted a malformed context")
+        open_parent.assert_not_called()
+
     def test_exact_four_mib_budget_is_shared_by_encode_and_read(self) -> None:
         from kil import v3b2_control_plane_manifest_source_record as record
         encoded = encode_control_plane_manifest_source_record(
@@ -117,6 +187,23 @@ class ControlPlaneManifestSourceRecordTest(unittest.TestCase):
                                         "four MiB|byte bound|bounded"):
                 read_control_plane_manifest_source_record(
                     path=self.path, context=self.context)
+        self.assertLessEqual(len(encoded), MAX_SOURCE_RECORD_BYTES)
+
+    def test_complete_envelope_uses_bounded_canonical_before_materialization(self) -> None:
+        from kil import v3b2_control_plane_manifest_source_record as record
+        unbounded = record.canonical
+
+        def reject_complete_envelope(value: object) -> bytes:
+            if type(value) is dict and set(value) == {"schema", "context", "proof"}:
+                raise AssertionError("complete envelope reached unbounded canonical")
+            return unbounded(value)
+
+        with patch.object(record, "canonical", side_effect=reject_complete_envelope):
+            try:
+                encoded = encode_control_plane_manifest_source_record(
+                    proof=self.proof, context=self.context)
+            except AssertionError as error:
+                self.fail(str(error))
         self.assertLessEqual(len(encoded), MAX_SOURCE_RECORD_BYTES)
 
     def test_existing_altered_bytes_are_never_replaced(self) -> None:
@@ -190,6 +277,19 @@ class ControlPlaneManifestSourceRecordTest(unittest.TestCase):
                     path=self.path, proof=self.proof, context=self.context)
         self.assertTrue(replaced)
         self.assertFalse(self.path.exists())
+
+    def test_parent_descriptor_is_closed_when_open_validation_raises(self) -> None:
+        from kil import v3b2_control_plane_manifest_source_record as record
+
+        with (
+            patch.object(record.os, "open", return_value=91),
+            patch.object(record.os, "fstat", side_effect=OSError("fstat failed")),
+            patch.object(record.os, "close") as close,
+        ):
+            with self.assertRaises(ControlPlaneManifestSourceRecordError):
+                read_control_plane_manifest_source_record(
+                    path=self.path, context=self.context)
+        close.assert_called_once_with(91)
 
     def test_corruption_unknown_fields_and_forged_nested_proof_fail_closed(self) -> None:
         encoded, document = self.encoded_document()

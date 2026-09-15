@@ -1245,6 +1245,33 @@ class V3B2JournalTest(unittest.TestCase):
             with self.assertRaisesRegex(JournalError, "delete|absence|phase|order"):
                 self._append("image_import_intent", image)
 
+    def test_image_load_cannot_begin_after_cluster_delete_or_absence(self) -> None:
+        delete = {"kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig}
+        absence = {"kind_cluster": "kil-v3-lab", "node_container_id": NODE_ID}
+        imported = {
+            "archive_sha256": "a" * 64,
+            "image": "kil.local/kil-v3b2:sha256-" + "d" * 64,
+            "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64,
+        }
+        image = {name: value for name, value in imported.items()
+                 if name != "archive_sha256"}
+
+        for absent in (False, True):
+            with self.subTest(absent=absent):
+                self.path = self.private / f"post-teardown-image-load-{absent}.json"
+                self._journal()
+                self._manifest_sourced()
+                self._append("image_import_intent", imported)
+                self._append("image_import_complete", imported)
+                self._append("cluster_delete_intent", delete)
+                self._append("cluster_delete_complete", delete)
+                if absent:
+                    self._append("cluster_absence_proof_intent", absence)
+                    self._append("cluster_absence_proof_complete", absence)
+                with self.assertRaisesRegex(
+                        JournalError, "delete|absence|teardown|phase|order"):
+                    self._append("image_load_intent", image)
+
     def test_manifest_source_requires_cluster_and_accepts_only_exact_kind_pair(self) -> None:
         self._journal()
         with self.assertRaisesRegex(JournalError, "cluster|order|phase"):

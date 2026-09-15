@@ -13,7 +13,13 @@ from kil.v3b2_control_plane_manifest_source import (
     ControlPlaneManifestSourceError,
     ControlPlaneManifestSourceProof,
 )
-from kil.v3b2_proofs import ExpectedContext, canonical, decode
+from kil.v3b2_proofs import (
+    ExpectedContext,
+    ProofError,
+    _canonical_bounded,
+    canonical,
+    decode,
+)
 
 
 _SCHEMA = "kil.v4.control-plane-manifest-source.v1"
@@ -95,11 +101,14 @@ def encode_control_plane_manifest_source_record(*, proof, context) -> bytes:
     expected = _context_document(context)
     encoded_proof = _proof_document(proof)
     _require_context_binding(encoded_proof, expected)
-    payload = canonical({"schema": _SCHEMA, "context": expected,
-                         "proof": encoded_proof})
-    if len(payload) > MAX_SOURCE_RECORD_BYTES:
+    try:
+        payload = _canonical_bounded(
+            {"schema": _SCHEMA, "context": expected, "proof": encoded_proof},
+            MAX_SOURCE_RECORD_BYTES,
+        )
+    except ProofError as error:
         raise ControlPlaneManifestSourceRecordError(
-            "manifest source record exceeds its four MiB byte bound")
+            "manifest source record exceeds its four MiB byte bound") from error
     return payload
 
 
@@ -159,10 +168,23 @@ def _decode_record(payload: bytes, context: ExpectedContext
 
 
 def _checkpoint_name(path: Path, context: ExpectedContext) -> tuple[Path, str]:
+    expected_context = _context_document(context)
     if not isinstance(path, Path):
         raise ControlPlaneManifestSourceRecordError(
             "manifest source checkpoint path must be a Path")
-    expected_name = f"control-plane-manifest-source-{context.intent_sequence}.json"
+    inputs = expected_context["inputs"]
+    assert isinstance(inputs, dict)
+    private = inputs.get("private_path")
+    version = inputs.get("control_plane_manifest_source_version")
+    if (type(version) is not int or version != 1
+            or type(private) is not str or not Path(private).is_absolute()
+            or ".." in Path(private).parts or str(Path(private)) != private
+            or path.parent != Path(private)):
+        raise ControlPlaneManifestSourceRecordError(
+            "manifest source checkpoint private parent or version is invalid")
+    expected_name = (
+        f"control-plane-manifest-source-{expected_context['intent_sequence']}.json"
+    )
     if (not path.is_absolute() or ".." in path.parts or str(path) != str(Path(path))
             or path.name != expected_name):
         raise ControlPlaneManifestSourceRecordError(
@@ -192,6 +214,10 @@ def _open_parent(path: Path) -> tuple[int, os.stat_result]:
             pass
         raise
     except OSError as error:
+        try:
+            os.close(descriptor)
+        except (NameError, OSError):
+            pass
         raise ControlPlaneManifestSourceRecordError(
             "checkpoint parent cannot be opened safely") from error
 
