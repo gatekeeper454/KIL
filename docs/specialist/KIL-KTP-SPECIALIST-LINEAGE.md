@@ -13623,3 +13623,72 @@ proof gates remain open.
 obtain independent Task 2 code-quality acceptance before beginning Task 3.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-280 — 2026-09-15 — V4 Task 2 quality re-review approved
+
+**Input:** Independently re-review the remaining T-278 Important finding after
+implementation commit `f44921940ebfacb88b876aca9664614ba3938357` and
+lineage commit `8121cf012fd73e611fdd8a6b440eb315c96b53f3`; confirm that
+evidence freeze, Envoy quiescence, and driver cancellation cannot newly begin
+after cluster deletion or absence, while legitimate pre-deletion
+teardown/recovery remains available. Reassess the complete Task 2
+implementation for Critical, Important, and Minor issues without invoking a
+live runtime or inspecting or mutating Colima.
+
+**Interpretation:** The irreversible boundary applies to new intents for every
+operation that needs the owned cluster. It must reject those intents as soon as
+cluster deletion begins, including after failed, abandoned, or completed delete
+state and after any cluster-absence state. It must not prevent the same
+cluster-live teardown operations from completing before deletion, and must
+continue to admit cluster/profile absence proof, profile teardown, foreign-state
+comparison, and publication after deletion.
+
+**Decision status:** Approved. No Critical, Important, or Minor findings remain
+in the reviewed Task 2 implementation. The T-278 Important finding is fully
+resolved: the shared intent gate includes `evidence_freeze`,
+`envoy_quiesce`, and `driver_cancel`, and checks both begun cluster deletion and
+begun cluster-absence proof. The earlier T-276 findings remain resolved, and
+the correction introduces no authority widening or unrelated behavior change.
+This is static Task 2 code-quality acceptance, not a live V4 validation or a
+claim that Task 3 wiring exists.
+
+**Rationale:** All three formerly omitted families derive Kubernetes reads or
+mutations during recovery, so placing them in the same pre-intent
+cluster-liveness gate closes the gap before a pending event can authorize a
+command. The gate is evaluated only for new intents and only after deletion or
+absence has begun. Existing nominal and request-free sequences still perform
+evidence freeze, ordered driver cancellation, and Envoy quiescence before
+cluster deletion; a failure-driven teardown sequence likewise accepted
+quiescence, freeze, synthetic UID-bound driver cancellation, and then deletion.
+Post-delete cluster-absence proof and the remaining profile/comparison/
+publication teardown families are outside the gate and retain their existing
+ordering rules.
+
+**Verification:** A no-runtime adversarial script exercised each of the three
+families at both irreversible boundaries. All six post-delete/post-absence
+intent attempts failed closed with `forward phase cannot begin after cluster
+deletion or absence`. A separate failure-driven pre-delete sequence accepted
+Envoy quiescence, evidence freeze, driver cancellation, and cluster deletion;
+recovery commands were inspected only as values and were not executed. The
+five-module focused suite passed all 150 tests in 29.282 seconds, including the
+new family-membership regression and existing nominal, request-free, stranded,
+and three-driver teardown paths. `git diff --check` passed for the complete
+implementation range through `f449219`. No Colima, Docker, Kind, kubectl,
+Kubernetes, request, evidence, or publication command was invoked.
+
+**Affected artifacts:** This append-only quality-acceptance entry and its
+regenerated HTML reader. Production code and tests were not modified by this
+review. T-276 through T-279 remain unchanged; the accepted implementation is
+the original Task 2 implementation plus corrections `6a9e0e2`, `977ffac`, and
+`f449219`.
+
+**Unresolved questions:** None for Task 2 code quality. Task 3 controller
+capture/recovery wiring, both component disk/API proofs, platform composition,
+the all-ten-Pod terminal, request-free lifecycle, and nominal lifecycle remain
+open and are not claimed here.
+
+**Next gate:** Begin Task 3 controller capture and recovery wiring under TDD,
+preserving the accepted durable-checkpoint and irreversible-teardown
+boundaries.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
