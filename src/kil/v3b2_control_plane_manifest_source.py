@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, fields
 from hashlib import sha256
+import json
 from pathlib import Path
 import re
 
@@ -222,6 +223,10 @@ def _decode_raw_observation(payload: bytes) -> RawObservation:
         stderr = bytes.fromhex(document["stderr_hex"])
     except ValueError as error:
         raise ControlPlaneManifestSourceError("retained raw observation hex is invalid") from error
+    if (document["stdout_hex"] != stdout.hex()
+            or document["stderr_hex"] != stderr.hex()):
+        raise ControlPlaneManifestSourceError(
+            "retained raw observation hex is not lowercase and contiguous")
     row = RawObservation(document["label"], tuple(document["argv"]),
                          tuple(tuple(pair) for pair in document["env"]),
                          document["returncode"], stdout, stderr)
@@ -280,7 +285,21 @@ def _node_projection(payload: bytes) -> dict[str, object]:
     if type(payload) is not bytes or not 1 <= len(payload) <= MAX_MANIFEST_BYTES:
         raise ControlPlaneManifestSourceError("node inspect stdout exceeds its exact byte bound")
     try:
-        document = decode(payload, maximum=MAX_MANIFEST_BYTES)
+        text = payload.decode("utf-8", errors="strict")
+
+        def object_from_pairs(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ControlPlaneManifestSourceError("node inspect JSON has a duplicate field")
+                result[key] = value
+            return result
+
+        def reject_constant(_value):
+            raise ControlPlaneManifestSourceError("node inspect JSON has a nonfinite value")
+
+        document = json.loads(text, object_pairs_hook=object_from_pairs,
+                              parse_constant=reject_constant)
         if type(document) is not list or len(document) != 1 or type(document[0]) is not dict:
             raise ControlPlaneManifestSourceError("node inspect root is ambiguous")
         node = document[0]

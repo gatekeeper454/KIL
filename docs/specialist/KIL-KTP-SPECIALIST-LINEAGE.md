@@ -13018,3 +13018,52 @@ bounded capture and recovery wiring. Keep all completion flags false and do not
 open any live gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-270 — 2026-09-15 — V4 manifest source encoding review corrections
+
+**Input:** Resolve the Task 1 specification-review findings that node-inspect
+JSON accepted Python's UTF-16/UTF-32 byte auto-detection and retained
+observation hex accepted uppercase or whitespace-separated spellings. Preserve
+the static-only scope, use test-first corrections, and publish no live claim.
+
+**Interpretation:** Every observation transport in the manifest source proof
+must have one canonical byte interpretation. Node inspection is strict UTF-8
+JSON rather than generic Python bytes-to-JSON autodetection, and retained
+stdout/stderr commitments use only exact lowercase contiguous hexadecimal.
+These are source-envelope corrections; they do not add component configuration,
+runtime, readiness, or application authority.
+
+**Decision status:** Confirmed static Task 1 correction; no live claim. The
+validator now decodes node-inspect bytes as strict UTF-8 text before closed JSON
+parsing, and proof reconstruction requires each retained hex spelling to equal
+the exact decoded byte sequence's canonical `.hex()` result. Completion flags
+remain exact `False`.
+
+**Rationale:** Python's bytes-oriented JSON loader intentionally recognizes
+UTF-16 and UTF-32, which was broader than the approved source contract.
+Likewise, `bytes.fromhex` intentionally ignores ASCII whitespace and accepts
+uppercase digits. Constraining both boundaries prevents alternate byte and
+text representations from reconstructing as the same retained authority.
+
+**Verification:** The new UTF-16, UTF-32, uppercase-hex, and whitespace-hex
+tests first failed against checkpoint `8ad7011`, directly reproducing both
+findings. After the bounded decoder corrections, the focused and neighboring
+suite passed 114 tests. No Colima, Docker, Kind, kubectl, or live runtime
+command was invoked.
+
+**Affected artifacts:** Corrected
+`src/kil/v3b2_control_plane_manifest_source.py`, extended
+`tests/test_v3b2_control_plane_manifest_source.py`, appended this lineage entry,
+and regenerated the lineage HTML reader. No journal grammar, foreign profile,
+cluster, evidence bundle, publication, or repository-visibility state changed.
+
+**Unresolved questions:** Task 2 persistence, Task 3 bounded successful-output
+capture and recovery, both component disk/API proofs, platform composition,
+the all-ten-Pod terminal, request-free lifecycle, and nominal lifecycle remain
+open. This correction does not authorize live capture.
+
+**Next gate:** Complete correction review, then begin Task 2's canonical private
+checkpoint and replay-safe journal family. Preserve strict false completion
+flags and carry bounded successful-output capture into Task 3.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

@@ -306,6 +306,14 @@ class ControlPlaneManifestProofTest(unittest.TestCase):
         with self.assertRaises(ControlPlaneManifestSourceError):
             self.validate(observations(apiserver=sized_manifest(MAX_MANIFEST_BYTES + 1)))
 
+    def test_node_inspect_must_be_strict_utf8_not_json_autodetected_unicode(self):
+        text = node().decode("utf-8")
+        for encoding in ("utf-16", "utf-32"):
+            payload = text.encode(encoding)
+            with self.subTest(encoding=encoding), self.assertRaises(
+                    ControlPlaneManifestSourceError):
+                self.validate(observations(before=payload, after=payload))
+
     def test_closed_yaml_and_exact_pod_envelope_reject_ambiguity(self):
         invalid = (
             b"apiVersion: v1\napiVersion: v1\nkind: Pod\nmetadata: {}\nspec: {}\n",
@@ -397,6 +405,19 @@ class ControlPlaneManifestProofTest(unittest.TestCase):
                        {"application_complete": 0}, {"application_complete": True}):
             with self.subTest(change=change), self.assertRaises(ControlPlaneManifestSourceError):
                 replace(proof, **change)
+
+    def test_retained_observation_hex_must_be_lowercase_and_contiguous(self):
+        proof = self.validate()
+        variants = ((1, "stdout_hex", lambda value: value.upper()),
+                    (0, "stderr_hex", lambda _value: " "))
+        for index, field, transform in variants:
+            retained = list(proof.raw_observations)
+            raw = json.loads(retained[index])
+            raw[field] = transform(raw[field])
+            retained[index] = canonical(raw)
+            with self.subTest(index=index, field=field), self.assertRaises(
+                    ControlPlaneManifestSourceError):
+                replace(proof, raw_observations=tuple(retained))
 
     def test_exact_types_defeat_subclasses_and_equality_traps(self):
         class EqualString(str):
