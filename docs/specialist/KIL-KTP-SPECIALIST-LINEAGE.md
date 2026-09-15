@@ -13959,3 +13959,74 @@ commit chain, integrate Task 3 only if they remain green, and keep Task 4
 separate from this capture/recovery boundary.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-285 — 2026-09-15 — V4 Task 3 independent specification review approved
+
+**Input:** Independently review the V4 Task 3 implementation over base
+`9769a06d6484f3259d9948d70015f57a84055106` through head
+`0c39e6471b32d657db4869adb6f225842d9cc5da` against the requested controller
+capture-ordering, failure, dispatch-barrier, crash-boundary, retained-only
+recovery, and scope requirements. Do not rely on prior reports or conclusions;
+do not modify production code or tests; execute only static tests; and commit
+only this append-only lineage record and its regenerated HTML reader.
+
+**Interpretation:** Task 3 is compliant only if the controller derives the
+exact owned identity from the disk-backed expected context, performs one fixed
+inspect/read/read/inspect source bracket through `_observe`, validates and
+durably publishes the deterministic checkpoint before returning success,
+journals the source stage immediately after cluster creation and before all
+image and apply work, and makes both normal terminal collection and recovery
+read only that checkpoint. Missing or invalid retained evidence must close to
+teardown-only without recollecting, all source/publication failures must block
+image import/load and Calico/application dispatch, and the accepted Task 2
+journal, version, path, replay, and teardown boundaries must remain unchanged.
+
+**Decision status:** Approved. Independent line-by-line inspection found no
+missing, extra, or misunderstood Task 3 behavior and no Critical, Important,
+or Minor specification finding. This approval is limited to the static Task 3
+controller integration; it does not approve Task 4 or later mirror proofs, a
+live V4 run, branch integration, publication, or remote CI.
+
+**Rationale:** `_checkpoint_control_plane_manifest_source` loads the pending
+context from the journal, reconstructs `OwnedIdentity` from its immutable
+`owned_identity` input, obtains the closed four-command registry, observes each
+command in order, builds exact `RawObservation` records, validates the source,
+publishes the intent-sequence-named checkpoint, and returns success only after
+publication. `_up_lifecycle` places the journal pair directly after
+`cluster_create` and before image import. The operation registry exposes one
+command-free checkpoint request; `_collect_observations` resolves it only via
+the deterministic retained-record reader and canonical encoder. Therefore a
+pending source terminal is completed from disk, while a missing or corrupt
+checkpoint produces teardown-only and no recovery branch can issue the four
+live capture commands. The failure tests cover changed before and after node
+identity, a stopped node, nonzero and truncated reads, publication failure,
+and missing and corrupt recovery checkpoints, and assert zero image, Calico,
+or application dispatch. The reviewed range changes only the intended
+controller/test files plus append-only review documentation; Task 2 production
+gates and Task 4+ proofs are untouched.
+
+**Verification:** The exact prescribed static suite passed 163 tests with
+exactly 16 explicit V4 skips in 509.488 seconds:
+`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -m unittest tests.test_v3b2_controller tests.test_v3b2_journal tests.test_v3b2_proofs tests.test_v3b2_control_plane_manifest_source_record -v`.
+The successful path proved
+`cluster_create_complete < control_plane_manifest_source_complete < image_import_intent`;
+all nine Task 3-focused controller tests passed, including disk-only recovery
+and downstream-zero failures. Reader regeneration produced 76 readers, the
+reader check verified all 76, and `git diff --check` passed. No live Colima,
+Docker, Kind, kubectl, Kubernetes, request, publication, or profile command
+was executed.
+
+**Affected artifacts:** No production code or tests were modified by this
+review. Only `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` and its regenerated
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm` reader are affected.
+
+**Unresolved questions:** None within the requested Task 3 specification.
+Full repository and remote CI, branch integration, Task 4+ component and
+platform proofs, and any live dedicated-profile experiment remain separate
+gates.
+
+**Next gate:** Run the broader repository and remote CI gates on the reviewed
+commit chain, integrate Task 3 only if they remain green, and begin Task 4 in a
+separate change without altering the accepted retained-only recovery boundary.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
