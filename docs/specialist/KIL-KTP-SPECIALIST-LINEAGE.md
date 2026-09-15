@@ -14030,3 +14030,72 @@ commit chain, integrate Task 3 only if they remain green, and begin Task 4 in a
 separate change without altering the accepted retained-only recovery boundary.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-286 — 2026-09-15 — V4 Task 3 quality review found unbounded successful capture
+
+**Input:** Independently review the V4 Task 3 implementation from base
+`9769a06d6484f3259d9948d70015f57a84055106` through head
+`3b224f5595df4c99318588e2686d832faa0fb4a0` for code quality, security,
+failure handling, crash recovery, test strength, and preservation of the
+accepted Task 2 boundaries. Inspect the actual implementation and tests from
+scratch, execute only static tests, modify no production code or tests, and
+commit only this append-only lineage entry and its regenerated HTML reader.
+
+**Interpretation:** Task 3 is ready only if the forward controller performs one
+journal-authorized, bounded inspect/read/read/inspect capture after cluster
+creation and before all image or apply mutation; publishes and revalidates the
+deterministic checkpoint before terminal success; and recovers solely from
+retained checkpoint bytes. The approved source design's one-MiB stdout and
+separately bounded stderr limits are transport properties: the production
+runner must stop or truncate successful output before retaining an unbounded
+payload, rather than relying on validation after `subprocess.run` has already
+captured all bytes.
+
+**Decision status:** Open Important finding; Task 3 is not approved by this
+quality review and must be fixed and re-reviewed. Ordering, immutable-context
+identity reconstruction, durable checkpoint publication, terminal readback,
+teardown-only missing/corrupt recovery, retained-only recovery, and downstream
+mutation barriers otherwise matched the reviewed requirements. No Critical or
+additional Important finding was identified.
+
+**Rationale:** `_checkpoint_control_plane_manifest_source` sends all four new
+source commands through `_observe`, which delegates to
+`SubprocessCommandRunner.run`. That runner uses
+`subprocess.run(..., capture_output=True)` and applies its capture cap only to
+the `TimeoutExpired` path. A successfully completed Docker inspect or manifest
+read therefore retains arbitrary stdout and stderr in memory before
+`validate_control_plane_manifest_source` can reject a one-MiB overflow or the
+four-MiB record encoder can reject the aggregate. A malformed or compromised
+owned node can exhaust controller memory at the new trust boundary instead of
+producing a bounded truncated observation. The controller test for truncation
+injects an already-truncated `CommandResult(-1001, ...)` through `FakeRunner`,
+so it does not exercise or protect the production successful-output transport.
+
+**Verification:** The prescribed static suite passed 163 tests with exactly 16
+explicit V4 skips in 475.160 seconds. A separate static synthetic check patched
+`subprocess.run` to return a successful control-plane manifest command with
+1,048,577 stdout bytes; `SubprocessCommandRunner.run` returned code zero and
+retained all 1,048,577 bytes, directly confirming the missing transport bound.
+No live Colima, Docker, Kind, kubectl, Kubernetes, request, publication, or
+profile command was executed.
+
+**Affected artifacts:** This review changes only
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` and its regenerated
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm` reader. The required future
+correction belongs in `src/kil/v3b2_controller.py` with regression coverage in
+`tests/test_v3b2_controller.py`; neither production code nor tests were changed
+by this review.
+
+**Unresolved questions:** The successful-output transport for all four source
+observations remains unbounded, and no integration test proves that a completed
+process crossing the stdout or stderr cap becomes a bounded unsuccessful
+observation before full retention. Task 4+, live execution, branch integration,
+publication, and remote CI remain separate gates.
+
+**Next gate:** Implement a bounded successful-process capture path for the four
+source observations, preserve their fixed command grammar and retained-only
+recovery, add production-runner regression tests for stdout and stderr limits,
+rerun the prescribed suite and reader checks, and obtain independent Task 3
+quality re-review before proceeding to Task 4 or integration.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
