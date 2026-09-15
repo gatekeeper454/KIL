@@ -13492,3 +13492,85 @@ lifecycle, and nominal lifecycle remain open.
 obtain independent Task 2 code-quality acceptance before beginning Task 3.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-278 — 2026-09-15 — V4 Task 2 quality re-review found adjacent live-cluster recovery gap
+
+**Input:** Independently re-review V4 Task 2 after correction commit
+`977ffac6cfbf3aefaef23b9b91d1412922d53ea9` and lineage commit
+`910004f783fbac509fe5566e2835c15450556e0b`; confirm the two Important
+and three Minor findings recorded in T-276, inspect the combined Task 2
+implementation for regressions, assess version-one enforcement at the durable
+record boundary, and verify that the shared forward-family set closes every
+post-deletion and post-absence resumption path without blocking valid teardown.
+The review was static and invoked no live cluster/runtime command and no Colima
+inspection or mutation.
+
+**Interpretation:** Quality acceptance requires more than closing the exact
+post-delete image-load counterexample: once cluster deletion begins, no new
+intent whose observation or mutation requires that cluster may be admitted.
+Evidence freeze, Envoy quiescence, and driver cancellation remain valid
+teardown/recovery operations before cluster deletion, but cannot be newly
+started after deletion or proved absence. Pure record encoding does not itself
+cross the durable-record boundary; version one must instead be enforced by
+immutable preflight construction and validation and by every publication,
+readback, and replay path that can confer durable authority.
+
+**Decision status:** Not approved. No Critical finding was identified, but one
+Important lifecycle finding remains and no separate Minor finding remains.
+The T-276 location-binding Important finding is fully resolved for durable
+publication/readback. The exact image-load counterexamples from the second
+Important finding are resolved, but its required whole-lifecycle invariant is
+not: the shared `forward_families` set omits `evidence_freeze`,
+`envoy_quiesce`, and `driver_cancel`. All three can still be newly journaled
+after `cluster_absence_proof_complete`, and recovery then returns live
+`kubectl` commands against a cluster already proved absent. The three T-276
+Minor findings are fully resolved: complete-envelope encoding is bounded before
+materialization, malformed context is totalized before filesystem access, and
+the parent descriptor is closed on post-open `OSError`.
+
+**Rationale:** The corrected record path derives its exact parent and filename
+from the validated context and rejects every non-one source version before
+opening or publishing a checkpoint. Production preflight writes version one,
+expected-intent construction rejects another version, and both checkpoint I/O
+and historical reconstruction revalidate version one. Although the pure
+encoder can form internally consistent bytes for a version-two context, those
+bytes cannot be published, read back, injected through immutable inputs, or
+reconstructed as authoritative by the reviewed production paths, so this is
+not an authority widening at the durable-record boundary. In contrast, the
+journal's teardown allowlist admits the three omitted cluster-live families and
+their family-specific predicates rely only on historical readiness/freeze
+state. A pending evidence freeze expands to ten `kubectl` log/inventory reads;
+a pending Envoy quiescence expands to a `kubectl get pods`; and a synthetic
+teardown driver cancellation expands to a UID-bound `kubectl get pod`. Rejecting
+only new intents for these families once cluster deletion has begun preserves
+their valid pre-deletion teardown use and all cluster/profile absence,
+comparison, and publication recovery.
+
+**Verification:** The five-module focused suite passed all 149 tests in 27.280
+seconds. `git diff --check` passed for
+`346e3c75f10f6fe5e09854c4b46a9e04f54be07c..977ffac6cfbf3aefaef23b9b91d1412922d53ea9`.
+Three no-runtime journal scripts reproduced the remaining Important gap using
+production append/load/recovery APIs: post-absence Envoy quiescence was accepted
+and planned `kubectl ... get pods --all-namespaces`; post-absence evidence
+freeze was accepted and planned ten `kubectl` reads; and, under the durable
+teardown latch, post-absence driver cancellation was accepted and planned a
+UID-bound `kubectl ... get pod`. The scripts constructed command values only;
+they executed none of them. No Colima, Docker, Kind, kubectl, Kubernetes,
+request, evidence, or publication command was invoked.
+
+**Affected artifacts:** This append-only quality re-review entry and its
+regenerated HTML reader. Production code and tests were not modified by the
+review. T-276 and T-277 remain unchanged, and the reviewed implementation is
+the original Task 2 implementation plus `977ffac`.
+
+**Unresolved questions:** The lifecycle validator needs one explicit
+cluster-live intent boundary covering evidence freeze, Envoy quiescence, and
+driver cancellation after cluster deletion or absence begins, with adversarial
+regressions for both boundaries and all affected families. Task 3 controller
+capture/recovery wiring and all later V4 proof gates remain open.
+
+**Next gate:** Correct the remaining Important lifecycle gap, rerun the focused
+suite and generated-reader checks, and obtain another independent Task 2
+quality re-review before beginning Task 3.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
