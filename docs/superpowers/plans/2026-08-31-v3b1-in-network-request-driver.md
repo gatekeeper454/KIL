@@ -891,7 +891,7 @@ not provide cryptographic proof of exact tuple restoration. A future lifecycle
 must persist and bind both before- and after-resource snapshots to close that
 evidence gap.
 
-- [ ] **Step 5: Publish the public-safe gate record**
+- [x] **Step 5: Publish the public-safe gate record**
 
 Append progress and lineage with exact run ID, source commit, checksum result,
 and claim exclusions. Commit only public-safe references; keep the

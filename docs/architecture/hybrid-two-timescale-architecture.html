@@ -49,6 +49,7 @@
       border-left: 4px solid var(--viz-series-2);
       background: color-mix(in srgb, var(--viz-series-2) 10%, transparent);
     }
+    #kil-hybrid-architecture .kil-status code { overflow-wrap: anywhere; }
     #kil-hybrid-architecture .kil-loop {
       margin-top: 1rem;
       padding: 0.9rem;
@@ -269,7 +270,7 @@
 
   <h2>Hybrid two-timescale enforcement</h2>
   <p class="kil-subtitle">Two temporal control loops feed one deterministic decision contract. Offline replay, the current local-Envoy boundary, and the future cluster boundary remain separate execution rails.</p>
-  <div class="kil-status"><strong>Implementation status:</strong> V3B-1 mechanism and static verification implemented only. The request-free readiness gate and one central live proof are pending. No validated, prevention, performance, Kind, Calico, or NetworkPolicy result is claimed.</div>
+  <div class="kil-status"><strong>Implementation status:</strong> V3B-1 Complete — accepted observed local-Envoy boundary. Run <code>v3b1-625262118e034d9c9b1df9c6e23bb54a78f01fe245a1b953d521b94884846e94</code> joined driver, decision, Envoy, and target evidence with exact teardown at <code>local_envoy_boundary</code>. It remains <code>not_promoted</code>; no prevention, performance, Kubernetes, Kind, Calico, or NetworkPolicy result is claimed.</div>
 
   <section class="kil-loop" data-timescale="authoritative" aria-labelledby="kil-authoritative-title">
     <div class="kil-loop-title">
@@ -394,12 +395,12 @@
       <span>Versioned Hugging Face actions + explicitly modeled KTP context → reproducible counterfactual decisions</span>
     </div>
     <div class="kil-rail" data-phase="current">
-      <strong>Current · V3B-1 local Envoy</strong>
-      <span>Mechanism and static checks implemented. Request-free readiness and the single central live proof remain pending.</span>
+      <strong>Current · V3B-1 Complete</strong>
+      <span>Accepted observed local-Envoy evidence joins one central run and exact teardown; it remains not_promoted.</span>
     </div>
     <div class="kil-rail" data-phase="future">
-      <strong>Future · V3B-2 Kind/Calico</strong>
-      <span>Cluster namespaces, NetworkPolicy behavior, and the failure matrix are separate future work; no result is claimed here.</span>
+      <strong>Post-publication · V4 Future</strong>
+      <span>Kind/Calico, NetworkPolicy, cluster transport, failure cases, repetition, and performance require future execution.</span>
     </div>
   </div>
 

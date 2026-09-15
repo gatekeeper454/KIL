@@ -2,8 +2,7 @@
 
 **Date:** 2026-09-08
 
-**Status:** Recommended disk-manifest approach approved; written specification
-pending review
+**Status:** Approved for V4 implementation on 2026-09-15
 
 **Parent design:** `2026-09-06-v3b2-kind-calico-validation-design.md`
 

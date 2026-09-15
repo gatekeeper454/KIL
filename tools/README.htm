@@ -6,7 +6,7 @@
 <title>Project tools</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="tools/README.md">
-<meta name="source-sha256" content="89119a6e8c754566f9ff9da4a077938b367ea443c990ec1ad34a836622f87a85">
+<meta name="source-sha256" content="0bd1e1e631743ae14bc3dbd476afdde4fd364c9640f3474463ee5dc116b89413">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>tools/README.md</code> (<code>89119a6e8c754566f9ff9da4a077938b367ea443c990ec1ad34a836622f87a85</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>tools/README.md</code> (<code>0bd1e1e631743ae14bc3dbd476afdde4fd364c9640f3474463ee5dc116b89413</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Project tools</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>tools/README.md</code> (<code>89119a6e8c754566f9ff9da4a077938b367ea443c990ec1ad34a836622f87a85</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>tools/README.md</code> (<code>0bd1e1e631743ae14bc3dbd476afdde4fd364c9640f3474463ee5dc116b89413</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#project-tools">Project tools</a></li><li class="level-2"><a href="#markdown-reader-publication">Markdown reader publication</a></li><li class="level-2"><a href="#v3b-1-local-envoy-controller">V3B-1 local-Envoy controller</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="project-tools" href="#project-tools">Project tools</a></li><li class="level-2"><a data-section-id="markdown-reader-publication" href="#markdown-reader-publication">Markdown reader publication</a></li><li class="level-2"><a data-section-id="v3b-1-local-envoy-controller" href="#v3b-1-local-envoy-controller">V3B-1 local-Envoy controller</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -69,10 +69,13 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 run deterministic replays, compare counterfactuals, and generate paper tables
 and figures from canonical decision records.</p>
 <h2 id="markdown-reader-publication">Markdown reader publication</h2>
-<p><code>render_markdown.py</code> maps every Git-tracked file whose final suffix is
-lowercase <code>.md</code> to exactly one same-directory <code>.htm</code> reader. Markdown is the
-source of record; generated readers carry their source path and SHA-256 digest
-and must not be edited directly.</p>
+<p><code>render_markdown.py</code> maps every Git-tracked documentation file whose final
+suffix is lowercase <code>.md</code> to exactly one same-directory <code>.htm</code> reader. The
+exact <code>artifacts/generated/**</code> namespace is excluded because its evidence
+directories are closed by their manifests and checksums; the reader generator
+must not add files there. Markdown is the source of record for reader inputs;
+generated readers carry their source path and SHA-256 digest and must not be
+edited directly.</p>
 <pre><code class="language-bash">make docs-html
 make docs-html-check
 </code></pre>
@@ -89,9 +92,11 @@ therefore require the referenced local files to remain available.</p>
 <p><code>make docs-html-check</code> runs the renderer with <code>--check</code>. It performs no repairs
 or removals and returns failure after reporting every missing, stale, or
 unexpected visible reader. <code>make validate</code> includes this check, so any future
-tracked lowercase-<code>.md</code> addition or removal changes the exact required <code>.htm</code>
-set automatically. Regeneration and checking require the pinned <code>docs</code>
-dependency set.</p>
+tracked lowercase-<code>.md</code> documentation addition or removal changes the exact
+required <code>.htm</code> set automatically. A Markdown path beneath the exact
+<code>artifacts/generated/</code> root does not become a reader source, and links to it
+retain <code>.md</code>. Regeneration and checking require the pinned <code>docs</code> dependency
+set.</p>
 <p><code>v3a_demo.py</code> runs the three infrastructure-fixed authorization tracks against
 one normalized request, joins each decision to its forwarding outcome and
 harmless target marker, and emits an atomic, content-addressed evidence bundle.

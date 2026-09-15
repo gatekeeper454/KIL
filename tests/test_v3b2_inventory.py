@@ -283,7 +283,14 @@ class V3B2InventoryTest(unittest.TestCase):
         )
         payload = raw_runtime_inventory().encode()
         raw_value = json.loads(payload)
-        platform = (
+        legacy_keys = {
+            (item.api_version, item.kind, item.namespace, item.name)
+            for item in snapshot().objects
+        }
+        legacy_keys.update(
+            ("v1", "Namespace", "", name) for name in snapshot().namespaces
+        )
+        legacy_keys.update({
             ("v1", "Pod", "kube-system", "kube-apiserver-kil-v3-lab-control-plane"),
             ("v1", "Pod", "kube-system", "coredns-7db6d8ff4d-abcde"),
             ("v1", "Pod", "local-path-storage", "local-path-provisioner-abcde"),
@@ -295,21 +302,40 @@ class V3B2InventoryTest(unittest.TestCase):
             ("v1", "ConfigMap", "kil-v3-baseline", "kube-root-ca.crt"),
             ("apps/v1", "Deployment", "kube-system", "coredns"),
             ("apps/v1", "DaemonSet", "kube-system", "kube-proxy"),
-        )
-        for index, (api_version, kind, namespace, name) in enumerate(platform):
-            raw_value["items"].append({
-                "apiVersion": api_version, "kind": kind,
-                "metadata": {"name": name, "namespace": namespace,
-                             "resourceVersion": str(900 + index),
-                             "uid": f"33333333-3333-4333-8333-{index:012x}"},
-                "spec": {}, "status": {},
-            })
+        })
+        def legacy_member(item):
+            metadata = item["metadata"]
+            namespace, name = metadata.get("namespace", ""), metadata["name"]
+            key = (item["apiVersion"], item["kind"], namespace, name)
+            workload_family = namespace in FIXED_PROFILE.application_namespaces and (
+                item["kind"] in {"Endpoints", "EndpointSlice"}
+                or item["kind"] == "Pod" and name.startswith(("envoy-", "authz-", "target-"))
+            )
+            calico_pod = (item["kind"] == "Pod" and namespace == "kube-system"
+                          and name.startswith(("calico-node-", "calico-kube-controllers-")))
+            return key in legacy_keys or workload_family or calico_pod
+        raw_value["items"] = [item for item in raw_value["items"] if legacy_member(item)]
         # Legacy pure parser fixture: fixed public members, not production
         # source-backed containerd status/provenance authority.
         for item in raw_value['items']:
+            if item['kind'] == 'DaemonSet' and item['metadata']['name'] == 'calico-node':
+                item['status'] = {'desiredNumberScheduled': 1, 'numberReady': 1}
+            if item['kind'] == 'Deployment' and item['metadata']['name'] == 'calico-kube-controllers':
+                item['status'] = {'replicas': 1, 'readyReplicas': 1}
             if item['kind'] == 'Pod' and item['metadata'].get('namespace', '').startswith('kil-'):
                 for row in item.get('status', {}).get('containerStatuses', []):
+                    row['image'] = ENVOY_IMAGE if row['name'] == 'envoy' else KIL_IMAGE
                     row['imageID'] = ENVOY_IMAGE_ID if row['name'] == 'envoy' else KIL_IMAGE_ID
+            if item['kind'] == 'EndpointSlice' and item['metadata'].get('namespace', '').startswith('kil-'):
+                namespace = item['metadata']['namespace']
+                service = item['metadata']['labels']['kubernetes.io/service-name']
+                endpoint = next(row for row in raw_value['items'] if
+                    row['kind'] == 'Endpoints'
+                    and row['metadata'].get('namespace') == namespace
+                    and row['metadata']['name'] == service)
+                item['endpoints'][0]['addresses'] = [
+                    row['ip'] for row in endpoint['subsets'][0]['addresses']
+                ]
         payload = json.dumps(raw_value, indent=2).encode()
         parsed = parse_runtime_inventory(
             payload, profile=FIXED_PROFILE, workload=workload,

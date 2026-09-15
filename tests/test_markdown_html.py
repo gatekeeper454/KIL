@@ -325,6 +325,20 @@ class MarkdownRendererTest(unittest.TestCase):
         )
         self.assertIn("box-shadow: none", rendered)
 
+    def test_wide_layout_directive_is_scoped_and_hidden(self) -> None:
+        wide = self.render("<!-- reader-layout: wide -->\n# Wide\n")
+        standard = self.render("# Standard\n")
+
+        self.assertIn('<body class="reader-wide">', wide)
+        self.assertNotIn("reader-layout: wide", wide)
+        self.assertIn(
+            "body.reader-wide .reader-layout {", wide
+        )
+        self.assertIn("minmax(0, 68rem)", wide)
+        self.assertIn("@media (max-width: 1120px)", wide)
+        self.assertIn("<body>", standard)
+        self.assertNotIn('<body class="reader-wide">', standard)
+
     def test_mobile_reader_keeps_search_notice_and_semantic_outline(self) -> None:
         rendered = self.render("# Mobile\n\n## Section\n")
         identifiers = re.findall(r'(?<![-\w])id="([^"]+)"', rendered)
@@ -449,6 +463,53 @@ class RepositoryGenerationTest(unittest.TestCase):
         self.assertTrue((self.root / "tracked.htm").is_file())
         self.assertFalse((self.root / "untracked.htm").exists())
         self.assertFalse((self.root / "ignored/private.htm").exists())
+
+    def test_tracked_generated_evidence_markdown_is_not_a_reader_source(self) -> None:
+        self.track("README.md", "# Root\n")
+        evidence = "artifacts/generated/v3b1-local-envoy/run-id/summary.md"
+        self.track(evidence, "# Closed evidence summary\n")
+
+        self.assertEqual(
+            (PurePosixPath("README.md"),),
+            render_markdown.discover_sources(self.root),
+        )
+        self.assertEqual([], render_markdown.render_repository(self.root))
+        self.assertTrue((self.root / "README.htm").is_file())
+        self.assertFalse(
+            (self.root / "artifacts/generated/v3b1-local-envoy/run-id/summary.htm").exists()
+        )
+
+    def test_generated_evidence_exclusion_is_component_exact_and_links_stay_markdown(self) -> None:
+        evidence = "artifacts/generated/v3b1-local-envoy/run-id/summary.md"
+        self.track("README.md", f"# Root\n\n[Evidence]({evidence})\n")
+        self.track(evidence, "# Closed evidence summary\n")
+        self.track("artifacts/generated-other/guide.md", "# Ordinary guide\n")
+
+        self.assertEqual(
+            (
+                PurePosixPath("README.md"),
+                PurePosixPath("artifacts/generated-other/guide.md"),
+            ),
+            render_markdown.discover_sources(self.root),
+        )
+        self.assertEqual([], render_markdown.render_repository(self.root))
+        root_reader = (self.root / "README.htm").read_text(encoding="utf-8")
+        self.assertIn(f'href="{evidence}"', root_reader)
+        self.assertNotIn(
+            "artifacts/generated/v3b1-local-envoy/run-id/summary.htm",
+            root_reader,
+        )
+        self.assertTrue((self.root / "artifacts/generated-other/guide.htm").is_file())
+
+    def test_tracked_html_inside_generated_evidence_is_unexpected(self) -> None:
+        evidence = "artifacts/generated/v3b1-local-envoy/run-id/summary"
+        self.track(f"{evidence}.md", "# Closed evidence summary\n")
+        self.track(f"{evidence}.htm", "invalid companion")
+
+        self.assertEqual(
+            [f"unexpected {evidence}.htm"],
+            render_markdown.render_repository(self.root, check=True),
+        )
 
     def test_untracked_html_is_visible_but_ignored_html_is_not(self) -> None:
         self.track("README.md", "# Root\n")
@@ -812,7 +873,7 @@ class RepositoryGenerationTest(unittest.TestCase):
 
 
 class RepositoryPublicationContractTest(unittest.TestCase):
-    def test_every_tracked_markdown_has_exact_tracked_generated_sibling(self) -> None:
+    def test_every_reader_source_has_exact_tracked_generated_sibling(self) -> None:
         sources = render_markdown.discover_sources(ROOT)
         expected = {source.with_suffix(".htm") for source in sources}
         tracked_output = subprocess.run(

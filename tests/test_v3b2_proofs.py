@@ -265,8 +265,9 @@ class ObservedProofTest(unittest.TestCase):
         allocations = {proofs._object_key(row): row['spec'] for row in fixture()[3]}
         prior = []
         for row in value['items']:
-            if row['kind'] == 'Service':
-                spec = allocations[proofs._object_key(row)]
+            key = proofs._object_key(row)
+            if row['kind'] == 'Service' and key in allocations:
+                spec = allocations[key]
                 for field in ('clusterIP', 'clusterIPs', 'ipFamilyPolicy', 'ipFamilies'):
                     row['spec'][field] = spec[field]
                 prior.append({'namespace': row['metadata']['namespace'], 'name': row['metadata']['name'],

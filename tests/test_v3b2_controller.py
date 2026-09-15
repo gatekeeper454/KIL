@@ -5,6 +5,7 @@ from functools import lru_cache
 from hashlib import sha256
 from io import BytesIO
 import json
+import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -598,6 +599,13 @@ class AcceptedArchiveConstantsTest(unittest.TestCase):
             self.assertNotEqual(descriptor["digest"], config_descriptor["digest"])
 
 
+def v4_future(test):
+    return unittest.skipUnless(
+        os.environ.get("KIL_RUN_V4_FUTURE_TESTS") == "1",
+        "V4 Future controller proof graph pending; run make v4-future-controller-test",
+    )(test)
+
+
 class V3B2ControllerTest(unittest.TestCase):
     def test_private_capture_write_fsyncs_file_and_parent_directory(self):
         from kil.v3b2_controller import _write_exclusive
@@ -1019,6 +1027,7 @@ class V3B2ControllerTest(unittest.TestCase):
         self.runner.calico_applied = True
         self.assertEqual(self.runner.run(noncanonical).stdout, "{}\n")
 
+    @v4_future
     def test_import_uses_preflight_verified_archive_bytes_not_reopened_path(self) -> None:
         archive_path = self.paths.tools.parent / "v3b2-input/kil-image.tar"
         verified = archive_path.read_bytes()
@@ -1090,6 +1099,7 @@ class V3B2ControllerTest(unittest.TestCase):
         self.assertIn("profile_start_failed", [name for name, _details in resumed.events])
         self.assertFalse(any("attach" in command.argv and command.stdin for command in self.runner.commands))
 
+    @v4_future
     def test_uncertain_command_failures_enter_exact_cleanup_without_forward_progress(self) -> None:
         abandoned = {"image_import", "image_load", "calico_apply", "application_apply", "quiesce"}
         for index, stage in enumerate((
@@ -1118,6 +1128,7 @@ class V3B2ControllerTest(unittest.TestCase):
         self.assertEqual(len(contexts), 1)
         self.assertFalse(contexts[0].mutating)
 
+    @v4_future
     def test_up_uses_only_owned_profile_cluster_and_applies_policy_before_workloads(self) -> None:
         self.controller.up()
         mutations = [command for command in self.runner.commands if command.mutating]
@@ -1144,6 +1155,7 @@ class V3B2ControllerTest(unittest.TestCase):
         self.assertTrue(calico_reads and max(calico_reads) < first_app)
         self.assertEqual(self.controller.kind_config.read_bytes(), __import__("kil.v3b2_manifests", fromlist=["render_kind_config"]).render_kind_config(self.controller.profile))
 
+    @v4_future
     def test_request_free_sends_no_attach_stdin_or_application_records(self) -> None:
         result = self.controller.request_free()
         self.assertEqual(result["instructions_sent"], 0)
@@ -1178,6 +1190,7 @@ class V3B2ControllerTest(unittest.TestCase):
                 if command.argv[3:5] == ("get", "pod") and command.argv[5].startswith(role + "-")
             ), 3)
 
+    @v4_future
     def test_driver_eof_cancel_requires_retained_terminal_exit_zero(self) -> None:
         self.runner.cancel_exit_code = 7
         with self.assertRaisesRegex(ControllerError, "driver_cancel_postcondition_invalid"):
@@ -1203,12 +1216,14 @@ class V3B2ControllerTest(unittest.TestCase):
         child = boundary.call_args.kwargs["env"]
         self.assertEqual(set(child) & set(poison), set())
 
+    @v4_future
     def test_envoy_quiesce_rejects_container_incarnation_change(self) -> None:
         self.runner.swap_envoy_container_after_drain = True
         with self.assertRaisesRegex(ControllerError, "envoy_quiesce_identity_invalid"):
             self.controller.request_free()
         self.assertTrue(self.controller.owned_absence_proven)
 
+    @v4_future
     def test_separate_process_can_continue_a_preflight_only_journal_into_request_free(self) -> None:
         self.controller.preflight()
         resumed = V3B2Controller(self.paths, self.runner)
@@ -1216,12 +1231,14 @@ class V3B2ControllerTest(unittest.TestCase):
         self.assertEqual(result["instructions_sent"], 0)
         self.assertTrue(resumed.owned_absence_proven)
 
+    @v4_future
     def test_request_free_rejects_any_application_record_but_still_tears_down(self) -> None:
         self.runner.inject_application_record = True
         with self.assertRaisesRegex(ControllerError, "source_producer_invalid"):
             self.controller.request_free()
         self.assertTrue(self.controller.owned_absence_proven)
 
+    @v4_future
     def test_down_resumes_bound_runtime_without_current_context_or_discovery_selected_delete(self) -> None:
         self.controller.up()
         resumed = V3B2Controller(self.paths, self.runner)
@@ -1235,6 +1252,7 @@ class V3B2ControllerTest(unittest.TestCase):
                     self.assertIn(str(resumed.kubeconfig), command.argv)
             self.assertNotIn("current-context", command.argv)
 
+    @v4_future
     def test_nominal_persists_intent_before_each_single_attach(self) -> None:
         bundle = self.controller.nominal()
         self.assertEqual(self.runner.attach_count, 3)
@@ -1250,6 +1268,7 @@ class V3B2ControllerTest(unittest.TestCase):
         verified = verify_bundle(self.controller.published_path)
         self.assertEqual(verified.result_class, "intermediate_provisional_kind_calico_nominal")
 
+    @v4_future
     def test_recover_attests_successful_profile_start_without_replaying_mutation(self) -> None:
         import kil.v3b2_controller as module
 
@@ -1274,6 +1293,7 @@ class V3B2ControllerTest(unittest.TestCase):
         self.assertIsNone(result["completed"])
         self.assertFalse(any("attach" in command.argv and command.stdin for command in self.runner.commands))
 
+    @v4_future
     def test_recover_attests_successful_cluster_create_without_replaying_create(self) -> None:
         import kil.v3b2_controller as module
 
@@ -1298,6 +1318,7 @@ class V3B2ControllerTest(unittest.TestCase):
         self.assertIsNone(result["completed"])
         self.assertFalse(any("attach" in command.argv and command.stdin for command in self.runner.commands))
 
+    @v4_future
     def test_recover_driver_cancel_completion_crash_attests_terminal_without_replaying_eof(self) -> None:
         import kil.v3b2_controller as module
 
@@ -1325,6 +1346,7 @@ class V3B2ControllerTest(unittest.TestCase):
         self.assertEqual(result["completed"], "driver_cancel")
         self.assertEqual(self.runner.cancel_attach_count, 1)
 
+    @v4_future
     def test_every_request_free_completion_persistence_boundary_recovers_without_request(self) -> None:
         import kil.v3b2_controller as module
 
@@ -1362,6 +1384,7 @@ class V3B2ControllerTest(unittest.TestCase):
                     if command.mutating and command.argv[0] in {"kind", "colima"}:
                         self.assertIn("kil-v3-lab", command.argv)
 
+    @v4_future
     def test_request_result_persistence_failure_recovers_by_freezing_never_replay(self) -> None:
         import kil.v3b2_controller as module
 
@@ -1385,6 +1408,7 @@ class V3B2ControllerTest(unittest.TestCase):
         self.assertIsNone(result["completed"])
         self.assertEqual(self.runner.attach_count, 1)
 
+    @v4_future
     def test_post_intent_failure_cancels_later_drivers_and_never_retries(self) -> None:
         self.runner.fail_track = TRACKS[0]
         with self.assertRaises(ControllerError):

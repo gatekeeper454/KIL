@@ -300,7 +300,7 @@ class V3B1DocumentationTest(unittest.TestCase):
         )[1].split("## Task 11", 1)[0]
         self.assertIn("- [x] **Step 3:", task10_plan)
         self.assertIn("- [x] **Step 4:", task10_plan)
-        self.assertIn("- [ ] **Step 5:", task10_plan)
+        self.assertIn("- [x] **Step 5:", task10_plan)
         task10_value = normalized(task10_plan).lower()
         self.assertNotIn("exact foreign-state restoration", task10_value)
         self.assertRegex(
@@ -435,14 +435,14 @@ class V3B1DocumentationTest(unittest.TestCase):
             paper_text,
         )
 
-    def test_v3b1_current_scope_and_v3b2_future_scope_remain_distinct(self):
-        for path in (README, V3_PROGRESS, PAPER, HYBRID_INLINE, HYBRID_STANDALONE):
+    def test_v3b1_current_scope_and_v4_future_scope_remain_distinct(self):
+        for path in (README, V3_PROGRESS, PAPER, HYBRID_STANDALONE):
             with self.subTest(path=path.relative_to(ROOT)):
                 value = normalized(path.read_text(encoding="utf-8"))
                 lowered = value.lower()
                 self.assertIn("v3b-1", lowered)
                 self.assertRegex(lowered, r"local[-_ ]envoy boundary")
-                self.assertIn("v3b-2", lowered)
+                self.assertIn("v4 future", lowered)
                 self.assertRegex(lowered, r"kind(?:/|\s*\+\s*)calico")
                 self.assertRegex(
                     lowered,

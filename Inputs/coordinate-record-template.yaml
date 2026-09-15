@@ -1,0 +1,78 @@
+# An observed reading of KIL in the Open Trust Coordinate System (OTCS).
+#
+# This record is intentionally sparse: it includes only coordinates supported
+# by KIL's published repository at the immutable source revision listed below.
+
+otcs_version: "0.1"
+
+project:
+  id: kinetic-infrastructure-layer
+  name: Kinetic Infrastructure Layer (KIL)
+  canonical_url: https://github.com/gatekeeper454/KIL
+  record_state: observed
+  as_of: "2026-09-03"
+
+observed_source:
+  read_by: OpenAI Codex
+  read_at: "2026-09-03"
+  inputs:
+    - https://github.com/gatekeeper454/KIL/tree/ab2667941b9328739c8201d626694770e2387fe9
+    - https://github.com/gatekeeper454/KIL/blob/ab2667941b9328739c8201d626694770e2387fe9/README.md
+    - https://github.com/gatekeeper454/KIL/blob/ab2667941b9328739c8201d626694770e2387fe9/docs/paper/kinetic-infrastructure.md
+    - https://github.com/gatekeeper454/KIL/blob/ab2667941b9328739c8201d626694770e2387fe9/docs/superpowers/specs/2026-08-29-v3-envoy-live-validation-design.md
+    - https://github.com/gatekeeper454/KIL/blob/ab2667941b9328739c8201d626694770e2387fe9/docs/lab/V3-PROGRESS.md
+
+declaration:
+  problem: >
+    KIL tests whether short-lived, identity- and authority-class-bound,
+    trajectory-aware KTP state can safely reduce or withhold authority at a
+    transport enforcement boundary before a consequential action reaches its
+    target.
+  known_limitations: >
+    KIL is a reference implementation and experiment harness, not a production
+    control plane. Its incident replay and current KTP context are modeled; the
+    V3B-1 request-free lifecycle is accepted, but the central live enforcement
+    proof, Kind/Calico validation, repetition, performance promotion, and
+    independent validation remain pending. It does not prove that the modeled
+    controls would have prevented the historical incident.
+
+coordinates:
+  actor:
+    ai_agent: 1.0
+    service: 1.0
+
+  authority: [capability, situational_approval]
+
+  verbs: [read, send, execute, modify_policy, create_identity]
+
+  environment:
+    - identity_confidence
+    - threat_pressure
+    - uncertainty
+    - cumulative_trajectory
+
+  functions:
+    observe: 0.6
+    interpret: 0.8
+    constrain: 0.9
+    decide: 0.9
+    enforce: 1.0
+    record: 0.9
+
+  time: [before_action, initiation, across_trajectory]
+
+evidence:
+  specification: 2
+  implementation: 2
+  independent_validation: 0
+
+# No registry seams are asserted from this observed reading. KIL does publish
+# integration boundaries, but a seam should be added only when both projects
+# declare the same registry identifier.
+interfaces:
+  provides: []
+  consumes: []
+
+lineage:
+  - project: kinetic-trust-protocol
+    relationship: implements
