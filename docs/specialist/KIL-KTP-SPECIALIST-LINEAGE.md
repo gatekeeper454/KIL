@@ -13838,3 +13838,73 @@ checkpoint and irreversible teardown contract, then require focused and full
 remote CI green before advancing.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-283 — 2026-09-15 — V4 Task 3 controller capture and disk-only recovery implemented
+
+**Input:** Implement Task 3 of the V4 control-plane static-manifest plan from
+base `9769a06d6484f3259d9948d70015f57a84055106`: capture the two reviewed
+control-plane manifests exactly once after owned cluster creation and before
+any image or apply work; durably publish the Task 2 checkpoint; complete its
+journal terminal from retained bytes; and make recovery revalidate only the
+deterministic checkpoint, never issue the four live capture commands. Use
+strict TDD, preserve the 16 explicit future lifecycle deferrals, make no live
+runtime claim, and commit code/tests separately from this lineage record.
+
+**Interpretation:** Task 3 is the narrow controller integration for the source
+proof and durable record already accepted in Tasks 1 and 2. Forward execution
+derives the exact owned identity from the journal's expected context, runs the
+fixed before/read/read/after observation bracket, validates the closed source
+proof, and publishes the intent-sequence-bound checkpoint. The terminal
+collector and explicit recovery path may only reopen, reconstruct, and
+canonicalize that checkpoint. They do not have a branch that recollects the
+Docker observations.
+
+**Decision status:** Confirmed for the synthetic controller integration scope
+in code commit `7617652`. The source pair is now ordered strictly between
+`cluster_create_complete` and `image_import_intent`. Changed before or after
+node identity, a stopped node, nonzero and truncated reads, checkpoint
+publication failure, and missing or corrupt recovery checkpoints all fail
+before image import/load, Calico apply, or application apply dispatch. A
+persisted checkpoint whose terminal write is interrupted is revalidated from
+disk and completes on recovery with zero additional `docker exec ... /bin/cat`
+commands.
+
+**Rationale:** Capturing immediately after cluster creation minimizes the
+unmeasured interval and gives later image and workload operations a replayable
+source commitment. Reconstructing `OwnedIdentity` from the independently
+derived expected context prevents mutable controller state from supplying a
+different Docker or cluster authority. Publishing before the terminal makes a
+crash recoverable without repeating live reads. Reusing the Task 2 record
+reader in `_collect_observations` preserves its owned-directory, deterministic
+path, canonical-envelope, byte-bound, and source-proof validation rather than
+adding a second recovery authority.
+
+**Verification:** TDD RED was observed before production edits. The required
+ordering test errored at the `image_import_intent` journal barrier because no
+`control_plane_manifest_source_complete` existed. The five source-failure
+tests then failed because zero, rather than two, exact manifest-read commands
+had executed; publication and recovery tests likewise stopped at the missing
+integration barrier. After implementation, the nine new source-focused tests
+passed in 13.170 seconds. The prescribed controller, journal, proof, and source
+record integration command then passed all 163 tests in 520.889 seconds with
+exactly 16 explicit V4 skips. `git diff --check` passed before the code commit.
+All command execution in these tests used the in-memory fake runner; no live
+Colima, Docker, Kind, kubectl, Kubernetes, request, publication, or profile
+operation was performed.
+
+**Affected artifacts:** Modified `src/kil/v3b2_controller.py` and
+`tests/test_v3b2_controller.py` in code commit `7617652`; appended this entry
+to `docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` and regenerated its
+self-contained HTML reader in the separate documentation commit that follows.
+
+**Unresolved questions:** Task 3 does not approve the deferred V4 component
+proofs, platform composition, all-ten-Pod terminal, request-free lifecycle, or
+nominal lifecycle. Full repository and remote CI validation, independent
+review, branch integration, and any live dedicated-profile experiment remain
+separate gates.
+
+**Next gate:** Independently review the Task 3 diff and test quality, run the
+broader repository/remote CI gates on the private branch, then begin Task 4
+only if this source capture and recovery boundary remains green and unchanged.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
