@@ -13769,3 +13769,72 @@ checkpoint and irreversible teardown boundaries, and restore the controller
 integration tests without introducing live recovery reads.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-282 — 2026-09-15 — V4 Task 2 delivered to private branch with explicit Task 3 CI gate
+
+**Input:** Resume V4 Future from private branch
+`codex/v3b2-kind-calico-implementation` at
+`346e3c75f10f6fe5e09854c4b46a9e04f54be07c`; verify the existing remote CI;
+then execute Task 2 of the V4 control-plane static-manifest plan using TDD,
+agents, independent specification and quality review, logical commits, and
+private pushes. Do not run a live cluster or touch any Colima profile other
+than a future dedicated `kil-v3-lab`. Task 3 will implement bounded controller
+capture later.
+
+**Interpretation:** Task 2 owns the durable source-checkpoint format, proof and
+journal semantics, replay behavior, and irreversible cluster-liveness boundary.
+It deliberately does not wire controller capture. Consequently, the focused
+Task 2 surface must be green, while existing controller paths must stop closed
+at `image_import_intent` until Task 3 inserts
+`control_plane_manifest_source_complete`.
+
+**Decision status:** Task 2 accepted and delivered. The pre-change remote run
+for `346e3c7` passed. Independent specification, quality, quality re-review,
+and final holistic reviews approved the corrected implementation with no
+remaining Critical, Important, or Minor findings. Commits through
+`ca37b4b7cee0abf816fa2d52ddca1d8592eb186b` were pushed to the private branch.
+Remote Actions run `35025946853` then reproduced the planned Task 3 RED gate:
+1,537 tests ran, with seven controller errors and 16 skips; every error was the
+new fail-closed requirement that image import cannot begin before the source
+checkpoint completes. This is not a green full-repository acceptance claim.
+
+**Rationale:** Weakening or bypassing the new journal barrier would invalidate
+Task 2's ordering guarantee, while adding live capture now would silently pull
+Task 3 into this task. Keeping the static checkpoint fail closed preserves the
+reviewed contract and gives Task 3 an explicit, reproducible integration gate.
+The implementation additionally binds the checkpoint to immutable private
+path, exact version, and intent sequence; bounds canonical content before
+publication; performs owned no-follow write-once durable publication; validates
+retained-byte replay; maps source failure to teardown-only; and rejects new
+cluster-live intents after deletion or absence begins.
+
+**Verification:** The five-module Task 2 suite passed all 150 tests in 27.620
+seconds, 76 Markdown readers were verified, and `git diff --check` passed. The
+full local run and remote run `35025946853` both reported the same seven
+controller errors at the deferred Task 3 boundary; the remote run completed in
+9 minutes 31 seconds. The local restricted-sandbox `/dev/fd/62` Envoy failures
+were separately rerun outside that sandbox and passed 10 of 10. No Colima,
+Docker, Kind, kubectl, Kubernetes, live request, or live publication command
+was invoked.
+
+**Affected artifacts:** Added
+`src/kil/v3b2_control_plane_manifest_source_record.py` and
+`tests/test_v3b2_control_plane_manifest_source_record.py`; updated
+`src/kil/v3b2_proofs.py`, `src/kil/v3b2_journal.py`, their tests, the observed
+lifecycle fixture, and the controller's immutable version-one preflight field.
+The implementation and review record spans commits `cf7cd68`, `aa7c5c5`,
+`2cd6d90`, `6a9e0e2`, `970fcf5`, `4a92382`, `a1c887e`, `977ffac`, `910004f`,
+`2dda21a`, `f449219`, `8121cf0`, `e28c5ba`, and `ca37b4b`.
+
+**Unresolved questions:** Task 3 still must perform the bounded one-shot
+controller capture, deterministic publication and retained readback, terminal
+completion across crash boundaries, and recovery without live recollection.
+It must restore the seven controller tests and the full CI gate. Later V4
+component proofs, platform composition, all-ten-Pod terminal, request-free
+lifecycle, and nominal lifecycle remain open.
+
+**Next gate:** Execute Task 3 under TDD and independent review, preserving this
+checkpoint and irreversible teardown contract, then require focused and full
+remote CI green before advancing.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
