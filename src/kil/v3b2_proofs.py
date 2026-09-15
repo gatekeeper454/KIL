@@ -762,6 +762,34 @@ def _image_import_requests(context):
               for index, row in enumerate(inputs["images"])), *_cluster_requests(context))
 
 
+def _control_plane_manifest_source_requests(context):
+    inputs = decode(context.inputs)
+    version = inputs.get("control_plane_manifest_source_version")
+    private = inputs.get("private_path")
+    if type(version) is not int or version != 1:
+        raise ProofError("control-plane manifest source version is invalid")
+    if (type(private) is not str or not Path(private).is_absolute()
+            or ".." in Path(private).parts or str(Path(private)) != private):
+        raise ProofError("control-plane manifest source private path is invalid")
+    return (ObservationRequest(
+        "control_plane_manifest_source",
+        source="control_plane_manifest_source",
+    ),)
+
+
+def _control_plane_manifest_source(context, observations):
+    from kil.v3b2_control_plane_manifest_source_record import _decode_record
+    retained = _one(observations, "control_plane_manifest_source", ())
+    if retained.env:
+        raise ProofError("manifest source checkpoint read carries external authority")
+    proof = _decode_record(retained.stdout, context)
+    proof.__post_init__()
+    return ProofDecision("complete", "durable_control_plane_manifest_source", canonical({
+        "control_plane_manifest_source": decode(retained.stdout,
+            maximum=4 * 1024 * 1024),
+    }))
+
+
 def _image_load_requests(context):
     inputs = decode(context.inputs)
     images = _image_expectations(inputs)
@@ -857,6 +885,8 @@ class Operation:
 OPERATIONS = MappingProxyType({
     "profile_start": Operation(_profile_requests, _profile),
     "cluster_create": Operation(_cluster_requests, _cluster),
+    "control_plane_manifest_source": Operation(
+        _control_plane_manifest_source_requests, _control_plane_manifest_source),
     "image_import": Operation(_image_import_requests, _image_import),
     "image_load": Operation(_image_load_requests, _image_load),
     "calico_apply": Operation(_applied_requests, _applied),
@@ -958,7 +988,9 @@ def decide(context: ExpectedContext, observations: tuple[RawObservation, ...]) -
                 return ProofDecision("unknown", "observation_registry_binding_mismatch")
         decision = OPERATIONS[context.family].validate(context, observations)
     except (ProofError, KeyError, TypeError, ValueError, IndexError, AttributeError):
-        decision = ProofDecision("unknown", "invalid_or_missing_observation")
+        decision = (ProofDecision("teardown_only", "manifest_source_checkpoint_invalid")
+                    if context.family == "control_plane_manifest_source"
+                    else ProofDecision("unknown", "invalid_or_missing_observation"))
     inputs = decode(context.inputs)
     if inputs.get("teardown_only"):
         if context.family in {"profile_start", "cluster_create", "image_import", "image_load", "calico_apply",
@@ -983,14 +1015,19 @@ def _expected_for_intent(base, journal, intent, prior, established):
             "prior_node_image_references", "policy_stage_checkpoint",
             "policy_stage_checkpoint_bytes", "policy_stage_checkpoint_path",
             "pre_driver_checkpoint", "pre_driver_checkpoint_bytes", "pre_driver_checkpoint_path",
-            "prior_node_image_source"} & base.keys():
-        raise ProofError("immutable inputs cannot claim runtime Service allocation bindings")
+            "prior_node_image_source", "prior_control_plane_manifest_source"} & base.keys():
+        raise ProofError("immutable inputs cannot claim runtime-derived authority")
     version = base.get("node_image_source_version")
+    manifest_source_version = base.get("control_plane_manifest_source_version")
     from kil.v3b2_application_evidence_budget import application_source_enabled
     if application_source_enabled(base) and (type(version) is not int or version != 1):
         raise ProofError('application source requires node image source version one')
     if "node_image_source_version" in base and (type(version) is not int or version != 1):
         raise ProofError("node image source version is invalid")
+    if ("control_plane_manifest_source_version" in base
+            and (type(manifest_source_version) is not int
+                 or manifest_source_version != 1)):
+        raise ProofError("control-plane manifest source version is invalid")
     inputs = {**base, "owned_identity": {**base["owned_identity"], **established.get("cluster", {})},
               "expected_inputs_sha256": journal["expected_inputs_sha256"], "history": prior,
               "profile_start_refused_sequence": journal["profile_start_refused_sequence"],
@@ -999,6 +1036,10 @@ def _expected_for_intent(base, journal, intent, prior, established):
     inputs["prior_node_image_references"] = established.get("node_image_references")
     if version == 1 and "node_image_source" in established:
         inputs["prior_node_image_source"] = established["node_image_source"]
+    if (manifest_source_version == 1
+            and "control_plane_manifest_source" in established):
+        inputs["prior_control_plane_manifest_source"] = (
+            established["control_plane_manifest_source"])
     if 'profile_binding' in established:
         inputs['profile_binding'] = established['profile_binding']
     if 'foreign_comparison' in established:
@@ -1115,6 +1156,14 @@ def expected_context(base_payload: bytes, journal: dict, read_proof: Callable) -
                 if "prior_node_image_source" in document.get("expected_inputs", {}):
                     raise ProofError("nested node image source is invalid")
                 established["node_image_source"] = document
+        if (context.family == "control_plane_manifest_source"
+                and decision.outcome == "complete"):
+            source = bindings.get("control_plane_manifest_source")
+            if (type(source) is not dict
+                    or "prior_control_plane_manifest_source" in
+                    source.get("context", {}).get("inputs", {})):
+                raise ProofError("nested control-plane manifest source is invalid")
+            established["control_plane_manifest_source"] = source
         if context.family == 'foreign_snapshot_comparison' and decision.outcome == 'complete':
             established['foreign_comparison'] = bindings
         prior.append(event)
@@ -1181,6 +1230,83 @@ def reconstruct_prior_node_image_references(context: ExpectedContext):
         if ((key in current) != (key in historical_inputs)
                 or (key in current and canonical(current[key]) != canonical(historical_inputs[key]))):
             raise ProofError("node image source inputs differ from current authority")
+    return proof
+
+
+def reconstruct_prior_control_plane_manifest_source(context: ExpectedContext):
+    """Revalidate the exact prior durable manifest checkpoint from replay."""
+    from kil.v3b2_control_plane_manifest_source import MAX_SOURCE_RECORD_BYTES
+    from kil.v3b2_control_plane_manifest_source_record import _decode_record
+    if type(context) is not ExpectedContext:
+        raise ProofError("control-plane manifest source context is invalid")
+    context.__post_init__()
+    current = decode(context.inputs)
+    if (type(current.get("control_plane_manifest_source_version")) is not int
+            or current.get("control_plane_manifest_source_version") != 1):
+        raise ProofError("control-plane manifest source version is invalid")
+    source = current.get("prior_control_plane_manifest_source")
+    encoded = _canonical_bounded(source, MAX_SOURCE_RECORD_BYTES)
+    if type(source) is not dict or set(source) != {"schema", "context", "proof"}:
+        raise ProofError("control-plane manifest source envelope is invalid")
+    retained_context = source.get("context")
+    if type(retained_context) is not dict or set(retained_context) != {
+            "run_id", "intent_sequence", "family", "intent", "inputs"}:
+        raise ProofError("control-plane manifest source context envelope is invalid")
+    historical = ExpectedContext(
+        retained_context["run_id"], retained_context["intent_sequence"],
+        retained_context["family"], canonical(retained_context["intent"]),
+        canonical(retained_context["inputs"]),
+    )
+    if (historical.run_id != context.run_id
+            or historical.family != "control_plane_manifest_source"):
+        raise ProofError("control-plane manifest source authority differs")
+    historical_inputs = decode(historical.inputs)
+    if (type(historical_inputs.get("control_plane_manifest_source_version")) is not int
+            or historical_inputs.get("control_plane_manifest_source_version") != 1
+            or "prior_control_plane_manifest_source" in historical_inputs):
+        raise ProofError("nested control-plane manifest source is invalid")
+    try:
+        proof = _decode_record(encoded, historical)
+    except (TypeError, ValueError, KeyError, AttributeError) as error:
+        raise ProofError("control-plane manifest source does not revalidate") from error
+    retained = RawObservation(
+        "control_plane_manifest_source", (), (), 0, encoded, b"")
+    decision = _control_plane_manifest_source(historical, (retained,))
+    bundle = observation_bundle(historical, (retained,), decision)
+    terminal = terminal_event(historical, decision, sha256(bundle).hexdigest())
+    intent = {"sequence": historical.intent_sequence,
+              "event": "control_plane_manifest_source_intent",
+              "details": decode(historical.intent)}
+    history = current.get("history")
+    if (type(history) is not list or any(
+            type(row) is not dict or set(row) != {"sequence", "event", "details"}
+            for row in history)):
+        raise ProofError("control-plane manifest source history is invalid")
+    intent_positions = [index for index, row in enumerate(history)
+                        if canonical(row) == canonical(intent)]
+    terminal_positions = [index for index, row in enumerate(history)
+                          if canonical(row) == canonical(terminal)]
+    generations = [row for row in history if row.get("event") in {
+        "control_plane_manifest_source_intent",
+        "control_plane_manifest_source_complete",
+    }]
+    if (len(intent_positions) != 1 or len(terminal_positions) != 1
+            or intent_positions[0] + 1 != terminal_positions[0]
+            or len(generations) != 2
+            or terminal["sequence"] >= context.intent_sequence):
+        raise ProofError("control-plane manifest source terminal is not in current history")
+    if current.get("owned_identity") != historical_inputs.get("owned_identity"):
+        raise ProofError("control-plane manifest source identity differs from current authority")
+    dynamic = {
+        "history", "prior_control_plane_manifest_source", "prior_service_bindings",
+        "prior_node_image_references", "prior_node_image_source", "source_images",
+        "driver_binding", "envoy_bindings", "applied_objects", "teardown_only",
+        "profile_start_refused_sequence", "profile_binding", "foreign_comparison",
+        "owned_identity",
+    }
+    for key, value in historical_inputs.items():
+        if key not in dynamic and current.get(key) != value:
+            raise ProofError("control-plane manifest source inputs differ from current authority")
     return proof
 
 

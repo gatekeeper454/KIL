@@ -964,7 +964,9 @@ class V3B2Controller:
         retained_archive = self.paths.private / "kil-image.tar"
         _write_exclusive(retained_archive, self._kil_archive_bytes)
         expected_inputs = {
-            "run_id": self.run_digest, "node_image_source_version": 1, "application_source_version": 1,
+            "run_id": self.run_digest, "node_image_source_version": 1,
+            "control_plane_manifest_source_version": 1,
+            "application_source_version": 1,
             "owned_identity": asdict(self._identity),
             "profile": json.loads(profile_bytes), "profile_sha256": _digest(profile_bytes),
             "profile_configuration": {"name": LAB_IDENTITY, "arch": "aarch64", "runtime": "docker",

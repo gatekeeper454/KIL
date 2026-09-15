@@ -218,6 +218,8 @@ class ObservedLifecycleTest(unittest.TestCase):
             ("profile_start", {"colima_profile": "kil-v3-lab"}, {"colima_profile": "kil-v3-lab"}),
             ("cluster_create", cluster, {**cluster, "node_container_id": identity.node_container_id,
                 "cluster_incarnation_uid": identity.cluster_incarnation_uid, "docker_host": identity.docker_host}),
+            ("control_plane_manifest_source", {"kind_cluster": "kil-v3-lab"},
+                {"kind_cluster": "kil-v3-lab"}),
             ("image_import", {**images, "archive_sha256": "f" * 64}, {**images, "archive_sha256": "f" * 64}),
         ):
             append_event(controller.journal_path, family + "_intent", intent)
@@ -234,7 +236,7 @@ class ObservedLifecycleTest(unittest.TestCase):
              "target_media_type": "application/vnd.oci.image.index.v1+json",
              "allowed_repo_tags": [], "allowed_repo_digests": [images["envoy_image"]]},
         ]
-        context = ExpectedContext(controller.run_digest, 7, "image_load", canonical(images), canonical({
+        context = ExpectedContext(controller.run_digest, 9, "image_load", canonical(images), canonical({
             "owned_identity": asdict(identity), "teardown_only": True,
             "kind_config_path": str(controller.kind_config), "kind_config_sha256": sha256(config).hexdigest(),
             "kind_node_image": controller.profile.kind_node_image, "images": expected_images,
@@ -255,7 +257,7 @@ class ObservedLifecycleTest(unittest.TestCase):
         journal = load_journal(controller.journal_path)
         self.assertEqual(journal["phase"], "image_load_abandoned_for_teardown")
         commitment = journal["events"][-1]["details"]["observed_proof_sha256"]
-        proof = json.loads((self.paths.private / ("proof-7-" + commitment + ".json")).read_bytes())
+        proof = json.loads((self.paths.private / ("proof-9-" + commitment + ".json")).read_bytes())
         observed = next(row for row in proof["observations"] if row["label"] == "node_images")
         self.assertEqual(bytes.fromhex(observed["stdout_hex"]), stdout)
         self.assertEqual(bytes.fromhex(observed["stderr_hex"]), stderr)

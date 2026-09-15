@@ -989,6 +989,7 @@ _PAIR_DETAILS: dict[str, frozenset[str]] = {
     "profile_delete": frozenset({"colima_profile"}),
     "cluster_create": frozenset({"kind_cluster", "kubeconfig"}),
     "cluster_delete": frozenset({"kind_cluster", "kubeconfig"}),
+    "control_plane_manifest_source": frozenset({"kind_cluster"}),
     "image_import": frozenset({"archive_sha256", "image", "envoy_image"}),
     "image_load": frozenset({"image", "envoy_image"}),
     "calico_apply": frozenset({"manifest_sha256"}),
@@ -1017,7 +1018,8 @@ _ABANDONMENT_FIELDS = frozenset({
 })
 _FAILURE_FAMILIES = frozenset({
     "profile_start", "profile_stop", "profile_delete", "cluster_create",
-    "cluster_delete", "image_import", "image_load", "calico_apply", "application_apply",
+    "cluster_delete", "control_plane_manifest_source", "image_import", "image_load",
+    "calico_apply", "application_apply",
     "envoy_quiesce", "driver_start", "driver_cancel",
 })
 
@@ -1193,10 +1195,14 @@ def _validate_history(events: object, lifecycle_mode: str, teardown_from_sequenc
                 require(sequence == 1, "profile start must be first")
             elif family == "cluster_create":
                 require(done("profile_start"), "cluster create requires profile start completion")
+            elif family == "control_plane_manifest_source":
+                require(done("cluster_create"),
+                        "control-plane manifest source requires cluster create completion")
             elif family == "calico_apply":
                 require(done("cluster_create") and done("image_load"), "Calico apply requires cluster and image load completion")
             elif family == "image_import":
-                require(done("cluster_create"), "image import requires cluster create completion")
+                require(done("cluster_create") and done("control_plane_manifest_source"),
+                        "image import requires control-plane manifest source completion")
             elif family == "image_load":
                 require(done("cluster_create") and done("image_import"), "image load requires cluster and import completion")
             elif family == "application_apply":

@@ -175,8 +175,14 @@ class V3B2JournalTest(unittest.TestCase):
             },
         )
 
-    def _ready(self) -> None:
+    def _manifest_sourced(self) -> None:
         self._cluster_created()
+        details = {"kind_cluster": "kil-v3-lab"}
+        self._append("control_plane_manifest_source_intent", details)
+        self._append("control_plane_manifest_source_complete", details)
+
+    def _ready(self) -> None:
+        self._manifest_sourced()
         image = {"image": "kil.local/kil-v3b2:sha256-" + "d" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64}
         imported = {**image, "archive_sha256": "a" * 64}
         self._append("image_import_intent", imported)
@@ -223,6 +229,8 @@ class V3B2JournalTest(unittest.TestCase):
         return [
             ("profile_start_intent", profile), ("profile_start_complete", profile),
             ("cluster_create_intent", cluster), ("cluster_create_complete", cluster_complete),
+            ("control_plane_manifest_source_intent", {"kind_cluster": "kil-v3-lab"}),
+            ("control_plane_manifest_source_complete", {"kind_cluster": "kil-v3-lab"}),
             ("image_import_intent", {"archive_sha256": "a" * 64, "image": "kil.local/kil-v3b2:sha256-" + "d" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64}), ("image_import_complete", {"archive_sha256": "a" * 64, "image": "kil.local/kil-v3b2:sha256-" + "d" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64}),
             ("image_load_intent", {"image": "kil.local/kil-v3b2:sha256-" + "d" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64}), ("image_load_complete", {"image": "kil.local/kil-v3b2:sha256-" + "d" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64}),
             ("calico_apply_intent", {"manifest_sha256": "2" * 64}), ("calico_apply_complete", {"manifest_sha256": "2" * 64}),
@@ -527,7 +535,7 @@ class V3B2JournalTest(unittest.TestCase):
 
     def test_uncertain_mutation_can_be_abandoned_only_for_owned_teardown(self) -> None:
         self._journal()
-        self._cluster_created()
+        self._manifest_sourced()
         details = {"archive_sha256": "6" * 64, "image": "kil.local/kil-v3b2:sha256-" + "8" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "5" * 64}
         self._append("image_import_intent", details)
         abandoned = {
@@ -545,7 +553,7 @@ class V3B2JournalTest(unittest.TestCase):
 
     def test_abandonment_rejects_request_false_identity_and_cross_family_hybrids(self) -> None:
         self._journal()
-        self._cluster_created()
+        self._manifest_sourced()
         details = {"archive_sha256": "6" * 64, "image": "kil.local/kil-v3b2:sha256-" + "8" * 64, "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "5" * 64}
         self._append("image_import_intent", details)
         base = {
@@ -1193,6 +1201,67 @@ class V3B2JournalTest(unittest.TestCase):
             self._append(name, details)
         self.assertTrue(recovery_plan(load_journal(self.path)).publication_allowed)
 
+    def test_manifest_source_is_exactly_between_cluster_create_and_image_import(self) -> None:
+        self._journal()
+        self._cluster_created()
+        image = {"archive_sha256": "a" * 64,
+                 "image": "kil.local/kil-v3b2:sha256-" + "d" * 64,
+                 "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64}
+        with self.assertRaisesRegex(JournalError, "source|order|phase"):
+            self._append("image_import_intent", image)
+        details = {"kind_cluster": "kil-v3-lab"}
+        self._append("control_plane_manifest_source_intent", details)
+        with self.assertRaisesRegex(JournalError, "overlap|completion"):
+            self._append("image_import_intent", image)
+        self._append("control_plane_manifest_source_complete", details)
+        self._append("image_import_intent", image)
+
+    def test_manifest_source_requires_cluster_and_accepts_only_exact_kind_pair(self) -> None:
+        self._journal()
+        with self.assertRaisesRegex(JournalError, "cluster|order|phase"):
+            self._append("control_plane_manifest_source_intent",
+                         {"kind_cluster": "kil-v3-lab"})
+        self.path.unlink()
+        self._journal()
+        self._cluster_created()
+        for details in ({}, {"kind_cluster": "foreign"},
+                        {"kind_cluster": "kil-v3-lab", "extra": True}):
+            with self.subTest(details=details), self.assertRaises(JournalError):
+                self._append("control_plane_manifest_source_intent", details)
+
+    def test_invalid_manifest_checkpoint_terminal_latches_teardown_only(self) -> None:
+        self._journal()
+        self._cluster_created()
+        details = {"kind_cluster": "kil-v3-lab"}
+        self._append("control_plane_manifest_source_intent", details)
+        abandoned = {
+            **details,
+            "abandoned_family": "control_plane_manifest_source",
+            "stage_category": "uncertain_or_partial",
+            "observation_sha256": "7" * 64,
+            "promotion_forbidden": True,
+        }
+        self._append("control_plane_manifest_source_abandoned_for_teardown",
+                     abandoned)
+        with self.assertRaisesRegex(JournalError, "teardown"):
+            self._append("image_import_intent", {
+                "archive_sha256": "a" * 64,
+                "image": "kil.local/kil-v3b2:sha256-" + "d" * 64,
+                "envoy_image": "docker.io/envoyproxy/envoy@sha256:" + "e" * 64,
+            })
+        self._append("cluster_delete_intent", {
+            "kind_cluster": "kil-v3-lab", "kubeconfig": self.kubeconfig})
+
+    def test_pending_manifest_source_recovery_never_issues_live_docker_reads(self) -> None:
+        self._journal()
+        self._cluster_created()
+        self._append("control_plane_manifest_source_intent",
+                     {"kind_cluster": "kil-v3-lab"})
+        plan = recovery_plan(load_journal(self.path))
+        self.assertEqual(plan.commands, ())
+        self.assertFalse(any(command.argv[:2] == ("docker", "exec")
+                             for command in plan.commands))
+
     def test_failed_foreign_comparison_never_authorizes_promotable_publication(self) -> None:
         self._journal()
         events = self._canonical_events()
@@ -1229,10 +1298,11 @@ class V3B2JournalTest(unittest.TestCase):
     def test_every_crash_boundary_recovers_only_the_pending_exact_mutation(self) -> None:
         events = self._canonical_events()
         intent_indices = [index for index, (name, _details) in enumerate(events) if name.endswith("_intent")]
-        self.assertEqual(len(intent_indices), 18)
+        self.assertEqual(len(intent_indices), 19)
         expected_probe = {
             "profile_start_intent": "status",
             "cluster_create_intent": "inspect",
+            "control_plane_manifest_source_intent": None,
             "calico_apply_intent": "kube-system",
             "application_apply_intent": "networkpolicies",
             "readiness_intent": "pods",
@@ -1260,8 +1330,10 @@ class V3B2JournalTest(unittest.TestCase):
                 self.assertEqual(pending.requests_to_send, ())
                 self.assertFalse(any(command.mutating for command in pending.commands))
                 pending_text = " ".join(argument for command in pending.commands for argument in command.argv)
-                if name in expected_probe:
+                if name in expected_probe and expected_probe[name] is not None:
                     self.assertIn(expected_probe[name], pending_text)
+                elif name == "control_plane_manifest_source_intent":
+                    self.assertEqual(pending.commands, ())
                 else:
                     self.assertEqual(name, "publication_intent")
                     self.assertEqual(pending.commands, ())

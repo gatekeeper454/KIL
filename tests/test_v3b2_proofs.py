@@ -1,4 +1,4 @@
-from dataclasses import FrozenInstanceError, asdict
+from dataclasses import FrozenInstanceError, asdict, replace
 import json
 import importlib.util
 import unittest
@@ -440,6 +440,111 @@ class ObservedProofTest(unittest.TestCase):
                     self.assertNotEqual(proofs.decide(context, (observation,)).outcome, "complete")
                 with self.assertRaises(FrozenInstanceError):
                     context.family = "request"
+
+    def test_control_plane_manifest_source_is_one_deterministic_local_checkpoint(self):
+        from kil import v3b2_proofs as proofs
+        from tests.test_v3b2_control_plane_manifest_source import context
+        source_context = context(
+            control_plane_manifest_source_version=1,
+            private_path="/tmp/kil-private",
+        )
+        operation = proofs.OPERATIONS["control_plane_manifest_source"]
+        self.assertEqual(operation.requests(source_context), (
+            proofs.ObservationRequest(
+                "control_plane_manifest_source",
+                source="control_plane_manifest_source",
+            ),
+        ))
+
+    def test_control_plane_manifest_source_terminal_binds_retained_bytes(self):
+        from hashlib import sha256
+        from kil import v3b2_proofs as proofs
+        from kil.v3b2_control_plane_manifest_source import validate_control_plane_manifest_source
+        from kil.v3b2_control_plane_manifest_source_record import encode_control_plane_manifest_source_record
+        from tests.test_v3b2_control_plane_manifest_source import context, identity, observations
+        source_context = context(
+            control_plane_manifest_source_version=1,
+            private_path="/tmp/kil-private",
+        )
+        source = validate_control_plane_manifest_source(
+            context=source_context, owned_identity=identity(), observations=observations())
+        checkpoint = encode_control_plane_manifest_source_record(
+            proof=source, context=source_context)
+        retained = proofs.RawObservation(
+            "control_plane_manifest_source", (), (), 0, checkpoint, b"")
+        decision = proofs.decide(source_context, (retained,))
+        self.assertEqual(decision.outcome, "complete")
+        bundle = proofs.observation_bundle(source_context, (retained,), decision)
+        digest = sha256(bundle).hexdigest()
+        terminal = proofs.terminal_event(source_context, decision, digest)
+        self.assertEqual(terminal["event"], "control_plane_manifest_source_complete")
+        self.assertEqual(terminal["details"], {
+            "kind_cluster": "kil-v3-lab", "observed_proof_sha256": digest})
+        changed = proofs.RawObservation(
+            retained.label, retained.argv, retained.env, 0, checkpoint[:-1], b"")
+        self.assertEqual(proofs.decide(source_context, (changed,)).outcome,
+                         "teardown_only")
+
+    def test_prior_control_plane_manifest_source_is_reconstructed_from_retained_bytes(self):
+        from hashlib import sha256
+        from kil import v3b2_proofs as proofs
+        from kil.v3b2_control_plane_manifest_source import validate_control_plane_manifest_source
+        from kil.v3b2_control_plane_manifest_source_record import encode_control_plane_manifest_source_record
+        from tests.test_v3b2_control_plane_manifest_source import context, identity, observations
+        source_context = context(
+            control_plane_manifest_source_version=1,
+            private_path="/tmp/kil-private",
+        )
+        source = validate_control_plane_manifest_source(
+            context=source_context, owned_identity=identity(), observations=observations())
+        checkpoint = encode_control_plane_manifest_source_record(
+            proof=source, context=source_context)
+        retained = proofs.RawObservation(
+            "control_plane_manifest_source", (), (), 0, checkpoint, b"")
+        decision = proofs.decide(source_context, (retained,))
+        bundle = proofs.observation_bundle(source_context, (retained,), decision)
+        intent = {"sequence": source_context.intent_sequence,
+                  "event": "control_plane_manifest_source_intent",
+                  "details": proofs.decode(source_context.intent)}
+        terminal = proofs.terminal_event(
+            source_context, decision, sha256(bundle).hexdigest())
+        current_inputs = {
+            **proofs.decode(source_context.inputs),
+            "prior_control_plane_manifest_source": proofs.decode(checkpoint),
+            "history": [intent, terminal],
+        }
+        current = proofs.ExpectedContext(
+            source_context.run_id, source_context.intent_sequence + 2,
+            "image_import", proofs.canonical({}), proofs.canonical(current_inputs))
+        reconstructed = proofs.reconstruct_prior_control_plane_manifest_source(current)
+        self.assertEqual(reconstructed, source)
+        current_inputs["prior_control_plane_manifest_source"]["proof"]["bindings"][0]["sha256"] = "0" * 64
+        poisoned = replace(current, inputs=proofs.canonical(current_inputs))
+        with self.assertRaises(proofs.ProofError):
+            proofs.reconstruct_prior_control_plane_manifest_source(poisoned)
+
+    def test_immutable_inputs_cannot_inject_prior_control_plane_manifest_source(self):
+        from hashlib import sha256
+        from kil import v3b2_proofs as proofs
+        base = proofs.canonical({
+            "run_id": "a" * 64,
+            "owned_identity": {"kubeconfig": "/tmp/kubeconfig",
+                               "docker_host": "unix:///tmp/kil-v3-lab/docker.sock"},
+            "control_plane_manifest_source_version": 1,
+            "prior_control_plane_manifest_source": {},
+        })
+        journal = {
+            "run_id": "a" * 64,
+            "owned_identity": proofs.decode(base)["owned_identity"],
+            "expected_inputs_sha256": sha256(base).hexdigest(),
+            "profile_start_refused_sequence": None,
+            "teardown_from_sequence": None,
+            "events": [{"sequence": 1, "event": "profile_start_intent",
+                        "details": {"colima_profile": "kil-v3-lab"}}],
+        }
+        with self.assertRaisesRegex(proofs.ProofError, "immutable|runtime"):
+            proofs.expected_context(base, journal,
+                                    lambda *_: self.fail("unexpected proof read"))
 
     def test_absence_requires_successful_closed_inventory(self):
         self.assertIsNotNone(importlib.util.find_spec("kil.v3b2_proofs"), "shared proof boundary is missing")
