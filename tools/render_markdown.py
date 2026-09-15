@@ -29,6 +29,7 @@ _CSP = (
     "script-src 'unsafe-inline'; font-src 'none'; connect-src 'none'; "
     "object-src 'none'; base-uri 'none'; form-action 'none'"
 )
+_WIDE_LAYOUT_DIRECTIVE = "<!-- reader-layout: wide -->\n"
 
 _CSS = """
 :root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
@@ -74,6 +75,13 @@ input { background: var(--paper); border: 1px solid var(--line); border-radius: 
 mark.reader-match { background: #ffe58a; color: #201c10; }
 @media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
 @media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }
+""".strip()
+
+_WIDE_CSS = """
+body.reader-wide .reader-stage { padding-inline: clamp(1rem, 2.5vw, 2.5rem); }
+body.reader-wide .reader-layout { gap: clamp(1.5rem, 3vw, 2.5rem); grid-template-columns: minmax(12rem, 14rem) minmax(0, 68rem); max-width: 86rem; }
+body.reader-wide #reader-article table { width: 100%; }
+@media (max-width: 1120px) { body.reader-wide .reader-layout { display: block; max-width: 68rem; } body.reader-wide .reader-outline { display: none; } body.reader-wide .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } body.reader-wide .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } body.reader-wide .reader-mobile-outline nav { padding: .7rem 0; } body.reader-wide .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } }
 """.strip()
 
 _JAVASCRIPT = r"""
@@ -328,6 +336,9 @@ def render_document(
 ) -> bytes:
     """Render UTF-8 Markdown as a deterministic, self-contained HTML reader."""
     markdown = source_bytes.decode("utf-8", errors="strict")
+    wide_layout = markdown.startswith(_WIDE_LAYOUT_DIRECTIVE)
+    if wide_layout:
+        markdown = markdown[len(_WIDE_LAYOUT_DIRECTIVE) :]
     parser = MarkdownIt("commonmark", {"html": False, "typographer": False}).enable(
         "table"
     )
@@ -345,6 +356,8 @@ def render_document(
     article = parser.renderer.render(tokens, parser.options, {})
     source_path = str(source)
     digest = sha256(source_bytes).hexdigest()
+    body_class = ' class="reader-wide"' if wide_layout else ""
+    reader_css = _CSS + ("\n" + _WIDE_CSS if wide_layout else "")
     rendered = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -355,9 +368,9 @@ def render_document(
 <meta name="source-path" content="{escape(source_path, quote=True)}">
 <meta name="source-sha256" content="{digest}">
 <meta http-equiv="Content-Security-Policy" content="{escape(_CSP, quote=True)}">
-<style>{_CSS}</style>
+<style>{reader_css}</style>
 </head>
-<body>
+<body{body_class}>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
 <p class="reader-notice">Generated from <code>{escape(source_path)}</code> (<code>{digest}</code>); edit the Markdown source, not this reader.</p>

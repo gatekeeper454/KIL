@@ -325,6 +325,20 @@ class MarkdownRendererTest(unittest.TestCase):
         )
         self.assertIn("box-shadow: none", rendered)
 
+    def test_wide_layout_directive_is_scoped_and_hidden(self) -> None:
+        wide = self.render("<!-- reader-layout: wide -->\n# Wide\n")
+        standard = self.render("# Standard\n")
+
+        self.assertIn('<body class="reader-wide">', wide)
+        self.assertNotIn("reader-layout: wide", wide)
+        self.assertIn(
+            "body.reader-wide .reader-layout {", wide
+        )
+        self.assertIn("minmax(0, 68rem)", wide)
+        self.assertIn("@media (max-width: 1120px)", wide)
+        self.assertIn("<body>", standard)
+        self.assertNotIn('<body class="reader-wide">', standard)
+
     def test_mobile_reader_keeps_search_notice_and_semantic_outline(self) -> None:
         rendered = self.render("# Mobile\n\n## Section\n")
         identifiers = re.findall(r'(?<![-\w])id="([^"]+)"', rendered)
