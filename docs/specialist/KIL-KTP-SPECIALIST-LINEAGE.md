@@ -13115,3 +13115,74 @@ plan. Task 3 remains responsible for bounding successful process output before
 retention.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-272 — 2026-09-15 — V4 durable manifest checkpoint implementation checkpoint
+
+**Input:** Execute Task 2 of the approved V4 control-plane static-manifest
+source plan under strict test-first development: add a canonical 4 MiB private
+checkpoint, make its publication write-once and replay-safe, add the
+`control_plane_manifest_source` lifecycle family between cluster creation and
+image import, reconstruct prior source authority only from retained bytes, and
+commit locally without pushing or touching any live runtime or Colima profile.
+
+**Interpretation:** This checkpoint establishes durable static evidence and
+journal/replay authority only. It does not collect the two manifests itself,
+issue a live Docker read during recovery, validate component-specific producer
+configuration, or advance runtime/application completion. The controller's
+preflight now opts into source version one, while Task 3 remains responsible
+for publishing the checkpoint after the cluster-create terminal and for reading
+only the deterministic retained filename during recovery.
+
+**Decision status:** Confirmed implementation checkpoint, not final independent
+acceptance and not a live claim. The closed envelope is
+`kil.v4.control-plane-manifest-source.v1` with exactly `schema`, `context`, and
+`proof`; its context and nested proof are reconstructed and compared exactly.
+The journal now enforces `cluster_create_complete` before source intent and
+source completion before image-import intent. Invalid or missing retained
+checkpoint evidence resolves to teardown-only, and recovery exposes no live
+Docker manifest-read command.
+
+**Rationale:** A separately durable checkpoint prevents crash recovery from
+silently recollecting mutable node files and calling the later result historical
+evidence. Exclusive no-replace publication, owner-only single-link regular-file
+checks, descriptor/name identity bracketing, file and parent fsync, and exact
+context reconstruction preserve the source proof as one immutable authority.
+Reserving `prior_control_plane_manifest_source` against caller injection and
+rebuilding it through its retained operation bundle binds later consumers to
+the source terminal's exact digest.
+
+**Verification:** The checkpoint suite first failed with the expected missing
+module import. After persistence was implemented, the lifecycle tests first
+failed with four failures and 44 errors for the missing operation, journal
+family, replay reconstruction, and injection guard. The final focused suite
+passed all 143 tests across the source proof, durable source record, shared
+proofs, journal, and observed lifecycle modules; `git diff --check` also passed.
+Coverage includes canonical bytes, exact context reconstruction, the 4 MiB
+boundary, idempotence, altered destinations, symlink/hardlink/FIFO/mode
+rejection, parent replacement, corrupt/open records, nested proof forgery,
+file/parent fsync, exact journal ordering, teardown-only failure, terminal
+digest binding, retained-byte reconstruction, and recovery with zero live
+Docker reads. No Colima, Docker, Kind, kubectl, Kubernetes, request, evidence,
+or publication command was invoked.
+
+**Affected artifacts:** Implementation commit `cf7cd68` added
+`src/kil/v3b2_control_plane_manifest_source_record.py` and
+`tests/test_v3b2_control_plane_manifest_source_record.py`; extended
+`src/kil/v3b2_proofs.py`, `src/kil/v3b2_journal.py`, and their tests; added the
+immutable preflight version in `src/kil/v3b2_controller.py`; and adjusted one
+existing observed-lifecycle fixture for the inserted phase. This entry and its
+regenerated HTML reader are the separate documentation checkpoint. No live or
+foreign resource state and no repository visibility changed.
+
+**Unresolved questions:** Independent specification and quality acceptance for
+Task 2 remain outstanding. Task 3 must implement bounded one-shot capture,
+checkpoint publication, deterministic retained-byte collection, crash-boundary
+completion, and failure routing without live recollection. Both component
+disk/API proofs, platform composition, the all-ten-Pod terminal, request-free
+lifecycle, and nominal lifecycle also remain open.
+
+**Next gate:** Obtain independent Task 2 specification and quality review, then
+execute Task 3's controller capture and recovery wiring under TDD. Preserve the
+static-only boundary and do not open a live gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
