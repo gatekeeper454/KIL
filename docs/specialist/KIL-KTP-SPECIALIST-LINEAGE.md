@@ -13299,3 +13299,59 @@ obtain independent Task 2 specification and code-quality acceptance before
 starting Task 3.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-275 — 2026-09-15 — V4 Task 2 specification re-review approved
+
+**Input:** Independent re-review of the complete V4 Task 2 implementation after
+code/test correction `6a9e0e218de77c3848e39203e4fcddc4d7db2548` and correction-lineage
+commit `970fcf50417324ab9275e8f2a350cabab0b27d28`, on top of the T-273
+specification-gap record at `2cd6d900b3460a2818b7917160a17812f3ce0873`.
+The review rechecked the original Task 2 contract, the exact validator change,
+the new adversarial regression, and the previously accepted counterexample.
+
+**Interpretation:** Approval requires the T-273 Important finding to be closed
+without weakening legitimate teardown or adding Task 3 controller capture and
+recovery wiring. It also requires the full original persistence, canonical
+schema, exact context/proof reconstruction, safe publication, local-only
+observation, immutable version, lifecycle, false-completion, retained-byte
+reconstruction, and zero-live-read recovery contracts to remain satisfied.
+
+**Decision status:** Approved for specification compliance. The prior Important
+finding is fully resolved: manifest-source intent and image-import intent now
+require that cluster deletion and cluster-absence proof have never begun. The
+complete Task 2 implementation meets the original contract, and no remaining
+specification finding or extra behavior widening scope was identified. This is
+a static software acceptance only, not a live runtime or V4 completion claim.
+
+**Rationale:** The new `begun(...)` predicate derives irreversible teardown
+entry from the existing validated family-state registry. Applying it to both
+forward phases rejects pending, completed, failed, or abandoned cluster
+deletion/absence histories while leaving the established valid sequence and
+teardown ordering intact. The regression independently covers source capture
+after deletion and image import after a valid source pair followed by deletion.
+The correction touches only the journal validator and its focused test.
+
+**Verification:** The new adversarial regression passed independently. The
+exact counterexample recorded in T-273 was rerun against the corrected journal
+and failed closed at source intent with `JournalError`. The required five-module
+focused suite passed all 144 tests in 26.994 seconds under the repository's
+Python 3.12 lab environment. Static diff inspection confirmed the correction
+scope was limited to `src/kil/v3b2_journal.py` and
+`tests/test_v3b2_journal.py`. No Colima, Docker, Kind, kubectl, Kubernetes, or
+other live runtime command was invoked.
+
+**Affected artifacts:** This append-only specification re-review entry and its
+regenerated HTML reader. Production code and tests were not modified by this
+review. T-273 and T-274 remain unchanged; Task 2 implementation authority is
+the reviewed implementation plus correction commits above.
+
+**Unresolved questions:** Independent code-quality acceptance remains a
+separate gate. Task 3 controller capture and recovery wiring, both component
+disk/API proofs, platform composition, the all-ten-Pod terminal, request-free
+lifecycle, and nominal lifecycle remain open and are not claimed here.
+
+**Next gate:** Complete independent Task 2 code-quality review. If that gate
+also approves, begin Task 3 controller capture and recovery wiring under TDD
+without reopening live recovery reads.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
