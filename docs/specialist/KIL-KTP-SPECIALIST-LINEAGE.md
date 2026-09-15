@@ -13574,3 +13574,52 @@ suite and generated-reader checks, and obtain another independent Task 2
 quality re-review before beginning Task 3.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-279 — 2026-09-15 — V4 Task 2 cluster-live teardown recovery gap corrected
+
+**Input:** Correct the remaining Important finding from quality re-review T-278,
+recorded in commit `2dda21a`, under strict test-first development. No push,
+live cluster/runtime command, or Colima inspection or mutation was authorized.
+
+**Interpretation:** Evidence freeze, Envoy quiescence, and driver cancellation
+remain valid before cluster deletion, including their existing nominal and
+request-free teardown/recovery uses. Once cluster deletion or cluster-absence
+proof has begun, however, no new intent for those cluster-live families may be
+admitted because recovery would address a deleted or proved-absent cluster.
+
+**Decision status:** Confirmed implementation correction, pending independent
+quality re-review. The shared irreversible cluster-teardown gate now includes
+`evidence_freeze`, `envoy_quiesce`, and `driver_cancel` in addition to the
+previous forward families. The family-specific pre-delete rules and recovery
+command derivation remain unchanged.
+
+**Rationale:** These three operations are teardown-oriented but still require a
+live Kubernetes API. Classifying them by cluster-liveness at the shared intent
+gate closes the remaining post-absence recovery surface without removing their
+legitimate role before deletion or widening the change into recovery command
+special cases.
+
+**Verification:** The adversarial regression first failed in all three
+subtests. An accepted post-absence evidence-freeze intent generated ten
+`kubectl` recovery reads, accepted Envoy quiescence generated one cluster-wide
+Pod read, and accepted driver cancellation generated one UID-bound Pod read.
+After adding the three families to the shared gate, that regression and the
+existing pre-delete nominal/request-free freeze, quiescence, and cancellation
+tests passed. The five-module focused suite passed all 150 tests in 27.540
+seconds, and `git diff --check` passed. The commands were inspected as values
+only; no Colima, Docker, Kind, kubectl, Kubernetes, or other live runtime
+command was invoked.
+
+**Affected artifacts:** Correction commit `f449219` updates
+`src/kil/v3b2_journal.py` and `tests/test_v3b2_journal.py`. This append-only
+entry and its regenerated HTML reader form a separate documentation checkpoint.
+The T-278 quality re-review record remains unchanged.
+
+**Unresolved questions:** Independent Task 2 code-quality re-review remains
+outstanding. Task 3 controller capture and recovery wiring and all later V4
+proof gates remain open.
+
+**Next gate:** Verify the committed correction and generated readers, then
+obtain independent Task 2 code-quality acceptance before beginning Task 3.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
