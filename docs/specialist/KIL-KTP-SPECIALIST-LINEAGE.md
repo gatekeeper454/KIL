@@ -13432,3 +13432,63 @@ rerun the five-module focused suite and reader checks, then obtain independent
 quality re-review before starting Task 3.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-277 — 2026-09-15 — V4 Task 2 quality findings corrected
+
+**Input:** Correct all two Important and three Minor findings from the T-276
+quality review recorded in commit `a1c887e`, using an adversarial test-first
+cycle for each boundary and without pushing, invoking a live cluster/runtime
+command, or inspecting or mutating any Colima profile.
+
+**Interpretation:** The durable checkpoint must be authorized by the exact
+version-one immutable private directory, encode within its four MiB allocation
+budget, reject malformed context before filesystem access, and close parent
+descriptors across validation failures. Cluster deletion or absence must also
+be an irreversible boundary for the complete forward lifecycle rather than
+only for source and image-import intent.
+
+**Decision status:** Confirmed implementation correction, pending independent
+quality re-review. The checkpoint path is now derived from the exact validated
+context inputs and requires `control_plane_manifest_source_version == 1`.
+Complete-envelope encoding uses the existing bounded canonical encoder. The
+reader validates exact context before path derivation or opening a directory,
+and `_open_parent` closes its descriptor when either descriptor or named-stat
+validation raises. A shared forward-family gate now blocks source, import,
+load, Calico/application apply, readiness, driver start, and request intent
+after cluster deletion or absence begins.
+
+**Rationale:** Owner-only directory permissions do not make an unrelated
+directory authoritative; immutable `private_path` must select the one retained
+checkpoint location. Bounded encoding must reject before an oversized complete
+JSON allocation, and public malformed input must remain within the module's
+closed error vocabulary. Filesystem validation must not leak resources on
+exceptional paths. Finally, teardown state is one-way, so a shared gate avoids
+moving the historical-completion gap from image import to the next forward
+family while preserving evidence-freeze and ordered teardown/recovery.
+
+**Verification:** Five adversarial RED checkpoints were observed before their
+corresponding production changes. Wrong-parent and version substitution failed
+with four missing expected record errors; post-delete and post-absence image
+load failed with two missing expected journal errors; the full envelope reached
+unbounded canonical encoding; malformed and non-exact contexts leaked raw or
+filesystem exceptions in three assertions; and mocked parent validation left
+one descriptor unclosed. Each focused test then passed after its minimal fix.
+The final five-module suite passed all 149 tests in 29.139 seconds and
+`git diff --check` passed. No Colima, Docker, Kind, kubectl, Kubernetes, or
+other live runtime command was invoked.
+
+**Affected artifacts:** Correction commit `977ffac` updates
+`src/kil/v3b2_control_plane_manifest_source_record.py`,
+`src/kil/v3b2_journal.py`, and their focused tests. This append-only entry and
+its regenerated HTML reader form a separate documentation checkpoint. The
+T-276 quality finding record remains unchanged.
+
+**Unresolved questions:** Independent code-quality re-review remains
+outstanding. Task 3 controller capture and recovery wiring, both component
+disk/API proofs, platform composition, the all-ten-Pod terminal, request-free
+lifecycle, and nominal lifecycle remain open.
+
+**Next gate:** Verify the committed implementation and generated readers, then
+obtain independent Task 2 code-quality acceptance before beginning Task 3.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
