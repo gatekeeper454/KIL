@@ -13908,3 +13908,54 @@ broader repository/remote CI gates on the private branch, then begin Task 4
 only if this source capture and recovery boundary remains green and unchanged.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-284 — 2026-09-15 — V4 Task 3 independent review accepted with test hardening
+
+**Input:** Independently review Task 3 against its capture-ordering,
+context-authority, fail-closed dispatch, durable crash-boundary, and disk-only
+recovery requirements; identify defects by severity; and resolve substantive
+feedback before handoff.
+
+**Interpretation:** This gate evaluates the implemented controller and tests,
+not the deferred V4 proof graph or a live experiment. A reviewer must inspect
+the complete `9769a06..2af80a8` range and verify that recovery has no path to
+the four Docker capture commands. Test matchers should also detect a future
+regression even if an unreviewed `/bin/cat` argument shape differs from the
+current six-argument grammar.
+
+**Decision status:** Independent review accepted Task 3 as ready to merge
+subject to the separately required broader CI gates, with no Critical or
+Important findings. Two Minor test-hardening recommendations were accepted and
+implemented in commit `0640b07`: recovery now rejects any Docker-exec command
+that invokes `/bin/cat`, and the successful path asserts exactly one adjacent
+before-inspect, two fixed manifest reads, and after-inspect bracket.
+
+**Rationale:** The reviewed production path already had correct ordering,
+journal-derived authority, deterministic checkpoint validation, and disk-only
+recovery. Broadening the forbidden-command matcher avoids a false negative if
+a future regression changes argument count or placement. Asserting the entire
+successful live bracket makes the one-shot capture requirement explicit at
+the controller integration boundary rather than relying only on source-module
+unit tests.
+
+**Verification:** The independent reviewer ran all nine source-focused
+controller tests: 9 passed in 15.126 seconds, and `git diff --check` passed.
+After the two Minor improvements, the ordering test and all three recovery
+tests passed: 4 tests in 59.202 seconds. `git diff --check` passed before the
+test-only commit. No live Colima, Docker, Kind, kubectl, Kubernetes, request,
+publication, or profile operation was executed.
+
+**Affected artifacts:** Hardened `tests/test_v3b2_controller.py` in commit
+`0640b07`; appended this review entry to
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` and regenerated its HTML
+reader in the separate documentation commit that follows.
+
+**Unresolved questions:** No Task 3 implementation or focused-test issue
+remains from independent review. Full repository and remote CI, branch
+integration, Task 4+, and any live dedicated-profile validation remain open.
+
+**Next gate:** Run the broader repository/remote CI gates on the reviewed
+commit chain, integrate Task 3 only if they remain green, and keep Task 4
+separate from this capture/recovery boundary.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
