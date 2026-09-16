@@ -16516,3 +16516,104 @@ Colima, Docker, Kind, kubectl, collector/controller or profile operation,
 application demonstration request, push, PR or publication is authorized here.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-323 — 2026-09-16 — Final static platform configuration specification review approved
+
+**Input:** The coordinator requested independent final specification review of
+the complete implementation and user-requested environment/actions synopsis,
+against the approved 2026-09-16 design and full implementation plan. Review base
+is `6aa52db`; Task 3 code and its independent reviews precede preliminary Task 4
+verification-document commit `549d72d`. Final approval was explicitly withheld
+until the fresh complete full-suite result and that commit were available.
+The coordinator released exclusive lineage ownership for this review-only entry.
+
+**Interpretation:** Apply the specification-reviewer prompt and
+verification-before-completion: inspect actual production, fixture, persisted
+tests and committed synopsis rather than accept implementation reports. Compare
+the requested scope line by line, verify the recorded complete regression log,
+and distinguish static configuration evidence from live/runtime evidence. Do not
+duplicate the expensive full suite, fix implementation, alter plan/synopsis, or
+preempt independent final quality/holistic review and bounded acceptance.
+
+**Decision status:** Confirmed final specification approval. No missing, extra
+or misunderstood applicable requirement was identified. This approves the static
+configuration-only implementation and factual synopsis; it is not final overall
+acceptance, publication, effective-image/status/readiness evidence, runtime or
+application completion, V4 completion or V3C completion.
+
+**Rationale:** The exact four-name public API retains explicit runtime ownership
+and nine exact component proofs. All top-level dependency types and fixed
+component binding tuple cardinalities are checked before dependency reconstruction
+or retained raw decoding. Existing constructors replay every dependency; complete
+retained ownership equality includes profile, workload/run, rendered expectations,
+full owned identity, raw List bytes and derived ownership. The explicit Calico
+source/projection byte join and complete reconstructed API-server/controller-
+manager manifest-source join remain present, without relaxing existing source
+semantics or excluding currently accepted minimal source contexts.
+
+Only validated heterogeneous component bindings are projected. Independent
+deployment, daemon and static ownership coverage requires ten distinct namespace/
+name pairs and ten UIDs, with two CoreDNS incarnations and one of each other
+reviewed component. Complete component/namespace/name/UID/resourceVersion equality
+and one corresponding bounded raw Pod incarnation are checked; application and
+unrelated objects cannot replace platform coverage. The frozen/slotted constructor
+recomputes the same joins and canonical tuple, rejecting altered, omitted,
+duplicated, reordered or forged evidence. Both completion flags are singleton
+`False`. Expected malformed evidence is locally wrapped with causes; there is no
+catch-all handler hiding arbitrary programming exceptions.
+
+The 129-line test helper merges independent observation deltas against each
+fixture's own baseline, rejects conflicts, and uses existing test-owned literals
+or checksummed Calico projection with independent serialization, not production
+expected-spec factories to manufacture candidate configurations. Persisted tests
+exercise both validator and constructor boundaries, all exact input types and
+subclasses/lookalikes, binding container/type/cardinality/incarnation drift,
+forged nested proofs and false flags. Complete whitespace/status/full-identity/
+workload-run alternatives validate and replay before individual mixes reject.
+Complete alternate manifest sources validate before either mixed source-bearing
+proof rejects. Arbitrary accepted Pod status remains uninterpreted. Pinned-profile,
+Calico-content and malformed endpoint mutations are accurately identified as
+earlier contract rejections, not independently valid alternatives. Every component
+configuration drift retains valid ownership but rejects component replay.
+
+Read-only host checks independently confirmed macOS 26.6.2 build 25G83, arm64
+and Python 3.12.13. Local profile/renderer/profile-state inspection and actual
+aggregate invocation independently confirmed the synopsis's configured single-
+control-plane Kind/Calico target, synthetic 57-record List, 22 Pods split into
+ten platform and twelve application Pods, exact platform names/UIDs/resourceVersions
+and requested images, four unscheduled Deployment-backed platform Pods and six
+host-network platform Pods on the synthetic owned Node. The synopsis clearly
+separates actual host facts, configured target and test observations; it states
+that the controller is not newly wired to this aggregate and claims no fresh lab
+or demonstration request/result. The changed-file range confirms existing
+validators/controller/collectors/journal/kernel and lifecycle deferrals unchanged.
+
+**Verification:** Fresh verbose focused execution with the approved environment
+interpreter, `PYTHONDONTWRITEBYTECODE=1` and `PYTHONPATH=src` ran 26 total methods
+in 33.270 seconds: 26 successful, zero failures/errors/skips, exit zero. The
+review independently read the completed full-suite footer and scanned the entire
+retained `/private/tmp/kil-task4-full-unittest-XXXXXX.log`: 1612 method starts,
+1596 successful results, 16 skips, zero failure/error statuses or sections;
+footer `Ran 1612 tests in 835.159s`, `OK (skipped=16)`. All sixteen names exactly
+match unchanged `DEFERRED_METHODS`, and its default-gate test passed. Two successful
+results follow intentional argparse diagnostics on standalone `ok` lines. The
+coordinator/verifier recorded exit zero with `pipefail`; no duplicate full suite
+was run. Committed preliminary documentation records the exact adjacent 225-
+method suite as 225 successes, zero skips/failures/errors, 79.392 seconds, exit
+zero; final review remains explicitly pending there. Reader regeneration/byte-
+check and working/staged diff checks precede this lineage-only review commit.
+
+**Affected artifacts:** Appended this entry at actual lineage EOF and regenerated
+the lineage reader only. Reviewed production, fixture, tests, committed plan and
+synopsis, and all previous lineage entries remain unchanged.
+
+**Unresolved questions:** Final independent quality and holistic review and the
+coordinator's separate bounded static acceptance remain required. Platform
+effective-image authority and component-specific status/readiness semantics still
+need separate design and evidence; no current running lab state is established.
+
+**Next gate:** Commit only the verified lineage Markdown/reader and return
+exclusive ownership to the coordinator for final independent quality/holistic
+review before Task 4 acceptance. No live operations, push, PR or publication.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
