@@ -14595,3 +14595,61 @@ specification approval, then submit the accepted Task 4 range to independent
 quality review before beginning Task 5.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-295 — 2026-09-15 — V4 Task 4 independent quality review approved
+
+**Input:** Perform a fresh code-quality and adversarial review of the complete
+V4 Task 4 range through
+`0ef08346e868e2511b199cb942600ff941bab677`, including the kube-apiserver
+disk/API proof, its independent fixtures, the cross-proof identity correction,
+and relevant source, ownership, API-default, etcd, and scheduler patterns.
+
+**Interpretation:** Quality approval requires more than nominal conformance.
+The implementation must reconstruct exact retained dependencies before use,
+normalize exposed failures to the component-local error, join both cluster and
+node-container authority across proofs, derive conditional CA mounts only from
+the authenticated disk Pod, construct the API expectation independently of
+candidate API fields, retain arbitrary status without interpreting it, reject
+mutable or non-exact proof shapes, and keep all completion claims strictly
+false.
+
+**Decision status:** Confirmed independent quality approval for V4 Task 4
+through `0ef08346e868e2511b199cb942600ff941bab677`. No Critical, Important, or
+Minor quality finding remains in the reviewed range. This approval is static
+and does not establish live execution, readiness, image realization, runtime
+completion, application completion, or `config.seen` freshness.
+
+**Rationale:** Both retained dependencies are exact-type checked and fully
+reconstructed before the source/ownership cluster-incarnation and node-
+container equality joins. The fixed disk Pod is compared with exact JSON
+scalar types; the five conditional candidates require complete, unique,
+ordered, read-only `DirectoryOrCreate` pairs; and the expected API spec is
+rebuilt from verifier-owned literals plus only the authenticated subset and
+owned Node InternalIP. API metadata, owner, hashes, defaults, and dynamic
+address occurrences are closed while status remains uninterpreted. Frozen
+binding and proof constructors rerun validation and same-source computation,
+and exposed dependency or shape failures are converted to
+`KubeAPIServerMirrorConfigurationError`.
+
+**Verification:** The prescribed kube-apiserver, etcd, scheduler, and
+API-default suite passed all 52 tests in 9.626 seconds, including both
+exhaustive 32-mask loops and the two cross-proof identity mismatch
+regressions. The reviewed range also passed `git diff --check`. No live Colima,
+Docker, Kind, kubectl, Kubernetes, request, publication, or profile command was
+executed.
+
+**Affected artifacts:** This quality review changes only
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` and its regenerated
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm` reader. The approved production
+and test implementation remains in commits `47ce733` and `9539119`.
+
+**Unresolved questions:** None within V4 Task 4 code quality. The combined V4
+static acceptance gate, Task 5 controller-manager proof, full repository
+validation, branch delivery, and any live dedicated-profile experiment remain
+separate gates.
+
+**Next gate:** Regenerate and verify the lineage reader, commit this docs-only
+quality acceptance, and return the resulting checkpoint to the parent task
+before beginning Task 5.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
