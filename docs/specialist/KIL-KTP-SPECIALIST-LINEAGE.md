@@ -21081,3 +21081,66 @@ by root's final composed verification. Native execution remains a separate
 permission gate and is not authorized by this checkpoint.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T391 — 2026-09-16 — Final runner metadata correction independent SPEC approval
+
+**Input:** Root assigned independent SPEC review of the bounded IO metadata
+correction in `8325767..06e6c35`, against the approved isolated-runtime design
+and written test-first implementation plan. Exclusive lineage/render/checkpoint
+ownership was granted after the T390 implementer released its writer.
+
+**Interpretation:** Current caller-owned tool metadata must still equal the
+fresh authenticated three-tool manifest after the final adapter validation and
+dispatch-fingerprint namespace guard IO, immediately before process capture.
+This finite dispatch contract does not promise transactional filesystem
+exclusion, race-free operation or resistance to arbitrary hostile in-process
+code. No native compatibility or platform-image identity audit is in scope.
+
+**Decision status:** SPEC APPROVED for the two-path metadata correction at
+`06e6c35`. No blocking requirement gap was found. Independent QUALITY and
+root's final composed verification remain required; native acceptance is not
+granted by this engineering review.
+
+**Rationale:** Inspection confirms that the final consistency block re-reads
+`inputs.tool_records` only after the adapter's final validation and fingerprint
+guards. It requires exact dict type and the authenticated tool key set, then
+requires each row's exact dict type, equal keys/values and exact value types.
+Equal-valued float substitution therefore cannot masquerade as an integer.
+Missing/extra keys, replaced/subclass maps, changed/subclass rows and invalid
+types refuse the handoff with the existing normalized authority error. The
+checks perform no further authentication IO and precede bounded capture;
+existing manifest/path checks, command grammar and output/time bounds remain
+unchanged.
+
+The reviewer independently ran all 61 IO/evidence tests with the designated
+interpreter, PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and ResourceWarning fatal:
+all passed in 3.883s. The three new regression methods were also independently
+run against an in-memory, Git-read `8325767` BoundedRunner, without editing any
+source file. All nine subcases failed the required refusal assertion, as
+expected, because the old runner reached mocked capture; there were no test
+errors. Their wrappers retain real manifest authentication and real
+RuntimeAuthority guards. This establishes the correction's specific failing
+baseline rather than merely trusting the implementer's RED report.
+
+**Affected artifacts:** This actual-EOF T391 append and its generated HTML
+reader only. Source and tests were inspected but not edited. The exact
+`06e6c35` Markdown prefix is preserved. Native/CLI, runtime/profile/evidence,
+strict sources/tests, accepted inputs/local Envoy, false provenance/full-
+acceptance flags, experiment exclusions and all sixteen V4 deferrals remain
+unchanged. The four known ignored immutable citation omissions are not
+repaired or reclassified. No actual Colima/Lima/Docker/Kind/kubectl, VM,
+HTTP/HF/network, Ollama or image audit ran; no old receipt, branch, merge or
+push was changed.
+
+**Unresolved questions:** Independent metadata QUALITY, Native QUALITY and
+root's final composed verification remain pending. Native compatibility,
+owned teardown, platform-image provenance and full Kind/Calico acceptance are
+not established by process-boundary fixtures.
+
+**Next gate:** Render/check the 88 indexed readers, verify the exact prior
+Markdown prefix and two-path-only checkpoint, commit this lineage pair and
+release the exclusive writer. Root may obtain independent metadata QUALITY
+and continue the separately coordinated Native review and final composition.
+Any live private rehearsal remains behind its separate native permission gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
