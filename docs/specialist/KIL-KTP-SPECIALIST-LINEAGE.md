@@ -18435,3 +18435,55 @@ CLI attempt request-free rehearsal and one fresh three-track action. Runtime
 uncertainty is inconclusive and cannot cause an automatic native replay.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-355 — 2026-09-16 — Root clarifies documented native startup omissions without fabricating readiness
+
+**Input:** During the T-353 correction, root inspected the new application
+readiness path and its requirement for all Deployment status counts. The user
+approval remains the separate narrower exploratory test, not strict platform
+acceptance or an image audit.
+
+**Interpretation:** A valid native startup response can omit zero/unobserved
+Deployment counts and conditions. Requiring a test fixture to provide all zero
+fields would again confuse a fabricated fixture shape with the actual producer.
+Root checked the pinned primary [Kubernetes v1.36.1 apps/v1 type definitions](https://raw.githubusercontent.com/kubernetes/kubernetes/v1.36.1/staging/src/k8s.io/api/apps/v1/types.go):
+Deployment observedGeneration, replicas, readyReplicas, availableReplicas and
+conditions use JSON omitempty; required DaemonSet readiness counts do not.
+
+**Decision status:** Confirmed wire-format clarification within the approved
+implementation: after actual desired configuration/identity validation and
+identity latching, only these documented Deployment omissions can classify a
+read as not-ready. Present malformed counts/conditions, unexplained nonzero
+commands, required identity/structure omissions and replacement remain hard
+stops. Do not fill absent native fields into observed readiness evidence or a
+complete closed projection. Root also required successful authenticated native
+Deployment readiness JSON before invoking the existing one-second wait; a
+nonzero wait remains a hard stop. No strict parser or acceptance flag changes.
+
+**Rationale:** This separates legitimate startup from native failures using
+the actual pinned API rather than broad exception handling, repaired native
+records or exit-code-only retry. The Calico projection remains expressly
+readiness/configuration-only; full raw command receipts remain available.
+Internal synthetic eligibility-only probes must never become a retained or
+returned native identity/readiness observation; actual ready bindings require
+the untouched actual container/image/status observation.
+
+**Affected artifacts:** Native lifecycle implementation plan Markdown/HTML;
+this appended specialist lineage Markdown/HTML. The original implementer owns
+the pending native source/test corrections and their failing-first verification.
+Root stages only these four documentation artifacts, not the implementer's
+uncommitted source changes. All earlier lineage bytes remain intact.
+
+**Unresolved questions:** Corrected native unit needs repeat independent SPEC
+and quality review, composed-source review and root verification. The broad
+outside-sandbox regression rerun is still unfinished with one unresolved
+failure. No profile/VM/image/cluster mutation or live request has occurred.
+Live compatibility, rehearsal/action evidence and teardown remain unknown;
+platform-image provenance and full Kind/Calico acceptance remain unverified.
+
+**Next gate:** Original implementer adds realistic omitted-field startup and
+malformed/replacement hard-stop RED/GREEN fixtures, then commits its exact
+native unit changes with entry T-356. Repeat independent review before any
+native rehearsal. No automatic native replay is permitted on uncertainty.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

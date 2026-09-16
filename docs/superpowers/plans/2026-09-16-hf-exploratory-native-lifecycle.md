@@ -288,10 +288,28 @@ Pass the closed projection to the unchanged existing Calico parser; wrong image
 requests, unexpected/duplicate containers or malformed native structure are hard
 errors, not pending. Only validated expected containers and incomplete readiness
 counts may produce ReadPending; no missing identity or malformed count is repaired.
+Documented native DeploymentStatus `omitempty` omissions of zero/unobserved
+replicas/readyReplicas (and, for application readiness, observedGeneration,
+availableReplicas and conditions) can be classified as ReadPending only after
+actual identity/spec/container requests are validated and identity latched.
+Validate every present count/condition and their consistency first. Retain the
+unchanged raw observation; do not emit repaired/invented counts as observed
+readiness or a complete closed projection. Required DaemonSet count omissions
+remain hard errors. Ready status requires actual complete positive counts and
+the expected current Available condition, not values filled by the adapter.
+The pinned native schema is [Kubernetes v1.36.1 apps/v1 types](https://raw.githubusercontent.com/kubernetes/kubernetes/v1.36.1/staging/src/k8s.io/api/apps/v1/types.go).
 Tests must supply real native-shaped nested templates and extra native metadata,
 spec, container and status fields, not preflattened objects pretending to be the
 native command response. This does not prove the independently expected platform
 image identities, comprehensive Calico configuration or full Kind/Calico acceptance.
+
+For application Deployment startup, read the exact rendered Deployment through
+the existing bounded `get --filename - --output json` grammar, validate its
+applied configuration and actual UID/generation, and latch that identity before
+classifying known not-ready status as ReadPending. Only after an authenticated
+current Available observation invoke the fixed one-second wait. A nonzero wait
+or other unexplained native command status is still an immediate hard stop; it
+is never converted to pending merely by exit code or timeout wording.
 
 Application ownership selection: select exactly one Pod per track+role, no deleting/restarted Pod or extra application-namespace Pod. App Pod ownerReferences exactly one controlling ReplicaSet; ReplicaSet owner exactly one controlling Deployment with expected role, namespace/run annotation and sole reviewed Pod template; join exact UIDs, confirm Deployment/ReplicaSet desired/ready1 and observedGeneration current. Driver Pod has no owner and exact run annotation. Fixed rendered commands, resources, volumes and safety flags are checked against native Pods, allowing only independently documented API/scheduling/CNI defaults; do not silently strip arbitrary fields. Bind requested/spec image separately from CRI-derived runtime image and ImageRef. A source is read only using the selected exact Pod from the readiness anchor.
 
