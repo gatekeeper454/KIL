@@ -17,6 +17,9 @@ import time
 from kil import hf_exploratory_case as case
 from kil.hf_exploratory_inputs import read_regular, verify_bytes, TOOL_VERSION_ARGUMENTS
 from kil.hf_exploratory_io import capture_process
+from kil.hf_exploratory_runtime import RuntimeAuthority, ExploratoryColimaCommand
+from kil.hf_exploratory_profile import ProfilePaths, creation_binding, unchanged, absent
+from kil.hf_exploratory_evidence import snapshot_runtime, observe_runtime_leftovers
 from kil.v3b2_accepted_images import ACCEPTED_IMAGES
 from kil.v3b2_colima_inventory import capture_roster, decode_inventory, require_complete
 from kil.v3b2_contracts import TRACKS, TRACK_NAMESPACES
@@ -30,7 +33,7 @@ from kil.v3b2_journal import (
     kubectl_envoy_quiesce_commands,
 )
 from kil.v3b2_profile_state import (
-    ProfilePaths, require_pristine, capture, creation_binding, unchanged, absent,
+    ProfilePaths as StrictProfilePaths, require_pristine, capture,
     passwd_home, _parent, _read,
 )
 from kil.v3b2_proofs import canonical, decode, CLUSTER_INVENTORY_ARGV, ACTIVE_GAUGES
@@ -134,6 +137,19 @@ def check_source(repository, reviewed_source):
 
 class ExploratoryLifecycle:
     def __init__(self, repository, inputs, store, runner, source_commit, mode):
+        self.runtime = None
+        try:
+            self._initialize(repository, inputs, store, runner, source_commit, mode)
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self):
+        """Release retained runtime descriptors only, never native resources."""
+        if self.runtime is not None:
+            self.runtime.close()
+
+    def _initialize(self, repository, inputs, store, runner, source_commit, mode):
         if (mode not in ('rehearsal', 'action') or type(mode) is not str
                 or type(source_commit) is not str or re.fullmatch(r'[0-9a-f]{40}', source_commit) is None
                 or re.fullmatch(r'v3b2-[0-9a-f]{64}', inputs.workload.run_id) is None):
@@ -141,13 +157,14 @@ class ExploratoryLifecycle:
         self.repository, self.inputs, self.store, self.runner = repository, inputs, store, runner
         self.source_commit, self.mode = source_commit, mode
         self.run_digest = inputs.workload.run_id[5:]
-        self.paths = ProfilePaths.bind(store.path)
+        self.runtime = RuntimeAuthority.create(store, self.run_digest)
+        self.paths = ProfilePaths.bind(self.runtime)
+        self.default_paths = StrictProfilePaths(self.paths.home, store.path)
         self.identity = OwnedIdentity('kil-v3-lab', 'unix://' + str(self.paths.profile / 'docker.sock'),
-                                     'kil-v3-lab', str(store.path / 'kubeconfig'), None, None)
-        self.docker_env = (('DOCKER_CONFIG', str(store.path / 'docker-config')),
+                                     'kil-v3-lab', str(self.runtime.kubeconfig), None, None)
+        self.docker_env = (('DOCKER_CONFIG', str(self.runtime.docker_config)),
                            ('DOCKER_HOST', self.identity.docker_host))
-        self.colima_env = (('DOCKER_CONFIG', str(store.path / 'docker-config')),
-                           ('TMPDIR', str(store.path / 'runtime-tmp')))
+        self.colima_env = ExploratoryColimaCommand(colima_start_command(), self.runtime).env
         self.profile_binding = None
         self.original_foreign = None
         self.started_pristine = False
@@ -172,23 +189,43 @@ class ExploratoryLifecycle:
         self.reached_gate = 'initial'
         self.error = None
         self._read_deadline = None
+        self.runtime_snapshot_attempted = False
+        self.runtime_observations = None
+        self.runtime_leftovers = None
+        self.runtime_leftovers_error = None
+        self.kind_config_bytes = None
+        self.kind_config_identity = None
 
-    def observe(self, command, allow_failure=False):
-        if type(command) is not Command:
+    def observe(self, command, allow_failure=False, *, _global_inventory=False):
+        if type(command) not in (Command, ExploratoryColimaCommand):
             raise ValueError('closed_command_required')
         command.__post_init__()
+        self.runtime.guard()
+        if type(command) is ExploratoryColimaCommand and command.authority is not self.runtime:
+            raise ValueError('foreign_colima_runtime_authority')
+        if _global_inventory:
+            if (type(command) is not Command or command.argv != ('colima','list','--json')
+                    or command.env or command.mutating):
+                raise ValueError('global_inventory_route_not_read_only')
+        elif type(command) is Command and command.argv[0] == 'colima':
+            command = ExploratoryColimaCommand(command, self.runtime)
         if self._read_deadline is not None:
             remaining = self._read_deadline-time.monotonic()
             if command.mutating or remaining<1:
                 raise ValueError('readiness_deadline_or_read_only_boundary')
-            command=replace(command,timeout_s=min(command.timeout_s,10,int(remaining)))
+            strict = command.command if type(command) is ExploratoryColimaCommand else command
+            strict = replace(strict,timeout_s=min(command.timeout_s,10,int(remaining)))
+            command = (ExploratoryColimaCommand(strict,self.runtime)
+                       if type(command) is ExploratoryColimaCommand else strict)
         if command.mutating:
             self.authorize_mutation(command)
+        self.runtime.guard()
         self.sequence += 1
         name = 'command-%04d' % self.sequence
         self.store.record('command_intent', {'sequence': self.sequence, 'argv': list(command.argv),
             'env': dict(command.env), 'mutating': command.mutating, 'timeout_s':command.timeout_s,
             'stdin_sha256': None if command.stdin is None else sha256(command.stdin).hexdigest()})
+        self.runtime.guard()
         result = self.runner.run(command)
         out_hash = self.store.write(name + '.stdout', result.stdout_bytes)
         err_hash = self.store.write(name + '.stderr', result.stderr_bytes)
@@ -210,6 +247,7 @@ class ExploratoryLifecycle:
                 raise ValueError('profile_start_already_attempted')
             check_source(self.repository, self.source_commit)
             require_pristine(self.paths)
+            self.private_inventory(empty=True)
             self.require_foreign_preserved()
             self.started_pristine = True
             self.profile_attempted = True
@@ -218,24 +256,31 @@ class ExploratoryLifecycle:
             if self.cluster_attempted:
                 raise ValueError('cluster_create_already_attempted')
             self.guard_profile()
+            self.require_kind_control()
             if self.endpoint_rows():
                 raise ValueError('fresh_owned_endpoint_not_empty')
+            self.require_foreign_preserved()
             self.cluster_attempted = True
             self.reached_gate = 'cluster_create_attempted'
         elif argv == kind_delete_command(self.identity).argv:
             if self.cluster_delete_attempted or self.cluster_removed:
                 raise ValueError('cluster_delete_already_attempted')
             self.guard_cluster()
+            self.ensure_runtime_snapshot()
+            self.require_foreign_preserved()
             self.cluster_delete_attempted = True
         elif argv == ('colima', 'stop', '--profile', 'kil-v3-lab'):
             if self.profile_stop_attempted or (self.cluster_attempted and not self.cluster_removed):
                 raise ValueError('profile_stop_not_authorized')
             self.guard_profile()
+            self.ensure_runtime_snapshot()
+            self.require_foreign_preserved()
             self.profile_stop_attempted = True
         elif argv == ('colima', 'delete', '--profile', 'kil-v3-lab', '--force', '--data'):
             if self.profile_delete_attempted or not self.profile_stopped:
                 raise ValueError('profile_delete_not_authorized')
             self.guard_profile(stopped=True)
+            self.require_foreign_preserved()
             self.profile_delete_attempted = True
         else:
             self.require_allowed_other_mutation(command)
@@ -243,6 +288,7 @@ class ExploratoryLifecycle:
             commitment = (argv, command.env, None if command.stdin is None else sha256(command.stdin).hexdigest())
             if commitment in self.mutation_commitments:
                 raise ValueError('mutation_already_attempted')
+            self.require_foreign_preserved()
             self.mutation_commitments.add(commitment)
             if argv[0]=='kubectl' and argv[3]=='attach':
                 track = next(track for track,namespace in TRACK_NAMESPACES if namespace==argv[6])
@@ -306,7 +352,43 @@ class ExploratoryLifecycle:
         observed = capture(self.paths)
         if unchanged(self.paths.document(), observed, self.profile_binding, stopped=stopped) is not True:
             raise ValueError('owned_profile_changed')
+        self.private_inventory(stopped=stopped)
         return observed
+
+    def private_inventory(self, *, empty=False, stopped=False):
+        self.runtime.guard()
+        colima = _read(self.paths.colima,directory_only=True)
+        allowed = {'_lima','_store','_templates','kil-v3-lab'}
+        if colima is None or not set(colima['entries']) <= allowed:
+            raise ValueError('private_colima_profile_roster_unknown')
+        before = capture_roster(self.paths)
+        result = self.observe(Command(('colima','list','--json'),10))
+        after = capture_roster(self.paths)
+        rows = require_complete(decode_inventory(result.stdout_bytes,
+            returncode=result.returncode,stderr=result.stderr_bytes),before,after)
+        if before is None:
+            raise ValueError('private_lima_roster_unavailable')
+        if empty:
+            if rows:
+                raise ValueError('private_lima_roster_not_empty')
+        else:
+            expected = {'name':'kil-v3-lab','status':'Stopped' if stopped else 'Running',
+                        'arch':'aarch64','runtime':'docker','cpus':4,
+                        'memory':8*1024**3,'disk':60*1024**3}
+            if len(rows)!=1 or any(rows[0].get(key)!=value for key,value in expected.items()):
+                raise ValueError('private_profile_inventory_not_exact_owned')
+        self.runtime.guard()
+        return rows
+
+    def require_kind_control(self):
+        self.runtime.guard()
+        current = _read(self.runtime.kind_config)
+        if (self.kind_config_bytes is None or current is None or 'hex' not in current
+                or {key:current[key] for key in ('device','inode','mode')} != self.kind_config_identity
+                or read_regular(self.runtime.kind_config,65536) != self.kind_config_bytes
+                or self.private_read('kind-config.yaml') != self.kind_config_bytes):
+            raise ValueError('kind_runtime_control_changed_or_unprepared')
+        self.runtime.guard()
 
     def endpoint_rows(self):
         result = self.observe(Command(CLUSTER_INVENTORY_ARGV, 10, env=self.docker_env))
@@ -376,46 +458,72 @@ class ExploratoryLifecycle:
             raise ValueError('unsafe_inherited_kubeconfig')
         result, total = [], 0
         for path in paths:
-            # Observe absence without creating any home/global directories.
-            with _parent(path) as parent:
-                if parent is None:
-                    payload = None
-                else:
-                    try:
-                        os.stat(path.name, dir_fd=parent, follow_symlinks=False)
-                    except FileNotFoundError:
-                        payload = None
-                    else:
-                        payload = read_regular(path, 8 * 1024 * 1024)
-            total += len(payload or b'')
+            observed = self.foreign_file(path,8*1024*1024)
+            total += observed['byte_count'] or 0
             if total > 8 * 1024 * 1024:
                 raise ValueError('inherited_kubeconfig_byte_bound')
-            result.append({'path':str(path), 'present':payload is not None,
-                           'byte_count':None if payload is None else len(payload),
-                           'sha256':None if payload is None else sha256(payload).hexdigest()})
+            result.append(observed)
         return {'inherited': inherited, 'files':result}
 
+    def foreign_file(self, path, maximum):
+        """Stable no-follow full-byte commitment; no foreign file is created."""
+        if (not isinstance(path,Path) or not path.is_absolute() or '..' in path.parts
+                or path.resolve()!=path):
+            raise ValueError('unsafe_foreign_configuration_path')
+        identity = None
+        payload = None
+        with _parent(path) as parent:
+            if parent is not None:
+                try:
+                    before = os.stat(path.name,dir_fd=parent,follow_symlinks=False)
+                except FileNotFoundError:
+                    pass
+                else:
+                    payload = read_regular(path,maximum)
+                    after = os.stat(path.name,dir_fd=parent,follow_symlinks=False)
+                    keys = ('st_dev','st_ino','st_mode','st_size','st_mtime_ns','st_ctime_ns')
+                    if any(getattr(before,key)!=getattr(after,key) for key in keys):
+                        raise ValueError('foreign_configuration_changed_during_read')
+                    identity = {key:getattr(before,key) for key in keys}
+        return {'path':str(path),'present':payload is not None,'identity':identity,
+                'byte_count':None if payload is None else len(payload),
+                'sha256':None if payload is None else sha256(payload).hexdigest()}
+
+    def foreign_files(self):
+        docker = self.runner.global_docker_config
+        if type(docker) is not str:
+            raise ValueError('unsafe_global_docker_config_path')
+        path = Path(docker)
+        if not path.is_absolute() or '..' in path.parts or path.resolve()!=path:
+            raise ValueError('unsafe_global_docker_config_path')
+        networks = _read(self.default_paths.lima / '_config/networks.yaml')
+        if networks is not None and 'hex' not in networks:
+            raise ValueError('default_networks_not_regular_file')
+        return {'default_networks':networks,
+                'global_docker_config':docker,
+                'global_docker_directory':_read(path,directory_only=True),
+                'global_docker_file':self.foreign_file(path/'config.json',8*1024*1024),
+                'kubeconfig':self.kubeconfig_fingerprint()}
+
     def foreign_snapshot(self):
-        before = capture_roster(self.paths)
-        inventory = self.observe(Command(('colima','list','--json'), 10))
-        after = capture_roster(self.paths)
+        before = capture_roster(self.default_paths)
+        files = self.foreign_files()
+        inventory = self.observe(Command(('colima','list','--json'), 10), _global_inventory=True)
+        after = capture_roster(self.default_paths)
         rows = require_complete(decode_inventory(inventory.stdout_bytes,
             returncode=inventory.returncode, stderr=inventory.stderr_bytes), before, after)
-        foreign_rows = [row for row in rows if row['name'] != 'kil-v3-lab']
-        if before is None:
-            foreign_roster = None
-        else:
-            # Only the known private owned entry can be added/removed. Parent
-            # identity and every other child (including reserved dirs) remain.
-            foreign_roster = {'directory':{key:before['directory'][key] for key in ('device','inode','mode')},
-                             'children':[row for row in before['children'] if row['name'] != 'colima-kil-v3-lab']}
         context = self.observe(replace(docker_context_command(), timeout_s=10)).stdout_bytes
         if not context or len(context) > 4096 or b'\r' in context or not context.endswith(b'\n') or context.count(b'\n') != 1:
             raise ValueError('invalid_global_docker_context')
-        return {'foreign_profiles':foreign_rows, 'foreign_lima_roster':foreign_roster,
+        final = self.observe(Command(('colima','list','--json'),10),_global_inventory=True)
+        end = capture_roster(self.default_paths)
+        final_rows = require_complete(decode_inventory(final.stdout_bytes,
+            returncode=final.returncode,stderr=final.stderr_bytes),after,end)
+        if before!=end or rows!=final_rows or files!=self.foreign_files():
+            raise ValueError('foreign_global_state_changed_during_observation')
+        return {'foreign_profiles':rows, 'foreign_lima_roster':before,
                 'global_docker_context':context.decode('utf-8', 'strict').strip(),
-                'global_docker_config':self.runner.global_docker_config,
-                'kubeconfig':self.kubeconfig_fingerprint()}
+                **files}
 
     def require_foreign_preserved(self):
         if self.original_foreign is None:
@@ -430,7 +538,12 @@ class ExploratoryLifecycle:
         if config['nodes'] != [{'role':'control-plane'}]:
             raise ValueError('unexpected_kind_config')
         config['nodes'][0]['image'] = self.inputs.profile.kind_node_image
-        self.store.write('kind-config.yaml', canonical(config))
+        self.kind_config_bytes = canonical(config)
+        self.store.write('kind-config.yaml', self.kind_config_bytes)
+        self.runtime.write_control('kind-config.yaml',self.kind_config_bytes)
+        row = _read(self.runtime.kind_config)
+        self.kind_config_identity = {key:row[key]
+                                     for key in ('device','inode','mode')}
         calico = read_regular(self.repository / self.inputs.profile.calico_manifest_path, 8 * 1024 * 1024)
         verify_bytes(calico, self.inputs.profile.calico_manifest_sha256, len(calico))
         self.store.write('calico-v3.32.0.yaml', calico)
@@ -441,16 +554,6 @@ class ExploratoryLifecycle:
                        [row for row in items if row['kind'] not in {'Namespace','NetworkPolicy','Pod'}],
                        [row for row in items if row['kind']=='Pod'])
         self.store.write('rendered-objects.json', self.rendered)
-        for name in ('docker-config','runtime-tmp'):
-            self.store._bound(b'', 1)
-            os.mkdir(name, mode=0o700, dir_fd=self.store._directory)
-            descriptor = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self.store._directory)
-            try:
-                os.fchmod(descriptor, 0o700)
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
-            os.fsync(self.store._directory)
 
     def setup(self):
         from kil.v3b2_proofs import validate_applied_objects
@@ -462,10 +565,11 @@ class ExploratoryLifecycle:
         self.original_foreign = self.foreign_snapshot()
         self.store.write('foreign-original.json', canonical(self.original_foreign))
         require_pristine(self.paths)
+        self.private_inventory(empty=True)
         self.reached_gate = 'foreign_and_pristine_preflight'
         self.prepare()
         self.reached_gate = 'private_prepared'
-        start = replace(colima_start_command(), env=self.colima_env)
+        start = colima_start_command()
         result = self.observe(start, allow_failure=True)
         self.reached_gate = 'profile_start_attempted'
         try:
@@ -1041,7 +1145,34 @@ class ExploratoryLifecycle:
         self.store.record('reset_store_remove_complete', {'path':str(self.paths.store)})
         require_pristine(self.paths)
 
+    def ensure_runtime_snapshot(self):
+        if self.runtime_snapshot_attempted:
+            if self.runtime_observations is None:
+                raise ValueError('runtime_snapshot_failed_no_retry')
+            return
+        self.runtime_snapshot_attempted = True
+        self.runtime_observations = snapshot_runtime(self.store,self.runtime)
+
     def cleanup(self):
+        """Capture once before native teardown, including safely observable failures."""
+        try:
+            try:
+                self.ensure_runtime_snapshot()
+            except Exception as error:
+                self.manual_recovery = self.profile_attempted
+                self.error = ('%s; runtime snapshot: %s' % (self.error or '',error))[:4096]
+            else:
+                self._cleanup_native()
+        finally:
+            try:
+                self.runtime_leftovers = observe_runtime_leftovers(self.runtime)
+                self.store.write('runtime-leftovers.json',canonical(self.runtime_leftovers))
+            except Exception as error:
+                self.runtime_leftovers = None
+                self.runtime_leftovers_error = str(error)[:4096]
+                self.error = ('%s; runtime leftovers unknown: %s' % (self.error or '',error))[:4096]
+
+    def _cleanup_native(self):
         """No resource discovery is deletion authority; refuse on any drift."""
         if not self.profile_attempted:
             return
@@ -1063,12 +1194,13 @@ class ExploratoryLifecycle:
                     raise ValueError('cluster_api_still_reachable')
                 self.cluster_removed = True
             self.observe(Command(('colima','stop','--profile','kil-v3-lab'), 300,
-                                 env=self.colima_env, mutating=True))
+                                 mutating=True))
             self.guard_profile(stopped=True)
             self.profile_stopped = True
             self.observe(Command(('colima','delete','--profile','kil-v3-lab','--force','--data'),
-                                 300, env=self.colima_env, mutating=True))
+                                 300, mutating=True))
             post_delete = capture(self.paths)
+            self.private_inventory_absent()
             if absent(self.paths.document(), post_delete) is not True:
                 raise ValueError('profile_absence_not_confirmed')
             self.profile_delete_completed = True
@@ -1078,6 +1210,15 @@ class ExploratoryLifecycle:
         except Exception as error:
             self.manual_recovery = not self.profile_delete_completed
             self.error = ('%s; cleanup: %s' % (self.error or '', error))[:4096]
+
+    def private_inventory_absent(self):
+        self.runtime.guard()
+        before = capture_roster(self.paths)
+        result = self.observe(Command(('colima','list','--json'),10))
+        after = capture_roster(self.paths)
+        if require_complete(decode_inventory(result.stdout_bytes,
+                returncode=result.returncode,stderr=result.stderr_bytes),before,after):
+            raise ValueError('private_profile_absence_not_confirmed')
 
     def private_read(self, name):
         """Read an unchanged bounded regular top-level run file by retained fd."""
@@ -1201,6 +1342,13 @@ class ExploratoryLifecycle:
                                  'actual_creation_bound':self.profile_binding is not None},
             'profile_binding':self.profile_binding, 'profile_delete_completed':self.profile_delete_completed,
             'cluster_removed':self.cluster_removed, 'owned_teardown':self.owned_teardown,
+            'paths':{'runtime':str(self.runtime.path),'receipt':str(self.store.path),
+                     'actual_default_home':str(self.paths.home)},
+            'runtime_observations':self.runtime_observations,
+            'runtime_observations_file':'runtime-observations.json' if self.runtime_observations is not None else None,
+            'runtime_snapshot_attempted':self.runtime_snapshot_attempted,
+            'runtime_leftovers':self.runtime_leftovers,'runtime_leftovers_error':self.runtime_leftovers_error,
+            'filesystem_fully_removed':False,
             'manual_recovery':self.manual_recovery, 'foreign_global_original':self.original_foreign,
             'foreign_global_observations':self.foreign_observations,
             'retained_files_error':retained_error,
@@ -1220,7 +1368,11 @@ class ExploratoryLifecycle:
             'Source commitments: '+canonical(self.source_metadata).decode().strip(),
             'Observed joined results and actual reasons: '+canonical(report['joined_results']).decode().strip(),
             'Docker daemon version is UNOBSERVED; Docker CLI output is recorded separately.',
-            'Owned teardown: '+str(self.owned_teardown)+'. Manual recovery: '+str(self.manual_recovery)+'.',
+            'Owned teardown (native-owned-teardown, not filesystem-fully-removed): '+str(self.owned_teardown)+'. Manual recovery: '+str(self.manual_recovery)+'.',
+            'Runtime namespace, immutable receipt, actual default home: '+canonical(report['paths']).decode().strip(),
+            'Finite runtime observations: '+str(report['runtime_observations_file'])+'.',
+            'Partial runtime leftovers (not absence or acceptance): '+canonical({'observation':self.runtime_leftovers,'unknown_error':self.runtime_leftovers_error}).decode().strip(),
+            'Canonical KTP citation: https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff',
             'No platform-image provenance, full Kind/Calico acceptance, causal HF prevention,',
             'NetworkPolicy enforcement, no-bypass, exploit, or performance claim is established.', ''])
         self.store.write('synopsis.md', synopsis.encode())

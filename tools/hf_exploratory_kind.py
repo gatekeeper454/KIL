@@ -109,6 +109,7 @@ def main(argv=None, *, repository=REPOSITORY):
             inputs = verify_inputs(repository,arguments.tools,arguments.kil_archive,digest)
             lock.guard()
             store = PrivateStore(lock.path/('hf-exploratory-'+digest))
+            lifecycle = None
             try:
                 runner = BoundedRunner(repository,inputs)
                 lifecycle = ExploratoryLifecycle(repository,inputs,store,runner,arguments.reviewed_source,mode)
@@ -116,7 +117,11 @@ def main(argv=None, *, repository=REPOSITORY):
                 lock.guard()
                 print(canonical({'mode':mode,'private_path':str(store.path),'status':report['status']}).decode().strip())
             finally:
-                store.close()
+                try:
+                    if lifecycle is not None:
+                        lifecycle.close()
+                finally:
+                    store.close()
             if report['status']!='complete' or report['owned_teardown'] is not True:
                 raise SystemExit(1)
     return 0

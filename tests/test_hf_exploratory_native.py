@@ -25,10 +25,43 @@ COMMIT = 'a' * 40
 COLIMA_VERSION_OUTPUT = b'colima version v0.10.3\ngit commit: 00f6c297e92a82c04a4ab507db0a61435650d7e8\n'
 
 
+class RuntimeCompositionTests(unittest.TestCase):
+    def test_constructor_derives_runtime_separate_from_receipt_and_default_home(self):
+        from kil import hf_exploratory_native as native
+        from tests.test_v3b2_driver_pod_configuration import PROFILE, WORKLOAD
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            home = root / 'home'; home.mkdir()
+            parent = root / '.tools/hf-exploratory-private'; parent.mkdir(parents=True, mode=0o700)
+            store = PrivateStore(parent / ('hf-exploratory-' + '1' * 64))
+            try:
+                inputs = SimpleNamespace(profile=PROFILE, workload=WORKLOAD)
+                with patch('kil.hf_exploratory_profile.actual_passwd_home', return_value=home):
+                    life = native.ExploratoryLifecycle(root, inputs, store, Mock(), COMMIT, 'rehearsal')
+                try:
+                    self.assertNotEqual(life.paths.colima, home / '.colima', 'native controls still use default home')
+                    self.assertEqual(life.runtime.path, parent / ('hf-exploratory-runtime-' + '1' * 64))
+                    self.assertEqual(life.identity.kubeconfig, str(life.runtime.kubeconfig))
+                    self.assertFalse((store.path / 'runtime-tmp').exists())
+                finally:
+                    life.close()
+            finally:
+                store.close()
+
+
 def node():
     return [{'Id': 'b' * 64, 'Name': '/kil-v3-lab-control-plane',
              'Config': {'Labels': {'io.x-k8s.kind.cluster': 'kil-v3-lab',
                                    'io.x-k8s.kind.role': 'control-plane'}}, 'State': {'Running': True}}]
+
+
+def create_native_profile(paths):
+    from tests.test_v3b2_profile_state import create_profile
+    create_profile(paths)
+    fixtures = Path(__file__).parent / 'fixtures'
+    for key, name in [('profile', 'profile'), ('instance', 'instance')]:
+        (getattr(paths, key) / 'colima.yaml').write_bytes(
+            (fixtures / ('hf-colima-0.10.3-' + name + '.yaml')).read_bytes())
 
 
 class NativeTests(unittest.TestCase):
@@ -41,17 +74,41 @@ class NativeTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.home = self.root / 'home'
         self.home.mkdir()
-        self.store = PrivateStore(self.root / 'run')
+        private = self.root / '.tools/hf-exploratory-private'
+        private.mkdir(parents=True, mode=0o700)
+        self.store = PrivateStore(private / ('hf-exploratory-' + '1' * 64))
         self.addCleanup(self.store.close)
         from tests.test_v3b2_driver_pod_configuration import PROFILE, WORKLOAD
         self.inputs = SimpleNamespace(profile=PROFILE, workload=WORKLOAD,
             profile_bytes=b'profile', manifest_bytes=b'manifest', archive=b'archive',
             tools=self.root / '.tools/bin', tool_records={})
         self.runner = Mock()
+        self.runner.global_docker_config = str(self.home / '.docker')
         self.runner.run.return_value = CommandResult(0, 'out', '', b'out', b'')
-        with patch.object(self.native.ProfilePaths, 'bind', return_value=self.native.ProfilePaths(self.home, self.store.path)):
+        with patch('kil.hf_exploratory_profile.actual_passwd_home', return_value=self.home):
             self.life = self.native.ExploratoryLifecycle(self.root, self.inputs, self.store,
                                                        self.runner, COMMIT, 'rehearsal')
+        self.addCleanup(self.life.close)
+
+    def test_read_dispatch_rechecks_runtime_namespace_before_intent(self):
+        journal = self.store.journal.read_bytes()
+        self.life.runtime.tmp.rename(self.life.runtime.tmp.with_name('old-tmp'))
+        self.life.runtime.tmp.mkdir(mode=0o700)
+        with self.assertRaises(ValueError): self.life.observe(Command(('colima', 'version'), 10))
+        self.runner.run.assert_not_called()
+        self.assertEqual(self.store.journal.read_bytes(), journal)
+
+    def test_scoped_colima_uses_adapter_and_foreign_environment_is_not_stripped(self):
+        from kil.hf_exploratory_runtime import ExploratoryColimaCommand
+        self.life.observe(Command(('colima', 'version'), 10))
+        command = self.runner.run.call_args.args[0]
+        self.assertIs(type(command), ExploratoryColimaCommand)
+        self.assertEqual(command.env, self.life.colima_env)
+        self.runner.run.reset_mock()
+        with self.assertRaises(ValueError):
+            self.life.observe(Command(('colima', 'version'), 10,
+                                      env=(('DOCKER_CONFIG', '/tmp/foreign'), ('TMPDIR', '/tmp/foreign'))))
+        self.runner.run.assert_not_called()
 
     def test_bind_node_exact_and_rejects_replacements(self):
         self.assertEqual(self.native.bind_node(node()), 'b' * 64)
@@ -107,8 +164,10 @@ class NativeTests(unittest.TestCase):
 
     def test_kind_create_attempt_not_replayed_after_dispatch_failure(self):
         self.life.profile_binding = {'bound': True}
+        self.life.repository = Path(__file__).resolve().parents[1]
+        self.life.prepare()
         self.runner.run.side_effect = OSError('uncertain')
-        with patch.object(self.life, 'guard_profile'), patch.object(self.life, 'endpoint_rows', return_value=[]):
+        with patch.object(self.life, 'guard_profile'), patch.object(self.life, 'endpoint_rows', return_value=[]), patch.object(self.life, 'require_foreign_preserved'):
             for _ in range(2):
                 with self.assertRaises((OSError, ValueError)):
                     self.life.observe(kind_create_command(self.life.identity))
@@ -119,7 +178,7 @@ class NativeTests(unittest.TestCase):
         from kil.v3b2_manifests import render_objects
         namespaces=[row for row in json.loads(render_objects(self.inputs.profile,self.inputs.workload))['items'] if row['kind']=='Namespace']
         command = kubectl_apply_command(self.life.identity, canonical({'apiVersion':'v1','kind':'List','items':namespaces}))
-        with patch.object(self.life, 'guard_cluster'):
+        with patch.object(self.life, 'guard_cluster'), patch.object(self.life, 'require_foreign_preserved'):
             self.life.observe(command)
             with self.assertRaises(ValueError):
                 self.life.observe(command)
@@ -141,8 +200,7 @@ class NativeTests(unittest.TestCase):
             with self.assertRaises(ValueError): self.life.guard_profile()
 
     def test_valid_profile_directory_replacement_false_cannot_authorize_mutation(self):
-        from tests.test_v3b2_profile_state import create_profile
-        create_profile(self.life.paths)
+        create_native_profile(self.life.paths)
         self.life.profile_binding=self.native.creation_binding(self.life.paths.document(),self.native.capture(self.life.paths))
         original=self.life.paths.profile.with_name('retained-original-profile')
         self.life.paths.profile.rename(original); self.life.paths.profile.mkdir()
@@ -334,7 +392,9 @@ class NativeTests(unittest.TestCase):
         self.assertEqual(sha256(calico).hexdigest(), self.inputs.profile.calico_manifest_sha256)
         self.assertEqual([len(rows) for rows in self.life.groups], [3,15,39,3])
         for name in ['docker-config','runtime-tmp']:
-            self.assertEqual((self.store.path/name).stat().st_mode & 0o777, 0o700)
+            self.assertFalse((self.store.path/name).exists())
+            self.assertEqual((self.life.runtime.path/name).stat().st_mode & 0o777, 0o700)
+        self.assertEqual(self.life.runtime.kind_config.read_bytes(),(self.store.path/'kind-config.yaml').read_bytes())
 
     def test_global_fingerprint_retains_absence_and_detects_config_change(self):
         self.assertTrue(hasattr(self.life, 'kubeconfig_fingerprint'), 'kubeconfig fingerprint missing')
@@ -467,11 +527,10 @@ class NativeTests(unittest.TestCase):
         from tests.test_v3b2_driver_pod_configuration import fixture as driver_fixture
         from tests.test_v3b2_service_bindings import fixture as service_fixture
         from tests.test_v3b2_evidence import producer_records
-        from tests.test_v3b2_profile_state import create_profile
         from kil.v3b2_manifests import WorkloadIdentity
         accepted = {row.role:row for row in self.native.ACCEPTED_IMAGES}
         self.inputs.workload = WorkloadIdentity('v3b2-'+'1'*64,accepted['kil'].target_digest,accepted['envoy'].requested_image)
-        self.inputs.tools.mkdir(parents=True)
+        self.inputs.tools.mkdir(parents=True, exist_ok=True)
         self.inputs.tool_records = {name:{'version_output':'fixture-'+name} for name in ['docker','kind','kubectl']}
         self.life.repository = Path(__file__).resolve().parents[1]
         self.life.runner.global_docker_config = str(self.home/'.docker')
@@ -501,8 +560,8 @@ class NativeTests(unittest.TestCase):
                     'restartCount':0,'containerID':'containerd://'+format(index+1,'064x'),'ready':True,'state':{'running':{}}}]}
             pods[(track,role)] = row
         self.pods = pods
-        self.life.paths.lima.mkdir(parents=True); (self.life.paths.lima/'_disks').mkdir()
-        self.state = {'profile':False,'cluster':False,'attached':[],'drained':[],'requests':{},'calls':[]}
+        self.life.paths.lima.mkdir(parents=True, exist_ok=True)
+        self.state = {'profile':False,'stopped':False,'cluster':False,'attached':[],'drained':[],'requests':{},'calls':[]}
         services = service_fixture(profile=self.inputs.profile,workload=self.inputs.workload)[3]
         service_map = {(row['metadata']['namespace'],row['metadata']['name']):row for row in services}
         def result(payload=b'',rc=0,stderr=b''):
@@ -516,13 +575,13 @@ class NativeTests(unittest.TestCase):
             if argv==('limactl','--version'): return result(b'limactl version 2.2.0\n')
             if argv==('docker','context','show'): return result(b'fixture-global\n')
             if argv==('colima','list','--json'):
-                rows = [] if not self.state['profile'] else [{'name':'kil-v3-lab','status':'Stopped' if self.life.profile_stopped else 'Running',
-                    'arch':'aarch64','runtime':'docker','cpus':4,'memory':8*1024**3,'disk':60*1024**3}]
+                rows = getattr(self, 'default_rows', []) if not command.env else ([] if not self.state['profile'] else [{'name':'kil-v3-lab','status':'Stopped' if self.state['stopped'] else 'Running',
+                    'arch':'aarch64','runtime':'docker','cpus':4,'memory':8*1024**3,'disk':60*1024**3}])
                 return result(b''.join(canonical(row) for row in rows))
             if executable=='colima' and argv[1]=='start':
-                create_profile(self.life.paths); self.state['profile']=True; return result()
+                create_native_profile(self.life.paths); self.state['profile']=True; return result()
             if executable=='colima' and argv[1]=='stop':
-                (self.life.paths.disk/'in_use_by').unlink(); return result()
+                (self.life.paths.disk/'in_use_by').unlink(); self.state['stopped']=True; return result()
             if executable=='colima' and argv[1]=='delete':
                 for target in [self.life.paths.profile,self.life.paths.instance,self.life.paths.disk]: shutil.rmtree(target)
                 self.life.paths.store.parent.mkdir(parents=True,exist_ok=True)
@@ -712,12 +771,12 @@ class NativeTests(unittest.TestCase):
         self.assertEqual(report['request_intent_count'],3); self.assertEqual(len(state['attached']),3)
 
     def test_each_colima_mutation_failed_attempt_is_not_replayed(self):
-        commands=[replace(self.native.colima_start_command(),env=self.life.colima_env),
-                  Command(('colima','stop','--profile','kil-v3-lab'),10,env=self.life.colima_env,mutating=True),
-                  Command(('colima','delete','--profile','kil-v3-lab','--force','--data'),10,env=self.life.colima_env,mutating=True)]
+        commands=[self.native.colima_start_command(),
+                  Command(('colima','stop','--profile','kil-v3-lab'),10,mutating=True),
+                  Command(('colima','delete','--profile','kil-v3-lab','--force','--data'),10,mutating=True)]
         self.runner.run.side_effect=OSError('uncertain')
         self.life.profile_stopped=True
-        with patch.object(self.native,'check_source'), patch.object(self.life,'require_foreign_preserved'), patch.object(self.life,'guard_profile'):
+        with patch.object(self.native,'check_source'), patch.object(self.life,'require_foreign_preserved'), patch.object(self.life,'guard_profile'), patch.object(self.life,'private_inventory'):
             for command in commands:
                 for _ in range(2):
                     with self.assertRaises((OSError,ValueError)): self.life.observe(command)
@@ -789,6 +848,321 @@ class NativeTests(unittest.TestCase):
     def execute_fake(self):
         with patch.object(self.native,'check_source'),patch.object(self.native.platform,'system',return_value='Darwin'),patch.object(self.native.platform,'machine',return_value='arm64'),patch.object(self.native.time,'sleep'):
             return self.life.execute()
+
+    def test_same_named_default_stopped_lab_is_foreign_and_byte_inode_preserved(self):
+        from tests.test_v3b2_profile_state import create_profile
+        self.full_fake_runner()
+        create_profile(self.life.default_paths)
+        self.default_rows = [{'name':'kil-v3-lab','status':'Stopped','arch':'aarch64',
+                             'runtime':'docker','cpus':4,'memory':8*1024**3,'disk':60*1024**3}]
+        original = self.native.capture(self.life.default_paths)
+        report = self.execute_fake()
+        self.assertEqual(report['status'], 'complete', report['error'])
+        self.assertTrue(report['owned_teardown'])
+        self.assertEqual(report['foreign_global_original']['foreign_profiles'], self.default_rows)
+        self.assertEqual(self.native.capture(self.life.default_paths), original)
+        self.assertNotEqual(self.life.paths.profile, self.life.default_paths.profile)
+        from kil.hf_exploratory_runtime import ExploratoryColimaCommand
+        for command in self.state['calls']:
+            if command.argv[0]=='colima':
+                if type(command) is Command:
+                    self.assertEqual(command.argv,('colima','list','--json'))
+                    self.assertEqual(command.env,())
+                else:
+                    self.assertIs(type(command),ExploratoryColimaCommand)
+                    self.assertEqual(command.env,self.life.colima_env)
+            if command.argv[0] in ('docker','kind') and command.argv!=('docker','context','show'):
+                self.assertEqual(command.env,self.life.docker_env)
+            if command.argv[0]=='kubectl':
+                self.assertEqual(command.argv[1:3],('--kubeconfig',str(self.life.runtime.kubeconfig)))
+            if command.argv[:2]==('kind','create'):
+                self.assertIn(str(self.life.runtime.kind_config),command.argv)
+                self.assertNotIn(str(self.store.path/'kind-config.yaml'),command.argv)
+
+    def test_private_extra_profile_roster_denies_start_before_latch(self):
+        self.full_fake_runner()
+        (self.life.paths.lima / 'colima-foreign').mkdir()
+        report = self.execute_fake()
+        self.assertEqual(report['status'], 'inconclusive')
+        self.assertFalse(self.life.profile_attempted)
+        self.assertFalse(any(command.mutating for command in self.state['calls']))
+
+    def test_default_network_and_docker_config_changes_are_not_preserved(self):
+        self.full_fake_runner()
+        networks = self.life.default_paths.lima / '_config/networks.yaml'
+        networks.parent.mkdir(parents=True); networks.write_bytes(b'network-original')
+        docker = self.home / '.docker/config.json'
+        docker.parent.mkdir(); docker.write_bytes(b'{"original":true}')
+        self.life.original_foreign = self.life.foreign_snapshot()
+        for path in [networks, docker]:
+            self.life.original_foreign = self.life.foreign_snapshot()
+            before = path.read_bytes()
+            path.write_bytes(b'changed')
+            with self.assertRaises(ValueError): self.life.require_foreign_preserved()
+            path.write_bytes(before)
+
+    def test_kind_runtime_control_stale_refuses_before_create_attempt(self):
+        self.full_fake_runner()
+        self.life.prepare()
+        original = (self.store.path / 'kind-config.yaml').read_bytes()
+        self.life.runtime.kind_config.write_bytes(b'changed')
+        with patch.object(self.life, 'guard_profile'), patch.object(self.life, 'endpoint_rows', return_value=[]):
+            with self.assertRaises(ValueError): self.life.observe(kind_create_command(self.life.identity))
+        self.assertFalse(self.life.cluster_attempted)
+        self.assertFalse(any(command.mutating for command in self.state['calls']))
+        self.assertEqual((self.store.path / 'kind-config.yaml').read_bytes(), original)
+
+    def test_runtime_snapshot_precedes_first_teardown_and_receipt_sums_survive_context_removal(self):
+        self.full_fake_runner()
+        context = self.life.runtime.docker_config / 'contexts/meta' / sha256(b'colima-kil-v3-lab').hexdigest() / 'meta.json'
+        context.parent.mkdir(parents=True); context.write_bytes(b'original-native-context')
+        boundary = self.runner.run.side_effect
+        def dispatch(command):
+            if command.mutating and command.argv[:2] in [('kind','delete'), ('colima','stop')]:
+                self.assertEqual((self.store.path / 'runtime-docker-context-meta.json').read_bytes(), b'original-native-context')
+                self.assertTrue((self.store.path / 'runtime-observations.json').exists())
+            if command.argv[:2] == ('colima','stop'): context.unlink()
+            return boundary(command)
+        self.runner.run.side_effect = dispatch
+        with patch.object(self.native,'snapshot_runtime',wraps=self.native.snapshot_runtime) as snapshot:
+            report = self.execute_fake()
+        self.assertEqual(snapshot.call_count,1)
+        self.assertEqual(report['status'], 'complete', report['error'])
+        for line in (self.store.path / 'SHA256SUMS').read_text().splitlines():
+            digest, name = line.split('  ', 1)
+            self.assertEqual(sha256((self.store.path / name).read_bytes()).hexdigest(), digest)
+        ledger = json.loads((self.store.path / 'runtime-observations.json').read_bytes())
+        self.assertEqual(next(row for row in ledger['files'] if row['runtime_path'] == str(self.life.runtime.kubeconfig))['presence'], 'absent')
+
+    def test_snapshot_persistence_failure_denies_all_teardown_and_preserves_partial(self):
+        self.full_fake_runner()
+        write = self.store.write
+        def failing(name, payload):
+            if name == 'runtime-observations.json': raise OSError('snapshot persist failed')
+            return write(name, payload)
+        with patch.object(self.store, 'write', side_effect=failing): report = self.execute_fake()
+        self.assertEqual(report['status'], 'inconclusive')
+        self.assertTrue(report['manual_recovery'])
+        self.assertFalse(any(command.argv[:2] in [('kind','delete'), ('colima','stop'), ('colima','delete')] for command in self.state['calls']))
+        self.assertTrue((self.store.path / 'runtime-kind-config.yaml').exists())
+        self.assertIsNotNone(report['runtime_leftovers'])
+        partial = (self.store.path / 'runtime-kind-config.yaml').read_bytes()
+        self.life.cleanup()
+        self.assertEqual((self.store.path / 'runtime-kind-config.yaml').read_bytes(),partial)
+        self.assertIn('no_retry',self.life.error)
+
+    def test_default_network_directory_is_not_a_configuration_commitment(self):
+        self.full_fake_runner()
+        networks = self.life.default_paths.lima / '_config/networks.yaml'
+        networks.mkdir(parents=True)
+        with self.assertRaises(ValueError): self.life.foreign_snapshot()
+
+    def test_unknown_private_profile_directory_cannot_authorize_start(self):
+        self.full_fake_runner()
+        (self.life.paths.colima / 'foreign-profile').mkdir()
+        report = self.execute_fake()
+        self.assertEqual(report['status'], 'inconclusive')
+        self.assertFalse(self.life.profile_attempted)
+        self.assertFalse(any(command.mutating for command in self.state['calls']))
+
+    def test_foreign_guard_failure_does_not_latch_kind_attempt(self):
+        self.full_fake_runner()
+        self.life.prepare()
+        with patch.object(self.life,'guard_profile'), patch.object(self.life,'endpoint_rows',return_value=[]), patch.object(self.life,'require_foreign_preserved',side_effect=ValueError('foreign drift')):
+            with self.assertRaises(ValueError): self.life.observe(kind_create_command(self.life.identity))
+        self.assertFalse(self.life.cluster_attempted)
+        self.assertFalse(any(command.mutating for command in self.state['calls']))
+
+    def test_private_reserved_roster_and_native_network_inode_reset_are_allowed(self):
+        self.full_fake_runner()
+        networks = self.life.paths.lima / '_networks'
+        networks.mkdir()
+        original = networks.stat().st_ino
+        boundary = self.runner.run.side_effect
+        def dispatch(command):
+            if command.argv[:2] == ('colima','start'):
+                networks.rename(networks.with_name('_original-networks'))
+                networks.mkdir()
+                networks.with_name('_original-networks').rmdir()
+            return boundary(command)
+        self.runner.run.side_effect = dispatch
+        report = self.execute_fake()
+        self.assertEqual(report['status'], 'complete', report['error'])
+        self.assertNotEqual(networks.stat().st_ino, original)
+        self.assertTrue(report['owned_teardown'])
+
+    def test_default_network_reset_after_start_refuses_all_later_mutations(self):
+        self.full_fake_runner()
+        networks = self.life.default_paths.lima / '_config/networks.yaml'
+        networks.parent.mkdir(parents=True); networks.write_bytes(b'original-default-networks')
+        boundary = self.runner.run.side_effect
+        def dispatch(command):
+            result = boundary(command)
+            if command.argv[:2] == ('colima','start'):
+                networks.rename(networks.with_name('original.yaml'))
+                networks.write_bytes(b'original-default-networks')
+            return result
+        self.runner.run.side_effect = dispatch
+        report = self.execute_fake()
+        self.assertEqual(report['status'], 'inconclusive')
+        self.assertTrue(report['manual_recovery'])
+        mutations = [command for command in self.state['calls'] if command.mutating]
+        self.assertEqual([command.argv[:2] for command in mutations],[('colima','start')])
+
+    def test_foreign_read_mid_observation_substitutions_are_detected(self):
+        self.full_fake_runner()
+        docker = self.home / '.docker/config.json'
+        docker.parent.mkdir(); docker.write_bytes(b'original')
+        boundary = self.runner.run.side_effect
+        def dispatch(command):
+            if command.argv == ('docker','context','show'):
+                docker.rename(docker.with_name('retained-original.json')); docker.write_bytes(b'original')
+            return boundary(command)
+        self.runner.run.side_effect = dispatch
+        with self.assertRaises(ValueError): self.life.foreign_snapshot()
+
+    def test_inherited_kubeconfig_retains_eight_mib_budget_and_identity(self):
+        path = self.home / 'inherited-kubeconfig'; path.write_bytes(b'x' * 70000)
+        with patch.dict(os.environ,{'KUBECONFIG':str(path)}):
+            first = self.life.kubeconfig_fingerprint()
+            self.assertEqual(first['files'][0]['byte_count'],70000)
+            path.rename(path.with_name('retained-original-kubeconfig')); path.write_bytes(b'x' * 70000)
+            self.assertNotEqual(self.life.kubeconfig_fingerprint(),first)
+
+    def test_constructor_bind_exception_releases_every_runtime_descriptor(self):
+        self.life.close(); self.store.close()
+        parent = self.store.path.parent
+        store = PrivateStore(parent / ('hf-exploratory-' + '2' * 64))
+        self.addCleanup(store.close)
+        inputs = SimpleNamespace(workload=SimpleNamespace(run_id='v3b2-'+'2'*64))
+        before = len(os.listdir('/dev/fd'))
+        with patch.object(self.native.ProfilePaths,'bind',side_effect=ValueError('late bind failure')):
+            with self.assertRaises(ValueError):
+                self.native.ExploratoryLifecycle(self.root,inputs,store,self.runner,COMMIT,'rehearsal')
+        self.assertEqual(len(os.listdir('/dev/fd')),before)
+
+    def test_unbound_partial_setup_snapshots_observations_without_adoption(self):
+        self.full_fake_runner()
+        boundary = self.runner.run.side_effect
+        def dispatch(command):
+            result = boundary(command)
+            if command.argv[:2] == ('colima','start'):
+                (self.life.paths.instance / 'colima.yaml').write_bytes(b'unknown-native-configuration')
+            return result
+        self.runner.run.side_effect = dispatch
+        report = self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertTrue(report['manual_recovery'])
+        self.assertEqual((self.store.path/'runtime-instance-colima.yaml').read_bytes(),b'unknown-native-configuration')
+        self.assertFalse(any(command.argv[:2] in [('kind','delete'),('colima','stop'),('colima','delete')] for command in self.state['calls']))
+
+    def test_ordinary_read_namespace_drift_during_intent_never_dispatches(self):
+        record = self.store.record
+        def drift(event, details):
+            record(event, details)
+            if event == 'command_intent':
+                self.life.runtime.tmp.rename(self.life.runtime.tmp.with_name('retained-tmp'))
+                self.life.runtime.tmp.mkdir(mode=0o700)
+        with patch.object(self.store,'record',side_effect=drift):
+            with self.assertRaises(ValueError): self.life.observe(Command(('limactl','--version'),10))
+        self.runner.run.assert_not_called()
+        self.assertEqual(json.loads(self.store.journal.read_bytes().splitlines()[-1])['event'],'command_intent')
+
+    def test_missing_symlink_and_replaced_namespace_reject_version_dispatch(self):
+        path = self.life.runtime.tmp
+        retained = path.with_name('retained-runtime-tmp')
+        for kind in ['missing','symlink','replaced']:
+            with self.subTest(kind=kind):
+                path.rename(retained)
+                if kind=='symlink': path.symlink_to(retained,target_is_directory=True)
+                if kind=='replaced': path.mkdir(mode=0o700)
+                try:
+                    with self.assertRaises(ValueError): self.life.observe(Command(('colima','version'),10))
+                    self.runner.run.assert_not_called()
+                finally:
+                    if kind=='symlink': path.unlink()
+                    if kind=='replaced': path.rmdir()
+                    retained.rename(path)
+
+    def test_foreign_adapter_and_subclass_are_refused_before_runner(self):
+        from kil.hf_exploratory_runtime import RuntimeAuthority, ExploratoryColimaCommand
+        store = PrivateStore(self.store.path.parent/('hf-exploratory-'+'2'*64))
+        self.addCleanup(store.close)
+        authority = RuntimeAuthority.create(store,'2'*64); self.addCleanup(authority.close)
+        with self.assertRaises(ValueError):
+            self.life.observe(ExploratoryColimaCommand(Command(('colima','version'),10),authority))
+        class DerivedCommand(Command): pass
+        with self.assertRaises(ValueError): self.life.observe(DerivedCommand(('colima','version'),10))
+        self.runner.run.assert_not_called()
+
+    def test_real_lifecycle_kind_control_substitution_refuses_create_not_owned_cleanup(self):
+        self.full_fake_runner()
+        boundary = self.runner.run.side_effect
+        def dispatch(command):
+            result = boundary(command)
+            if command.argv[:2]==('colima','start'):
+                original = self.life.runtime.kind_config
+                original.rename(original.with_name('retained-original-kind-config'))
+                original.write_bytes((self.store.path/'kind-config.yaml').read_bytes())
+            return result
+        self.runner.run.side_effect = dispatch
+        report = self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertIn('kind_runtime_control_changed',report['error'])
+        self.assertFalse(self.life.cluster_attempted)
+        self.assertFalse(any(command.argv[:2]==('kind','create') for command in self.state['calls']))
+        self.assertTrue(report['owned_teardown'])
+        config = json.loads((self.store.path/'kind-config.yaml').read_bytes())
+        self.assertEqual(config['nodes'],[{'role':'control-plane','image':self.inputs.profile.kind_node_image}])
+
+    def test_private_incomplete_roster_after_start_preserves_manual_owned_vm(self):
+        self.full_fake_runner()
+        boundary = self.runner.run.side_effect
+        def dispatch(command):
+            result = boundary(command)
+            if command.argv[:2]==('colima','start'):
+                (self.life.paths.lima/'colima-extra').mkdir()
+            return result
+        self.runner.run.side_effect=dispatch
+        report = self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertTrue(report['manual_recovery'])
+        self.assertEqual([command.argv[:2] for command in self.state['calls'] if command.mutating],[('colima','start')])
+        self.assertTrue(self.life.paths.instance.exists())
+
+    def test_snapshot_capture_failure_blocks_teardown_with_bounded_leftovers(self):
+        self.full_fake_runner()
+        boundary = self.runner.run.side_effect
+        def dispatch(command):
+            result = boundary(command)
+            if command.argv[:2]==('colima','start'):
+                (self.life.runtime.docker_config/'config.json').symlink_to(self.home/'foreign-config.json')
+            return result
+        self.runner.run.side_effect=dispatch
+        report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertTrue(report['manual_recovery'])
+        self.assertIn('runtime snapshot',report['error'])
+        self.assertFalse(any(command.argv[:2] in [('kind','delete'),('colima','stop'),('colima','delete')] for command in self.state['calls']))
+        self.assertIsNone(report['runtime_observations'])
+        self.assertIsNotNone(report['runtime_leftovers'])
+
+    def test_namespace_drift_after_native_cleanup_reports_unknown_not_absence(self):
+        self.full_fake_runner()
+        boundary=self.runner.run.side_effect
+        def dispatch(command):
+            result=boundary(command)
+            if command.argv[:2]==('colima','delete'):
+                self.life.runtime.tmp.rename(self.life.runtime.tmp.with_name('retained-original-tmp'))
+                self.life.runtime.tmp.mkdir(mode=0o700)
+            return result
+        self.runner.run.side_effect=dispatch
+        report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertIsNone(report['runtime_leftovers'])
+        self.assertIsNotNone(report['runtime_leftovers_error'])
+        self.assertIn('runtime leftovers unknown',report['error'])
+        self.assertFalse(report['filesystem_fully_removed'])
 
     def test_read_until_never_retries_command_schema_or_identity_error(self):
         for error_type in [ValueError,KeyError,TypeError]:
@@ -1249,12 +1623,25 @@ class CLITests(unittest.TestCase):
         seen = []
         def lifecycle(repo, inputs, store, runner, commit, mode):
             seen.append((store.path, mode))
-            return SimpleNamespace(execute=lambda:{'status':'complete','owned_teardown':True})
+            return SimpleNamespace(execute=lambda:{'status':'complete','owned_teardown':True}, close=lambda:None)
         with patch.object(self.cli,'check_source') as source, patch.object(self.cli,'verify_inputs',return_value=SimpleNamespace()) as inputs, patch.object(self.cli,'BoundedRunner'), patch.object(self.cli,'ExploratoryLifecycle',side_effect=lifecycle):
             with redirect_stdout(io.StringIO()): self.assertEqual(self.cli.main(self.argv, repository=self.root),0)
         self.assertEqual([mode for _,mode in seen],['rehearsal','action'])
         self.assertNotEqual(seen[0][0],seen[1][0]); self.assertEqual(inputs.call_count,2)
         self.assertGreaterEqual(source.call_count,3)
+
+    def test_execution_and_close_failures_still_close_lifecycle_before_store(self):
+        events = []
+        def execute():
+            events.append('execute'); raise OSError('execution failed')
+        def close():
+            events.append('lifecycle-close'); raise OSError('close failed')
+        original = self.cli.PrivateStore.close
+        def store_close(store):
+            events.append('store-close'); original(store)
+        with patch.object(self.cli,'check_source'), patch.object(self.cli,'verify_inputs',return_value=SimpleNamespace()), patch.object(self.cli,'BoundedRunner'), patch.object(self.cli,'ExploratoryLifecycle',return_value=SimpleNamespace(execute=execute,close=close)), patch.object(self.cli.PrivateStore,'close',store_close):
+            with self.assertRaises(OSError): self.cli.main(self.argv,repository=self.root)
+        self.assertEqual(events,['execute','lifecycle-close','store-close'])
 
 
 if __name__ == '__main__':

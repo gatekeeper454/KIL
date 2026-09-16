@@ -20632,3 +20632,129 @@ release the exclusive writer. Continue separately scoped Task 3B engineering
 implementation and independent review; no native run is authorized by this entry.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T386 — 2026-09-16 — Task 3B Native/CLI isolated runtime composition checkpoint
+
+**Input:** The user authorized design approval under brainstorming followed by
+test-first implementation of the separate exploratory HF launcher repair. Root
+approved the recommended design and implementation plan; Runtime, profile and
+corrected runner/evidence dependencies passed their separate independent SPEC
+and QUALITY gates. Root assigned this fresh implementation worker only
+`src/kil/hf_exploratory_native.py`, `tools/hf_exploratory_kind.py` and
+`tests/test_hf_exploratory_native.py`, then granted the exclusive T386
+lineage/render/checkpoint writer after T385 commit 2d8da3e and its writer release.
+
+**Interpretation:** Task 3B composes those already reviewed interfaces rather
+than reopening the design or modifying strict modules. Runtime controls belong
+to a fresh run-derived fd-anchored sibling namespace; the receipt contains
+immutable observations, not live control files. Every actual passwd-default-home
+profile and Lima child, including a same-named stopped `kil-v3-lab`, is FOREIGN.
+Discovery and finite snapshots provide observations, never adoption or deletion
+authority. This is local engineering with temporary files and mocked command
+boundaries only, not native compatibility, configuration admission or acceptance.
+
+**Decision status:** IMPLEMENTED, TEST-VERIFIED ENGINEERING CHECKPOINT for Task
+3B, pending independent SPEC then QUALITY review and root's final composed
+verification. Root confirmed three narrow interpretations during implementation:
+complete/empty private preflight means zero profile rows with a complete stable
+roster, allowing only strict known reserved Lima directories; Kind control
+freshness applies to Create, which consumes that file, not unused controls during
+exact-owned deletion or image loading; and global Docker/inherited kubeconfig
+preservation records stable nofollow file identity, size and SHA-256 over full
+bounded bytes without embedding secret-bearing global bytes in receipts.
+
+**Rationale:** The first behavior RED failed because lifecycle controls still
+used default-home paths. Fresh real RuntimeAuthority/ProfilePaths binding made
+that isolation test GREEN. Further REDs reproduced missing read-dispatch runtime
+guards and Colima adapters; default/private inventory confusion; missing global
+network/Docker commitments; stale Kind control admission; absent pre-teardown
+snapshots; snapshot persistence failures incorrectly allowing native teardown;
+nonregular default network admission; unknown private profile admission; foreign
+guard failure latching an undispatched Kind attempt; reserved-directory preflight
+being over-restrictive; namespace drift during durable intent persistence; CLI
+failure cleanup omitting lifecycle close; and missing safely observable leftovers
+after failed snapshot persistence. Each correction followed its observed RED
+with focused GREEN verification, using the designated interpreter and fatal
+ResourceWarning. Additional composition regressions exercise namespace missing,
+symlink and replacement cases, foreign adapters/subclasses, inherited kubeconfig
+inputs above 64 KiB, constructor descriptor cleanup, unbound partial setup,
+incomplete private rosters, mid-read global substitutions and explicit unknown
+leftovers rather than invented absence.
+
+Native dispatch freshly guards runtime authority before durable intent and again
+after intent persistence immediately before `runner.run`, including ordinary
+strict Commands. The reviewed runner freshly validates strict grammar/tools and
+additionally validates finite Colima adapter fd authority at its process-capture
+boundary. This split does not establish transactional exclusion or eliminate
+TOCTOU. Only exact empty-environment scoped Colima Commands are wrapped; foreign
+environment bindings are rejected, never stripped. The explicit global route is
+plain empty-environment read-only `colima list --json` only. Readiness timeout
+resizing replaces the underlying strict Command then rewraps it, preserving the
+shared 300-second/60-attempt setup policy and original one-attempt latches.
+
+Default inventory and retained global observations have closed complete roster
+and file commitment brackets, with no same-name exclusions. Default
+`_config/networks.yaml` must be a nofollow regular file at most 64 KiB, preserving
+original bytes and concrete identity; private native reserved-directory churn is
+allowed without freezing child inodes. Docker configuration paths must be
+canonical and safe; file commitments preserve full bounded bytes. Inherited and
+default kubeconfig commitments keep the existing 32-path aggregate 8 MiB budget.
+Every native mutation rechecks FOREIGN commitments after exact-owned guards and
+before its latch, with a final preservation check after owned cleanup.
+
+Prepare exclusively writes identical canonical one-control-plane pinned Kind
+bytes into the immutable Store and runtime control copy. Kind Create reads only
+the latter and refuses stale/replaced/symlink controls before its attempt latch.
+Docker configuration, runtime scratch and native kubeconfig are outside the
+receipt. Runtime snapshots are attempted exactly once, before the first Kind
+delete or Colima stop and also for safely observable partial/unbound setup
+failures. Capture/persistence failure prevents all teardown mutations, preserves
+partial retained bytes, marks the result inconclusive and requires manual
+recovery when a native profile was attempted; no retry extends partial capture.
+The existing zero-store removal remains restricted to the exact private owned
+path after verified private absence. RuntimeRoot is never recursively erased.
+Five bounded leftover rosters remain explicitly partial observations; failures
+are explicit unknown errors. `owned_teardown` continues to mean exact owned native
+resources absent plus FOREIGN preservation, not filesystem fully removed.
+
+Fresh verification passed all 110 Native/CLI tests in 33.348s, retaining all 84
+original protections with fixture placement migrated rather than weakened and
+adding 26 tests. The required combined 15-module verification passed all 401
+tests in 84.176s with PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and
+`-W error::ResourceWarning`; the final two focused path/environment and
+snapshot-once/checksum assertions additionally passed in 2.722s. The worker
+self-reviewed the actual three-path diff and `git diff --check` passed. The full
+repository suite and independent reviews are still separate gates.
+
+**Affected artifacts:** The three assigned source/test paths, this actual-EOF
+append and its generated HTML reader only. Constructor failures release every
+retained runtime descriptor; idempotent lifecycle close is fd-only. CLI nested
+finally closes lifecycle before Store, including execution/close exceptions,
+without changing LabLock ownership or adding runtime-home, resume, retry or
+action-only flags. Rehearsal must be complete with exact-True owned teardown
+before a separate fresh action identity. Reports/synopses distinguish runtime,
+receipt and actual default-home paths and expose finite observations and partial
+leftovers. Future synopsis includes canonical KTP citation. Accepted local Envoy,
+strict modules/inputs and all 16 V4 deferrals remain unchanged. The exact 2d8da3e
+Markdown remains a prefix; no earlier entry is rewritten. No native
+Colima/Lima/Docker/Kind/kubectl command, VM, HTTP/HF request, Ollama operation,
+platform-image audit, old receipt write, missing-metadata repair, external branch
+move, merge or push was performed. The detached externally managed worktree is
+preserved.
+
+**Unresolved questions:** Independent Task 3B SPEC/QUALITY findings and final
+composed verification remain pending. Private-home native compatibility, actual
+native teardown, full Kind/Calico acceptance and platform-image provenance remain
+unestablished; report flags remain false and all claim exclusions remain intact.
+The original stopped default-home lab remains FOREIGN and unmodified, not an
+adopted cleanup target. The known four ignored immutable Markdown citation
+omissions remain a broad-scan limitation; neither old receipts nor citation tests
+were edited to hide that limitation.
+
+**Next gate:** Render/check all 88 readers, verify exact prior Markdown prefix and
+five-path staged scope, checkpoint only this implementation/lineage set and
+release the exclusive writer. Then obtain independent SPEC followed by QUALITY
+review before root's final composed verification. Native execution requires a
+separate gate; this checkpoint does not authorize it.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
