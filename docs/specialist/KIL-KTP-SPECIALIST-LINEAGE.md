@@ -15054,3 +15054,82 @@ specification acceptance, and return the checkpoint for quality re-review
 before broader static acceptance or delivery.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-302 — 2026-09-16 — V4 Task 5 authority correction quality re-review approved
+
+**Input:** Independently quality re-review the T-299 Important run/full-owned-
+authority composition finding after correction
+`b2fedfa4000685fd2ace3402f121cf4204e34278` and specification acceptance
+`f14df73c319c5b4a70838364846a6165261d82f1`. Cover both the Task 5 controller-
+manager validator and the narrow adjacent Task 4 apiserver correction against
+the approved static-manifest design and V4 implementation plan. Production
+edits, push, and live infrastructure/profile calls are outside this review.
+
+**Interpretation:** Quality re-review must show that both exact reconstructed
+dependencies share the retained run and complete owned authority, not merely
+cluster/container strings. Independently valid isolated run, Docker endpoint,
+and kubeconfig mismatches must fail both public validation and reconstructing
+proof construction. Positive fixtures must be aligned without candidate-
+derived expectations, source-format changes, API widening, alias/type bypass,
+or expanded runtime/application completion claims.
+
+**Decision status:** Confirmed corrected Task 5 quality acceptance: zero
+Critical, zero Important, and zero Minor findings remain within reviewed
+scope; T-299's Important composition finding is closed at this corrected
+checkpoint. This is bounded static quality approval, not Task 6 holistic
+acceptance, runtime/readiness/image realization, application completion, V4
+completion, V3C, or a live claim. Earlier entries remain historical and are
+not rewritten.
+
+**Rationale:** The final production/test diff and consumed authority path were
+inspected independently. Both components reconstruct exact ownership and
+source dependencies before recovering source authority through the existing
+closed `_retained_authority` decoder. They retain explicit cluster/container
+joins, compare the source run with the required unprefixed ownership workload
+run, and require equality of all six fields of the exact reconstructed
+`OwnedIdentity`, including isolated endpoint and private kubeconfig scope.
+Exact dependency reconstruction ensures these equality joins operate on
+validated primitive fields and exact records rather than subclasses or
+equality traps. Retained source bytes and commitments reconstruct before the
+decoder is reused; source exceptions continue to normalize to component-local
+errors at public validation and proof-construction boundaries. The shared
+source format, public signatures, component-local fixed expectations,
+disk-only five-way CA selection, independent disk/API fixtures, exact scalar
+closure, alias resistance, sole owned mirror, reviewed defaults, syntax-only
+timestamps, arbitrary retained status, frozen proof reconstruction, and
+strictly false completion fields are unchanged. Aligned positives now share
+the complete source identity and run. All six new mismatch methods alter
+only their named authority dimension, independently reconstruct dependencies,
+preserve cluster/container equality, and cover validator plus constructor.
+
+**Verification:** Fresh independent combined execution of the prescribed
+apiserver, controller-manager, etcd, and scheduler modules plus the unchanged
+manifest-source suite passed all 65 unittest methods in 19.781 seconds with
+zero skips. Independently loading pre-correction verifier source from
+`2c7de3eea8ea384e65c93dec048674fa49c1f962` into isolated in-memory modules
+and running the six current mismatch methods reproduced all 12 expected
+validator/constructor assertion failures, zero errors, and zero skips.
+Production files were never altered by that RED reproduction. This is
+observed correction-regression evidence, not a claim to have reproduced
+historical implementation TDD. `git diff --check` passed before this entry.
+Reader regeneration and verification are the final docs-only recording gate.
+No live Colima, Docker, Kind, kubectl, Kubernetes, request, publication, push,
+or profile command was executed.
+
+**Affected artifacts:** Reviewed both apiserver/controller-manager modules
+and tests, the shared source authority and owned/workload identity definitions,
+the approved design/plan, and retained lineage evidence. Changed only this
+specialist lineage and its regenerated HTML reader for quality approval.
+
+**Unresolved questions:** None within corrected Task 5 quality scope. Task 6
+holistic static acceptance, full repository validation, all-ten-platform-Pod
+configuration/image/status/readiness composition, and any separately
+authorized later live experiment remain distinct gates. No fresh/live
+configuration continuity or completion result is inferred from these tests.
+
+**Next gate:** Regenerate and verify all readers, commit this docs-only quality
+approval, and return the exact checkpoint for Task 6 holistic static
+acceptance and broader validation under the approved scope. Keep all
+runtime/application/V4 completion claims false until their separate gates.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
