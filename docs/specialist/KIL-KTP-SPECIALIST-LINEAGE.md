@@ -20931,3 +20931,82 @@ own bounded unit before final composed verification. Native execution remains a
 separate permission gate and is not authorized by this checkpoint.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T389 — 2026-09-16 — Task 3B independent corrected SPEC approval
+
+**Input:** Root requested the original independent SPEC reviewer recheck the
+corrected Task 3B Native/CLI composition at clean checkpoint
+`2d8fa87334c0d98e49f5b2d97ab643d454dc9c52`, including the two T387 timing findings,
+root's additional valid-Command substitution finding, and six concrete
+regressions. Root explicitly granted this reviewer the exclusive actual-EOF
+T389 lineage checkpoint after the Native implementer released its writer.
+
+**Interpretation:** Review the actual correction diff `0fd55d3..2d8fa87` and its
+composition with the previously reviewed three-path unit from `2d8da3e`, not the
+implementer's success report. Scope remains `src/kil/hf_exploratory_native.py`,
+`tools/hf_exploratory_kind.py`, and `tests/test_hf_exploratory_native.py`, with T388
+read as implementation evidence. The separately queued runner metadata-boundary
+correction is outside this Native SPEC verdict and remains a dependency/final
+composition gate. No native execution is authorized or inferred.
+
+**Decision status:** SPEC APPROVED for the corrected Task 3B Native/CLI scope.
+No actionable missing/extra behavior or requirement departure was found in this
+bounded re-review. The approval supersedes the T387 not-approved verdict for the
+corrected source, without rewriting that historical entry or approving the
+separately pending runner correction.
+
+**Rationale:** Native now retains the exact dispatch fingerprint before nested
+authorization IO, then freshly checks exact grammar, owned adapter authority,
+runtime namespace, and that fingerprint before durable command intent. After
+intent persistence it rechecks the fresh bounded Kind consumer identity/bytes
+and immutable Store bytes for Create only, then checks dispatch grammar,
+authority/runtime and fingerprint again. Authorization itself does not latch an
+attempt. Only the final handoff marks attempts/commitments; an opaque runner
+exception afterward remains an uncertain one-shot attempt, preserving existing
+no-replay behavior. KindDelete/image load do not acquire an unused Kind-control
+freshness requirement. This is bounded consistency across known IO, not
+transactional exclusion or elimination of TOCTOU.
+
+Fresh designated-interpreter verification passed all 116 Native/CLI tests in
+38.174s with PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and
+`-W error::ResourceWarning`. The six focused correction regressions separately
+passed in 0.851s: Start namespace drift during durable intent, Kind consumer
+bytes drift during durable intent, late Kind namespace drift, valid Start-to-
+Delete substitution during durable intent, the same substitution during nested
+authorization IO, and ordinary KindCreate-to-Delete substitution during intent.
+These fixtures use real temporary filesystem, RuntimeAuthority and ProfilePaths,
+with the boundary Runner double and no high-level resource guard mocks.
+
+The reviewer independently reran the original two TempFS reproduction programs
+from T387 against the corrected source. Start namespace drift now yields an
+inconclusive report with zero mutation handoffs, false profile/cluster attempt
+latches and no false manual-recovery claim. Kind consumer bytes drift now yields
+an inconclusive report with no Create handoff or cluster latch; the already
+creation-bound profile still completes owned Stop/Delete and reports true owned
+teardown without manual recovery. The full suite also retains preexisting
+Kind-control identity substitution refusal, private/default inventory and file
+preservation, finite snapshot failure blocking, descriptor/CLI cleanup, partial
+leftover labeling, fixed Rehearsal/Action joins and existing one-shot protections.
+
+**Affected artifacts:** This actual-EOF T389 append and its generated HTML
+reader only. No source or test edit was made by the reviewer, and no concurrent
+dependency file was staged. The exact `2d8fa87` Markdown prefix is preserved.
+Accepted local Envoy, false provenance/full-acceptance flags, claim exclusions,
+all 16 V4 deferrals, strict sources/tests and four ignored immutable citation
+omissions remain unchanged. No actual Colima/Lima/Docker/Kind/kubectl, VM,
+HTTP/HF/network, Ollama, platform-image audit, old receipt edit, metadata repair,
+branch move, merge or push occurred.
+
+**Unresolved questions:** Independent QUALITY, the separately queued IO
+metadata-boundary correction and its unit reviews, and root's final composed
+verification remain pending. Native compatibility/teardown, full Kind/Calico
+acceptance and platform-image provenance remain unestablished; this approval
+does not convert boundary fixtures into native evidence.
+
+**Next gate:** Render/check all 88 readers, verify the exact prior Markdown
+prefix and two-path-only checkpoint, commit only this lineage pair and release
+the writer. Root may proceed to independent Native QUALITY while coordinating
+the separate IO unit correction/reviews, then final composed verification.
+Native execution still requires its separate permission gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
