@@ -1,17 +1,18 @@
 import importlib
 import importlib.util
+import json
 from hashlib import sha256
 import os
 from pathlib import Path
 import sys
 import tempfile
 import unittest
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from kil.v3b1_driver_protocol import canonical_record
 from kil.v3b2_contracts import TRACKS
 from kil.v3b2_journal import Command
+from kil.hf_exploratory_inputs import ACCEPTED_RUN, ACCEPTED_MANIFEST_SHA256, ExploratoryInputs, verify_bytes
 
 
 def terminal(track):
@@ -32,6 +33,13 @@ class IOTests(unittest.TestCase):
         store = self.io.PrivateStore(Path(self.temp.name).resolve() / 'run')
         self.addCleanup(store.close)
         return store
+
+    def accepted_inputs(self, tools=None):
+        manifest = (Path.cwd() / 'artifacts/generated/v3b1-local-envoy' / ACCEPTED_RUN / 'manifest.json').read_bytes()
+        verify_bytes(manifest, ACCEPTED_MANIFEST_SHA256, len(manifest))
+        # Real frozen container; unused readiness fields are inert test placeholders.
+        return ExploratoryInputs(None, b'', None, b'', tools or Path(self.temp.name).resolve(),
+            json.loads(manifest)['verified_tool_identities'], manifest)
 
     def test_intent_precedes_action_and_no_repeat(self):
         store = self.store()
@@ -84,7 +92,7 @@ class IOTests(unittest.TestCase):
 
     def test_runner_validates_before_capture(self):
         self.assertTrue(hasattr(self.io, 'BoundedRunner'))
-        runner = self.io.BoundedRunner(Path.cwd(), SimpleNamespace(tool_records={}, tools=Path(self.temp.name)))
+        runner = self.io.BoundedRunner(Path.cwd(), self.accepted_inputs())
         with patch.object(self.io, 'capture_process') as capture:
             with self.assertRaises(ValueError):
                 runner.run(object())
@@ -100,8 +108,7 @@ class IOTests(unittest.TestCase):
         tools.mkdir(parents=True)
         executable = tools / 'docker'
         executable.write_bytes(b'drift')
-        runner = self.io.BoundedRunner(Path.cwd(), SimpleNamespace(tools=tools,
-            tool_records={'docker': {'executable_sha256': 'a'*64, 'byte_size': 5}}))
+        runner = self.io.BoundedRunner(Path.cwd(), self.accepted_inputs(tools))
         with patch.object(self.io, 'capture_process') as capture:
             with self.assertRaises(ValueError):
                 runner.run(Command((str(executable), '--version'), 1))
@@ -122,6 +129,72 @@ class IOTests(unittest.TestCase):
             store.send_once(TRACKS[0], b'instruction\n', lambda: b'not-json\n')
         with self.assertRaises(ValueError):
             store.send_once(TRACKS[1], b'instruction\n', lambda: self.fail('called'))
+
+    def test_missing_lf_terminal_latches_uncertainty(self):
+        store = self.store()
+        with self.assertRaises(ValueError):
+            store.send_once(TRACKS[0], b'instruction\n', lambda: terminal(TRACKS[0])[:-1])
+        self.assertTrue(store.uncertain)
+        with self.assertRaises(ValueError):
+            store.send_once(TRACKS[1], b'instruction\n', lambda: self.fail('called'))
+
+    def test_crlf_terminal_latches_uncertainty(self):
+        store = self.store()
+        with self.assertRaises(ValueError):
+            store.send_once(TRACKS[0], b'instruction\n', lambda: terminal(TRACKS[0])[:-1] + b'\r\n')
+        self.assertTrue(store.uncertain)
+        with self.assertRaises(ValueError):
+            store.send_once(TRACKS[1], b'instruction\n', lambda: self.fail('called'))
+
+    def test_runner_rejects_mutable_matching_digest_override(self):
+        inputs = self.accepted_inputs()
+        runner = self.io.BoundedRunner(Path.cwd(), inputs)
+        payload = b'test-owned replacement, never executed'
+        (inputs.tools / 'docker').write_bytes(payload)
+        inputs.tool_records['docker']['executable_sha256'] = sha256(payload).hexdigest()
+        inputs.tool_records['docker']['byte_size'] = len(payload)
+        with patch.object(self.io, 'capture_process') as capture:
+            with self.assertRaises(ValueError):
+                runner.run(Command(('docker', 'context', 'show'), 1))
+            capture.assert_not_called()
+
+    def test_runner_rejects_missing_records_before_path_fallback(self):
+        inputs = self.accepted_inputs()
+        inputs.tool_records.clear()
+        runner = self.io.BoundedRunner(Path.cwd(), inputs)
+        with patch.object(self.io, 'capture_process') as capture:
+            with self.assertRaises(ValueError):
+                runner.run(Command(('docker', 'context', 'show'), 1))
+            capture.assert_not_called()
+
+    def test_runner_rejects_substituted_manifest(self):
+        inputs = self.accepted_inputs()
+        object.__setattr__(inputs, 'manifest_bytes', b'{}\n')
+        runner = self.io.BoundedRunner(Path.cwd(), inputs)
+        with patch.object(self.io, 'capture_process') as capture:
+            with self.assertRaises(ValueError):
+                runner.run(Command(('colima', 'version'), 1))
+            capture.assert_not_called()
+
+    def test_runner_rejects_missing_or_malformed_authority(self):
+        for metadata in (None, [], {'docker': {}}, {'docker': 'malformed'}):
+            with self.subTest(metadata=metadata):
+                inputs = self.accepted_inputs()
+                object.__setattr__(inputs, 'tool_records', metadata)
+                runner = self.io.BoundedRunner(Path.cwd(), inputs)
+                with patch.object(self.io, 'capture_process') as capture:
+                    with self.assertRaises(ValueError):
+                        runner.run(Command(('docker', 'context', 'show'), 1))
+                    capture.assert_not_called()
+
+    def test_runner_reauthenticates_manifest_after_construction(self):
+        inputs = self.accepted_inputs()
+        runner = self.io.BoundedRunner(Path.cwd(), inputs)
+        object.__setattr__(inputs, 'manifest_bytes', inputs.manifest_bytes + b' ')
+        with patch.object(self.io, 'capture_process') as capture:
+            with self.assertRaises(ValueError):
+                runner.run(Command(('docker', 'context', 'show'), 1))
+            capture.assert_not_called()
 
     def test_intent_fsync_failure_prevents_action(self):
         store = self.store()
@@ -163,11 +236,19 @@ class IOTests(unittest.TestCase):
         tools.mkdir(parents=True)
         payload = b'test-owned identity only'
         (tools / 'docker').write_bytes(payload)
-        inputs = SimpleNamespace(tools=tools, tool_records={'docker':
-            {'executable_sha256': sha256(payload).hexdigest(), 'byte_size': len(payload)}})
+        inputs = self.accepted_inputs(tools)
+        real_verify = self.io.verify_bytes
+        def dispatch_only_verify(data, digest, size):
+            # Manifest authority uses the real check; only dummy binary IO is isolated.
+            if digest == ACCEPTED_MANIFEST_SHA256:
+                return real_verify(data, digest, size)
+            self.assertEqual(data, payload)
+            self.assertEqual(digest, inputs.tool_records['docker']['executable_sha256'])
+            self.assertEqual(size, inputs.tool_records['docker']['byte_size'])
+            return digest
         with patch.dict(os.environ, {'DOCKER_CONFIG': '/global-config', 'HOME': '/untrusted', 'EXTRA_AUTHORITY': 'no'}):
             runner = self.io.BoundedRunner(Path.cwd(), inputs)
-            with patch.object(self.io, 'capture_process') as capture:
+            with patch.object(self.io, 'verify_bytes', side_effect=dispatch_only_verify), patch.object(self.io, 'capture_process') as capture:
                 runner.run(Command((str(tools / 'docker'), '--version'), 1))
                 argv, env, _, _, _, _ = capture.call_args.args
                 self.assertEqual(argv[0], str(tools / 'docker'))
@@ -179,7 +260,7 @@ class IOTests(unittest.TestCase):
                 self.assertEqual(capture.call_args.args[1]['DOCKER_CONFIG'], '/global-config')
 
     def test_runner_requires_colima_private_environment(self):
-        runner = self.io.BoundedRunner(Path.cwd(), SimpleNamespace(tool_records={}, tools=Path(self.temp.name)))
+        runner = self.io.BoundedRunner(Path.cwd(), self.accepted_inputs())
         with patch.object(self.io, 'capture_process') as capture:
             with self.assertRaises(ValueError):
                 runner.run(Command(('colima', 'stop', '--profile', 'kil-v3-lab'), 1, mutating=True))

@@ -1,6 +1,7 @@
 """Bounded local IO for exploratory HF work; no orchestration or recovery."""
 import fcntl
 from hashlib import sha256
+import json
 import os
 from pathlib import Path
 import re
@@ -9,7 +10,8 @@ import signal
 import subprocess
 import time
 
-from kil.hf_exploratory_inputs import read_regular, verify_bytes
+from kil.hf_exploratory_inputs import read_regular, verify_bytes, TOOL_VERSION_ARGUMENTS
+from kil.v3b2_accepted_images import ACCEPTED_MANIFEST_SHA256
 from kil.v3b1_driver_protocol import parse_result
 from kil.v3b2_contracts import TRACKS
 from kil.v3b2_controller import CommandResult
@@ -117,6 +119,24 @@ class BoundedRunner:
         if type(command) is not Command:
             raise ValueError('invalid_exploratory_command')
         command.__post_init__()
+        try:
+            manifest = self.inputs.manifest_bytes
+            if type(manifest) is not bytes or len(manifest) > 1024 * 1024:
+                raise ValueError('invalid_accepted_manifest_bytes')
+            verify_bytes(manifest, ACCEPTED_MANIFEST_SHA256, len(manifest))
+            # Derive fresh rows from authenticated bytes, not caller-owned mutable maps.
+            accepted = json.loads(manifest)['verified_tool_identities']
+            metadata = self.inputs.tool_records
+            if (type(metadata) is not dict or set(metadata) != set(TOOL_VERSION_ARGUMENTS)
+                    or set(accepted) != set(TOOL_VERSION_ARGUMENTS)):
+                raise ValueError('invalid_accepted_tool_metadata')
+            for name, row in accepted.items():
+                current = metadata[name]
+                if (type(current) is not dict or current != row
+                        or any(type(current[key]) is not type(value) for key, value in row.items())):
+                    raise ValueError('substituted_accepted_tool_metadata')
+        except (AttributeError, KeyError, TypeError, ValueError) as error:
+            raise ValueError('unavailable_or_substituted_accepted_tool_authority') from error
         environment = {key: os.environ[key] for key in ('PATH', 'LANG', 'LC_ALL') if key in os.environ}
         environment['HOME'] = str(passwd_home())
         global_context = command.argv == ('docker', 'context', 'show')
@@ -129,9 +149,9 @@ class BoundedRunner:
             environment['TMPDIR'] = str(Path(dict(command.env)['DOCKER_CONFIG']).parent / 'runtime-tmp')
         argv = command.argv
         name = Path(argv[0]).name
-        if name in self.inputs.tool_records:
+        if name in TOOL_VERSION_ARGUMENTS:
             executable = self.inputs.tools / name
-            row = self.inputs.tool_records[name]
+            row = accepted[name]
             verify_bytes(read_regular(executable, 128 * 1024 * 1024),
                          row['executable_sha256'], row['byte_size'])
             argv = (str(executable), *argv[1:])
@@ -229,7 +249,10 @@ class PrivateStore:
         self.record('request_intent', {'track': track, 'instruction_sha256': digest})
         payload = action()
         result_digest = self.write(track + '.attach.stdout', payload)
-        records = [parse_result(line + b'\n', expected_track=track) for line in payload.splitlines()]
+        lines = payload.splitlines(keepends=True)
+        if len(lines) not in (1, 2):
+            raise ValueError('request_terminal_uncertain')
+        records = [parse_result(line, expected_track=track) for line in lines]
         if (len(records) not in (1, 2) or (len(records) == 2 and records[0]['schema_version'] != 'kil.v3b1-driver-readiness.v1')
                 or records[-1]['schema_version'] != 'kil.v3b1-driver-result.v1' or records[-1]['status'] != 'complete'):
             raise ValueError('request_terminal_uncertain')

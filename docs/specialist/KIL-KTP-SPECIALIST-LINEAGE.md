@@ -17492,3 +17492,46 @@ the corrected IO unit, then obtain independent quality review before any native
 orchestration gate. Do not send, retry or replay an instruction during this review.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-339 — 2026-09-16 — Fixed accepted tool authority and terminal framing
+
+**Input:** Independent IO specification review T-338 identified two mandatory
+gaps: caller-mutable tool rows could replace accepted hash authority or permit
+PATH fallback, and stripped/repaired terminal framing could clear uncertainty.
+Correct these through failing-first local tests without native execution.
+
+**Interpretation:** Accepted identity comes only from the fixed authenticated
+manifest, not the caller's nested map. Exact retained terminal bytes must reach
+the canonical parser without LF repair or CRLF normalization.
+
+**Decision status:** Both confirmed gaps corrected in the proposed IO unit;
+independent specification re-review remains required. Fresh verification passed
+26 focused tests with ResourceWarning promoted to errors; no native action.
+
+**Rationale:** Five added regressions first failed with assertions: missing LF,
+CRLF, matching caller-selected executable digest replacement, missing tool rows
+and substituted manifest. Preserving splitlines(keepends=True) framing and
+checking the one-or-two-record count cleared only the two framing failures.
+Reauthenticating manifest_bytes against ACCEPTED_MANIFEST_SHA256 at each dispatch,
+deriving fresh fixed rows and checking exact three-name metadata agreement cleared
+the three authority failures. Docker, Kind and kubectl now always use the retained
+absolute verified path, never missing-map PATH fallback. No internal mutable row
+authority is retained. Additional tests cover malformed metadata and manifest
+mutation after construction. Negative authority tests use real frozen
+ExploratoryInputs containers, real checks and the authentic tracked manifest;
+dispatch-only environment tests isolate dummy executable-byte checks while still
+authenticating the manifest normally. No accepted binary was read or run.
+
+**Affected artifacts:** src/kil/hf_exploratory_io.py,
+tests/test_hf_exploratory_io.py, this appended entry and regenerated HTML reader.
+Strict modules, completion flags, deferrals and root-owned plans are unchanged.
+
+**Unresolved questions:** Independent specification re-review and quality review
+must evaluate the corrected authority/framing edge cases. Native lifecycle,
+runtime readiness, enforcement and platform-image provenance are unestablished.
+
+**Next gate:** Independent IO specification re-review, then independent quality
+review before any later native-orchestration gate. No instruction retry or replay;
+any malformed or incomplete terminal permanently blocks subsequent tracks.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
