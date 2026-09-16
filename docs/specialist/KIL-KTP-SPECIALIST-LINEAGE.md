@@ -17157,3 +17157,55 @@ within approved exploratory scope; do not resume the platform-image audit or
 infer strict acceptance.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-332 — 2026-09-16 — Independent exploratory input-unit specification review
+
+**Input:** Review the input-readiness unit from 34c7267 to
+4337644a928e0d63601feccaafc4f4ab76550ac4 against its written plan and approved
+exploratory design; inspect actual code independently of the implementer report.
+
+**Interpretation:** Review only bounded retained input verification, fixed
+accepted-manifest authority, accepted application content and exact three-tool
+identity checks. Lifecycle, native input availability, runtime readiness and
+platform-image provenance are not established by this unit review.
+
+**Decision status:** Specification-compliant input unit; no specification
+correction requested. Missing factory success-path coverage is a quality
+consideration, not a violation of the five tests explicitly prescribed by this
+input-only plan. Independent quality review and native input verification remain
+separate gates.
+
+**Rationale:** Line-by-line inspection confirms canonical nonsymlink bounded
+reads with retained bytes and before/after descriptor checks; exact byte-size and
+lowercase SHA-256 validation; fixed accepted-run manifest hash before parsing;
+KIL and Envoy identities matched to ACCEPTED_IMAGES; fixed accepted archive hash;
+exact docker/kind/kubectl key membership, content checks and owner executable
+checks. The factory accepts no caller-supplied acceptance table or expected-hash
+override. The reviewed source diff changes no strict controller, profile,
+verifier or lifecycle deferral and introduces no subprocess or lab mutation.
+
+**Verification:** Fresh specified unittest suite passed all five tests. A
+test-only absent-module reconstruction using an empty kil package search path
+produced exactly five assertion failures and zero errors without source edits;
+this verifies RED behavior, not the historical order of implementation. Separate
+test-owned checks rejected boolean, nonstring, uppercase, nonhex and wrong-length
+run digests before reads, rejected unhashed manifest substitution, confirmed the
+closed factory signature and preserved archive failure causes. Archive-error
+propagation used injected tool-stage preconditions; it is not a native tool or
+factory success verification. No native input check, download or live command.
+
+**Affected artifacts:** Append this review at the actual lineage EOF and
+regenerate its HTML reader only; reviewed implementation and tests remain
+unchanged. No application, profile, acceptance receipt or platform-audit edit.
+
+**Unresolved questions:** Full factory success-path and race coverage remain
+quality considerations. Later lifecycle code must recheck executable commitments
+at execution, protect ownership and durable intent, and bind bounded evidence;
+the input unit does not guarantee later path identity or establish readiness.
+
+**Next gate:** Independent code-quality review, then root-owned read-only
+verification of retained native inputs. Continue separately planned exploratory
+lifecycle/evidence units and readiness rehearsal; platform-image audit stays
+stopped and strict Kind/Calico/V4/V3C acceptance remains unestablished.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
