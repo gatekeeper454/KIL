@@ -15133,3 +15133,151 @@ acceptance and broader validation under the approved scope. Keep all
 runtime/application/V4 completion claims false until their separate gates.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-303 — 2026-09-16 — V4 holistic static review requested-image authority finding
+
+**Input:** Fresh independent holistic review of approved design
+`docs/superpowers/specs/2026-09-08-v3b2-control-plane-static-manifest-source-design.md`
+and approved plan
+`docs/superpowers/plans/2026-09-15-v4-control-plane-static-manifest-source.md`,
+covering implementation and tests from
+`0c222ce5b85fd3bddcaced922f4f39cd74373046` through
+`6f20f0e256bacf70b8fb90f1270174de08850023`. The coordinator runs the
+combined/full static gates separately. This review authorizes no production
+edits, push, live infrastructure commands, or profile inspection/mutation.
+
+**Interpretation:** The accepted bounded source authenticates the requested
+digest-pinned Kind image and the exact owned node bracket. The component
+composition must join this available retained requested-image authority to
+the independently reconstructed fixed ownership profile. This is not an
+image-realization, historical-filesystem, readiness, or freshness requirement.
+
+**Decision status:** Important finding confirmed by independent pure
+reproduction and coordinator review; holistic static PASS withheld pending
+regression-first correction and independent re-review. No Critical or Minor
+finding was identified in the remaining inspected Task 1–5 implementation.
+Earlier task acceptances remain historical and are not rewritten.
+
+**Rationale:** Shared source `_context_authority` currently checks the
+`inputs.kind_node_image` scalar only against a version/digest regular
+expression, and the bracket checks inspect output against that scalar.
+Apiserver and controller-manager composition reconstruct both dependencies
+and join the run, cluster/container identities, and complete `OwnedIdentity`,
+but do not compare the retained requested-image scalar with
+`ownership.profile.kind_node_image`. Consequently, a source retaining the
+valid approved profile can also retain a different requested-image digest;
+matching before/after inspect observations make that source reconstruct,
+and both public component validators accept it with the unchanged approved
+ownership proof. The exact affected boundaries are shared source lines
+440–443, apiserver lines 363–367, and controller-manager lines 230–232 at
+the reviewed checkpoint. This admits contradictory fixed-producer authority,
+although all completion flags remain false.
+
+**Verification:** Two short independent Python experiments used the existing
+literal disk/API fixtures, `asdict(ownership.profile)`, and an alternate
+requested image `kindest/node:v1.36.1@sha256:` followed by 64 lowercase `d`
+characters. Each source passed full constructor reconstruction with before
+and after inspect projections matching that alternate scalar. The unchanged
+apiserver ownership produced an accepted configuration proof with both
+contract-completion flags false. The unchanged controller-manager ownership
+also produced an accepted configuration proof with runtime/application
+completion false. Actual source, checkpoint, journal, controller, proof,
+component, and changed test code was inspected rather than relying on prior
+review conclusions. No duplicate full suite, live Colima, Docker, Kind,
+kubectl, Kubernetes, request, publication, or push command ran.
+
+**Affected artifacts:** Reviewed Task 1–5 source/checkpoint/controller/journal/
+proof modules and tests, both component proof modules and tests, consumed
+ownership/profile/defaulting definitions, and the approved design/plan.
+Changed only this lineage entry and its regenerated HTML reader. Proposed
+correction is local to the two component dependency-composition boundaries
+and their regression tests; no production correction was made by this review.
+
+**Unresolved questions:** The finding remains open. The coordinator confirmed
+that each component must compare retained `inputs.kind_node_image` with the
+independent ownership profile's fixed requested image. When a full `profile`
+is retained, reconstruct it through exact `V3B2Profile.from_mapping` and
+require equality with `ownership.profile`, rejecting malformed or
+contradictory retained profile authority. Minimal standalone source contexts
+may remain valid. Private checkpoint parent/path relationships remain the
+controller/checkpoint gates; they do not broaden this component static claim.
+
+**Next gate:** Regression-first narrow correction in both component validators,
+focused static validation, independent holistic re-review, and only then the
+Task 6 combined/full static acceptance record. All-ten-platform-Pod
+configuration/image/status/readiness composition and separately authorized
+live experiments remain later gates. Runtime, readiness, application
+completion, V4 completion, and V3C remain explicitly unclaimed.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-304 — 2026-09-16 — V4 requested producer and optional profile join correction
+
+**Input:** Remediate the Important holistic review finding in T-303 in both
+component consumers, preserving the reviewer's uncommitted record. Add
+regression-first independently reconstructable alternate requested-image
+sources, matching full-profile positives, and malformed/contradictory optional
+profile cases through validators and reconstructing constructors. Retain
+minimal standalone contexts without a profile and make no public API or
+source-format change. No push or live/profile commands are authorized.
+
+**Interpretation:** Matching run and complete owned identity does not resolve
+contradictory requested-producer authority. After exact dependency and retained
+context reconstruction, `inputs.kind_node_image` must equal the fixed requested
+image in `ownership.profile`. When `inputs.profile` is present, it must
+reconstruct under the existing exact `V3B2Profile.from_mapping` schema and equal
+the ownership profile. This joins requested producer configuration only; it
+does not prove effective image realization, historical filesystem, certificate
+contents or any additional checkpoint/private-path/workload claim.
+
+**Decision status:** Narrow producer-authority correction implemented and
+verified locally; independent holistic re-review and broader static acceptance
+remain pending. T-303 remains unchanged historical non-acceptance evidence.
+All completion flags remain strictly false, and readiness, freshness,
+application completion, V4 completion and V3C remain unclaimed.
+
+**Rationale:** Both component consumers use the already reconstructed retained
+source context, decode its inputs through the existing bounded JSON contract,
+join the requested-image scalar exactly, and reconstruct any supplied profile
+through the existing fixed schema. Source authentication remains valid for
+minimal standalone contexts, while configuration composition rejects producer
+contradiction. The full-profile positive uses the established JSON schema with
+`calico_images` as an object and namespace arrays; raw `asdict` tuple-pair image
+arrays are deliberately rejected rather than widening that schema. Fixed
+component literals, conditional CA decisions, identity joins, retained status
+and independent API defaulting are unchanged.
+
+**Verification:** Before production edits, six new unittest methods ran in
+1.662 seconds: both compatibility methods passed; four rejection methods
+failed with 40 expected validator/constructor subtest assertions, zero errors
+and zero skips. Independently valid source brackets consistently requested the
+alternate digest; run and owned identities remained aligned. Additional cases
+held the requested-image scalar fixed while varying optional profile image,
+Pod/Service subnets, exact scalar types, missing/extra keys, scalar boolean
+profiles and non-schema image arrays. After correction, the focused component
+suite ran 34 methods, all 34 passed with zero skips in 15.783 seconds. The four
+prescribed mirror modules ran 52 methods, all 52 passed with zero skips in
+21.367 seconds. The unchanged source suite ran 19 methods, all 19 passed with
+zero skips in 0.391 seconds. Subtests are not counted as additional unittest
+methods. `git diff --check` passed. No live Colima, Docker, Kind, kubectl,
+Kubernetes, request, publication, push or profile command ran.
+
+**Affected artifacts:**
+`src/kil/v3b2_kube_apiserver_mirror_configuration.py`,
+`src/kil/v3b2_kube_controller_manager_mirror_configuration.py`,
+`tests/test_v3b2_kube_apiserver_mirror_configuration.py`,
+`tests/test_v3b2_kube_controller_manager_mirror_configuration.py`, this lineage
+(preserving T-303 and appending T-304), and its regenerated HTML reader.
+The shared source module, profile schema and public function/constructor
+signatures are unchanged.
+
+**Unresolved questions:** None identified in correction self-review;
+independent holistic re-review, combined/full repository acceptance and all
+later configuration/image/status/readiness composition remain separate gates.
+Any live experiment requires its own explicit authorization.
+
+**Next gate:** Regenerate and verify readers, commit this focused correction
+with preserved review evidence, and supply the exact base/head checkpoint for
+independent holistic re-review before recording Task 6 static acceptance.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

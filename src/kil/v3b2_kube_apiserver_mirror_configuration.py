@@ -25,12 +25,14 @@ import json
 import re
 
 from kil.v3b2_api_defaults import _equal, _managed_fields, _timestamp, matches_configuration
+from kil.v3b2_contracts import V3B2Profile
 from kil.v3b2_control_plane_manifest_source import (
     ControlPlaneManifestSourceProof,
     _retained_authority,
     control_plane_manifest_pod,
 )
 from kil.v3b2_driver_pod_configuration import _rv, _uid
+from kil.v3b2_proofs import decode
 from kil.v3b2_runtime_ownership import RuntimeOwnershipProof
 
 
@@ -360,10 +362,19 @@ def _compute(*, ownership, source):
             "kube-apiserver source run differs from ownership")
     # Dependencies are reconstructed above; recover complete retained authority,
     # including isolated endpoint and private kubeconfig/Docker-config scope.
-    _context, source_identity = _retained_authority(source.raw_observations)
+    source_context, source_identity = _retained_authority(source.raw_observations)
     if source_identity != ownership.owned_identity:
         raise KubeAPIServerMirrorConfigurationError(
             "kube-apiserver complete source owned authority differs from ownership")
+    # Join requested producer authority, without asserting image realization.
+    inputs = decode(source_context.inputs)
+    if inputs["kind_node_image"] != ownership.profile.kind_node_image:
+        raise KubeAPIServerMirrorConfigurationError(
+            "kube-apiserver source requested Kind image differs from ownership profile")
+    if ("profile" in inputs
+            and V3B2Profile.from_mapping(inputs["profile"]) != ownership.profile):
+        raise KubeAPIServerMirrorConfigurationError(
+            "kube-apiserver source profile differs from ownership profile")
     relations = [row for row in ownership.node_ownership.static_pods
                  if row.component == "kube-apiserver"]
     if len(relations) != 1:

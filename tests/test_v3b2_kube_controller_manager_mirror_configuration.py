@@ -1,6 +1,6 @@
 """Independent reviewed controller-manager disk and API fixtures."""
 from copy import deepcopy
-from dataclasses import FrozenInstanceError, replace
+from dataclasses import FrozenInstanceError, asdict, replace
 import importlib
 import importlib.util
 import json
@@ -11,8 +11,11 @@ from kil.v3b2_runtime_ownership import validate_runtime_ownership
 from tests.test_v3b2_control_plane_manifest_source import (
     context as source_context, identity as source_identity,
     observations as source_observations,
+    node as source_node,
 )
-from tests.test_v3b2_driver_pod_configuration import WORKLOAD as OWNERSHIP_WORKLOAD
+from tests.test_v3b2_driver_pod_configuration import (
+    PROFILE as OWNERSHIP_PROFILE, WORKLOAD as OWNERSHIP_WORKLOAD,
+)
 from tests.test_v3b2_runtime_ownership import fixture as ownership_fixture, encode
 
 
@@ -190,12 +193,22 @@ def row(document):
                 and item["metadata"]["name"] == POD_NAME)
 
 
-def literal_source_fixture(selected=(), document=None):
+def literal_source_fixture(selected=(), document=None, *, source_inputs=None):
     owned = source_identity()
+    inputs = {} if source_inputs is None else source_inputs
+    requested_image = inputs.get("kind_node_image", OWNERSHIP_PROFILE.kind_node_image)
     return validate_control_plane_manifest_source(
-        context=source_context(owned), owned_identity=owned,
+        context=source_context(owned, **inputs), owned_identity=owned,
         observations=source_observations(owned, controller=yaml_bytes(
-            disk_pod(selected) if document is None else document)))
+            disk_pod(selected) if document is None else document),
+            before=source_node(requested_image=requested_image),
+            after=source_node(requested_image=requested_image)))
+
+
+def profile_mapping():
+    profile = asdict(OWNERSHIP_PROFILE)
+    profile["calico_images"] = dict(OWNERSHIP_PROFILE.calico_images)
+    return profile
 
 
 def api_document(selected=(), owned_identity=MATCHED_OWNERSHIP_IDENTITY,
@@ -477,6 +490,59 @@ class KubeControllerManagerMirrorConfigurationTest(unittest.TestCase):
         owned = replace(MATCHED_OWNERSHIP_IDENTITY, kubeconfig="/tmp/other/kubeconfig")
         self.assertNotEqual(owned.kubeconfig, MATCHED_OWNERSHIP_IDENTITY.kubeconfig)
         self.reject_independently_valid_authority_mismatch(owned_identity=owned)
+
+    def reject_independently_valid_producer_authority(self, source):
+        proof = self.validate()
+        source.__post_init__()
+        proof.ownership.__post_init__()
+        self.assertEqual(source.run_id, proof.source.run_id)
+        self.assertEqual(source.cluster_uid, proof.source.cluster_uid)
+        self.assertEqual(source.node_container_id, proof.source.node_container_id)
+        for boundary in ("validator", "constructor"):
+            with self.subTest(boundary=boundary), self.assertRaises(self.error):
+                if boundary == "validator":
+                    self.module.validate_kube_controller_manager_mirror_configuration(
+                        ownership=proof.ownership, source=source)
+                else:
+                    replace(proof, source=source)
+
+    def test_source_requested_image_must_match_owned_profile(self):
+        alternate_image = "kindest/node:v1.36.1@sha256:" + "d" * 64
+        self.assertNotEqual(alternate_image, OWNERSHIP_PROFILE.kind_node_image)
+        for include_profile in (False, True):
+            inputs = {"kind_node_image": alternate_image}
+            if include_profile:
+                inputs["profile"] = profile_mapping()
+            with self.subTest(include_profile=include_profile):
+                self.reject_independently_valid_producer_authority(
+                    literal_source_fixture(source_inputs=inputs))
+
+    def test_matching_full_profile_and_minimal_contexts_are_accepted(self):
+        for inputs in ({}, {"profile": profile_mapping()}):
+            source = literal_source_fixture(CA_CANDIDATES[:1], source_inputs=inputs)
+            ownership = literal_runtime_fixture(CA_CANDIDATES[:1])
+            proof = self.module.validate_kube_controller_manager_mirror_configuration(
+                ownership=ownership, source=source)
+            self.assertEqual(replace(proof), proof)
+
+    def test_optional_source_profile_must_reconstruct_exact_owned_profile(self):
+        cases = []
+        for field, value in (("kind_node_image", "kindest/node:v1.36.1@sha256:" + "d" * 64),
+                             ("pod_subnet", "10.245.0.0/16"), ("service_subnet", "10.97.0.0/16"),
+                             ("kind_version", True)):
+            profile = profile_mapping()
+            profile[field] = value
+            cases.append((field, profile))
+        missing = profile_mapping()
+        del missing["kind_node_image"]
+        extra = profile_mapping()
+        extra["foreign"] = "x"
+        cases.extend((("missing", missing), ("extra", extra), ("scalar-bool", True),
+                      ("non-schema-calico-array", asdict(OWNERSHIP_PROFILE))))
+        for label, profile in cases:
+            with self.subTest(profile=label):
+                self.reject_independently_valid_producer_authority(
+                    literal_source_fixture(source_inputs={"profile": profile}))
 
     def test_exact_constructors_bindings_false_flags_and_frozen_slots(self):
         proof = self.validate(CA_CANDIDATES[:2])
