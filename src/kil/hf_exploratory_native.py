@@ -5,6 +5,7 @@ attempt, and deletion requires freshly rebound exact owned resources. Raw
 private observations are retained; no publication or strict controller is used.
 """
 from dataclasses import asdict, replace
+from copy import deepcopy
 from hashlib import sha256
 import os
 from pathlib import Path
@@ -42,7 +43,14 @@ INCARNATION_KEYS = ('namespace', 'pod', 'role', 'uid', 'container_id',
 
 
 class ReadPending(ValueError):
-    """An otherwise bound driver is still running; only this may be retried."""
+    """An authenticated, valid known not-ready observation; retry only this."""
+
+
+class SetupReadinessBudget:
+    """One elapsed-time and read-attempt budget for all setup readiness phases."""
+    def __init__(self):
+        self.deadline = time.monotonic()+300
+        self.attempts = 0
 
 
 def bind_node(rows):
@@ -64,6 +72,51 @@ def same_incarnation(before, after):
             and all(type(before.get(key)) is str and before[key]
                     and before[key] == after.get(key) for key in INCARNATION_KEYS)):
         raise ValueError('application_incarnation_changed_or_unbound')
+
+
+def calico_readiness_projection(payload, kind):
+    """Native nested workload -> configuration/readiness projection only.
+
+    The full native response remains a command receipt. Omitted fields are not
+    audited and this projection establishes no platform content provenance.
+    """
+    from kil.v3b2_inventory import parse_calico_runtime_workload
+    row = decode(payload)
+    if kind not in ('DaemonSet','Deployment') or type(row) is not dict:
+        raise ValueError('native_calico_kind_invalid')
+    if row.get('apiVersion')!='apps/v1' or row.get('kind')!=kind:
+        raise ValueError('native_calico_type_invalid')
+    metadata = row['metadata']
+    template = row['spec']['template']['spec']
+    if type(metadata) is not dict or type(template) is not dict or type(row['status']) is not dict:
+        raise ValueError('native_calico_structure_invalid')
+    projected = {'apiVersion':'apps/v1','kind':kind,
+        'metadata':{key:metadata[key] for key in ('namespace','name','uid','resourceVersion')},
+        'spec':{},'status':{}}
+    for field in ('containers','initContainers'):
+        containers = template[field] if field=='containers' else template.get(field,[])
+        if type(containers) is not list or any(type(container) is not dict for container in containers):
+            raise ValueError('native_calico_container_array_invalid')
+        projected['spec'][field] = [{key:container[key] for key in ('name','image')} for container in containers]
+    fields = ('desiredNumberScheduled','numberReady') if kind=='DaemonSet' else ('replicas','readyReplicas')
+    for field in fields:
+        # DeploymentStatus documents these counts as omitempty. Preserve their
+        # omission, not a repaired zero count; the caller can only mark pending.
+        if kind=='Deployment' and field not in row['status']:
+            continue
+        value = row['status'][field]
+        if type(value) is not int or value<0:
+            raise ValueError('native_calico_counts_invalid')
+        projected['status'][field] = value
+    if projected['status'].get(fields[1],0)>projected['status'].get(fields[0],0):
+        raise ValueError('native_calico_counts_inconsistent')
+    # The existing closed parser checks identities and exact pinned inventory
+    # independently of readiness; its validation-only count probe is never an
+    # observed readiness record. Persist only the actual native counts below.
+    eligibility = deepcopy(projected)
+    eligibility['status'] = {field:1 for field in fields}
+    parse_calico_runtime_workload(canonical(eligibility),kind)
+    return canonical(projected)
 
 
 def check_source(repository, reviewed_source):
@@ -107,6 +160,9 @@ class ExploratoryLifecycle:
         self.mutation_commitments = set()
         self.attach_attempted = set()
         self.anchors, self.endpoints, self.results, self.source_metadata = {}, {}, {}, {}
+        self.selected_pods, self.endpoint_bindings = {}, {}
+        self.deployment_bindings = {}
+        self.calico_bindings = {}
         self.command_checksums, self.aliases, self.environment = {}, {}, {}
         self.foreign_observations, self.placements, self.platform_images = [], [], []
         self.rendered = None
@@ -450,15 +506,28 @@ class ExploratoryLifecycle:
         verify_bytes(calico, self.inputs.profile.calico_manifest_sha256, len(calico))
         self.observe(kubectl_apply_calico_command(self.identity, calico_path))
         self.reached_gate = 'calico_apply_attempted'
+        readiness_budget = SetupReadinessBudget()
         def calico_ready(deadline):
             for kind in ('DaemonSet','Deployment'):
                 if time.monotonic() >= deadline:
                     raise ValueError('readiness_deadline_exceeded')
                 raw = self.observe(replace(kubectl_calico_workload_command(self.identity, kind), timeout_s=10)).stdout_bytes
-                # Native pretty JSON canonicalization only, no projection or
-                # weakening of the existing closed Calico parser.
-                parse_calico_runtime_workload(canonical(decode(raw)), kind)
-        self.read_until(calico_ready)
+                projection = calico_readiness_projection(raw,kind)
+                digest = self.store.write('calico-readiness-projection-%04d.json'%self.sequence,projection)
+                self.store.record('calico_readiness_configuration_projection',{
+                    'command_sequence':self.sequence,'native_sha256':sha256(raw).hexdigest(),
+                    'projection_sha256':digest,'full_configuration_verified':False,
+                    'platform_image_provenance_verified':False})
+                projected = decode(projection)
+                uid = projected['metadata']['uid']
+                if kind in self.calico_bindings and self.calico_bindings[kind]!=uid:
+                    raise ValueError('selected_calico_workload_replaced')
+                self.calico_bindings.setdefault(kind,uid)
+                counts = projected['status']
+                if len(counts)!=2 or any(value!=1 for value in counts.values()):
+                    raise ReadPending('validated_calico_counts_not_ready')
+                parse_calico_runtime_workload(projection, kind)
+        self.read_until(calico_ready,budget=readiness_budget)
         self.reached_gate = 'calico_ready'
         for group in self.groups[:2]:
             self.observe(kubectl_apply_command(self.identity, self.object_list(group)))
@@ -474,12 +543,13 @@ class ExploratoryLifecycle:
                 for role in ('authz','envoy','target'):
                     if time.monotonic() >= deadline:
                         raise ValueError('readiness_deadline_exceeded')
+                    self.require_deployment_available(track,role)
                     self.observe(replace(kubectl_workload_ready_command(self.identity, NAMESPACES[track], role), timeout_s=10))
                     if time.monotonic() >= deadline:
                         raise ValueError('readiness_deadline_exceeded')
                     endpoints[(track, role)] = self.read_endpoint(track, role)
             return endpoints
-        self.endpoints = self.read_until(application_ready)
+        self.endpoints = self.read_until(application_ready,budget=readiness_budget)
         self.reached_gate = 'application_endpoints_ready'
         nonpods = [*self.groups[0], *self.groups[1], *self.groups[2]]
         applied = self.applied_read(nonpods)
@@ -489,7 +559,7 @@ class ExploratoryLifecycle:
         self.reached_gate = 'application_configuration_and_allocations_verified'
         self.observe(kubectl_apply_command(self.identity, self.object_list(self.groups[3])))
         self.reached_gate = 'driver_apply_attempted'
-        self.read_until(lambda deadline: self.bind_runtime_inventory(deadline))
+        self.read_until(lambda deadline: self.bind_runtime_inventory(deadline),budget=readiness_budget)
         self.reached_gate = 'all_application_incarnations_ready'
         self.capture_all(final=False)
         self.reached_gate = 'request_free_ready'
@@ -501,6 +571,49 @@ class ExploratoryLifecycle:
     def applied_read(self, items):
         return self.observe(Command(('kubectl','--kubeconfig',self.identity.kubeconfig,
             'get','--filename','-','--output','json'), 10, stdin=self.object_list(items))).stdout_bytes
+
+    def require_deployment_available(self, track, role):
+        """Authenticate native owned readiness before the fixed one-second wait."""
+        from kil.v3b2_proofs import validate_applied_objects
+        desired = [row for row in self.groups[2] if row['kind']=='Deployment'
+                   and row['metadata']['namespace']==NAMESPACES[track] and row['metadata']['name']==role]
+        if len(desired)!=1:
+            raise ValueError('deployment_desired_not_exact')
+        raw = self.applied_read(desired)
+        validate_applied_objects(desired,raw)
+        document = decode(raw)
+        row = document['items'][0] if document.get('kind')=='List' else document
+        metadata,status = row['metadata'],row['status']
+        uid,rv,generation = metadata['uid'],metadata['resourceVersion'],metadata['generation']
+        if (type(uid) is not str or not uid or type(rv) is not str or not rv
+                or type(generation) is not int or generation<1 or 'deletionTimestamp' in metadata
+                or type(status) is not dict):
+            raise ValueError('deployment_readiness_identity_invalid')
+        identity = (uid,generation)
+        key = (track,role)
+        if key in self.deployment_bindings and self.deployment_bindings[key]!=identity:
+            raise ValueError('deployment_readiness_incarnation_changed')
+        self.deployment_bindings.setdefault(key,identity)
+        fields = ('observedGeneration','replicas','readyReplicas','availableReplicas')
+        present = {field:status[field] for field in fields if field in status}
+        if any(type(value) is not int or value<0 for value in present.values()):
+            raise ValueError('deployment_readiness_counts_invalid')
+        # These native status fields are documented omitempty. Local zero
+        # comparisons classify only pending/invalid state; no projected count
+        # or observed readiness proof is created from an omitted field.
+        observed,replicas,ready,available = (present.get(field,0) for field in fields)
+        conditions = status.get('conditions',[])
+        if (type(conditions) is not list or any(type(condition) is not dict
+                or type(condition.get('type')) is not str or condition.get('status') not in ('True','False','Unknown')
+                for condition in conditions)
+                or len({condition['type'] for condition in conditions})!=len(conditions)):
+            raise ValueError('deployment_readiness_conditions_invalid')
+        available_rows = [condition for condition in conditions if condition['type']=='Available']
+        if len(available_rows)>1 or observed>generation or ready>replicas or available>ready or replicas>1:
+            raise ValueError('deployment_readiness_state_invalid')
+        if (len(present)!=4 or len(available_rows)!=1 or observed!=generation
+                or (replicas,ready,available)!=(1,1,1) or available_rows[0]['status']!='True'):
+            raise ReadPending('authenticated_owned_deployment_not_available')
 
     def import_application_images(self):
         accepted = {row.role:row for row in ACCEPTED_IMAGES}
@@ -569,9 +682,25 @@ class ExploratoryLifecycle:
                    if row['metadata']['name']=='driver']
         validate_driver_pod_configuration(profile=self.inputs.profile, workload=self.inputs.workload,
             rendered_objects=self.rendered, owned_identity=self.identity, pods=drivers)
-        anchors, placements = {}, []
+        anchors, placements, pending = {}, [], False
         if len(app_pods)!=12:
             raise ValueError('application_pod_cardinality_not_exact')
+        # Latch every selected identity before any pending observation can end
+        # this attempt. A later read may complete it, never replace it.
+        for track in TRACKS:
+            for role in ROLES:
+                rows = [row for row in app_pods if row['metadata']['namespace']==NAMESPACES[track]
+                        and row['metadata']['labels'].get('kil.dev/role')==role]
+                if len(rows)!=1:
+                    raise ValueError('application_pod_selection_not_exact')
+                metadata = rows[0]['metadata']
+                selected = tuple(metadata[key] for key in ('namespace','name','uid'))
+                if any(type(value) is not str or not value for value in selected):
+                    raise ValueError('application_selection_unbound')
+                key = (track,role)
+                if key in self.selected_pods and self.selected_pods[key]!=selected:
+                    raise ValueError('selected_application_pod_replaced')
+                self.selected_pods.setdefault(key,selected)
         for track in TRACKS:
             for role in ROLES:
                 rows = [row for row in app_pods if row['metadata']['namespace']==NAMESPACES[track]
@@ -579,7 +708,17 @@ class ExploratoryLifecycle:
                 if len(rows)!=1:
                     raise ValueError('application_pod_selection_not_exact')
                 pod = rows[0]
-                bound = self.bind_application_pod(pod, track, role)
+                try:
+                    bound = self.bind_ready_pod(pod, track, role)
+                except ReadPending:
+                    # Validate/latch the other initial native incarnations too;
+                    # one starting driver must not hide an already-running CID.
+                    pending = True
+                    continue
+                if (track,role) in self.anchors:
+                    same_incarnation(self.anchors[(track,role)],bound)
+                else:
+                    self.anchors[(track,role)] = bound
                 if pod['spec'].get('nodeName')!='kil-v3-lab-control-plane':
                     raise ValueError('application_node_placement_not_exact')
                 if role!='driver':
@@ -590,6 +729,8 @@ class ExploratoryLifecycle:
                 anchors[(track,role)] = bound
                 placements.append({'track':track,'role':role,**bound,'node':pod['spec']['nodeName'],
                                    'pod_ip':pod['status'].get('podIP')})
+        if pending:
+            raise ReadPending('authenticated_application_inventory_not_ready')
         nodes = [row for row in document['items'] if row['kind']=='Node']
         if len(nodes)!=1 or nodes[0]['metadata']['name']!='kil-v3-lab-control-plane':
             raise ValueError('observed_node_not_exact')
@@ -600,13 +741,52 @@ class ExploratoryLifecycle:
                               'containerID':container.get('containerID')}
                              for field in ('containerStatuses','initContainerStatuses') for container in row.get('status',{}).get(field,[])],
             'verified':False} for row in document['items'] if row['kind']=='Pod' and row not in app_pods]
-        self.anchors, self.placements = anchors, placements
+        self.placements = placements
         # Bracket readiness against fresh same-role Pod and EndpointSlice reads,
         # not merely the wide source's earlier Ready state.
         for track in TRACKS:
             self.require_current_track(track)
         self.store.write('runtime-ready-source.json', raw)
         return anchors
+
+    def bind_ready_pod(self, pod, track, role):
+        status = pod['status']
+        if status['phase']=='Pending':
+            rows = status['containerStatuses']
+            if type(rows) is not list or len(rows)!=1 or type(rows[0]) is not dict:
+                raise ValueError('pending_container_inventory_invalid')
+            observed = rows[0]
+            requested = pod['spec']['containers'][0]['image']
+            waiting = observed.get('state',{}).get('waiting')
+            if (observed.get('name')!=role or observed.get('ready') is not False
+                    or type(observed.get('restartCount')) is not int or observed['restartCount']!=0
+                    or observed.get('containerID')!='' or observed.get('imageID')!=''
+                    or observed.get('image')!=requested or set(observed['state'])!={'waiting'}
+                    or type(waiting) is not dict or waiting.get('reason')!='ContainerCreating'
+                    or set(waiting)-{'reason','message'}
+                    or ('message' in waiting and type(waiting['message']) is not str)
+                    or pod['spec'].get('nodeName')!='kil-v3-lab-control-plane'
+                    or (track,role) in self.anchors):
+                raise ValueError('pending_container_not_known_startup')
+            # Validate the unchanged metadata/spec with the existing partial
+            # safety binder. This internal eligibility probe is never retained
+            # or used as a runtime identity/provenance observation.
+            probe = deepcopy(pod)
+            alias = self.aliases['envoy' if role=='envoy' else 'kil']
+            probe['status']['phase']='Running'
+            probe['status']['containerStatuses'][0].update(
+                image=alias.runtime_image,imageID=alias.image_ref,
+                containerID='containerd://'+'0'*64,state={'running':{}},ready=False)
+            self.bind_application_pod(probe,track,role,require_ready=False)
+            raise ReadPending('authenticated_container_creating')
+        bound = self.bind_application_pod(pod,track,role,require_ready=False)
+        if (track,role) in self.anchors:
+            same_incarnation(self.anchors[(track,role)],bound)
+        else:
+            self.anchors[(track,role)] = bound
+        if status['containerStatuses'][0]['ready'] is not True:
+            raise ReadPending('bound_running_container_not_ready')
+        return bound
 
     def bind_application_pod(self, pod, track, role, *, completed=False, require_ready=True):
         image_role = 'envoy' if role == 'envoy' else 'kil'
@@ -636,7 +816,12 @@ class ExploratoryLifecycle:
                                 expected_namespace=NAMESPACES[track], expected_service=role)
         if len(endpoint.addresses) != 1:
             raise ValueError('endpoint_not_exactly_one')
-        return {'addresses': list(endpoint.addresses), 'target_uid': uid}
+        bound = {'addresses': list(endpoint.addresses), 'target_uid': uid}
+        key = (track,role)
+        if key in self.endpoint_bindings and self.endpoint_bindings[key]!=bound:
+            raise ValueError('selected_endpoint_binding_changed')
+        self.endpoint_bindings.setdefault(key,bound)
+        return bound
 
     def require_current_track(self, track):
         for role in ROLES:
@@ -652,16 +837,20 @@ class ExploratoryLifecycle:
     def require_current_driver(self, track):
         return self.current_pod(track, 'driver')
 
-    def read_until(self, operation, *, seconds=300, attempts=60, retry_errors=(ValueError, KeyError, TypeError)):
+    def read_until(self, operation, *, seconds=300, attempts=60, retry_errors=(ReadPending,), budget=None):
         """Retry only bounded read observations, never mutation commands."""
-        deadline = time.monotonic() + seconds
+        if retry_errors!=(ReadPending,):
+            raise ValueError('only_explicit_read_pending_may_retry')
+        deadline = time.monotonic() + seconds if budget is None else budget.deadline
         last_error = None
         previous_deadline = self._read_deadline
         self._read_deadline = deadline if previous_deadline is None else min(deadline,previous_deadline)
         try:
             for index in range(attempts):
-                if time.monotonic() >= deadline:
+                if time.monotonic() >= deadline or (budget is not None and budget.attempts>=60):
                     break
+                if budget is not None:
+                    budget.attempts+=1
                 try:
                     value = operation(deadline)
                     if time.monotonic() >= deadline:
@@ -725,6 +914,7 @@ class ExploratoryLifecycle:
         if type(drain_raw) is not dict or set(drain_raw) != {'drain_requested'} or drain_raw['drain_requested'] is not True:
             raise ValueError('drain_not_confirmed')
         def quiescent(deadline):
+            self.current_pod(track,'envoy',require_ready=False)
             raw = decode(self.observe(replace(stats, timeout_s=10)).stdout_bytes)
             if type(raw) is not dict or set(raw) != {'listener_refused', 'stats'} or raw['listener_refused'] is not True or type(raw['stats']) is not list:
                 raise ValueError('quiescence_not_confirmed')
@@ -733,11 +923,13 @@ class ExploratoryLifecycle:
                 if type(row) is not dict or type(row.get('name')) is not str:
                     raise ValueError('invalid_stats_record')
                 if row['name'] in ACTIVE_GAUGES:
-                    if set(row) != {'name','value'} or row['name'] in active or type(row.get('value')) is not int or row['value'] != 0:
+                    if set(row) != {'name','value'} or row['name'] in active or type(row.get('value')) is not int or row['value'] < 0:
                         raise ValueError('active_or_duplicate_gauge')
                     active[row['name']] = row['value']
             if set(active) != ACTIVE_GAUGES:
                 raise ValueError('missing_active_gauge')
+            if any(value!=0 for value in active.values()):
+                raise ReadPending('bound_envoy_active_gauges_not_zero')
             return raw
         self.read_until(quiescent, seconds=10, attempts=20)
         after = self.current_pod(track, 'envoy', require_ready=False)

@@ -522,6 +522,10 @@ class NativeTests(unittest.TestCase):
                 for index,row in enumerate(desired):
                     if row['kind']=='Service': row=deepcopy(service_map[(row['metadata']['namespace'],row['metadata']['name'])])
                     else: row['metadata'].update(uid=f'applied-{index}',resourceVersion='1')
+                    if row['kind']=='Deployment':
+                        row['metadata'].update(uid='deployment-'+row['metadata']['namespace']+'-'+row['metadata']['name'],generation=1)
+                        row['status']={'observedGeneration':1,'replicas':1,'readyReplicas':1,'availableReplicas':1,
+                            'conditions':[{'type':'Available','status':'True','reason':'MinimumReplicasAvailable'}]}
                     applied.append(row)
                 return result(canonical({'apiVersion':'v1','kind':'List','items':applied}))
             if arguments[:2] in [('get','daemonset'),('get','deployment')]:
@@ -532,6 +536,12 @@ class NativeTests(unittest.TestCase):
                     'spec':{'containers':[{'name':name,'image':pins['node' if kind=='DaemonSet' else 'kube_controllers']}],
                             'initContainers':[{'name':n,'image':pins['node' if n=='ebpf-bootstrap' else 'cni']} for n in ['upgrade-ipam','install-cni','ebpf-bootstrap']] if kind=='DaemonSet' else []},
                     'status':{'desiredNumberScheduled':1,'numberReady':1} if kind=='DaemonSet' else {'replicas':1,'readyReplicas':1}}
+                projected['metadata']['managedFields']=[{'manager':'kubectl'}]
+                projected['spec']={'selector':{'matchLabels':{'k8s-app':name}},'template':{'metadata':{'labels':{'k8s-app':name}},'spec':projected['spec']}}
+                for row in projected['spec']['template']['spec']['containers']:
+                    row.update(imagePullPolicy='IfNotPresent',resources={},env=[{'name':'NATIVE_EXTRA','value':'retained'}])
+                if kind=='Deployment': projected['spec']['template']['spec'].pop('initContainers')
+                projected['status']['observedGeneration']=1
                 return result(json.dumps(projected,indent=2).encode()+b'\n')
             if arguments and arguments[0]=='wait': return result()
             if arguments[:2]==('get','endpointslices'):
@@ -728,6 +738,329 @@ class NativeTests(unittest.TestCase):
             report=self.life.execute()
         self.assertEqual(report['status'],'inconclusive'); self.assertIn('bounded',report['retained_files_error'])
         self.assertFalse((self.store.path/'SHA256SUMS').exists())
+
+    def execute_fake(self):
+        with patch.object(self.native,'check_source'),patch.object(self.native.platform,'system',return_value='Darwin'),patch.object(self.native.platform,'machine',return_value='arm64'),patch.object(self.native.time,'sleep'):
+            return self.life.execute()
+
+    def test_read_until_never_retries_command_schema_or_identity_error(self):
+        for error_type in [ValueError,KeyError,TypeError]:
+            operation=Mock(side_effect=[error_type('permanent'),True])
+            with patch.object(self.native.time,'sleep'),self.assertRaises(error_type):
+                self.life.read_until(operation)
+            self.assertEqual(operation.call_count,1)
+
+    def test_calico_nonzero_read_permanently_blocks_all_eof(self):
+        state=self.full_fake_runner(); original=self.runner.run.side_effect; failed=False
+        def once(command):
+            nonlocal failed
+            if command.argv[3:5]==('get','daemonset') and not failed:
+                failed=True; state['calls'].append(command)
+                return CommandResult(3,'','failed Calico read',b'',b'failed Calico read')
+            return original(command)
+        self.runner.run.side_effect=once; report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive'); self.assertEqual(state['attached'],[])
+        self.assertTrue(report['owned_teardown'])
+
+    def test_ready_authz_uid_replacement_is_not_adopted_on_inventory_retry(self):
+        state=self.full_fake_runner(); original=self.runner.run.side_effect; changed=False
+        authz=self.pods[(TRACKS[0],'authz')]
+        def once(command):
+            nonlocal changed
+            result=original(command)
+            if command.argv[3:6]==('get','pod',authz['metadata']['name']) and not changed:
+                changed=True; replacement=deepcopy(authz); replacement['metadata']['uid']='ready-replacement'
+                raw=canonical(replacement); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=once; report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive'); self.assertEqual(state['attached'],[])
+        self.assertEqual(self.life.anchors[(TRACKS[0],'authz')]['uid'],authz['metadata']['uid'])
+
+    def test_container_creating_uid_latch_refuses_later_ready_replacement(self):
+        from kil.v3b2_proofs import RUNTIME_RESOURCES
+        state=self.full_fake_runner(); original=self.runner.run.side_effect; wide=0
+        def pending_then_replacement(command):
+            nonlocal wide
+            result=original(command)
+            if command.argv[3:5]==('get',RUNTIME_RESOURCES):
+                wide+=1; doc=json.loads(result.stdout_bytes)
+                driver=next(row for row in doc['items'] if row['kind']=='Pod' and row['metadata'].get('namespace')=='kil-v3-baseline' and row['metadata']['name']=='driver')
+                if wide==1:
+                    driver['status']['phase']='Pending'; status=driver['status']['containerStatuses'][0]
+                    status.update(ready=False,image=driver['spec']['containers'][0]['image'],imageID='',containerID='',state={'waiting':{'reason':'ContainerCreating'}})
+                else: driver['metadata']['uid']='later-ready-replacement'
+                raw=canonical(doc); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=pending_then_replacement; report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive'); self.assertEqual(state['attached'],[])
+        self.assertEqual(wide,2)
+
+    def test_container_creating_same_uid_eventually_becomes_ready(self):
+        from kil.v3b2_proofs import RUNTIME_RESOURCES
+        state=self.full_fake_runner(); original=self.runner.run.side_effect; wide=0
+        def pending_once(command):
+            nonlocal wide
+            result=original(command)
+            if command.argv[3:5]==('get',RUNTIME_RESOURCES):
+                wide+=1
+                if wide==1:
+                    doc=json.loads(result.stdout_bytes)
+                    driver=next(row for row in doc['items'] if row['kind']=='Pod' and row['metadata'].get('namespace')=='kil-v3-baseline' and row['metadata']['name']=='driver')
+                    driver['status']['phase']='Pending'; status=driver['status']['containerStatuses'][0]
+                    status.update(ready=False,image=driver['spec']['containers'][0]['image'],imageID='',containerID='',state={'waiting':{'reason':'ContainerCreating'}})
+                    raw=canonical(doc); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=pending_once; report=self.execute_fake()
+        self.assertEqual(report['status'],'complete'); self.assertEqual(len(state['attached']),3)
+        self.assertEqual(wide,2)
+
+    def test_setup_readiness_budget_deadline_survives_between_phases(self):
+        self.assertTrue(hasattr(self.native,'SetupReadinessBudget'),'shared setup budget missing')
+        clock=[100.0]
+        with patch.object(self.native.time,'monotonic',side_effect=lambda:clock[0]):
+            budget=self.native.SetupReadinessBudget()
+            self.life.read_until(lambda deadline:deadline,budget=budget)
+            clock[0]=401.0
+            later=Mock()
+            with self.assertRaises(ValueError): self.life.read_until(later,budget=budget)
+        later.assert_not_called(); self.assertIsNone(self.life._read_deadline)
+
+    def test_setup_readiness_budget_shared_sixty_attempts(self):
+        self.assertTrue(hasattr(self.native,'SetupReadinessBudget'),'shared setup budget missing')
+        with patch.object(self.native.time,'sleep'):
+            budget=self.native.SetupReadinessBudget()
+            first=Mock(side_effect=[self.native.ReadPending('valid pending')]*58+[True])
+            self.life.read_until(first,budget=budget)
+            self.life.read_until(lambda deadline:True,budget=budget)
+            later=Mock()
+            with self.assertRaises(ValueError): self.life.read_until(later,budget=budget)
+        self.assertEqual(first.call_count,59); later.assert_not_called()
+
+    def test_full_setup_shares_one_budget_across_three_phases(self):
+        self.full_fake_runner(); original=self.life.read_until; budgets=[]
+        def read(operation,**options):
+            if options.get('seconds',300)==300: budgets.append(options.get('budget'))
+            return original(operation,**options)
+        with patch.object(self.life,'read_until',side_effect=read): report=self.execute_fake()
+        self.assertEqual(report['status'],'complete'); self.assertEqual(len(budgets),3)
+        self.assertIsNotNone(budgets[0]); self.assertTrue(all(value is budgets[0] for value in budgets))
+
+    def test_native_nested_calico_projection_retains_raw_and_closed_readiness(self):
+        self.full_fake_runner(); report=self.execute_fake()
+        self.assertEqual(report['status'],'complete')
+        projections=list(self.store.path.glob('calico-readiness-projection-*.json'))
+        self.assertEqual(len(projections),2)
+        from kil.v3b2_inventory import parse_calico_runtime_workload
+        for path in projections:
+            raw=path.read_bytes(); doc=json.loads(raw)
+            parse_calico_runtime_workload(raw,doc['kind'])
+            self.assertEqual(set(doc['spec']),{'containers','initContainers'})
+            self.assertEqual(set(doc['metadata']),{'namespace','name','uid','resourceVersion'})
+        native_receipts=[path.read_bytes() for path in self.store.path.glob('command-*.stdout')]
+        self.assertTrue(any(b'NATIVE_EXTRA' in raw and b'"template"' in raw for raw in native_receipts))
+        self.assertFalse(report['platform_image_provenance_verified'])
+
+    def test_native_calico_valid_pending_counts_retry_but_wrong_image_does_not(self):
+        state=self.full_fake_runner(); original=self.runner.run.side_effect; reads=0
+        def pending_once(command):
+            nonlocal reads
+            result=original(command)
+            if command.argv[3:5]==('get','daemonset'):
+                reads+=1
+                if reads==1:
+                    doc=json.loads(result.stdout_bytes); doc['status']['numberReady']=0
+                    raw=canonical(doc); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=pending_once; report=self.execute_fake()
+        self.assertEqual(report['status'],'complete'); self.assertEqual(reads,2)
+
+    def test_native_calico_wrong_image_pending_counts_hard_stop(self):
+        state=self.full_fake_runner(); original=self.runner.run.side_effect; reads=0
+        def wrong_image(command):
+            nonlocal reads
+            result=original(command)
+            if command.argv[3:5]==('get','daemonset'):
+                reads+=1; doc=json.loads(result.stdout_bytes); doc['status']['numberReady']=0
+                doc['spec']['template']['spec']['containers'][0]['image']='unverified:latest'
+                raw=canonical(doc); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=wrong_image; report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive'); self.assertEqual(reads,1); self.assertEqual(state['attached'],[])
+
+    def test_application_known_pending_json_before_wait_then_ready(self):
+        state=self.full_fake_runner(); original=self.runner.run.side_effect; reads=0
+        def pending_once(command):
+            nonlocal reads
+            result=original(command)
+            if command.argv[3:5]==('get','--filename'):
+                desired=json.loads(command.stdin)['items']
+                if len(desired)==1 and desired[0]['kind']=='Deployment':
+                    reads+=1
+                    if reads==1:
+                        doc=json.loads(result.stdout_bytes); row=doc['items'][0]
+                        row['status'].update(readyReplicas=0,availableReplicas=0)
+                        row['status']['conditions'][0]['status']='False'
+                        raw=canonical(doc); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=pending_once; report=self.execute_fake()
+        self.assertEqual(report['status'],'complete'); self.assertEqual(reads,10)
+        self.assertEqual(sum(command.argv[3:4]==('wait',) for command in state['calls']),9)
+
+    def test_application_wait_failure_is_permanent(self):
+        state=self.full_fake_runner(); original=self.runner.run.side_effect
+        def fail_wait(command):
+            if command.argv[3:4]==('wait',):
+                state['calls'].append(command)
+                return CommandResult(1,'','timed out waiting for the condition',b'',b'timed out waiting for the condition')
+            return original(command)
+        self.runner.run.side_effect=fail_wait; report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive'); self.assertEqual(state['attached'],[])
+        self.assertEqual(sum(command.argv[3:4]==('wait',) for command in state['calls']),1)
+
+    def test_calico_pending_uid_replacement_hard_stop(self):
+        state=self.full_fake_runner(); original=self.runner.run.side_effect; reads=0
+        def replacement(command):
+            nonlocal reads
+            result=original(command)
+            if command.argv[3:5]==('get','daemonset'):
+                reads+=1; doc=json.loads(result.stdout_bytes)
+                if reads==1: doc['status']['numberReady']=0
+                else: doc['metadata']['uid']='replacement-calico'
+                raw=canonical(doc); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=replacement; report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive'); self.assertEqual(reads,2); self.assertEqual(state['attached'],[])
+
+    def test_native_calico_malformed_counts_identity_inventory_never_pending(self):
+        self.full_fake_runner()
+        command=self.native.kubectl_calico_workload_command(self.life.identity,'DaemonSet')
+        doc=json.loads(self.runner.run.side_effect(command).stdout_bytes)
+        mutations=[lambda row:row['metadata'].update(uid=''),
+            lambda row:row['metadata'].pop('resourceVersion'),
+            lambda row:row['status'].update(numberReady=True),
+            lambda row:row['status'].update(desiredNumberScheduled=0,numberReady=1),
+            lambda row:row['status'].pop('numberReady'),
+            lambda row:row['spec']['template']['spec']['containers'].append(deepcopy(row['spec']['template']['spec']['containers'][0])),
+            lambda row:row['spec']['template']['spec'].update(initContainers=[]),
+            lambda row:row['spec'].update(template=[])]
+        for mutate in mutations:
+            changed=deepcopy(doc); mutate(changed)
+            try: self.native.calico_readiness_projection(canonical(changed),'DaemonSet')
+            except (ValueError,KeyError,TypeError) as error:
+                self.assertNotIsInstance(error,self.native.ReadPending)
+            else: self.fail('malformed native Calico projection accepted')
+
+    def test_endpoint_initial_binding_is_not_overwritten(self):
+        self.install_pods(); pod=self.pods[(TRACKS[0],'authz')]
+        def endpoint(uid):
+            return canonical({'apiVersion':'discovery.k8s.io/v1','kind':'EndpointSlice',
+                'metadata':{'name':'authz-slice','namespace':'kil-v3-baseline','labels':{'kubernetes.io/service-name':'authz'}},
+                'addressType':'IPv4','ports':[{'name':'http','protocol':'TCP','port':8080}],
+                'endpoints':[{'addresses':['10.244.0.2'],'conditions':{'ready':True},
+                'targetRef':{'kind':'Pod','name':pod['metadata']['name'],'namespace':'kil-v3-baseline','uid':uid}}]})
+        raws=[endpoint('initial'),endpoint('replacement')]
+        self.runner.run.side_effect=[CommandResult(0,raw.decode(),'',raw,b'') for raw in raws]
+        self.life.read_endpoint(TRACKS[0],'authz')
+        with self.assertRaises(ValueError): self.life.read_endpoint(TRACKS[0],'authz')
+        self.assertEqual(self.life.endpoint_bindings[(TRACKS[0],'authz')]['target_uid'],'initial')
+
+    def test_native_calico_deployment_omitted_zero_counts_then_ready(self):
+        self.full_fake_runner(); original=self.runner.run.side_effect; reads=0
+        def omitted_once(command):
+            nonlocal reads
+            result=original(command)
+            if command.argv[3:5]==('get','deployment'):
+                reads+=1
+                if reads==1:
+                    doc=json.loads(result.stdout_bytes); doc['status']={}
+                    raw=canonical(doc); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=omitted_once; report=self.execute_fake()
+        self.assertEqual(report['status'],'complete'); self.assertEqual(reads,2)
+        projections=[json.loads(path.read_bytes()) for path in self.store.path.glob('calico-readiness-projection-*.json')]
+        self.assertTrue(any(row['kind']=='Deployment' and row['status']=={} for row in projections))
+
+    def test_native_application_deployment_omitted_zero_startup_then_ready(self):
+        self.full_fake_runner(); original=self.runner.run.side_effect; reads=0
+        def omitted_once(command):
+            nonlocal reads
+            result=original(command)
+            if command.argv[3:5]==('get','--filename'):
+                desired=json.loads(command.stdin)['items']
+                if len(desired)==1 and desired[0]['kind']=='Deployment':
+                    reads+=1
+                    if reads==1:
+                        doc=json.loads(result.stdout_bytes); doc['items'][0]['status']={}
+                        raw=canonical(doc); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=omitted_once; report=self.execute_fake()
+        self.assertEqual(report['status'],'complete'); self.assertEqual(reads,10)
+
+    def test_application_present_bad_count_and_pending_uid_replacement_hard_stop(self):
+        self.full_fake_runner(); self.life.prepare()
+        desired=next(row for row in self.life.groups[2] if row['kind']=='Deployment')
+        raw=self.runner.run.side_effect(self.native.Command(('kubectl','--kubeconfig',self.life.identity.kubeconfig,
+            'get','--filename','-','--output','json'),10,stdin=self.life.object_list([desired]))).stdout_bytes
+        doc=json.loads(raw); track=next(track for track,ns in self.native.NAMESPACES.items() if ns==desired['metadata']['namespace']); role=desired['metadata']['name']
+        bad=deepcopy(doc); bad['items'][0]['status']['readyReplicas']=True
+        with patch.object(self.life,'applied_read',return_value=canonical(bad)),self.assertRaises(ValueError):
+            self.life.require_deployment_available(track,role)
+        pending=deepcopy(doc); pending['items'][0]['status']={}
+        with patch.object(self.life,'applied_read',return_value=canonical(pending)),self.assertRaises(self.native.ReadPending):
+            self.life.require_deployment_available(track,role)
+        replacement=deepcopy(doc); replacement['items'][0]['metadata']['uid']='replacement'
+        with patch.object(self.life,'applied_read',return_value=canonical(replacement)),self.assertRaises(ValueError):
+            self.life.require_deployment_available(track,role)
+
+    def test_full_setup_elapsed_policy_apply_consumes_global_deadline(self):
+        state=self.full_fake_runner(); original=self.runner.run.side_effect; clock=[100.0]
+        def elapsed_apply(command):
+            result=original(command)
+            if command.argv[3:5]==('apply','-f') and command.stdin:
+                desired=json.loads(command.stdin)['items']
+                if desired and desired[0]['kind']=='Namespace': clock[0]=401.0
+            return result
+        self.runner.run.side_effect=elapsed_apply
+        with patch.object(self.native.time,'monotonic',side_effect=lambda:clock[0]): report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive'); self.assertEqual(state['attached'],[])
+        self.assertEqual(sum(command.argv[3:4]==('wait',) for command in state['calls']),0)
+        self.assertTrue(report['owned_teardown'])
+
+    def test_known_active_quiescence_gauge_retries_only_read(self):
+        state=self.full_fake_runner(); original=self.runner.run.side_effect; stats=0
+        def active_once(command):
+            nonlocal stats
+            result=original(command)
+            if command.argv[3:4]==('exec',) and b'listener_refused' in result.stdout_bytes:
+                stats+=1
+                if stats==1:
+                    doc=json.loads(result.stdout_bytes); doc['stats'][0]['value']=1
+                    raw=canonical(doc); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=active_once; report=self.execute_fake()
+        self.assertEqual(report['status'],'complete'); self.assertEqual(stats,4)
+        self.assertEqual(len(state['drained']),3)
+
+    def test_pending_driver_does_not_hide_other_initial_container_identity(self):
+        from kil.v3b2_proofs import RUNTIME_RESOURCES
+        state=self.full_fake_runner(); original=self.runner.run.side_effect; wide=0
+        authz=self.pods[(TRACKS[0],'authz')]; initial=authz['status']['containerStatuses'][0]['containerID']
+        def drift_after_pending(command):
+            nonlocal wide
+            if command.argv[3:5]==('get',RUNTIME_RESOURCES):
+                wide+=1
+                if wide==2: authz['status']['containerStatuses'][0]['containerID']='containerd://'+'e'*64
+            result=original(command)
+            if command.argv[3:5]==('get',RUNTIME_RESOURCES) and wide==1:
+                doc=json.loads(result.stdout_bytes)
+                driver=next(row for row in doc['items'] if row['kind']=='Pod' and row['metadata'].get('namespace')=='kil-v3-baseline' and row['metadata']['name']=='driver')
+                driver['status']['phase']='Pending'; status=driver['status']['containerStatuses'][0]
+                status.update(ready=False,image=driver['spec']['containers'][0]['image'],imageID='',containerID='',state={'waiting':{'reason':'ContainerCreating'}})
+                raw=canonical(doc); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=drift_after_pending; report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive'); self.assertEqual(state['attached'],[])
+        self.assertEqual(self.life.anchors[(TRACKS[0],'authz')]['container_id'],initial)
 
 
 class MissingIntegrationTests(unittest.TestCase):

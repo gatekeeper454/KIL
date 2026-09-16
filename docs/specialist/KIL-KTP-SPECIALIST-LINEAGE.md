@@ -18487,3 +18487,78 @@ native unit changes with entry T-356. Repeat independent review before any
 native rehearsal. No automatic native replay is permitted on uncertainty.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-356 — 2026-09-16 — Native implementer corrects readiness retry, shared budget and native Calico mapping
+
+**Input:** Independent SPEC review T-353 (452048b) reproduced native read
+failure and ready Pod replacement being retried into a complete rehearsal,
+three reset setup budgets, and a flattened fixture incompatible with real
+Calico workload JSON. Root clarified the narrow projection and documented
+Deployment startup omissions in T-354/T-355 (29260e2 and 1e8c523).
+
+**Interpretation:** Only positively authenticated, structurally valid known
+not-ready observations may be retried. Native command failures, malformed
+responses and identity/endpoint drift are permanent failures. The native
+workload shape needs an explicitly retained readiness/configuration projection,
+not a strict parser change or a platform provenance claim.
+
+**Decision status:** Implementation correction confirmed by owned test-first
+verification; independent SPEC and quality approval remain pending. Default
+read polling catches only explicit ReadPending. Initial selected Pod UIDs and
+all available untouched native container incarnations are nonreplaceable,
+including when another Pod is still ContainerCreating. Endpoint, application
+Deployment UID/generation and Calico UID bindings are latched. Successful
+native desired-configuration/identity/Available checks precede the fixed
+one-second waits; any unexplained nonzero wait/read stops the flow. One shared
+300-second deadline and maximum 60 readiness attempts span all three setup
+phases, counting elapsed intervening applies without authorizing mutations
+inside a read phase.
+
+**Rationale:** Full native Calico receipts retain nested templates and extra
+native fields. The separately retained canonical projection contains only
+actual identity, requested container inventory and actual readiness counts;
+documented Deployment omissions remain omitted and can classify only pending.
+Required DaemonSet fields, bad present types, inconsistent counts, wrong images
+and duplicate/unexpected containers fail closed. Eligibility-only internal
+synthetic status/count probes reuse existing safety/configuration validators
+but are discarded, never returned or retained as native identity/readiness
+observations. Ready bindings still require untouched actual status and
+source-derived aliases. Valid nonzero active Envoy gauges retry only reads
+after fresh same-incarnation checking; drain remains one-shot.
+
+Owned RED observations included three permanent-error probes, two pending Pod
+probes, three global-budget probes, two nested-native projection probes, the
+JSON-before-wait probe, a Calico UID replacement, two omitted-zero startup
+probes, an active gauge, a hidden initial CID replacement and inconsistent
+Calico counts. Each received a corresponding GREEN run. Final exact-source
+focused verification passed 144 tests in 56.400 seconds with ResourceWarnings
+as errors: the four hf_exploratory units, v4_future_controller_gate and both
+V3B2 application boundary units. An earlier broader focused run passed 221
+tests in 92.710 seconds across those units plus profile state, node aliases,
+runtime ownership and generated/driver configuration; the final inconsistent
+count check was added afterward and verified by the final focused run. The
+native module contains 78 tests; the separately reported 80-test run included
+two duplicate probes. No broad discovery passing claim is made here.
+
+**Affected artifacts:** Only src/kil/hf_exploratory_native.py and its owned
+tests/test_hf_exploratory_native.py change; the prescribed CLI remains unchanged.
+This appended lineage Markdown and generated HTML reader record the correction.
+All earlier 1e8c523 lineage bytes, strict validators/flags, publication code,
+plans and original HF boundaries remain unchanged. Fixtures are exclusively
+test-owned and are not real experiment evidence.
+
+**Unresolved questions:** Independent repeated SPEC/quality review, final
+composed-source verification, actual native compatibility and exact live
+rehearsal/action/teardown observations remain open. The integration is larger
+than a small adapter because it keeps lifecycle safety gates and native mapping
+explicit; no unplanned split was introduced. No accepted input factory, native
+binary, profile/VM/cluster operation, image pull or live request was executed
+by this implementer. Platform-image provenance and full Kind/Calico acceptance
+remain unverified and both flags remain false.
+
+**Next gate:** Independent SPEC re-review of the correction, then independent
+quality review. Root alone may attempt the separately approved request-free
+rehearsal and, only after complete exact teardown, one fresh three-track action.
+Uncertainty is inconclusive, never authority to resend or adopt a replacement.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
