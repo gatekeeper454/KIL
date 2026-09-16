@@ -15355,3 +15355,95 @@ specification approval, and return the checkpoint for quality/holistic
 re-review before broader static acceptance or delivery.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-306 — 2026-09-16 — V4 holistic static implementation quality re-review approved
+
+**Input:** Independently re-review the T-303 Important requested-image/profile
+authority contradiction after correction
+`e200fb916d0b4d257773c22f61d1ab6160da4856` and specification acceptance
+`5e1861e566a9391606043b285baf9044dc54a7e1`. Complete the bounded holistic
+Task 1–5 implementation quality review against the approved static-manifest
+design and V4 implementation plan, from base
+`0c222ce5b85fd3bddcaced922f4f39cd74373046` through the corrected checkpoint.
+The coordinator separately owns the final combined/full static gates.
+Production edits, push, and live infrastructure/profile calls are excluded.
+
+**Interpretation:** The complete static composition must reconstruct the two
+identity-bracketed manifest sources, durable source checkpoint and journal
+order, and both independent disk/API mirror proofs. Requested producer
+authority must join the independently reconstructed ownership profile;
+optional full profiles must use the existing closed schema. This does not
+require or establish effective image realization, historical filesystem,
+configuration freshness, status, readiness, or completion.
+
+**Decision status:** Confirmed bounded holistic Task 1–5 static quality
+approval: zero Critical, zero Important, and zero Minor findings remain.
+T-303's Important producer-authority contradiction is closed in both
+consumers. This is not the final Task 6 combined/full acceptance checkpoint
+and is not a live claim. Earlier entries are preserved historical evidence.
+
+**Rationale:** Both corrected consumers first reconstruct exact source and
+ownership dependencies, recover the retained context/complete owned identity,
+and decode bounded context inputs. Each now compares the retained requested
+Kind image exactly with `ownership.profile.kind_node_image`; any retained
+full profile reconstructs through `V3B2Profile.from_mapping` and must equal
+that same independent ownership profile. Public validation and frozen proof
+construction normalize invalid profile evidence to local component errors.
+The test helper supplies the existing JSON profile schema's Calico image map;
+raw `asdict` tuple-pair arrays remain rejected without changing the schema.
+Minimal source contexts and matching full-profile contexts remain compatible.
+These joins close requested-producer contradictions without asserting that a
+runtime image was realized or broadening any source/API claim.
+
+The earlier holistic inspection and fresh final correction review retain
+the literal two-path non-mutating command surface, exact owned-node bracket,
+separate 1 MiB subprocess streams and deadline, four closed retained
+observations, raw/semantic commitments, strict closed YAML and reconstructing
+constructors. The deterministic 4 MiB private checkpoint remains mode-0600,
+no-follow, write-once and fsynced with bounded retained-only replay. Journal
+ordering requires source completion after cluster creation and before image
+or apply work; missing/invalid retained sources permit teardown only, never
+recovery recapture. Both components retain local fixed disk expectations,
+all 32 conditional CA subsets and 32 differing API-subset rejection cases,
+independent reviewed API defaults, complete metadata closure, exact run and
+full-owned-authority joins, owned InternalIP binding for apiserver, arbitrary
+uninterpreted retained status, syntax-only `config.seen`, and strictly false
+completion flags. Public signatures, source format, profile schema and the
+existing default-gate lifecycle deferral are unchanged.
+
+**Verification:** Fresh independent execution of apiserver, controller-manager,
+etcd, scheduler and the unchanged manifest-source modules passed all 71
+unittest methods in 21.721 seconds with zero skips. Independently loading
+the pre-correction consumers from
+`6f20f0e256bacf70b8fb90f1270174de08850023` into isolated in-memory modules
+and running the six current producer/profile methods reproduced 40 expected
+validator/constructor assertion failures, zero errors and zero skips; the
+two minimal/full-profile compatibility methods passed. No production or
+filesystem alteration was needed for this RED reproduction. The complete
+correction diff, existing profile reconstruction contract and appended
+finding/correction/specification evidence were inspected directly.
+`git diff --check` passed before this entry. Reader regeneration and check
+are the final docs-only recording gate. No live Colima, Docker, Kind,
+kubectl, Kubernetes, request, publication, push or profile command ran.
+
+**Affected artifacts:** Reviewed Task 1–5 source/checkpoint/controller/journal/
+proof code and tests, both corrected consumer modules and their independent
+fixtures/regressions, consumed ownership/profile/defaulting definitions,
+approved design/plan, and lineage evidence. Changed only this lineage entry
+and its regenerated HTML reader for the quality checkpoint.
+
+**Unresolved questions:** None within bounded Task 1–5 holistic static quality.
+The final combined/full Task 6 static gates must run against the final
+recorded revision. All-ten-platform-Pod configuration/image/status/readiness
+composition and any separately authorized live experiments remain distinct
+later gates. Runtime, readiness, application completion, V4 completion and
+V3C remain explicitly unclaimed; no image-realization or freshness result is
+inferred from the producer-authority correction.
+
+**Next gate:** Regenerate and verify all 76 readers, commit this docs-only
+quality approval, and return the exact revision to the coordinator for final
+combined/full static validation and the Task 6 acceptance evidence entry.
+Keep exactly the existing 16 default V4 lifecycle methods deferred until
+their separately reviewed completion gate; do not expand skips or live claims.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
