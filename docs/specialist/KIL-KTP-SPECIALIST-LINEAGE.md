@@ -17119,3 +17119,41 @@ quality review. Continue the dependent exploratory units within approved scope;
 do not invoke the strict launcher or resume the platform-image audit.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-331 — 2026-09-16 — Pure exploratory input-readiness implementation
+
+**Input:** Approved bounded exploratory input unit: retain accepted profile,
+manifest and application archive bytes, validate accepted tool identities, and
+implement tests first without native commands or lifecycle actions.
+
+**Interpretation:** Input identity is a separate pure prerequisite. It does not
+prove execution-time executable identity, platform-image readiness, enforcement,
+or runtime ownership and does not authorize changes to the strict launcher.
+
+**Decision status:** Confirmed implementation of the bounded input factory and
+five unit tests; specification and quality reviews and native input-factory
+verification remain pending. No runtime success is asserted.
+
+**Rationale:** Observed RED was five assertion failures for the absent module
+(5 tests, 0.001s); GREEN was five passing tests (0.058s). Bounded canonical
+nonsymlink reads compare file identity before and after retaining bytes; exact
+size and SHA-256 checks reject substituted input. The factory has no subprocess
+or native execution path. Self-review checked the supplied constants, accepted
+image mapping, exact three-tool membership, error chaining and bounded reads.
+
+**Affected artifacts:** Create src/kil/hf_exploratory_inputs.py and
+tests/test_hf_exploratory_inputs.py; append this entry and regenerate its reader.
+Existing production code and profiles are unchanged.
+
+**Unresolved questions:** Independent reviews and actual retained-input
+verification remain required. Tool byte identity is checked at factory read
+time, not guaranteed across later execution; lifecycle must independently bound
+that concern. Full success-path and concurrent-mutation tests are outside these
+five specified tests and remain a coverage consideration.
+
+**Next gate:** Specification then quality review, followed by root-owned native
+input-factory verification. Continue separately planned lifecycle/evidence units
+within approved exploratory scope; do not resume the platform-image audit or
+infer strict acceptance.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
