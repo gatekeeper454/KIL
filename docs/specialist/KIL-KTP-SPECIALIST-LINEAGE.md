@@ -18562,3 +18562,95 @@ rehearsal and, only after complete exact teardown, one fresh three-track action.
 Uncertainty is inconclusive, never authority to resend or adopt a replacement.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-357 — 2026-09-16 — Independent corrected native SPEC review finds Deployment continuity gap
+
+**Input:** Repeat independent specification review at clean commit
+4c446845d41ab0edcc15832c527bf39e665d90c5. Check the three T-353 findings
+against actual corrected source, the complete approved design and updated
+native implementation plan including the T-354/T-355 clarifications. Retain
+the earlier native unit, CLI, private-report and strict-boundary review scope.
+Use only owned fixtures; do not execute accepted verify_inputs, native tools,
+profile/VM/cluster operations, downloads, network requests or a live experiment.
+
+**Interpretation:** Only authenticated known-not-ready observations may retry
+as ReadPending. Command, schema and observed UID/container/endpoint drift are
+hard stops. Setup shares one elapsed-time/attempt budget. Explicit native
+Calico projection preserves actual raw observations and does not become
+platform provenance. Documented DeploymentStatus omissions remain pending
+without inventing observed counts; actual application readiness requires
+authenticated current configuration/identity before the fixed wait. Identity
+latched in one native observation must remain continuous when a subsequent
+native ownership/configuration observation presents the same resource.
+
+**Decision status:** NOT specification-compliant; approval remains withheld
+for one newly reproduced application Deployment continuity gap. The original
+three findings are corrected and are not reopened. No implementation or
+approved design is changed by this review; no quality or native execution
+approval is implied by the existing or fresh test results.
+
+**Rationale:** Source inspection confirms explicit ReadPending-only retries,
+one SetupReadinessBudget passed to all three setup-readiness phases, native
+remaining-time bounds, partial-inventory Pod UID/running-CID latches, native
+nested Calico templates with retained full receipts and separate committed
+readiness/configuration projections, and actual application Deployment JSON
+readiness before the one-second wait. The synthetic eligibility probes remain
+internal validation inputs: they are not returned or retained as runtime
+incarnations or observed ready counts. Deployment omissions preserve actual
+raw/status omissions, malformed present counts and required DaemonSet omissions
+are hard errors, and known active quiescence gauges retry reads only while the
+Envoy incarnation remains bound. The unchanged CLI still requires complete
+request-free rehearsal and exact owned teardown before one fresh action.
+
+Independent owned full-flow repetitions of the original status-3 Calico read
+and ready authz UID-replacement injections now return inconclusive with zero
+later EOF attaches. Fresh execution of tests.test_hf_exploratory_native with
+PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src, the exact repository Python interpreter
+and -W error::ResourceWarning passed all 78 tests in 15.799 seconds. The raw
+native-shaped Calico success and failure fixture paths were inspected; this
+does not establish actual native compatibility or a live result.
+
+The remaining gap is src/kil/hf_exploratory_native.py:592-596 versus
+554-558 and 673-678. require_deployment_available latches each actual
+Deployment UID/generation, but subsequent applied non-Pod readback and the
+wide runtime ownership inventory do not compare their observed Deployment
+identities with deployment_bindings. The pure ownership validator validates
+the new inventory's coherent Deployment/ReplicaSet join in isolation, not its
+continuity with the earlier readiness identity.
+
+An independent owned temporary full-action reproduction first made all
+readiness/applied Deployment UIDs consistent with the original wide inventory.
+The baseline authz readiness and applied UID was deployment-uid-1, and its
+latched binding was (deployment-uid-1, 1). Only the later wide inventory was
+changed to report replacement-deployment for that Deployment and a matching
+ReplicaSet controlling-owner UID; Pod/container identities, endpoint addresses,
+rendered configuration and actual status counts were unchanged. execute still
+returned complete, three request intents, three complete producer joins and
+owned_teardown true, while the original Deployment binding remained latched.
+A separate rehearsal reproduction likewise reached complete with three EOF
+attaches. These are exclusively owned test observations, not native evidence.
+Observed replacement must stop even when its reconstructed ownership chain
+and configuration are coherent; the root confirmed there is no scope exception.
+
+**Affected artifacts:** Review concerns src/kil/hf_exploratory_native.py,
+tests/test_hf_exploratory_native.py and the unchanged
+tools/hf_exploratory_kind.py. Only this appended lineage Markdown and its
+regenerated sibling HTML are modified by the reviewer. The 4c44684 Markdown
+remains a byte-for-byte prefix. Strict sources, accepted inputs, flags,
+sixteen deferrals, platform provenance and publication boundaries are unchanged.
+
+**Unresolved questions:** The initial authenticated application Deployment
+UID/generation must be checked against subsequent applied-object and wide
+ownership observations. Owned failing-first regressions, the minimal continuity
+fix and independent re-review remain required. Independent quality approval,
+actual native compatibility, request-free rehearsal and exact live
+action/capture/teardown remain unestablished. Platform-image provenance is
+unverified; full Kind/Calico acceptance is not established.
+
+**Next gate:** Correct the concrete Deployment continuity finding with owned
+RED/GREEN, retain a clean source commit and repeat independent SPEC review.
+Do not proceed to quality review or any native operation before SPEC approval.
+No retry, replacement adoption, parser weakening, platform provenance audit
+or publication is authorized by this entry.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
