@@ -418,6 +418,16 @@ for mode in ('rehearsal', 'action'):
 
 Create private_parent exactly repository/.tools/hf-exploratory-private with nofollow canonical ancestry, mode700, existing only regular actual directories. Hold exclusive nonblocking flock on profile.lock (nofollow600) across BOTH runs; release on all exits. This lock excludes this path's launcher, not all external processes; absence/rebinding gates remain mandatory. Source revision/cleanliness checks run again immediately before each native lifecycle start and instruction phase. No edits/staging/commits during native action.
 
+Persist each newly created ancestry entry, not only the final run directory:
+open repository nofollow directory, mkdir/open `.tools` relative to that descriptor,
+fsync repository; mkdir/open `hf-exploratory-private` relative to `.tools` descriptor,
+fsync `.tools`; fsync private-parent after creating its lock. Existing `.tools`
+can have its normal permissions, but the private-parent must be exactly owner-only
+700; reject symlink/replaced ancestors. Close every directory/lock descriptor on
+initialization failure. The reviewed PrivateStore persists the run entry in that
+parent before any request capability. Add failing-first test-owned fd/fsync and
+parent-replacement tests; no durable-intent claim from unsynced ancestry.
+
 Report exact schema kil.hf-exploratory-report.v1, LABEL text, mode, run_id, source_commit, profile_sha256, input/tool commitments, command/source checksums, reached_gate, status complete/inconclusive, error text bounded4096, actual application incarnations and observed platform image references/IDs, request_intent_count (0 rehearsal; <=3 action), joined observed results, owned_teardown bool, manual_recovery bool, foreign/global-state-preservation observations, platform_image_provenance_verified false, full_kind_calico_acceptance false. Never mark static strict flags true. Generate private report.json, synopsis.md and SHA256SUMS over retained regular run files excluding lock and SHA256SUMS; checksum list itself is written exclusively. Private aggregate256MiB, singlefile8MiB, source1MiB. Explicit exclusions historicalHFprevention/fullincident, all8phases/exploits, NetworkPolicy enforcement/no-bypass, repeats/performance, strictV3b2/V4/V3C. No artifacts/generated/public writer.
 
 - [ ] Run focused GREEN and original strict boundary guards. Independently spec-review then quality-review the entire native unit and source/private report interfaces; original implementer fixes findings through observed RED/GREEN. Commit exact new module/script/test/lineage/readers only after verification.

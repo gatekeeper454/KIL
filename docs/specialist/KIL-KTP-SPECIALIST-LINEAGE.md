@@ -17755,6 +17755,52 @@ work proceed; no instruction, retry, replay or native action occurred here.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
+## T-345 — 2026-09-16 — IO quality clear; source reasons and ancestry durability
+
+**Input:** Continue approved exploratory HF execution after independent IO
+correction review; prepare pure case and native consumer handoff.
+
+**Interpretation:** Durable request intent includes newly created directory
+ancestry. An expected HTTP/marker tuple alone does not establish the cause of
+KIL denial; report actual authorization adapter/engine reasons as evidence.
+
+**Decision status:** Confirmed IO quality gate approved at 2c66e50 by independent
+re-review 4b7e2b3. Three defects corrected through observed failing-first tests:
+containing-parent fsync, conservative quota reservation on failed persistence,
+and selector/process acquisition cleanup. Pure case implementation is in progress.
+Native ancestry creation must fsync each new link before instruction capability;
+joins must retain reasons without calling expired/unverified Q-state denial a
+demonstration of local reduction. Native execution remains pending.
+
+**Rationale:** PrivateStore now persists its run entry, but a launcher-created
+.tools/private-parent ancestry also needs its containing directories synced.
+Complete joined producer evidence proves the observed response/action tuple;
+the raw reason codes distinguish local reduction from expiry or verification
+failure. Neither addition admits independently expected platform images or
+changes the harmless fixture, retry limit or strict acceptance path.
+
+**Verification:** Independent IO re-review passed 34 focused tests and reproduced
+all three corrected failure paths. Fresh root reuse-oriented suites passed 185
+tests (50.503s) covering ownership, generated/direct application configuration,
+node image references, Service allocations, inventory/profile state and source
+evidence. These are test-owned/static checks, not native enforcement or complete
+platform acceptance. No profile start, cluster creation, image pull or request.
+
+**Affected artifacts:** Case/evidence plan adds retained actual reason arrays;
+native plan adds ancestry fsync and exact reset-store regression fixtures; their
+readers, this appended lineage and reader. Fresh case implementer owns only its
+new module/test and its later lineage. All strict files remain unchanged.
+
+**Unresolved questions:** Pure case review, native lifecycle implementation and
+independent full-change review, clean source and request-free rehearsal. Platform
+provenance explicitly unverified and no live HF modeled-cut-point result yet.
+
+**Next gate:** Complete pure case then native lifecycle gates continuously. Only
+a successful fresh no-request rehearsal permits the single fresh action run.
+Any real ambiguity stops later instructions and triggers only exact owned cleanup.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
 ## T-344 — 2026-09-16 — Independent corrected exploratory IO quality approval
 
 **Input:** Independently re-review actual correction 2c66e50 against the three

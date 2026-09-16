@@ -163,7 +163,10 @@ def join(sources, *, track, run_id, request_free):
     actual = (row['decision'], row['http_status'], len(reduced['target']))
     return {'track': track, 'observed': list(actual), 'expected': list(EXPECTED[TRACKS.index(track)]),
             'classification': 'expected' if actual == EXPECTED[TRACKS.index(track)] else 'unexpected',
-            'decision_digest': row['decision_digest'], 'semantic_join': reduced}
+            'decision_digest': row['decision_digest'], 'semantic_join': reduced,
+            'adapter_reasons': sources['decision'][0]['adapter_reasons'],
+            'engine_reasons': sources['decision'][0]['engine_reasons'],
+            'untrusted_header_names': sources['decision'][0]['untrusted_header_names']}
 ```
 
 - [ ] Add the following literal Pod fixtures and failing tests before `bind_pod`. Wrong requested/runtime images, config-vs-target ImageRef distinction, restarting/extra containers, deleting/foreign/run-mismatched Pods and missing readiness are independent negatives. UID/CID replacement is covered by the earlier frozen-source test. This asserts selected safety controls and incarnation only; it is not full static/admission/no-bypass acceptance.
@@ -323,6 +326,6 @@ class ExploratoryJoinTests(ExploratoryCaseTests):
 
 ## Native consumer contract
 
-The next unit must prove two accepted application image alias branches from authenticated CRI/node-store observations, never substitute target digest for config digest. It selects twelve exact ready role Pods from the fresh bound cluster and captures applied rendered objects/policies and Calico readiness before instructions. Capture each source between two `bind_pod` observations and two identical complete reads; retain raw commands, bytes and checksum. Envoy listener refusal and all four zero active gauges, plus zero-exit one-shot drivers, precede final capture. After listener drain `require_ready=False` permits a running Envoy whose TCP readiness probe has correctly failed; it does not permit termination, restart or replacement. Driver resourceVersion can change on completion but UID/CID must equal the readiness anchor; the frozen before/after observation must itself be identical. Any source cap, parse failure, replacement or incomplete join is inconclusive. No diagnostic plaintext is silently removed; fixed Envoy configuration routes diagnostics to /tmp/envoy.log while stdout carries access JSONL. No public bundle writer/verifier is called.
+The next unit must prove two accepted application image alias branches from authenticated CRI/node-store observations, never substitute target digest for config digest. It selects twelve exact ready role Pods from the fresh bound cluster and captures applied rendered objects/policies and Calico readiness before instructions. Capture each source between two `bind_pod` observations and two identical complete reads; retain raw commands, bytes and checksum. Envoy listener refusal and all four zero active gauges, plus zero-exit one-shot drivers, precede final capture. After listener drain `require_ready=False` permits a running Envoy whose TCP readiness probe has correctly failed; it does not permit termination, restart or replacement. Driver resourceVersion can change on completion but UID/CID must equal the readiness anchor; the frozen before/after observation must itself be identical. Any source cap, parse failure, replacement or incomplete join is inconclusive. No diagnostic plaintext is silently removed; fixed Envoy configuration routes diagnostics to /tmp/envoy.log while stdout carries access JSONL. Matching the expected tuple alone does not establish the cause of denial: report the actual adapter/engine reasons, and never call an expired/unverified Q-state denial a demonstrated local-reduction denial. No public bundle writer/verifier is called.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
