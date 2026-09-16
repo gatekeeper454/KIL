@@ -341,3 +341,5 @@ CLI fd lifecycle and leftovers are Task 3. Existing experiment guards are
 regressions, not redesign. Interface names above are shared across units.
 Negative cases receive RED verification before rejection changes; already
 rejected cases remain regression tests. No native operation is a plan step.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
