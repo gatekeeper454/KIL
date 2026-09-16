@@ -21273,3 +21273,91 @@ Any fresh request-free private native rehearsal remains behind its separate
 permission gate; no live action follows automatically from engineering approval.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T394 — 2026-09-16 — Isolated HF launcher repair final composed engineering review
+
+**Input:** After the final metadata SPEC review, root assigned a separate
+bounded senior composition review of the entire engineering repair in
+`89a641a..06e6c35`, against the approved brainstorming design and written
+test-first implementation plan. The reviewer remained read-only until root
+granted exclusive lineage/render/checkpoint ownership after the T393 Native
+QUALITY writer released it at `30376e2`.
+
+**Interpretation:** Review the joins among fd-anchored runtime authority,
+closed exploratory dispatch, exact generated saved-form binding, foreign-state
+protection, runtime control freshness, immutable evidence before teardown,
+one-shot durable intent and descriptor lifetime. Review fixture behavior and
+maintainability without redesigning the accepted scope, promising race-free
+operation or equating command-boundary tests with native proof. Platform-image
+provenance remains explicitly unverified; no renewed image audit is required.
+
+**Decision status:** FINAL COMPOSED ENGINEERING REVIEW APPROVED for the source
+at `06e6c35`. No concrete Critical, Important or required Minor implementation
+issue was found. This is readiness for the engineering checkpoint and root's
+final verification, not permission to merge, operate native resources or claim
+live compatibility. The externally managed detached worktree is preserved.
+
+**Rationale — strengths:** RuntimeAuthority owns a fresh source-bound receipt
+sibling and retains no-follow namespace identities; closure releases descriptors
+without erasing resources. The exploratory adapter preserves the unchanged
+finite strict command grammar and derives only the four namespace variables.
+Profile binding validates the exact pinned generated instance alias using a
+validation-only copy while committing original full bytes and concrete resource
+identities. Actual passwd HOME remains distinct from the runtime namespace.
+
+The Native composition keeps every default-home profile/Lima child foreign,
+including the old same-named stopped lab, and brackets global observations with
+identity/full-byte commitments. Private reserved-network churn stays within
+owned state; unknown private profiles and default-home drift refuse subsequent
+mutations. Durable command intent and fresh dispatch fingerprints precede
+one-shot handoff latches, with late Kind consumer-byte verification before
+Create. The runner's final authenticated metadata consistency follows the last
+adapter/fingerprint guard IO and precedes capture. Finite runtime observation
+snapshots occur before the first native teardown, partial snapshot failures
+block teardown without retry, and leftover reporting is explicitly partial
+rather than a filesystem-absence claim. CLI closure orders lifecycle before
+PrivateStore even on errors, and an unready rehearsal cannot start action.
+
+**Rationale — tests and issues:** The reviewer independently ran 73 tests with
+the designated interpreter, PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and
+ResourceWarning fatal: all passed in 9.505s. These comprise all 58 runtime,
+profile and evidence tests plus fifteen targeted Native/CLI composition cases
+covering same-name foreign preservation, snapshot-before-teardown and retained
+hash survival, private-network churn versus default reset denial, stale Kind
+controls, unbound observations, incomplete private inventory, snapshot failures,
+durable-intent command/control substitution, attempt-latch joins, rehearsal
+gating and finally ordering. Native process handoff is doubled; filesystem
+authority, profile binding and receipt behavior remain real fixture operations.
+The strict V3/V4 source/test and accepted local-Envoy artifact range diff was
+independently verified empty, with a clean worktree and passing diff check.
+No additional corrective edit or optional refactor is required by this review.
+
+Root separately reported its fresh combined 410-test pass in 93.542s; that
+is root's verification, not a duplicate reviewer run. Full discovery was still
+running at this review checkpoint. The four known ignored immutable citation
+omissions remain an existing broader-suite limitation, not an implementation
+issue to hide by changing old receipts or citation-test exemptions.
+
+**Affected artifacts:** This actual-EOF T394 append and its generated HTML
+reader only. All reviewed source/tests remain frozen at `06e6c35`; no source
+or test edit was made by this reviewer. The exact `30376e2` Markdown prefix is
+preserved. Accepted local Envoy, strict acceptance, fixed tracks, sixteen V4
+deferrals, false provenance/full-acceptance flags and experiment exclusions
+remain unchanged. No actual Colima/Lima/Docker/Kind/kubectl, VM, HTTP/HF/network,
+Ollama, image audit, old receipt modification, metadata reconstruction, branch
+move, merge or push occurred.
+
+**Unresolved questions:** Root's full discovery result, final plan/progress
+record and clean checkpoint remain pending. Native compatibility and owned
+live teardown require the separately gated private rehearsal; these fixtures
+do not establish platform-image provenance or full Kind/Calico acceptance.
+
+**Next gate — recommendations and assessment:** Render/check all 88 indexed
+readers, verify the exact prior Markdown prefix and two-path-only checkpoint,
+commit this review lineage pair and release the writer. Root can finalize
+verification and honestly distinguish focused engineering passes from known
+broader-suite limitations. No merge/integration is requested. Any next native
+execution still requires its separate permission gate and a fully retained,
+request-free private rehearsal before the separate fresh three-track action.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
