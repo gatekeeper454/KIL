@@ -16280,3 +16280,79 @@ repository static acceptance. No live Docker, Colima, Kind, kubectl or profile
 calls were performed or authorized by this regression task.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-320 — 2026-09-16 — Independent Task 3 specification review approved
+
+**Input:** The coordinator requested independent specification review of Task 3
+commit `88d4b25` against the approved configuration-composition design and plan.
+Inspect the actual aggregate, independent fixture and persisted adversarial tests;
+run the requested focused module freshly and preserve the coordinator-owned dirty
+plan/readers and untracked execution synopsis. Lineage ownership was delegated
+exclusively for this documentation-only review turn. No live execution or fixes.
+
+**Interpretation:** Check Task 3 requirements against persisted code rather than
+implementer claims. Require complete alternate inventories to accept before
+classifying each individually mixed dependency as an aggregate rejection. Check
+both validator and constructor replay, exact dependency and binding contracts,
+configuration reconstruction, malformed-evidence chaining and claim boundaries.
+Distinguish necessarily earlier schema, identity and Calico content-lock rejection
+from independently valid authority alternatives; do not manufacture validity by
+weakening established contracts or label corrected test scaffolding as contract RED.
+
+**Decision status:** Confirmed Task 3 specification approval. No missing, extra
+or misunderstood applicable persisted Task 3 requirement was identified. This
+approval remains static configuration-only; independent quality review and Task 4
+adjacent/full-repository acceptance are separate gates. No runtime/application,
+effective platform image, status/readiness, V4 or V3C completion is established.
+
+**Rationale:** The persisted suite covers all ten exact input types, lookalikes,
+subclasses, missing keywords versus explicit None, malformed component/aggregate
+binding containers and cardinalities, reordered/duplicate coverage, binding types
+and subclasses, projected incarnation drift, forged nested UID and namespace/
+component values, and both singleton-false flags. The shared rejection helper
+exercises validator and constructor boundaries. Complete whitespace, arbitrary
+Pod-status, Docker-endpoint, kubeconfig and workload-run alternatives accept and
+replay before every one-input mix rejects at both boundaries. Complete sequence-
+changed manifest-source records accept, while either mixed source-bearing proof
+rejects at both boundaries. The pinned Kind image rejects earlier at SchemaError;
+the forged nested profile still rejects through aggregate reconstruction. The
+valid alternate endpoint retains the required kil-v3-lab/docker.sock suffix; its
+malformed counterpart rejects earlier at JournalError. Calico byte mutations
+reject at their existing content locks and nested source forgery rejects replay.
+
+Each of the nine components has an observed-image mutation that reconstructs
+valid runtime ownership with unchanged deployment/node bindings, then fails
+component reconstruction through validator and constructor. Malformed retained
+JSON preserves the local error cause. Production reconstructs dependencies before
+complete authority comparisons, derives canonical ten-incarnation coverage from
+ownership, retains the explicit Calico/complete manifest joins and exact-false
+flags, and has no catch-all exception handler. Fixture observations remain test-
+owned literals or checksummed Calico projection with independent serialization;
+production expected-spec factories do not manufacture observed configurations.
+Task 3 changed no production validator or fixture, added no skip, and left the
+existing sixteen lifecycle deferrals outside this static slice.
+
+**Affected artifacts:** Appended this entry at the actual lineage EOF and
+regenerated only the lineage reader for this review commit. The reviewed
+aggregate, fixture, 26-method test module and earlier entries remain unchanged.
+Coordinator-owned plan Markdown/reader and untracked synopsis are excluded.
+
+**Verification:** Fresh execution with the approved environment Python and
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ran the requested verbose focused module:
+26 total methods in 32.592 seconds, 26 successful methods, zero failures, errors
+or skips. Source inspection and the Task 3 commit file list independently confirm
+the persisted requirement matrix and absence of production/fixture changes. This
+review did not reproduce historical scaffold failures by modifying reviewed code
+and does not claim a new RED/GREEN cycle. Reader generation/byte verification and
+diff checks precede this documentation-only commit.
+
+**Unresolved questions:** Independent Task 3 quality review, adjacent component/
+ownership/source suites and full repository acceptance remain pending. Platform
+effective-image authority and component-specific status/readiness still require
+separate design and evidence; this review supplies no live observation authority.
+
+**Next gate:** Verify the tracked Markdown readers and diff, commit only the
+lineage Markdown/reader, and return lineage ownership to the coordinator for
+independent Task 3 quality review before Task 4 static acceptance.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
