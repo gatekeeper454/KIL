@@ -21202,3 +21202,74 @@ Complete separately coordinated Native QUALITY and root verification; any live
 private rehearsal remains subject to its separate native permission gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T393 — 2026-09-16 — Isolated Native lifecycle independent QUALITY approval
+
+**Input:** Root assigned an independent QUALITY review after Native SPEC approval
+of the three-path `2d8da3e..2d8fa87` implementation and test changes, against the
+approved isolated-runtime design and its written test-first plan. Root granted
+exclusive lineage/render/checkpoint ownership after the T392 metadata QUALITY
+writer released it.
+
+**Interpretation:** Review the bounded exploratory Native/CLI composition for
+maintainability, error handling and regressions: isolated dispatch, separate
+foreign/private inventories, exact generated-form binding, finite immutable
+evidence before teardown, consumer freshness, one-shot handoff accounting and
+descriptor lifetime. This is not another platform-image provenance audit and
+does not require or authorize native execution. The design does not promise
+transactional exclusion or race-free operation against arbitrary in-process
+code or external actors.
+
+**Decision status:** QUALITY APPROVED for the scoped Native/CLI implementation
+at `2d8fa87`. No concrete Critical, Important or Minor issue was found. Final
+composition review and root verification remain required; this review does
+not establish native compatibility or acceptance.
+
+**Rationale:** The reviewed implementation keeps Colima authority in the derived
+runtime sibling and restricts the explicit global route to empty-environment,
+read-only Colima inventory. Default-home inventory retains every row and child,
+including the old same-named stopped lab, and brackets global observations with
+bounded identity/full-byte commitments. Private inventory and concrete saved
+configuration/resource bindings remain prerequisites for mutation. Immutable
+runtime observations precede the first native teardown; capture or persistence
+failure refuses teardown and preserves partial evidence without retry.
+
+Authorization validates eligibility without setting attempt latches. Fresh
+command grammar, namespace authority and the captured dispatch fingerprint
+are joined across nested authorization IO and durable command intent before
+one-shot handoff accounting is committed. Kind Create additionally rechecks
+its exact runtime/receipt control bytes after durable intent; unused Kind
+controls do not prevent unrelated exact-owned cleanup. Opaque failures after
+runner handoff retain uncertain attempt state rather than enabling replay.
+Constructor failures release acquired runtime descriptors, and the CLI closes
+the lifecycle before closing PrivateStore even when execution/closure fails.
+
+The reviewer independently ran `tests.test_hf_exploratory_native` with the
+designated interpreter, PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and
+ResourceWarning fatal: all 116 tests passed in 37.735s. The exact three-path
+range passed `git diff --check`; the Native/CLI/test files were verified
+unchanged since `2d8fa87`. Composition regressions exercise real temporary
+namespace, binding and receipt behavior with the native command boundary
+doubled, including same-name foreign preservation, context removal, snapshot
+failure, late namespace/control drift and valid-command substitution.
+
+**Affected artifacts:** Only this actual-EOF T393 append and its generated HTML
+reader. Reviewed source/tests were not edited. The exact `1f0bb6` Markdown
+prefix is preserved. Strict sources/tests, accepted inputs/local Envoy, fixed
+tracks, all sixteen V4 deferrals, false provenance/full-acceptance flags and
+experiment exclusions remain unchanged. No actual Colima/Lima/Docker/Kind/
+kubectl, VM, HTTP/HF/network, Ollama or platform-image audit ran. Old receipts,
+immutable citation omissions, branch state, merge and push were untouched.
+
+**Unresolved questions:** Whole-repair composition review and root's final
+verification remain pending. Temporary filesystem and process-boundary fixtures
+do not establish native compatibility, owned live teardown, platform-image
+provenance or full Kind/Calico acceptance.
+
+**Next gate:** Render/check all 88 indexed readers, verify the exact earlier
+Markdown prefix and two-path-only checkpoint, commit the lineage pair and
+release the exclusive writer. Complete whole-repair review and root verification.
+Any fresh request-free private native rehearsal remains behind its separate
+permission gate; no live action follows automatically from engineering approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
