@@ -14540,3 +14540,58 @@ identity-join correction without pushing, and return the exact commit range to
 independent review before starting Task 5.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-294 — 2026-09-15 — V4 Task 4 specification re-review approved
+
+**Input:** Independently re-review fix commit
+`9539119f6ecd60cc2474689ed2f002be7a124ca4` against the open Task 4
+cross-incarnation source-composition finding, inspect the regression tests and
+narrow implementation change, and rerun the focused and prescribed static
+test gates without any live infrastructure operation.
+
+**Interpretation:** The original finding is closed only if each dependency
+first reconstructs independently, the authenticated manifest source's cluster
+incarnation and node-container identities then equal the retained runtime
+ownership authorities, both valid-but-mismatched compositions are rejected,
+and the accepted fixture continues to exercise the complete Task 4 contract.
+
+**Decision status:** Confirmed specification approval for V4 Task 4 through
+`9539119f6ecd60cc2474689ed2f002be7a124ca4`. The original Important finding is
+resolved. No Critical, Important, or Minor specification finding remains in
+the reviewed Task 4 range. Independent quality review and later acceptance
+gates remain separate.
+
+**Rationale:** `_compute` now performs literal equality joins for
+`source.cluster_uid` against
+`ownership.owned_identity.cluster_incarnation_uid` and for
+`source.node_container_id` against
+`ownership.owned_identity.node_container_id`, immediately after reconstructing
+both exact dependency proofs and before selecting any ownership relation or
+validating disk/API candidates. The tests align the nominal dependency
+authorities and separately construct fully valid cross-cluster and cross-node
+pairs, proving that the same-source check does not rely on malformed fixtures.
+No fixed manifest, conditional CA, API-default, address, constructor, retained
+status, or strict-false behavior was widened.
+
+**Verification:** Both targeted identity-mismatch regressions passed in 0.069
+seconds. The prescribed kube-apiserver, etcd, scheduler, and API-default suite
+passed all 52 tests in 9.755 seconds, including the two exhaustive 32-mask
+loops. The reviewed commit range passed `git diff --check`; the worktree was
+clean before this docs-only acceptance entry. No live Colima, Docker, Kind,
+kubectl, Kubernetes, request, publication, or profile command was executed.
+
+**Affected artifacts:** This re-review changes only
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` and its regenerated
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm` reader. The approved production
+and regression changes remain those in commit `9539119`.
+
+**Unresolved questions:** None within Task 4 specification compliance.
+Independent quality review, the combined V4 static acceptance gate, Task 5,
+full repository validation, branch delivery, and any live dedicated-profile
+experiment remain separate gates.
+
+**Next gate:** Regenerate and verify the lineage reader, commit this docs-only
+specification approval, then submit the accepted Task 4 range to independent
+quality review before beginning Task 5.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
