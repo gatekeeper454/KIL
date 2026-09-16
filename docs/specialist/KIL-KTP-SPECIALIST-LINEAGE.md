@@ -17432,3 +17432,63 @@ units and a fresh request-free rehearsal can precede the approved exploratory
 three-track action. Strict acceptance remains unestablished.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-338 — 2026-09-16 — Bounded exploratory IO specification review gaps
+
+**Input:** Independently review bounded HF IO commit d8aac72 against base
+22ee51e and the durable IO plan. Inspect actual module and tests, run fresh
+focused verification, and preserve strict lifecycle code and completion flags.
+No native factory, accepted executable execution, lab action or download.
+
+**Interpretation:** This is the separate pure IO specification gate. Fixed
+accepted tool identities must remain authoritative at each dispatch, and exact
+canonical driver framing must not be repaired into evidence of completion.
+Previously confirmed native input availability does not establish runtime readiness.
+
+**Decision status:** Specification approval withheld for two confirmed gaps.
+Nineteen focused tests pass freshly with ResourceWarning promoted to errors,
+but the uncovered identity and terminal-framing cases violate mandatory bounds
+on executable authority and uncertainty clearance.
+
+**Rationale:** BoundedRunner at src/kil/hf_exploratory_io.py:132 uses the mutable
+inputs.tool_records map as digest authority. A harmless diagnostic created
+test-owned retained bytes, instantiated frozen ExploratoryInputs, constructed
+the runner, then changed both retained bytes and the nested map's digest/size.
+Real bounded read and hash verification accepted the replacement and mocked
+dispatch was reached. No executable ran. A missing retained tool record also
+reached mocked dispatch as bare docker via PATH instead of refusing the missing
+accepted identity. The root confirmed that authenticated fixed manifest records,
+not caller-selected mutable records or PATH fallback, are mandatory here.
+
+Separately, send_once at src/kil/hf_exploratory_io.py:232 strips record framing
+with splitlines and adds LF before parse_result. Test-owned private-store
+diagnostics showed both a complete-looking JSON record missing its final LF and
+a CRLF-framed record were rejected by direct parse_result, but accepted by
+send_once as complete with uncertainty cleared. Thus an incomplete/noncanonical
+terminal can authorize the next track. Exact retained framing must remain the
+parser's input; malformed or incomplete output must permanently latch uncertainty.
+
+Other inspected requirements include closed Command revalidation, sanitized
+environment and private mutating Colima environment, selector-driven stdin and
+aggregate output capture, owned process-session termination on timeout/overflow,
+private directory-descriptor anchored writes, fsync before callback, exact track
+sequence and three-track maximum, close/reanchor refusal and no replay mechanism.
+Passing these covered checks does not override the two failed specification gates.
+
+**Affected artifacts:** Append this independent review at actual lineage EOF and
+regenerate its HTML reader only. Reviewed module, tests and plans remain unchanged;
+root-owned modified case plan and untracked native lifecycle plan are excluded
+from this documentation-only commit.
+
+**Unresolved questions:** Failing-first corrections and independent specification
+re-review are required for fixed accepted identity and exact terminal framing.
+Quality review, lifecycle/evidence implementation and request-free rehearsal
+remain subsequent gates. Platform-image provenance and strict acceptance remain
+unestablished; this review provides no runtime or live enforcement result.
+
+**Next gate:** Original implementer adds regression tests and corrects both
+confirmed gaps without changing strict lifecycle/flags. Independently re-review
+the corrected IO unit, then obtain independent quality review before any native
+orchestration gate. Do not send, retry or replay an instruction during this review.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
