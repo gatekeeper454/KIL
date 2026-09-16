@@ -14365,3 +14365,62 @@ continuation request, using its approved plan section and the same static-first
 review and validation controls.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-291 — 2026-09-15 — V4 Task 4 kube-apiserver disk/API proof implemented
+
+**Input:** Execute approved V4 plan Task 4: add the kube-apiserver disk and API
+mirror proof using strict test-first development, cover every five-way
+conditional CA-mount subset and adversarial mismatch, preserve the static-only
+claim boundary, and stop without any live Colima, Docker, Kind, kubectl, or
+Kubernetes execution.
+
+**Interpretation:** The retained `ControlPlaneManifestSourceProof` is the only
+authority for the kube-apiserver disk Pod. The verifier must reconstruct that
+proof and the exact `RuntimeOwnershipProof`, validate all fixed kubeadm v1.36.1
+disk fields, derive only the five conditional CA pairs from authenticated disk
+bytes, bind every dynamic address field to the retained owned-Node InternalIP,
+and compare the sole owned API mirror against an independently transformed
+expectation without learning candidate fields from API output.
+
+**Decision status:** Proposed Task 4 implementation checkpoint pending
+independent specification and quality review. The implementation retains both
+runtime and full-application completion flags as strict false booleans and
+makes no live, readiness, image-realization, or application-completion claim.
+
+**Rationale:** The proof closes the two unconditional `ca-certs` and
+`k8s-certs` mounts, the complete kube-apiserver command, probes, image,
+resources, ports, metadata, priority, security context, and exact sorted volume
+order. It permits only the reviewed five CA path/name pairs, each as a complete
+read-only `DirectoryOrCreate` volume/mount pair. The API transformation adds
+only reviewed kubelet/API defaults, owned Node identity and InternalIP,
+file-mirror metadata, and the API-defaulted host port; arbitrary Pod status is
+retained without interpretation. Frozen proof records recompute both dependency
+proofs and the binding on construction, so coordinated retained-record drift
+cannot bypass source or ownership validation.
+
+**Verification:** The initial test run was RED with all nine test methods
+failing because `kil.v3b2_kube_apiserver_mirror_configuration` did not exist.
+After implementation, the focused suite passed nine test methods, including
+one 32-mask acceptance loop and a second 32-mask disk/API mismatch-rejection
+loop. A final focused run passed nine tests in 4.290 seconds. The final
+prescribed adjacent kube-apiserver, etcd, scheduler, and API-default set passed
+50 tests in 10.167 seconds, all 76 Markdown readers verified, and
+`git diff --check` passed. No live infrastructure command was executed.
+
+**Affected artifacts:**
+`src/kil/v3b2_kube_apiserver_mirror_configuration.py`,
+`tests/test_v3b2_kube_apiserver_mirror_configuration.py`,
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`, and its regenerated
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm` reader.
+
+**Unresolved questions:** Independent specification and quality review still
+need to confirm the fixed kubeadm/Kubernetes v1.36.1 field set, constructor
+closure, and adversarial coverage. The combined V4 static acceptance gate,
+Task 5 controller-manager proof, full repository validation, branch delivery,
+and any live dedicated-profile experiment remain separate gates.
+
+**Next gate:** Regenerate and verify the lineage reader, commit the Task 4
+checkpoint, then submit the exact commit range for independent specification
+and quality review before starting Task 5.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
