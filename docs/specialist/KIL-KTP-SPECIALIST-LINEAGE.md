@@ -15281,3 +15281,77 @@ with preserved review evidence, and supply the exact base/head checkpoint for
 independent holistic re-review before recording Task 6 static acceptance.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-305 — 2026-09-16 — V4 producer-authority correction specification re-review approved
+
+**Input:** Independently review narrow producer-authority correction
+`e200fb916d0b4d257773c22f61d1ab6160da4856` from
+`6f20f0e256bacf70b8fb90f1270174de08850023` against the approved static-manifest
+design and V4 implementation plan. Review both component consumers, six new
+regression methods, compatibility, and the existing exact profile schema.
+No production edits, push, or live infrastructure/profile calls are authorized.
+
+**Interpretation:** An independently valid source bracket requesting a
+version-compatible alternate digest cannot compose with a different fixed
+ownership producer profile. Both component consumers must join the retained
+requested Kind-image scalar to the independent ownership profile and
+reconstruct any supplied full source profile through the existing closed
+schema. Minimal contexts without an optional full profile remain compatible.
+This is requested-producer authority, not effective image realization.
+
+**Decision status:** Confirmed correction specification acceptance with no
+Critical, Important, or Minor findings in the reviewed scope; no live claim.
+The T-303 Important finding is closed by this checkpoint's consumer joins.
+Earlier acceptances remain unchanged historical records; this approval does
+not claim their checkpoints contained the corrected producer-authority join.
+Holistic review and broader static acceptance remain separate gates.
+
+**Rationale:** The full changed diff and appended finding/correction evidence
+were inspected. After exact source and ownership reconstruction and retained
+authority recovery, both consumers decode bounded context inputs, compare the
+requested image exactly with `ownership.profile.kind_node_image`, and use
+`V3B2Profile.from_mapping` for any supplied profile before requiring equality
+with the reconstructed ownership profile. Malformed or contradictory image,
+Pod/Service network, scalar types, missing/extra keys, scalar profiles, and
+non-schema Calico image arrays cannot compose. The controller retains the
+profile's original JSON object, whose Calico images use the established map
+schema, so rejecting raw `asdict` tuple-pair arrays does not widen or alter
+that schema. Minimal and matching-full-profile contexts still validate and
+reconstruct. Source format and public signatures are unchanged. Component-
+local literals, independent disk/API fixtures, five-way disk-only conditional
+CA selection, previous run/full-owned-identity joins, retained arbitrary
+status, syntax-only `config.seen`, and strict false completion flags remain
+intact.
+
+**Verification:** Fresh independent prescribed apiserver, controller-manager,
+etcd, and scheduler execution passed all 52 unittest methods in 21.296 seconds
+with zero skips; this includes all 34 focused component methods. The unchanged
+manifest-source suite passed all 19 methods in 0.396 seconds with zero skips.
+Independent regression RED loaded pre-correction verifier code from Git into
+isolated in-memory modules and ran the six current producer/profile methods:
+40 expected validator/constructor assertion failures, zero errors, zero skips,
+in 1.654 seconds; both minimal/full-profile compatibility methods passed.
+No production or filesystem edits were needed for this reproduction.
+`git diff --check` passed before this entry. Reader regeneration and
+verification are the final docs-only recording gate. No live Colima, Docker,
+Kind, kubectl, Kubernetes, request, publication, push, or profile command ran.
+
+**Affected artifacts:** Reviewed both apiserver/controller-manager modules
+and tests, consumed source authority, bounded JSON decoder, existing
+`V3B2Profile` schema, controller profile retention, approved design/plan, and
+lineage evidence. Changed only this lineage and its regenerated HTML reader
+for specification approval.
+
+**Unresolved questions:** None within producer-authority correction
+specification compliance. Independent quality/holistic re-review, Task 6
+combined/full static acceptance, and all-ten-platform-Pod configuration/image/
+status/readiness composition remain distinct gates. Requested-image authority
+does not establish image realization, runtime, readiness, application
+completion, V4 completion, or V3C. Live experiments require separate explicit
+authorization.
+
+**Next gate:** Regenerate and verify readers, commit this docs-only
+specification approval, and return the checkpoint for quality/holistic
+re-review before broader static acceptance or delivery.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
