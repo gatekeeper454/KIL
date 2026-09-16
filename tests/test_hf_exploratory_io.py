@@ -141,6 +141,59 @@ class IOTests(unittest.TestCase):
                 runner.run(Command((str(executable), '--version'), 1))
             capture.assert_not_called()
 
+    def test_runner_rejects_manifest_substitution_during_final_executable_authentication(self):
+        tools = Path(self.temp.name).resolve() / '.tools' / 'bin'
+        tools.mkdir(parents=True)
+        payload = b'temporary executable identity fixture only'
+        (tools / 'docker').write_bytes(payload)
+        inputs = self.accepted_inputs(tools)
+        runner = self.io.BoundedRunner(Path.cwd(), inputs)
+        expected = dict(inputs.tool_records['docker'])
+        real_verify = self.io.verify_bytes
+        executable_checks = []
+        def verify(data, digest, size):
+            if digest == ACCEPTED_MANIFEST_SHA256:
+                return real_verify(data, digest, size)
+            self.assertEqual((data, digest, size),
+                             (payload, expected['executable_sha256'], expected['byte_size']))
+            executable_checks.append(1)
+            if len(executable_checks) == 2:
+                object.__setattr__(inputs, 'manifest_bytes', b'{}\n')
+            return digest
+        with patch.object(self.io, 'verify_bytes', side_effect=verify), patch.object(self.io, 'capture_process') as capture:
+            with self.assertRaises(ValueError):
+                runner.run(Command((str(tools / 'docker'), '--version'), 1))
+            capture.assert_not_called()
+        self.assertEqual(len(executable_checks), 2)
+
+    def test_runner_rejects_tools_path_substitution_during_final_executable_authentication(self):
+        tools = Path(self.temp.name).resolve() / '.tools' / 'bin'
+        tools.mkdir(parents=True)
+        payload = b'temporary executable identity fixture only'
+        (tools / 'docker').write_bytes(payload)
+        replacement = tools.parent / 'replacement-bin'
+        replacement.mkdir()
+        (replacement / 'docker').write_bytes(payload)
+        inputs = self.accepted_inputs(tools)
+        runner = self.io.BoundedRunner(Path.cwd(), inputs)
+        expected = dict(inputs.tool_records['docker'])
+        real_verify = self.io.verify_bytes
+        executable_checks = []
+        def verify(data, digest, size):
+            if digest == ACCEPTED_MANIFEST_SHA256:
+                return real_verify(data, digest, size)
+            self.assertEqual((data, digest, size),
+                             (payload, expected['executable_sha256'], expected['byte_size']))
+            executable_checks.append(1)
+            if len(executable_checks) == 2:
+                object.__setattr__(inputs, 'tools', replacement)
+            return digest
+        with patch.object(self.io, 'verify_bytes', side_effect=verify), patch.object(self.io, 'capture_process') as capture:
+            with self.assertRaises(ValueError):
+                runner.run(Command((str(tools / 'docker'), '--version'), 1))
+            capture.assert_not_called()
+        self.assertEqual(len(executable_checks), 2)
+
     def test_runner_rechecks_runtime_after_manifest_authentication(self):
         from kil.hf_exploratory_runtime import ExploratoryColimaCommand
         authority = self.runtime_authority()

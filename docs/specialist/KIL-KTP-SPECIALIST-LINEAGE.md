@@ -20429,3 +20429,68 @@ new entry between T380 and T381 using a repeated tail anchor. This commit moves
 only that just-added entry to actual EOF, restores the exact 9548961 Markdown
 prefix, and records the correction explicitly. No prior entry content or review
 verdict is rewritten.
+
+## T383 — 2026-09-16 — Task 3A final authentication authority consistency correction
+
+**Input:** Correct the independent SPEC review finding recorded in T382, before
+any Task 3B lifecycle composition. Starting checkpoint is clean detached 1ee2c3d;
+the correction is limited to BoundedRunner.run, its IO tests and this lineage pair.
+Root subsequently relocated its misplaced T382 at 58e86be; that corrected
+checkpoint is the exact-prefix base for this actual-EOF append.
+
+**Interpretation:** The existing final executable authentication occurs after the
+previous final accepted-manifest and tool-path comparisons. A deterministic leaf
+substitution during that second executable verification can therefore reach
+capture with changed caller-owned manifest bytes or tool path. This is a real
+ordering gap in the reviewed unit, not permission to widen tool identity coverage
+or to change native orchestration, accepted strict units or immutable evidence.
+
+**Decision status:** IMPLEMENTED CORRECTION CHECKPOINT, pending the original SPEC
+reviewer's re-review and subsequent independent QUALITY review. T381's self-review
+statement did not establish final accepted-authority consistency; the gap and its
+correction are recorded here without rewriting T381 or T382. No native acceptance,
+cleanup, recovery, publication or protocol-alignment decision is confirmed.
+
+**Rationale:** Two separate test-first regressions substitute manifest_bytes with
+b'{}\n' and substitute the retained tool path during the second executable-byte
+verification. Both observed RED as ValueError not raised, with capture reached.
+The real authenticated manifest digest remains checked; temporary executable
+bytes are isolated only at the narrow binary-verification leaf, asserting original
+accepted hash/size and exact dummy bytes. GREEN additionally confirms that each
+regression reached both executable authentications and never called capture.
+
+The correction adds final exact-byte-type/content and tool-path consistency
+comparisons after executable authentication, metadata comparison, adapter guard
+and dispatch fingerprint, immediately before process acquisition. These final
+comparisons perform no authentication IO. The exact three-tool Docker/Kind/
+kubectl accepted manifest is unchanged; no Colima hash identity is invented.
+All prior command closure, scoped/global separation, authority guards, dispatch
+fingerprint, derived child environment, 8 MiB output and 900-second limits remain.
+
+Fresh focused verification passed all 58 runner/evidence tests in 3.560s, including
+all 34 original IO protections, the prior 10 runner regressions, these two new
+regressions and 12 unchanged evidence tests. ResourceWarning is fatal and bytecode
+writes are disabled. Fresh combined verification passed all 375 tests in 69.582s
+across the same 15 runtime/profile/exploratory/strict/inventory/future modules used
+for T381, including the two new refusals.
+
+**Affected artifacts:** src/kil/hf_exploratory_io.py (only BoundedRunner.run),
+tests/test_hf_exploratory_io.py, this actual-EOF T383 append and its generated HTML
+reader. The complete exact 58e86be Markdown remains a prefix; earlier entries are
+not moved or revised. Strict source/tests, runtime, profile, evidence, Native and
+CLI files are unchanged. No native Colima/Lima/Docker/Kind/kubectl invocation, VM,
+HTTP/HF request, Ollama operation, image audit, old receipt write or external
+branch/move/merge/push operation occurred.
+
+**Unresolved questions:** Whether the corrected unit satisfies SPEC remains for
+the original reviewer; QUALITY review and Task 3B are not yet authorized gates.
+Native private-home compatibility, Kind/Calico acceptance, platform-image
+provenance and filesystem cleanup remain unestablished.
+
+**Next gate:** Finish fresh combined regression verification, render/check all
+88 readers, confirm exact prior Markdown prefix and four-path diff, and commit
+only the two IO paths plus the two lineage paths. Release the exclusive writer
+for the original SPEC reviewer to re-review; proceed to QUALITY only after SPEC
+approval, and to Task 3B only after both independent reviews approve.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

@@ -190,6 +190,15 @@ class BoundedRunner:
         command.__post_init__()
         if dispatch != (command.argv, command.timeout_s, command.stdin, command.env, command.mutating):
             raise ValueError('command_changed_during_verification')
+        # Last consistency checks perform no authentication IO: the final tool
+        # read/verification must not leave substituted caller-owned authority live.
+        try:
+            if type(self.inputs.manifest_bytes) is not bytes or self.inputs.manifest_bytes != manifest:
+                raise ValueError('accepted_manifest_changed_during_verification')
+            if name in TOOL_VERSION_ARGUMENTS and self.inputs.tools != tools:
+                raise ValueError('accepted_tools_path_changed_during_verification')
+        except (AttributeError, TypeError, ValueError) as error:
+            raise ValueError('unavailable_or_substituted_accepted_tool_authority') from error
         return capture_process(argv, environment, command.stdin, command.timeout_s,
                                MAX_OUTPUT_BYTES, self.repository)
 
