@@ -16064,3 +16064,71 @@ bounded aggregate implementation. The coordinator then runs independent Task 2
 specification and quality reviews before advancing to Task 3 adversarial tests.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-317 — 2026-09-16 — Independent Task 2 specification review approved
+
+**Input:** The coordinator requested independent specification review of Task 2
+implementation `585ec88` against base `dc7ebd4`, using the approved platform Pod
+configuration composition design. Inspect the actual aggregate and focused test
+module, preserve the approved Task 1 fixture and coordinator-owned plan/synopsis,
+and make no production/test edits, live calls or push.
+
+**Interpretation:** Compare the fixed typed aggregate with its approved Task 2
+requirements rather than treating the implementer's report as acceptance evidence.
+Inspect dependency reconstruction, complete authority joins, independent platform
+coverage, constructor replay, malformed-evidence handling and claim limitations.
+Task 3's persisted adversarial matrix and later repository-wide acceptance are
+separate gates, not prerequisites silently promoted into this bounded review.
+
+**Decision status:** Confirmed Task 2 specification approval with no deviations
+found. Independent quality review remains required before coordinator acceptance
+and progression to Task 3. No runtime, image, status/readiness or V4 completion
+is established by this approval.
+
+**Rationale:** The exact four-name export surface and keyword-only typed ownership
+plus nine proof inputs match the approved interface. The frozen/slotted five-field
+ordered binding enforces the fixed component/namespace vocabulary and established
+UID/resourceVersion helpers. All component types and fixed binding cardinalities
+are checked before dependency reconstruction or raw decoding. Existing dependency
+constructors replay retained evidence before complete RuntimeOwnershipProof
+equality at the nine specified paths, exact shared Calico byte-pair equality and
+complete authenticated manifest-source equality. Mirror source run, complete
+identity, requested Kind image and optional full-profile joins remain governed by
+unchanged component validators, preserving their minimal-context contracts.
+Reconstructed ownership independently supplies the three platform Deployment
+chains, two daemon Pods and four static Pods. Both projections require ten unique
+namespace/name pairs and ten UIDs with two CoreDNS incarnations; bounded raw
+inventory checks require each matching UID/resourceVersion incarnation once.
+Constructor replay uses the validator's computation path and compares the entire
+canonical tuple. Both completion flags require singleton `False`. The local
+malformed-evidence exception set uses chaining without a catch-all; no registry,
+collector or completion integration was added.
+
+**Affected artifacts:** Appended this entry and regenerated its lineage reader
+only. Reviewed production/test code, Task 1 fixture, coordinator-owned plan and
+untracked execution synopsis remain unchanged; earlier entries were not rewritten.
+
+**Verification:** Fresh focused execution with the approved existing virtual-
+environment Python and `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src` ran five methods
+in 3.208 seconds: five successes, zero failures and zero skips. Separate read-only
+diagnostics passed 74 rejection probes covering supplied None values, subclasses,
+altered/count/type/order/duplicate binding tuples, non-singleton-false flags,
+forged nested component bindings through validator and constructor, independently
+valid whitespace/status inventory mixes and independently valid sequence-changed
+complete manifest-source mixes. Each changed inventory/source accepted when used
+unmixed; arbitrary Pod status remained uninterpreted. Exact keyword-only signature,
+declared binding fields and slotted records were also checked. These supplemental
+probes are not persisted tests and do not replace Task 3. Historical RED claims
+were inspected in T-316, not independently reproduced by modifying reviewed code.
+Reader regeneration/byte-check and diff checks precede this docs-only commit.
+
+**Unresolved questions:** Independent Task 2 quality review, the persisted Task 3
+adversarial matrix, adjacent focused suites and full repository validation remain
+planned gates. Effective image and status/readiness authority remain separately
+undesigned; no live execution authorization or new lifecycle evidence is added.
+
+**Next gate:** Verify the 78 tracked Markdown readers and diff, commit this
+documentation-only approval, then hand lineage ownership back to the coordinator
+for independent Task 2 quality review before Task 3 progression.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
