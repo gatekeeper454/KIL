@@ -14985,3 +14985,72 @@ and preserved review evidence, then supply the exact base/head checkpoint for
 independent specification and quality re-review before Task 6 acceptance.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-301 — 2026-09-16 — V4 Task 5 authority correction specification re-review approved
+
+**Input:** Independently re-review correction
+`b2fedfa4000685fd2ace3402f121cf4204e34278` from specification checkpoint
+`2c7de3eea8ea384e65c93dec048674fa49c1f962` against the approved static-manifest
+design and V4 implementation plan. Cover Task 5 and the narrow adjacent Task 4
+correction identified in T-299, without production edits, push, or live calls.
+
+**Interpretation:** The design's retained run, isolated Docker endpoint,
+private kubeconfig/Docker-config scope, and reconstructable exact identities
+require a cross-proof same-run and complete owned-authority join, not only
+equal cluster-incarnation and node-container strings. Re-review must reject
+independently valid isolated run, endpoint, and kubeconfig disagreement through
+both public validators and reconstructing proof constructors while preserving
+independent fixed disk/API expectations and strict false claim boundaries.
+
+**Decision status:** Confirmed correction specification acceptance: no
+Critical, Important, or Minor findings remain in the reviewed scope; no live
+claim. The T-299 Important finding exposed an omission in the earlier T-298
+specification acceptance. T-298 remains historical and is not rewritten; this
+entry accepts the corrected checkpoint rather than claiming the original
+checkpoint had the now-required authority join.
+
+**Rationale:** The complete diff was inspected, including fixture alignment,
+all six new regression methods, unchanged fixed expectations, and appended
+non-acceptance/correction records. Each validator reconstructs exact source
+and ownership dependencies before using the existing retained-authority
+decoder, compares `source.run_id` with the ownership workload's required
+unprefixed run, and requires equality of all six reconstructed `OwnedIdentity`
+fields. Explicit cluster-incarnation and node-container checks remain intact.
+The decoder reuses the already reviewed closed retained source authority;
+neither source format nor public API changes. Regression fixtures alter only
+their named authority dimension, independently reconstruct both proofs, keep
+cluster/container identities equal, and test validation plus constructor
+reconstruction. Component-local fixed expectations, five-way disk-only CA
+selection, independent literal disk/API fixtures, arbitrary retained status,
+syntax-only `config.seen`, and strictly false completion flags are unchanged.
+
+**Verification:** Fresh independent prescribed apiserver, controller-manager,
+etcd, and scheduler execution passed all 46 methods in 19.594 seconds with
+zero skips. The unchanged manifest-source suite passed all 19 methods in
+0.398 seconds with zero skips. Independent regression RED was reproduced by
+loading the pre-correction verifier source from Git into isolated in-memory
+modules and running the six current mismatch methods: all 12 expected
+validator/constructor assertion failures, zero errors, zero skips. This did
+not alter production or filesystem state; the first harness attempt needed
+module-spec metadata before the successful reproduction. `git diff --check`
+passed before this entry; reader regeneration and verification are the final
+docs-only recording gate. No live Colima, Docker, Kind, kubectl, Kubernetes,
+request, publication, push, or profile command ran.
+
+**Affected artifacts:** Reviewed both apiserver/controller-manager modules and
+tests, the unchanged shared source authority and owned/workload identity
+definitions, the approved design/plan, and retained lineage evidence. Changed
+only this lineage and its regenerated HTML reader for specification approval.
+
+**Unresolved questions:** None within correction specification compliance.
+Independent quality re-review, Task 6 holistic static acceptance, full
+repository validation, all-ten-platform-Pod configuration/image/status/
+readiness composition, and separately authorized live experiments remain
+distinct gates. Runtime, readiness, application completion, V4 completion,
+and V3C remain unclaimed.
+
+**Next gate:** Regenerate and verify readers, commit this docs-only correction
+specification acceptance, and return the checkpoint for quality re-review
+before broader static acceptance or delivery.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
