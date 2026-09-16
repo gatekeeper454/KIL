@@ -17390,3 +17390,45 @@ fresh rehearsal authorizes one fresh three-track action under the existing user
 approval; uncertainty blocks later instructions, never triggers a retry.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-337 — 2026-09-16 — Bounded exploratory local IO implementation
+
+**Input:** Implement the approved separate exploratory HF IO unit after reviewed
+input readiness, retaining unverified platform provenance. No native factory,
+accepted-tool execution, lifecycle action, downloads or live requests.
+
+**Interpretation:** Local command capture and durable one-shot request intent are
+implementation gates only, not an experiment or strict acceptance. Closed command
+grammar remains authoritative; accepted executable bytes are rechecked directly
+before future dispatch. No recovery, retry or arbitrary command override is added.
+
+**Decision status:** Proposed implementation ready for independent specification
+and quality review; not authorized here for native orchestration. Nineteen focused
+tests passed freshly with ResourceWarning promoted to errors.
+
+**Rationale:** Initial four tests failed as assertions on the missing module, then
+passed. A second four-assertion RED cycle established capture bounds, closed-store
+rejection and validated runner dispatch. A subsequent failing parent-reanchor
+test exposed child opening before parent validation; directory-descriptor anchored
+opens now prevent following a replaced parent. Tests also cover streaming stdin,
+empty EOF, broken-pipe cleanup, aggregate output caps, timeout after output EOF,
+constructor failure cleanup, exact permissions, symlink/byte quotas, executable
+drift, sanitized environment, locked version reads, malformed terminal uncertainty,
+intent fsync failure before action and the three-track maximum. Native platform
+inputs were neither read nor executed by this implementer; only test-owned Python
+children and temporary files were used.
+
+**Affected artifacts:** src/kil/hf_exploratory_io.py,
+tests/test_hf_exploratory_io.py, this appended lineage entry and generated HTML
+reader. Existing strict code and unrelated root-owned plans remain untouched.
+
+**Unresolved questions:** Independent specification and quality review may identify
+additional IO edge cases. This local unit does not establish lifecycle ownership,
+runtime readiness, enforcement evidence or platform-image provenance.
+
+**Next gate:** Independent specification review, then independent quality review
+and any failing-first correction. Only subsequently reviewed lifecycle/evidence
+units and a fresh request-free rehearsal can precede the approved exploratory
+three-track action. Strict acceptance remains unestablished.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
