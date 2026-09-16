@@ -18722,3 +18722,82 @@ authority for any later approved request-free rehearsal and fresh action.
 Uncertainty never permits a resend, retry of a mutation or replacement adoption.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-359 — 2026-09-16 — Independent native SPEC approval after Deployment continuity correction
+
+**Input:** Independently repeat specification review of the minimal T-357
+continuity correction at clean commit
+1fcd7422f060279c8ad6ad65ddfbed5f49f9a216. Inspect actual native source/test
+changes, retain the earlier complete approved-design/updated-plan review and
+unchanged CLI/safety boundaries, and repeat the coherent Deployment/ReplicaSet
+replacement reproduction. Use only test-owned observations; do not execute
+accepted verify_inputs, native binaries, downloads, network, profile/VM/cluster
+operations or a live experiment. Append this review and its sibling reader only.
+
+**Interpretation:** Every later applied-object and wide ownership observation
+of the nine application Deployments must join their actual UID/generation to
+the identities already authenticated during readiness. Configuration-equivalent
+replacement or a coherent reconstructed ReplicaSet ownership chain cannot
+replace that authority. The original three corrected requirements and the
+separate request-free-rehearsal-before-fresh-action design remain unchanged.
+
+**Decision status:** Specification-compliant within the complete reviewed
+native integration scope; independent SPEC approval is granted for the native
+source snapshot at 1fcd742. No remaining missing, extra or misunderstood
+requirement was found in this repeat review. This is source/owned-fixture
+approval, not quality approval, actual native readiness, a live result,
+platform-image provenance, full Kind/Calico acceptance or publication approval.
+
+**Rationale:** Actual source inspection confirms the narrow
+require_deployment_continuity helper requires all nine prior bindings and
+exact application Deployment cardinality, apps/v1 type, nonempty actual UID,
+positive exact integer generation, no deletion timestamp and equality to each
+readiness latch. It never adopts a new identity. The complete non-Pod applied
+readback invokes it after applied-configuration validation; the wide runtime
+inventory invokes it immediately after the native read and before ownership
+validation or Pod selection. Missing, malformed, duplicate, unexpected,
+replacement or generation-drift observations remain hard errors, not pending.
+The fixture now uses coherent original Deployment UIDs/generation across
+readiness, applied readback and runtime inventory without changing existing
+ReplicaSet controlling-owner UIDs. The 34-line source correction does not
+change the CLI, strict validators/factories/flags, accepted inputs or deferrals.
+
+An independent owned full-action reproduction changed only the later wide
+baseline authz Deployment UID from deployment-uid-1 to replacement-deployment
+and joined the ReplicaSet owner to that replacement, leaving Pods, containers,
+endpoints, configuration and counts unchanged. The earlier readiness latch
+remained (deployment-uid-1, 1). execute now returned inconclusive with
+readiness_deployment_identity_changed_or_unbound, zero request intents,
+zero attaches, zero joined results, exactly one wide read and owned_teardown
+true. No retry, later request or replacement adoption occurred. These are
+temporary test-owned observations, not retained native experiment evidence.
+
+Fresh verification with PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src,
+/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python
+and -W error::ResourceWarning passed all 82 native tests in 16.426 seconds.
+Both successful rehearsal/action fixtures and command/schema/identity failure
+paths remain covered. The original ReadPending-only hard-stop classification,
+single shared setup-readiness budget and explicit native Calico projection
+fixes remain unchanged and approved. Broad regression claims remain root-owned.
+
+**Affected artifacts:** Reviewed correction is limited to
+src/kil/hf_exploratory_native.py and tests/test_hf_exploratory_native.py;
+tools/hf_exploratory_kind.py is unchanged. Only this appended lineage Markdown
+and regenerated sibling HTML are modified by the reviewer. The 1fcd742
+Markdown remains a byte-for-byte prefix. No implementation source is edited.
+
+**Unresolved questions:** Independent quality review, final composed-source
+verification and actual native producer compatibility remain open. Exact
+request-free live setup/capture/teardown must complete before one fresh live
+three-track action. Live preservation and complete producer joins are not
+established here. Platform-image provenance remains unverified and full
+Kind/Calico acceptance remains not established; mandatory report labels and
+false flags are unchanged.
+
+**Next gate:** Proceed to independent quality review of the approved native
+unit. Only after that and root-owned final static checks may the root consider
+the separately approved native rehearsal/action gate. No live execution,
+retry, broad cleanup, platform provenance audit or publication is authorized
+to this reviewer by this entry.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
