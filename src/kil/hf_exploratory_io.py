@@ -197,7 +197,15 @@ class BoundedRunner:
                 raise ValueError('accepted_manifest_changed_during_verification')
             if name in TOOL_VERSION_ARGUMENTS and self.inputs.tools != tools:
                 raise ValueError('accepted_tools_path_changed_during_verification')
-        except (AttributeError, TypeError, ValueError) as error:
+            current_metadata = self.inputs.tool_records
+            if type(current_metadata) is not dict or set(current_metadata) != set(accepted):
+                raise ValueError('accepted_tool_metadata_changed_during_verification')
+            for tool, row in accepted.items():
+                current = current_metadata[tool]
+                if (type(current) is not dict or current != row
+                        or any(type(current[key]) is not type(value) for key, value in row.items())):
+                    raise ValueError('accepted_tool_metadata_changed_during_verification')
+        except (AttributeError, KeyError, TypeError, ValueError) as error:
             raise ValueError('unavailable_or_substituted_accepted_tool_authority') from error
         return capture_process(argv, environment, command.stdin, command.timeout_s,
                                MAX_OUTPUT_BYTES, self.repository)

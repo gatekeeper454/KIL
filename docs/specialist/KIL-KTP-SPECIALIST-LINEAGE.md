@@ -21010,3 +21010,74 @@ the separate IO unit correction/reviews, then final composed verification.
 Native execution still requires its separate permission gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T390 — 2026-09-16 — Task 3A final runner metadata consistency correction
+
+**Input:** Root independently reproduced caller-owned accepted-tool row drift
+during the final adapter RuntimeAuthority guard after the runner's metadata
+comparison. The uncorrected runner reached mocked process capture. Root assigned
+a fresh bounded correction worker the runner and IO tests only, then granted
+exclusive actual-EOF T390 lineage/render/checkpoint ownership after the T389
+reviewer released its writer at `83257678eb2dfe652fa7afa6b1bb80d4aa5c0155`.
+
+**Interpretation:** The final adapter validation and dispatch fingerprint's env
+property perform filesystem guard IO after the existing metadata comparison.
+The final no-authentication-IO manifest/path checks therefore also need to
+compare the current caller-owned metadata against fresh authenticated manifest
+rows, rather than trust an earlier map alias. The existing accepted authority
+remains exactly Docker/Kind/kubectl; this is not a Colima identity audit.
+
+**Decision status:** The minimal two-path correction is implemented and its
+required regression checks pass. Fresh independent SPEC and QUALITY approval
+remain pending; this entry does not grant final composed or native acceptance.
+
+**Rationale:** Immediately after the last adapter/fingerprint guard, the final
+consistency block now re-reads `inputs.tool_records`, requires its exact dict
+type and accepted three-tool key set, and requires each current row to be an
+exact dict equal to its authenticated row with every corresponding value's
+exact type preserved. Extra/missing keys and equal-valued different types are
+rejected. Attribute/Key/Type/Value errors retain the same
+`unavailable_or_substituted_accepted_tool_authority` normalization. No new
+authentication IO follows these checks. This is bounded freshness across known
+IO, not transactional exclusion or elimination of TOCTOU.
+
+TDD RED was observed before the production edit: three new test methods produced
+nine expected failures because no authority rejection occurred. Cases cover late
+row value drift; None, empty, missing-tool and dict-subclass map replacements;
+extra/missing row keys; a row subclass; and an equal-valued float replacing an
+integer. Mutation is injected after the last fingerprint-env guard, using the
+second real manifest authentication as a phase marker. The wrapper always calls
+the real RuntimeAuthority guard, and real frozen ExploratoryInputs plus the
+authenticated tracked manifest remain in use. Only process capture is mocked;
+the cases require that capture not be called. Existing unchanged metadata
+continues to permit scoped guarded capture.
+
+GREEN verification with the designated interpreter, PYTHONDONTWRITEBYTECODE=1,
+PYTHONPATH=src and `-W error::ResourceWarning` passed all 61 IO/evidence tests in
+3.652s and all 410 tests across the required 15-module combined suite in 87.764s.
+The actual source diff is confined to the final consistency block and the new
+IO regressions; `git diff --check` passed before the lineage append.
+
+**Affected artifacts:** `src/kil/hf_exploratory_io.py`,
+`tests/test_hf_exploratory_io.py`, this actual-EOF T390 append and its generated
+HTML reader only. The exact `8325767` Markdown remains a prefix and T389/earlier
+entries are unchanged. Native/CLI, Runtime/profile/evidence/inputs, strict
+sources/tests, accepted inputs/local Envoy, false provenance/full-acceptance
+flags, claim exclusions, all 16 V4 deferrals and the four known ignored immutable
+citation omissions are unchanged. No actual Colima/Lima/Docker/Kind/kubectl, VM,
+HTTP/HF/network, Ollama or platform-image audit occurred. No old receipt edit,
+metadata repair, FOREIGN default-home adoption, branch move, merge or push
+occurred; the detached externally managed worktree is preserved.
+
+**Unresolved questions:** Independent corrected IO SPEC/QUALITY and root's final
+composed verification remain pending. Native compatibility/teardown, full
+Kind/Calico acceptance and platform-image provenance remain unestablished;
+temporary filesystem/process-boundary fixtures are not native proof.
+
+**Next gate:** Render/check all 88 readers, verify the exact prior Markdown prefix
+and four-path scope, checkpoint only this correction/lineage set and release the
+exclusive writer. Obtain fresh independent IO SPEC then QUALITY review, followed
+by root's final composed verification. Native execution remains a separate
+permission gate and is not authorized by this checkpoint.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

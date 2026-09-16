@@ -114,6 +114,80 @@ class IOTests(unittest.TestCase):
                 runner.run(Command((str(tools / 'docker'), '--version'), 1))
             capture.assert_not_called()
 
+    def assert_final_adapter_guard_metadata_rejected(self, authority, mutate):
+        from kil.hf_exploratory_runtime import ExploratoryColimaCommand, RuntimeAuthority
+        inputs = self.accepted_inputs()
+        runner = self.io.BoundedRunner(Path.cwd(), inputs)
+        command = ExploratoryColimaCommand(Command(('colima', 'version'), 1), authority)
+        real_verify = self.io.verify_bytes
+        real_guard = RuntimeAuthority.guard
+        manifest_checks = 0
+        final_guards = 0
+        changed = False
+
+        def verify(data, digest, size):
+            nonlocal manifest_checks
+            result = real_verify(data, digest, size)
+            if digest == ACCEPTED_MANIFEST_SHA256:
+                manifest_checks += 1
+            return result
+
+        def guard(actual):
+            nonlocal final_guards, changed
+            real_guard(actual)
+            if manifest_checks == 2:
+                final_guards += 1
+                # After reauthentication, the adapter validation guards first;
+                # the dispatch fingerprint's env property performs the last guard.
+                if final_guards == 2:
+                    mutate(inputs)
+                    changed = True
+
+        with patch.object(self.io, 'verify_bytes', side_effect=verify), \
+                patch.object(RuntimeAuthority, 'guard', guard), \
+                patch.object(self.io, 'capture_process') as capture:
+            with self.assertRaisesRegex(ValueError, 'unavailable_or_substituted_accepted_tool_authority'):
+                runner.run(command)
+            capture.assert_not_called()
+        self.assertTrue(changed)
+        self.assertEqual((manifest_checks, final_guards), (2, 2))
+
+    def test_runner_rejects_row_drift_during_last_adapter_guard(self):
+        authority = self.runtime_authority()
+        def mutate(inputs):
+            inputs.tool_records['kind']['version_output'] = 'substituted-after-metadata-check'
+        self.assert_final_adapter_guard_metadata_rejected(authority, mutate)
+
+    def test_runner_rejects_metadata_map_replacement_during_last_adapter_guard(self):
+        authority = self.runtime_authority()
+        class MetadataSubclass(dict):
+            pass
+        for replacement in (None, {}, {'docker': {}}, MetadataSubclass):
+            with self.subTest(replacement=replacement):
+                def mutate(inputs):
+                    value = (MetadataSubclass(inputs.tool_records)
+                             if replacement is MetadataSubclass else replacement)
+                    object.__setattr__(inputs, 'tool_records', value)
+                self.assert_final_adapter_guard_metadata_rejected(authority, mutate)
+
+    def test_runner_rejects_row_shape_and_exact_type_drift_during_last_adapter_guard(self):
+        authority = self.runtime_authority()
+        class RowSubclass(dict):
+            pass
+        for drift in ('extra-key', 'missing-key', 'row-subclass', 'equal-float'):
+            with self.subTest(drift=drift):
+                def mutate(inputs):
+                    row = inputs.tool_records['kind']
+                    if drift == 'extra-key':
+                        row['extra'] = 'unaccepted'
+                    elif drift == 'missing-key':
+                        row.pop('version_output')
+                    elif drift == 'row-subclass':
+                        inputs.tool_records['kind'] = RowSubclass(row)
+                    else:
+                        row['byte_size'] = float(row['byte_size'])
+                self.assert_final_adapter_guard_metadata_rejected(authority, mutate)
+
     def test_runner_rechecks_executable_after_manifest_reauthentication(self):
         tools = Path(self.temp.name).resolve() / '.tools' / 'bin'
         tools.mkdir(parents=True)
