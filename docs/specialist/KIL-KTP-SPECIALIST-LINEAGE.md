@@ -17302,3 +17302,50 @@ gated exploratory lifecycle work; strict acceptance remains unestablished and
 the platform-image audit remains stopped.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-335 — 2026-09-16 — Independent FIFO correction quality re-review
+
+**Input:** Re-review correction 710920a46ad3f9da73a7bc3a9c74b771713837ed
+against the Important FIFO hang recorded by quality review ed10df3. Inspect the
+actual source/test delta and independently rerun the focused input suite only.
+
+**Interpretation:** Resolve the nonregular-input blocking defect without changing
+retained-byte bounds, canonical nonsymlink checks or fixed accepted expectations.
+This remains an input-unit gate, not a native availability or runtime gate.
+
+**Decision status:** Input-unit quality gate approved after correction. The
+previously confirmed Important FIFO issue is fixed; no new Critical or Important
+defect was identified in the narrow correction. Native input verification remains
+root-owned and pending; no runtime readiness is asserted.
+
+**Rationale:** The sole production-code delta adds O_NONBLOCK to the existing
+O_RDONLY and O_NOFOLLOW open flags. The unchanged fstat regular-file check now
+rejects a FIFO before any read, without waiting for a writer. Regular-file reads,
+maximum-size enforcement, descriptor identity comparison, exact retained-byte
+hashes and accepted manifest/tool/archive authority remain unchanged. The new
+test uses a test-owned temporary FIFO and an isolated Python child with a
+two-second subprocess timeout and verifies the precise rejection error.
+
+**Verification:** Fresh specified inherited-venv execution passed all six
+focused tests (0.080s), including FIFO rejection, normal-file retention and bounds,
+symlink/relative-path rejection, digest substitution, invalid size/digest and
+missing-input checks. Review compared the exact correction source/test diff.
+No native input-factory invocation, accepted tool execution, full suite rerun,
+profile/lab command, image download or live result occurred.
+
+**Affected artifacts:** Append this independent correction review and regenerate
+its HTML reader only; no source or test edits by the reviewer. Unrelated root-owned
+case/evidence plan remains outside this commit.
+
+**Unresolved questions:** Native accepted-input verification remains a separate
+gate. Factory success-path coverage remains a nonblocking consideration; later
+consumers still must reconstruct executable commitments and recheck identity at
+execution, establish ownership and bind durable intent/evidence. This approval
+does not provide those lifecycle guarantees.
+
+**Next gate:** Root-owned read-only verification of retained native accepted
+inputs, then independently gated exploratory lifecycle/evidence implementation
+and readiness rehearsal. Platform-image audit remains stopped and strict
+acceptance remains unestablished.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
