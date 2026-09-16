@@ -19098,3 +19098,72 @@ root attempt the first approved native lab rehearsal; genuine readiness failure
 or uncertain mutation/request remains inconclusive and cannot authorize replay.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-364 — 2026-09-16 — Independent SPEC approval of exact Colima native version prefix correction
+
+**Input:** Bounded independent SPEC recheck at clean commit
+40d9b13bc72fd80a148ac2960f766fe6ea9b56f3. Inspect the actual tiny source/test
+diff from aeba16f and verify that the exact pinned Colima version parser accepts
+the supplied literal native format without making the prefix optional or
+broadening the pin. The root reports that its earlier launcher stopped after
+five read-only version commands and before any lab mutation or request; that
+private evidence remains retained. The reviewer must not read private actual
+evidence or execute accepted verify_inputs, actual tools, network, profile/VM,
+cluster or live operations. Owned copied-literal fixtures alone are permitted.
+
+**Interpretation:** The approved Colima pin remains 0.10.3 and Lima remains
+2.2.0. The literal native Colima version prefix is v0.10.3; the previous
+missing-v parser was a preparation format mismatch, not permission to accept
+another version or weaken any lifecycle safety gate. Earlier independent
+SPEC approval of the full native integration remains the baseline.
+
+**Decision status:** SPEC approval granted for the exact bounded preparation
+correction at 40d9b13. No missing, extra or misunderstood behavior was found.
+This approves the source/owned-fixture format adapter only, not quality,
+actual native readiness, lab compatibility, rehearsal/action results,
+platform-image provenance, full Kind/Calico acceptance or publication.
+
+**Rationale:** The only native source change is one literal v added to the
+anchored full-match regex at src/kil/hf_exploratory_native.py:364. It requires
+v0.10.3 rather than admitting both prefixed and bare versions. The byte bound,
+exact patch version, newline grammar, prior optional hexadecimal commit line
+and Lima comparison are unchanged. The full-flow owned fixture now uses the
+supplied exact 76-byte Colima output, including its forty-hex commit line.
+The read-only fixture version gate retains that literal receipt and separate
+observed Colima/Lima strings, leaves the daemon version UNOBSERVED, and performs
+no profile/cluster attempt or request instruction. Eight negative outputs
+cover patch .4, .30, bare prefix, double v, extra text, CRLF, malformed commit
+line and missing final newline; all are refused before lab mutation flags.
+
+Fresh focused verification with PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src,
+/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python
+and -W error::ResourceWarning passed the three exact version-format tests in
+0.132 seconds. The fresh entire native owned-fixture suite passed all 84 tests
+in 15.164 seconds. The actual source diff confirms all prior identity
+continuity, closed mutation authority, durable one-shot intent, hard-stop
+pending classification, readiness budget, producer joins and cleanup behavior
+are unchanged. CLI, strict sources/flags/deferrals, fixed inputs, Calico/policy
+configuration, mandatory unverified labels and publication boundaries are
+unchanged. No actual failed private evidence was read or altered by this review;
+the earlier five-command/no-lab-operation account is root-reported, not an
+independently established native observation here.
+
+**Affected artifacts:** Reviewed correction is one source regex line in
+src/kil/hf_exploratory_native.py and owned version fixtures/regressions in
+tests/test_hf_exploratory_native.py. Only this appended lineage Markdown and
+regenerated sibling HTML are modified by the reviewer. The 40d9b13 Markdown
+remains a byte-for-byte prefix; no implementation source is edited.
+
+**Unresolved questions:** Bounded independent quality recheck and root's fresh
+static/source gate remain required. Actual native lab readiness, request-free
+rehearsal, three-track action, complete captures and exact live preservation/
+teardown remain unestablished by this review. Platform-image provenance remains
+unverified and full Kind/Calico acceptance is not established.
+
+**Next gate:** Proceed to the separate bounded quality recheck. Root alone
+may consider the separately approved first lab rehearsal after all remaining
+gates. This format correction does not authorize replay of a VM mutation,
+uncertain request, broad cleanup, version substitution, provenance audit or
+publication. No actual native execution is authorized to this reviewer.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
