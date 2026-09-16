@@ -17868,3 +17868,53 @@ lifecycle units under their existing plans and approval gates. No instruction,
 retry, replay or native action is authorized by this local IO quality approval.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-346 — 2026-09-16 — Pure exploratory case and evidence unit implemented
+
+**Input:** Implement the separately authorized pure exploratory HF case unit
+after approved input and corrected IO units. Preserve the strict boundary: no
+native factory, accepted executable reads or execution, download, lab or live
+action. Work only on the case module, its tests and appended lineage/readers.
+
+**Interpretation:** This unit constructs deterministic fixture instructions,
+parses complete bounded JSONL, binds supplied Pod/image observations, brackets
+unchanged source identity and bytes, and reports closed producer joins. It does
+not establish platform-image provenance or full Kind/Calico acceptance.
+
+**Decision status:** Implemented for independent specification and quality
+review; not yet independently approved. Fresh focused verification passed six
+tests with ResourceWarning promoted to errors, using the inherited interpreter,
+PYTHONDONTWRITEBYTECODE=1 and PYTHONPATH=src. Initial RED had three missing-module
+assertion failures; the next RED had two absent-function assertion failures.
+Both became GREEN after their corresponding implementations. A further
+readiness regression first failed and then passed after exact boolean validation.
+
+**Rationale:** Instruction fixtures accept only fixed tracks, lowercase run
+digests and positive exact integer issuance times, with no implicit clock or
+endpoint override. Complete bounded JSONL rejects nonobjects, duplicate keys or
+records, missing terminal LF and cap-sized payloads. Frozen sources require both
+exact unchanged identity dictionaries, including resource version, and complete
+identical bytes. Pod checks retain requested tag, runtime alias and source-derived
+image reference separately; the test fixture deliberately uses differing config
+and target digests. Running nonready observations can be explicitly allowed,
+but termination, malformed readiness and restarts remain rejected. The existing
+closed producer adapter validates joins before tuple classification; actual
+adapter/engine reasons and untrusted header names remain visible. Matching the
+expected tuple does not demonstrate cause, local reduction, or acceptance.
+
+**Affected artifacts:** New src/kil/hf_exploratory_case.py and
+tests/test_hf_exploratory_case.py; this appended lineage entry and regenerated
+HTML reader. Root-owned native plan changes remain untouched and unstaged.
+Strict code, lifecycle flags and deferrals remain unchanged.
+
+**Unresolved questions:** Independent case specification/quality reviews,
+native lifecycle implementation/reviews, clean full-change verification,
+request-free rehearsal, platform-image provenance, live enforcement and strict
+acceptance remain separate gates. Tests use test-owned producer wire fixtures,
+not fabricated native evidence; no real endpoint or native action occurred.
+
+**Next gate:** Independent specification review followed by quality review of
+this exact pure unit before proceeding to native lifecycle gates. No retry,
+replay, native action or broader acceptance is authorized by these helper tests.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
