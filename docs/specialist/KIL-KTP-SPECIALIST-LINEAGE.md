@@ -19671,3 +19671,84 @@ evidence-backed design/tests and review, not native replay; deletion and
 subsequent live progression retain their separate exact-target gates.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-371 — 2026-09-16 — Pinned native causes traced; isolated-state repair design checkpoint before app reload
+
+**Input:** User approved proceeding with the focused launcher repair phase,
+then requested a stopping point to reload the Codex app.
+
+**Interpretation:** Perform bounded source-based investigation and save a
+resume checkpoint. No deletion, restart, guest provisioning or test request
+is inferred. A material native-home/command-authority design needs review
+before implementation, even though the engineering phase is authorized.
+
+**Decision status:** Pinned source investigation completed; isolated per-run
+native state/evidence repair PROPOSED in a saved concrete design. No repair
+implementation or tests changed. Safe stopping place before design approval/
+implementation planning. Residual VM remains at its last verified Stopped
+state; no new native state observation or operation was performed this turn.
+
+**Rationale:** Initial sandboxed GitHub tree lookup failed network connection;
+the same read-only lookup outside the sandbox succeeded. Read pinned Colima
+v0.10.3 path, generation, networking, VM lifecycle and Docker-runtime sources
+through GitHub API. Native writeNetworkFile removes its selected Lima network
+assets when no instances are running; the assets path is that Lima home's
+_networks. This explains a compatible source-level mechanism for the observed
+inode replacement without proving an uncaptured internal deletion trace.
+Native newConf inserts the Docker-to-Lima host alias and instance persistence
+retains that form. Docker Stop calls teardownContext, which removes its scoped
+Docker context. Default-home state and runtime-inside-receipt placement are
+therefore the relevant repair boundaries, not image identity.
+
+Recommended design derives a private runtime sibling for each nonce/source-
+bound run, explicitly creates/anchors its Colima/Lima homes before dispatch,
+and keeps native context/temp/Kind control files outside immutable receipt
+files. COLIMA_HOME otherwise can fall back if its directory does not exist,
+so fallback must be refused. Preserve all default-home profiles and complete
+foreign state, including the old stopped kil-v3-lab; no name-based exclusion
+across homes. Admit only exact generated saved forms in exploratory binding
+logic and retain/hash full native bytes. Snapshot runtime context/config into
+separate immutable evidence before shutdown, rather than hashing live files.
+
+The shared strict Command admits only two private Colima environment keys;
+private native-home variables require a separate exploratory-only closed
+adapter, not widening strict grammar. Existing Kind factories derive runtime
+configuration from kubeconfig parent, so those private paths must move
+coherently and their immutable copies be retained. Private network reset stays
+inside owned state; default-home identity changes still fail. The prior
+default-home placement contract changes and therefore requires explicit
+design review. Blanket shared-directory exceptions or tool/substrate changes
+were considered and rejected. This approach may avoid deleting the old stopped
+lab merely to obtain fresh isolated state; no deletion is included.
+
+Brainstorming and systematic-debugging instructions caused source tracing and
+the explicit material-design approval gate before code. Implementation
+workflow instructions were inspected for later planning, not executed. No
+worker was spawned. Source reads returned hook pattern findings for environment,
+sudo and /etc-write text in upstream/skill code; none of those snippets was
+executed, no environment dump or /etc write occurred, and no native hook bypass
+was attempted. The checkpoint distinguishes source reading from execution.
+
+**Affected artifacts:** New proposed design:
+docs/superpowers/specs/2026-09-16-hf-exploratory-launcher-repair-design.md and
+generated reader; this appended lineage/reader. Proposed source boundaries
+are new exploratory profile/runtime units and existing exploratory native/IO/
+CLI integrations and tests, not strict units. Full a582797 lineage Markdown
+remains an exact prefix. No private transcript/receipt, missing metadata,
+native resources, implementation/test, deployment, accepted evidence, strict
+flags or sixteen deferrals is edited.
+
+**Unresolved questions:** User approval of the isolated native-home/command
+authority design, concrete implementation plan and actual private native
+compatibility remain open. Original receipt still has the documented missing
+context file. No HF request or KIL decision was exercised. Accepted local-Envoy
+evidence remains unaffected; platform-image provenance remains unverified and
+full Kind/Calico acceptance not established.
+
+**Next gate:** Verify exact lineage prefix, self-review proposed design for
+scope/contradictions, render/check readers, diff-check and save only docs. End
+for app reload with no commands/workers/locks left running. After reload,
+review/approve the saved concrete design before test-first implementation
+planning and independent review. No automatic native continuation is scheduled.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
