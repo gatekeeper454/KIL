@@ -16904,3 +16904,80 @@ user review before implementation planning. Preserve the existing worktree and
 local commits; no live operations, push, PR or broader completion claim.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-327 — 2026-09-16 — Image-authority direction approved; source-admission design written
+
+**Input:** The user requested "do next" after the T-326 recommendation and
+approval question for image authority before component-specific status/readiness.
+Current base is the local proposal checkpoint `87702b9`; static configuration
+acceptance `d9c5103` and its execution synopsis remain unchanged.
+
+**Interpretation:** Treat the user's continuation as approval of the proposed
+direction, then refine it into a written design under brainstorming. Do not
+interpret this as approval of unknown expected image digests, a runtime adapter,
+live collection, bulk artifact downloads or publication. Decompose the next gate
+at its actual authority dependency rather than implement guessed expectations.
+
+**Decision status:** Confirmed user approval of image-authority-first direction.
+Written source-admission design proposed for user review; no source receipt,
+platform image realization or runtime/readiness acceptance is established. The
+written-specification review gate precedes implementation planning.
+
+**Rationale:** The ten platform Pods have thirteen fixed container placements
+and ten distinct requested image references. Seven tagged families need an
+independent association through the immutable pinned Kind artifact; the three
+Calico families start at profile-pinned digest roots and need verified platform
+manifest/config paths. Merely resolving today's mutable tags or copying candidate
+Node/Pod image IDs cannot establish those independent expectations. The design
+therefore selects a complete reviewed ten-row source-admission receipt before
+the separate observed-image source and configuration-composition designs.
+
+The receipt preserves requested reference, root/index target, selected linux/
+arm64 manifest and config identity separately, with retained hash/size-verified
+evidence and reproducible requested-tag associations. Missing or ambiguous source
+edges stop admission rather than allowing partial rows or invented identities.
+The source-audit plan must specify schema, parsing and artifact/byte/disk budgets
+before fetching bulk artifacts. Current source audit has not been executed.
+
+Pinned upstream sources were inspected read-only. Containerd's ContainerStatus
+keeps config ImageId separate from potentially repository-based ImageRef;
+Kubernetes maintains internal distinctions and maps ImageRef into public Pod
+container status imageID. These source facts constrain the future adapter, not
+attest the user's installed runtime. The existing two-role KIL/Envoy API and
+legacy Calico inventory contract are not generalized or modified.
+[containerd source](https://github.com/containerd/containerd/blob/v2.3.1/internal/cri/server/container_status.go),
+[Kubernetes runtime source](https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/kubelet/kuberuntime/kuberuntime_container.go),
+[Kubernetes public status source](https://github.com/kubernetes/kubernetes/blob/v1.36.1/pkg/kubelet/kubelet_pods.go).
+
+**Affected artifacts:** Created
+docs/superpowers/specs/2026-09-16-v4-platform-image-authority-design.md and its
+generated reader; appended this entry at actual lineage EOF and regenerated its
+reader. No production/test/source-receipt/controller/collector/journal/checkpoint/
+schema change, accepted-synopsis rewrite, artifact download, live lab operation,
+demonstration request, push, PR or publication.
+
+**Verification:** Self-review checked purpose, decomposition, source independence,
+fixed coverage, hash/descriptor/platform association, failure/acceptance boundaries
+and authorization. Placeholder scan found no unresolved implementation placeholders;
+missing native identities are explicit source-admission requirements, not claimed
+values. Fresh accepted-fixture/aggregate diagnostic asserted ten platform Pods,
+ten regular plus three init placements, ten distinct requested references and
+both singleton-false completion flags, exit zero. This is configuration evidence,
+not image admission. Reader byte verification, append-only verification and diff
+checks precede this documentation-only design checkpoint. Prior full test results
+are not relabeled as new runs.
+
+**Unresolved questions:** User review of the written specification; whether all
+required tagged image associations and descriptor/config paths can be established
+from the chosen immutable roots in the subsequent bounded source audit. Actual
+image content admission, observation schemas/commands/version provenance and
+component-specific status/readiness remain subsequent gates. Sixteen lifecycle
+deferrals and runtime/application false flags are unchanged; V4/V3C remain absent.
+
+**Next gate:** Obtain written-design approval, then use writing-plans to define
+the bounded source-audit plan and its exact evidence/byte/disk constraints. Only
+a successful independently reviewed source admission permits planning the
+subsequent observation/image composition adapter. Preserve local commits and the
+host-managed worktree; no live or publication authority is inferred.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
