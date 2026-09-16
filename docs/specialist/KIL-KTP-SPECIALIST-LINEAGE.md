@@ -14310,3 +14310,58 @@ remote-CI gate without altering the accepted bounded-capture and retained-only
 recovery boundaries.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-290 — 2026-09-15 — V4 Task 3 delivered to the private implementation branch
+
+**Input:** Resume after the requested reboot, complete the next authorized V4
+Task 3 stopping point, resolve any review or validation finding, push the
+accepted result to the existing private implementation branch, and stop before
+Task 4 or any live infrastructure execution.
+
+**Interpretation:** Delivery requires the finalized Task 3 capture-ordering and
+retained-only recovery implementation, the T-286 bounded-output finding and
+its test-harness integration issue to be closed, the prescribed and full local
+static gates to pass, independent quality approval, and a successful remote CI
+run for the pushed commit range. It does not authorize live Colima, Docker,
+Kind, kubectl, Kubernetes, request, publication, or profile activity.
+
+**Decision status:** Confirmed and delivered. V4 Task 3 is accepted on private
+branch `codex/v3b2-kind-calico-implementation` through reviewed commit
+`187c295cbf9a922ff38d436580bee1562c4d3ce4`. GitHub Actions CI run
+`35042245179` completed successfully. Task 4 and live execution remain
+unauthorized and unstarted.
+
+**Rationale:** The controller now checkpoints the exact identity-bracketed
+control-plane manifest source after cluster creation and before image import,
+publishes the durable record before terminal completion, and recovers only by
+revalidating retained bytes. The production subprocess boundary enforces
+independent in-flight one-MiB stdout and stderr caps for the exact four source
+commands, preserves bounded raw timeout/truncation prefixes, and cannot be held
+open past its absolute deadline by inherited or escaped descendant pipes. The
+final independent review reported no Critical, Important, or Minor finding.
+
+**Verification:** The exact Task 3 prescribed suite passed 169 tests with 16
+explicit V4-future skips in 473.789 seconds. After correcting the legacy test
+double to cover both production runner paths, full local `make validate`
+passed 1,552 tests with 16 explicit skips in 753.494 seconds, verified all 76
+Markdown readers, and passed `git diff --check`. The final quality re-review
+passed 11 focused tests in 59.744 seconds and approved the range without a
+finding. GitHub Actions CI run `35042245179` then completed successfully for
+commit `187c295cbf9a922ff38d436580bee1562c4d3ce4`. No live infrastructure
+command was executed.
+
+**Affected artifacts:** `src/kil/v3b2_controller.py`,
+`tests/test_v3b2_controller.py`,
+`tests/test_v3b2_observed_lifecycle.py`,
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`, and its regenerated
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm` reader.
+
+**Unresolved questions:** None within V4 Task 3. Task 4+ component and platform
+proof work, branch integration, and any live dedicated-profile experiment
+remain separate authorization and execution gates.
+
+**Next gate:** Stop at the Task 3 boundary. Begin Task 4 only on an explicit
+continuation request, using its approved plan section and the same static-first
+review and validation controls.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
