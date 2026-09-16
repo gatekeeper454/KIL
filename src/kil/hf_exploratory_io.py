@@ -118,9 +118,15 @@ class BoundedRunner:
         self.global_docker_config = os.environ.get('DOCKER_CONFIG', str(passwd_home() / '.docker'))
 
     def run(self, command):
-        if type(command) is not Command:
+        from kil.hf_exploratory_runtime import ExploratoryColimaCommand
+        if type(command) not in (Command, ExploratoryColimaCommand):
             raise ValueError('invalid_exploratory_command')
         command.__post_init__()
+        dispatch = (command.argv, command.timeout_s, command.stdin, command.env, command.mutating)
+        if (type(command) is Command and command.argv[0] == 'colima'
+                and (command.env or command.argv not in (('colima', 'version'),
+                                                          ('colima', 'list', '--json')))):
+            raise ValueError('plain_colima_requires_global_read_only_command')
         try:
             manifest = self.inputs.manifest_bytes
             if type(manifest) is not bytes or len(manifest) > 1024 * 1024:
@@ -145,18 +151,45 @@ class BoundedRunner:
         if global_context:
             environment['DOCKER_CONFIG'] = self.global_docker_config
         environment.update(command.env)
-        if command.argv[0] == 'colima' and command.mutating and not command.env:
-            raise ValueError('mutating_colima_requires_private_environment')
         if command.argv[0] in ('docker', 'kind') and not global_context:
             environment['TMPDIR'] = str(Path(dict(command.env)['DOCKER_CONFIG']).parent / 'runtime-tmp')
         argv = command.argv
         name = Path(argv[0]).name
         if name in TOOL_VERSION_ARGUMENTS:
-            executable = self.inputs.tools / name
+            tools = self.inputs.tools
+            executable = tools / name
             row = accepted[name]
             verify_bytes(read_regular(executable, 128 * 1024 * 1024),
                          row['executable_sha256'], row['byte_size'])
             argv = (str(executable), *argv[1:])
+        # Authentication itself performs IO; reject caller-owned substitutions
+        # made after the first manifest/metadata checks, before process acquisition.
+        try:
+            current_manifest = self.inputs.manifest_bytes
+            if type(current_manifest) is not bytes or current_manifest != manifest:
+                raise ValueError('accepted_manifest_changed_during_verification')
+            verify_bytes(current_manifest, ACCEPTED_MANIFEST_SHA256, len(current_manifest))
+            if self.inputs.manifest_bytes != manifest:
+                raise ValueError('accepted_manifest_changed_during_verification')
+            if name in TOOL_VERSION_ARGUMENTS and self.inputs.tools != tools:
+                raise ValueError('accepted_tools_path_changed_during_verification')
+            if name in TOOL_VERSION_ARGUMENTS:
+                verify_bytes(read_regular(executable, 128 * 1024 * 1024),
+                             row['executable_sha256'], row['byte_size'])
+            current_metadata = self.inputs.tool_records
+            if type(current_metadata) is not dict or set(current_metadata) != set(accepted):
+                raise ValueError('accepted_tool_metadata_changed_during_verification')
+            for tool, row in accepted.items():
+                current = current_metadata[tool]
+                if (type(current) is not dict or current != row
+                        or any(type(current[key]) is not type(value) for key, value in row.items())):
+                    raise ValueError('accepted_tool_metadata_changed_during_verification')
+        except (AttributeError, KeyError, TypeError, ValueError) as error:
+            raise ValueError('unavailable_or_substituted_accepted_tool_authority') from error
+        # The adapter and its retained authority may have changed during tool IO.
+        command.__post_init__()
+        if dispatch != (command.argv, command.timeout_s, command.stdin, command.env, command.mutating):
+            raise ValueError('command_changed_during_verification')
         return capture_process(argv, environment, command.stdin, command.timeout_s,
                                MAX_OUTPUT_BYTES, self.repository)
 

@@ -20308,3 +20308,83 @@ exclusive writer. Root may proceed to separately reviewed Task 3 composition;
 any native run still requires its own gates and authority.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T381 — 2026-09-16 — Task 3A scoped runner and immutable runtime observations
+
+**Input:** Implement the separately reviewable runner/evidence unit on detached
+d31c423, after the approved runtime authority and pure profile units and before
+Task 3B native lifecycle composition. Keep strict units and their tests unchanged;
+do not run native tools, mutate old receipts, or infer permission for a native run.
+
+**Interpretation:** A closed local dispatch boundary and finite retention/reporting
+API, not native lifecycle wiring, native compatibility evidence, profile admission,
+or a filesystem-cleanup contract. Use real temporary filesystem fixtures, a mocked
+process-capture boundary, and narrow fault/verification leaves only when needed.
+
+**Decision status:** IMPLEMENTED UNIT CHECKPOINT, pending independent SPEC then
+QUALITY review. No composed lifecycle, native acceptance, cleanup, recovery,
+publication, or protocol-alignment decision is confirmed by this implementation.
+
+**Rationale:** BoundedRunner.run accepts only exact strict Command or exact
+ExploratoryColimaCommand, revalidates the adapter/retained authority at entry and
+at the final process boundary, and rejects valid as well as invalid command
+substitutions during authentication. Plain Colima is restricted to empty-env
+global version/list reads; status and mutating/private-env attempts require the
+scoped adapter. Its four environment values are derived from guarded runtime
+authority. Child HOME remains actual passwd provenance, not a fabricated home;
+ambient native/XDG/profile overrides remain excluded. Strict Docker/Kind/kubectl
+grammar/private derivation, the global Docker-context special path, 8 MiB output
+and 900-second limits are unchanged. Manifest, every tool metadata row, retained
+tool path and applicable executable bytes are freshly checked before capture.
+Colima is not added to the authenticated Docker/Kind/kubectl identity manifest.
+
+snapshot_runtime binds an exact live receipt store to its exact live runtime,
+collects seven fixed config/control files with the existing bounded no-follow
+reader, and rejects changed double captures before writing. It retains original
+raw bytes under fixed exclusive names and an observed-only canonical ledger with
+actual runtime/receipt provenance, concrete identities, full raw hashes and byte
+counts. Absent inputs remain explicitly absent, never synthesized. Every fixed
+immutable name is preflighted, including the ledger, so repeats cannot extend an
+earlier all-absent snapshot or overwrite a partial capture. Persistence failures
+propagate, reserve bounded store quota and retain partial bytes; Task 3B must
+refuse any native teardown mutation after such a failure. Snapshotting must occur
+before the first Kind-delete or Colima-stop mutation, not merely before Colima.
+
+observe_runtime_leftovers double-observes only the five named namespace directory
+rosters, each limited to 4096 entries. Its report explicitly says partial and
+"named namespace directories only". Unknown descendants, VM disks, caches and
+full-tree absence are neither inspected nor verified, and no path is erased.
+
+TDD RED was observed for the missing scoped-runner admission and missing snapshot
+module, then for manifest replacement during authentication, valid command
+substitution, repeat extension after an all-absent ledger, and executable drift
+during manifest reauthentication. Focused GREEN passed 56 tests: all 34 original
+IO protections, 10 added runner tests and 12 evidence tests. A separate inventory
+guard run passed 71 tests. Fresh final combined verification passed all 373 tests
+in 71.440s across runtime/profile, the four original exploratory suites, runner/
+evidence, strict profile/journal, future gate and five inventory guard suites;
+ResourceWarning is fatal and bytecode writes are disabled throughout. Temporary
+evidence fixtures are explicitly observations
+only, not synthetic native compatibility or admission proofs.
+
+**Affected artifacts:** src/kil/hf_exploratory_io.py (only BoundedRunner.run),
+tests/test_hf_exploratory_io.py, new src/kil/hf_exploratory_evidence.py and new
+tests/test_hf_exploratory_evidence.py, this actual-EOF append and its generated
+HTML reader. The exact d31c423 Markdown remains a prefix. No strict source/test,
+runtime/profile unit, CLI or Native lifecycle file is edited. No native Colima,
+Lima, Docker, Kind or kubectl command, VM, HTTP/HF request, Ollama operation,
+platform-image audit, old receipt write or metadata reconstruction occurred.
+
+**Unresolved questions:** Independent unit review, Task 3B ordering/composition,
+private-home native compatibility, Kind/Calico acceptance and platform-image
+provenance remain unestablished. Existing Native mocked integration remains
+temporarily legacy until the separately assigned Task 3B worker. No unit test or
+directory roster establishes native cleanup or global absence.
+
+**Next gate:** Finish fresh combined unit/regression verification, render/check
+all 88 readers, verify prior Markdown prefix and exact-path diff, and commit only
+the four runner/evidence paths plus two lineage paths. Release the exclusive
+lineage writer and request independent SPEC then QUALITY review before Task 3B;
+any native run still requires its own gates and authority.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
