@@ -17754,3 +17754,71 @@ paths and the full IO unit. Only after that gate may the next pure/native unit
 work proceed; no instruction, retry, replay or native action occurred here.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-344 — 2026-09-16 — Independent corrected exploratory IO quality approval
+
+**Input:** Independently re-review actual correction 2c66e50 against the three
+Important findings in T-341/a456321, preserving specification approval e562a04.
+Reproduce the original harmless probes and run the complete focused IO suite
+freshly; do not execute native tools or edit implementation/root-owned plans.
+
+**Interpretation:** This is the bounded exploratory IO quality gate only.
+Approval establishes reviewed local acquisition, persistence and accounting
+behavior, not native lifecycle readiness, platform-image provenance, live
+enforcement, public acceptance or strict completion. Runtime readiness remains
+false/unestablished.
+
+**Decision status:** Corrected bounded exploratory IO unit quality-approved.
+All three T-341 Important findings are closed in actual source and independent
+fresh diagnostics; no new Critical, Important or Minor finding is reported.
+Fresh focused verification passed all 34 IO tests with ResourceWarning promoted
+to errors, zero failures/errors/skips, using the existing Python environment,
+PYTHONDONTWRITEBYTECODE=1 and PYTHONPATH=src.
+
+**Rationale:** PrivateStore now opens its containing directory with directory
+and no-follow flags, creates/opens the run directory relative to that anchored
+descriptor, and fsyncs the containing directory before lock/journal creation.
+Constructor exceptions close retained resources; its finally closes the parent.
+The original real-fsync descriptor probe now confirmed the containing-directory
+inode was synced before the successful harmless action callback. The focused
+parent-fsync-failure regression confirms acquired constructor descriptors close.
+This is call-order and failure-path evidence, not a physical crash experiment.
+
+PrivateStore.write and record now reserve the full validated payload before
+opening or writing, without refund on persistence failure. The original
+five-byte failed-write/eight-byte-cap probe now charged the retained bytes and
+refused the second five-byte write before creation: tracked/actual totals both
+38 bytes against cap 41. Fresh focused tests also cover failed journal fsync,
+partial journal append with full conservative reservation, and exact successful
+retained-byte totals. Failed creation may overreserve, safely preserving the cap.
+
+capture_process allocates its selector before spawning, and Popen is inside the
+selector cleanup try/finally. Repeating the original selector-allocation error
+probe now created no child or pipes. An independent spawn-error probe confirmed
+the already-acquired selector closes. Existing child cleanup, bounded capture,
+timeout/overflow return codes and streaming stdin behavior remain intact.
+
+The correction does not alter closed Command grammar, fixed authenticated
+manifest-derived three-tool authority, sanitized/private execution environment,
+exact terminal framing, TRACKS ordering, per-file intent-before-callback sync or
+the permanent uncertainty latch. Those contracts and existing focused regressions
+were re-inspected. All diagnostics used test-owned local temporary files,
+harmless Python children or mocked acquisition failures only; no accepted
+executable bytes were read/run, input factory called, native lab used or download
+performed. Strict lifecycle, flags and deferrals remain untouched.
+
+**Affected artifacts:** Only this appended independent approval and regenerated
+lineage HTML reader are changed by the reviewer. Reviewed source/tests are
+src/kil/hf_exploratory_io.py and tests/test_hf_exploratory_io.py. Root-owned native
+plan modification remains unrelated and unstaged by this lineage-only commit.
+
+**Unresolved questions:** Pure case/evidence and native lifecycle implementation
+and independent reviews, clean full change-set verification, request-free
+rehearsal, platform-image provenance, live enforcement and strict acceptance
+remain separate unresolved gates. This approval does not bypass any of them.
+
+**Next gate:** Proceed to the separately reviewed pure case/evidence and native
+lifecycle units under their existing plans and approval gates. No instruction,
+retry, replay or native action is authorized by this local IO quality approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
