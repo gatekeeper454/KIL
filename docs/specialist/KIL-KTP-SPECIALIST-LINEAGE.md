@@ -15996,3 +15996,71 @@ approval, then let the coordinator accept the Task 1 review checkpoint and begin
 test-first Task 2 under the approved static plan.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-316 — 2026-09-16 — Task 2 typed ten-platform-Pod configuration aggregate
+
+**Input:** The coordinator dispatched only Task 2 under the approved static
+composition design and continuous-execution authority, after independent Task 1
+fixture, specification and quality approvals at `b7ab127`, `4ac45d4` and
+`dc7ebd4`. Preserve the approved fixture, coordinator-owned plan/synopsis and
+existing validators; use the existing detached linked worktree without live calls.
+
+**Interpretation:** Implement the fixed typed aggregate, retaining explicit
+ownership plus nine component proofs by identity. Reconstruct every dependency,
+join complete retained ownership and shared Calico/manifest source authorities,
+then independently derive exactly ten platform Pod incarnations from ownership.
+This adds configuration coverage and authority continuity, not readiness,
+effective-image realization, freshness or runtime/application completion.
+
+**Decision status:** Implemented Task 2 and confirmed its focused acceptance
+gate. Independent specification and quality reviews are still required before
+coordinator acceptance; Task 3 adversarial expansion remains unperformed here.
+
+**Rationale:** The new pure module uses exact proof types and fixed binding tuple
+cardinalities before reconstruction or raw decoding. Existing constructors replay
+all dependencies before full ownership equality, exact Calico byte-pair equality
+and complete authenticated manifest-source equality. A fixed descriptor table
+normalizes only reconstructed component bindings. Deployment, daemon and static
+ownership independently supply ten distinct namespace/name pairs and ten UIDs,
+with two CoreDNS incarnations and one of each other reviewed component. The
+established bounded ownership decoder supplies raw Pod incarnation checks;
+application/unrelated objects never compensate for coverage. Aggregate construction
+replays the same computation and rejects a different retained binding tuple. Both
+completion flags are constrained to singleton `False`; no new completion/readiness
+claim or registry extension point was introduced. Expected malformed-evidence
+errors are locally wrapped with chaining, without a broad exception catch.
+
+**Affected artifacts:** Added `src/kil/v3b2_platform_pod_configuration.py`;
+extended `tests/test_v3b2_platform_pod_configuration.py` while retaining
+`PlatformFixtureTest`; appended this lineage entry and regenerated its reader.
+Existing production validators, fixture observations and deferred lifecycle tests
+were not modified. Coordinator-owned plan changes and the untracked execution
+synopsis are excluded from this task's commit.
+
+**Verification:** Test-first RED ran four methods in 0.630 seconds: the existing
+fixture succeeded and three new composition methods failed the explicit
+absent-aggregate assertion, with no import-error substitute. After implementation,
+fresh verbose GREEN ran four methods in 2.580 seconds and fresh quiet GREEN ran
+four methods in 2.462 seconds; both had four successes, zero failures and zero
+skips. Acceptance checks exact ten-Pod coverage, two CoreDNS Pods, unique identities
+and UIDs, canonical ordering, retained-input object identity, `dataclasses.replace`
+constructor replay and singleton-false flags. Self-review checked implementation
+against the dispatched requirements and found no specification incompatibility.
+The coordinator's preliminary inspection identified the planned explicit export
+surface missing from the first implementation. A new export test first failed
+alone in 0.730 seconds because `__all__` was absent; the module then gained the
+exact four-name export tuple. Final fresh verbose GREEN ran five methods in
+3.221 seconds and quiet GREEN ran five methods in 3.101 seconds, each with five
+successes, zero failures and zero skips. This correction changes no proof semantics.
+Reader regeneration/byte-check and diff checks precede the explicit-files commit;
+no full-suite or broader adversarial acceptance is claimed by these focused runs.
+
+**Unresolved questions:** Independent Task 2 reviews and Task 3 malformed/mixed
+authority cases remain subsequent gates. Platform image authority and component
+status/readiness semantics remain separately undesigned; no live authority added.
+
+**Next gate:** Regenerate and byte-check readers, check the diff and commit the
+bounded aggregate implementation. The coordinator then runs independent Task 2
+specification and quality reviews before advancing to Task 3 adversarial tests.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
