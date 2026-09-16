@@ -16981,3 +16981,103 @@ subsequent observation/image composition adapter. Preserve local commits and the
 host-managed worktree; no live or publication authority is inferred.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-328 — 2026-09-16 — Stopped audit planning; explain image identity and HF live-test scope
+
+**Input:** The user approved the written source-admission direction, then said
+"stop", asked why the audit was happening again, and requested elaboration on
+image identity and its relationship to live testing of the HF incident.
+
+**Interpretation:** Stop source-audit planning and execution. Answer the scope
+question from existing accepted artifacts and primary image-format sources;
+the explanatory request does not authorize resuming the audit or a live run.
+
+**Decision status:** Confirmed stop. Earlier configuration acceptance remains
+historical accepted evidence. The approved image-authority design is not an
+executed audit, admitted native receipt, observed-image proof or live gate.
+No new implementation plan was completed. Distinguish a functional live
+demonstration from acceptance under the selected rigorous Kind/Calico contract;
+changing that contract would require a separately approved scope decision.
+
+**Rationale:** Requested tags, immutable registry roots, selected platform
+manifests, image configs and runtime image observations describe different
+objects. Independent expectations avoid accepting whatever the candidate
+cluster happens to report. They support reproducibility and environment
+attribution, not evidence that an image is benign or an action authorized.
+Image identity also cannot establish readiness, absence of a bypass, runtime
+filesystem integrity or historical incident prevention. The existing local
+Envoy result already supplies bounded live enforcement evidence; the later
+Kind/Calico rail adds substrate-specific claims rather than repeating that
+result. The HF rail safely tests representative modeled actions, not an attack
+on Hugging Face or a reconstruction of its private production environment.
+
+**Affected artifacts:** Append this clarification at actual lineage EOF and
+regenerate its reader only. Read existing README, lab design, accepted execution
+synopsis and image-authority design; inspect pinned OCI specifications read-only.
+No source receipt, plan, production/test code, accepted synopsis or design edit;
+no artifact-image download, new test run, live lab operation, publication or push.
+
+**Unresolved questions:** Whether the user wants to retain the full independent
+platform-image admission requirement before the later Kind/Calico acceptance
+gate or discuss a narrower explicitly labeled exploratory experiment. No scope
+change is inferred. Native image admission and the live cluster's current state
+remain unestablished by this turn.
+
+**Next gate:** Remain stopped. Provide the requested explanation; await explicit
+direction before resuming source-audit planning, changing acceptance scope or
+performing live testing. Existing lifecycle deferrals and false completion flags
+are unchanged; V4/V3C completion is not claimed.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-329 — 2026-09-16 — Exploratory HF scope selected; run when ready, not ready now
+
+**Input:** The user selected planning the narrower exploratory live HF test
+with platform-image provenance unverified and full Kind/Calico acceptance
+excluded, then instructed "run it when ready".
+
+**Interpretation:** Confirm the exploratory direction and authorize its future
+bounded live run when ready. Do not resume image auditing, silently switch to
+local Envoy, bypass safety proofs or infer publication/full acceptance. Use
+brainstorming to refine the concrete experiment before its implementation plan.
+
+**Decision status:** Confirmed exploratory direction and conditional live-run
+authorization. Concrete one-action three-track scope proposed for written
+review. Exploratory runner not implemented; no setup or request executed. The
+existing strict controller is not an exploratory launcher.
+
+**Rationale:** The existing preflight requires clean synchronized origin/main
+source and worktree-local content-locked tools. This detached HEAD differs from
+origin/main and lacks .tools. Its unfinished controller lifecycle methods also
+remain exactly deferred. A separately labeled path can retain owned isolation,
+application/tool commitments, request intent, no retries, bounded joins and
+exact teardown without representing omitted platform-image authority as proved.
+Proposed first case is the established harmless administrative-action example,
+not eight-phase live incident execution. A request-free rehearsal precedes the
+fresh single nominal lifecycle; no weakening of strict production checks.
+
+**Affected artifacts:** Create
+docs/superpowers/specs/2026-09-16-hf-exploratory-kind-calico-design.md and its
+reader; append this entry and regenerate the lineage reader. Preserve the
+previous uncommitted T-328 clarification. No production/test/strict-profile or
+receipt edit, image download, live mutation, request, cleanup, push or publication.
+
+**Verification:** Read-only colima list --json returned kil-v3-lab absent and
+the default and attackswarm foreign profiles stopped; neither was changed.
+Fresh unittest tests.test_v4_future_controller_gate -v ran two tests, both
+passed, with the exact sixteen deferred methods unchanged. These are guard
+tests, not lifecycle readiness or a fresh full-suite run. Reader verification,
+append-only checks and diff hygiene apply to this documentation checkpoint.
+
+**Unresolved questions:** Written review of the concrete exploratory scope and
+then a bounded separate-runner implementation plan with exact command/evidence
+limits. Actual tools/application input availability, exploratory lifecycle
+verification and request-free rehearsal remain readiness requirements. No
+native platform-image identity, readiness or enforcement result is inferred.
+
+**Next gate:** Review the written experimental scope, then implement and verify
+the separate exploratory path. Once it is demonstrably ready, use the existing
+run-when-ready authorization for the bounded local experiment. Audit remains
+stopped; strict Kind/Calico/V4/V3C acceptance remains excluded.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
