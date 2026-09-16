@@ -20164,3 +20164,74 @@ seven paths. Release the exclusive lineage writer for independent Task 2 SPEC
 and QUALITY review. Task 3 integration and any native run remain separate gates.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T379 — 2026-09-16 — Independent Task 2 exploratory profile SPEC approval
+
+**Input:** Independently review Task 2 exact exploratory profile binding against
+the approved isolated-runtime requirements, inspecting the actual 5fb0b53 to
+c2554c1 diff, implementation, full native fixtures and tests rather than relying
+on the implementer's report. Do not edit source/tests or run native tools.
+
+**Interpretation:** A bounded engineering-only specification review of the pure
+profile unit and its reuse of unchanged strict collector/schema helpers. This
+does not authorize integration, cleanup, VM execution, HTTP/HF requests or
+platform-image auditing. Historical RED claims can be inspected as records but
+are not independently witnessed by this review.
+
+**Decision status:** SPEC APPROVED for the reviewed c2554c1 Task 2 unit. No
+missing, extra or misunderstood requirement was found. This is not a QUALITY
+verdict, composed runner approval, native compatibility result or experiment
+acceptance; those gates remain separate.
+
+**Rationale:** The actual diff preserves all strict source/tests. Frozen pure
+paths retain actual passwd-home provenance and derive the native namespace under
+the exact guarded RuntimeAuthority; the document accepts only canonical home
+and runtime string fields. Collector properties match the required private
+Colima/Lima, profile, instance, disk, store and startup locations. The bounded
+bytes-only instance parser admits exactly the generated DNS alias block,
+validates all other content through the unchanged inert strict parser, and
+returns the real alias without changing retained proof bytes. The strict profile
+still requires empty DNS hosts. Independent SHA-256 verification matched the
+required full fixture values: profile
+5b4a547ad13cda67870cdb821fbb140940562626c28ef6fb1228191675dc79e9 and instance
+37dff309a27985cf3a007517133c66a436fb578a5d14fd6df0c9ababeb7503de. The files
+differ only in the generated alias block, and the whitespace exception is scoped
+to those two exact fixture paths.
+
+Creation validates the closed capture, protected/startup absence, all eight
+concrete identities, full original profile/instance and Lima bytes, raw 60 GiB
+data and 20 GiB root capacities, and exact private instance lock target in the
+unchanged six-field binding schema. Unchanged validates both inputs and fully
+recomputes the original binding; stopped missing-lock handling uses only an
+internal, directory-consistent symbolic probe without altering retained input.
+Absence validates the exact document/capture and requires no owned profile,
+instance, disk or startup plus an absent or exact reset store. There is no native
+execution or orphan cleanup. Negative tests cover alias, scalar, YAML syntax,
+document, capture, identity, byte, capacity, format, protection and lock drift,
+using real temporary files and sparse disks with no invented-home strict binding.
+
+Fresh independent focused verification passed all 76 tests in 35.038s: 18 new
+exploratory profile, 28 runtime and 30 original strict profile tests, using the
+existing interpreter with PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and
+ResourceWarning fatal. No full-suite or historical RED replay is claimed.
+
+**Affected artifacts:** This actual-EOF append and generated lineage reader
+only. Reviewed src/kil/hf_exploratory_profile.py,
+tests/test_hf_exploratory_profile.py, both hf-colima-0.10.3 native YAML fixtures,
+the narrow .gitattributes rule and unchanged strict/runtime dependencies without
+editing them. The exact c2554c1 lineage Markdown remains a prefix. No native
+Colima/Lima/Docker/Kind/kubectl command, VM, HTTP/HF request, Ollama operation,
+platform-image audit, old receipt write or metadata reconstruction occurred.
+
+**Unresolved questions:** Independent QUALITY review and later runner/lifecycle
+composition remain required. Private-home native compatibility, immutable runtime
+snapshots, full Kind/Calico acceptance and platform-image provenance are not
+established. The broader baseline's immutable ignored historical private-document
+citation-scanner issue is outside this review; old receipts remain untouched.
+
+**Next gate:** Render/check all 88 readers, verify the exact prior prefix and
+documentation-only diff, then commit only the two lineage paths and release the
+exclusive writer. Root may dispatch independent Task 2 QUALITY review. Task 3
+integration and any native permission remain separate gates.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
