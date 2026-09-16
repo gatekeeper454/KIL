@@ -17081,3 +17081,41 @@ run-when-ready authorization for the bounded local experiment. Audit remains
 stopped; strict Kind/Calico/V4/V3C acceptance remains excluded.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-330 — 2026-09-16 — Approved exploratory scope; bounded input plan checkpoint
+
+**Input:** "approved proceed" approves the concrete exploratory design, with
+the prior conditional instruction "run it when ready" still in force.
+
+**Interpretation:** Plan and implement the separate exploratory path, verify it,
+then execute the request-free rehearsal and the one bounded nominal experiment
+only if readiness succeeds. No routine continuation approval between units;
+new scope or unresolved ownership still requires stopping.
+
+**Decision status:** Confirmed written-scope approval. Input-readiness unit
+planned first as an independently testable dependency, not a complete runtime
+launcher. Further lifecycle/evidence plans remain required before execution.
+
+**Rationale:** Retained accepted tools exist in the main checkout; reading them
+does not require installing another toolchain or modifying that checkout. The
+accepted application archive was found in the retained central-proof rerun
+worktree. Fresh SHA-256 inspection matched the fixed accepted archive checksum
+07c12f338c7d764812ef6271ec8942f0535d05019288f4df1e1b54f6cd75e4b6.
+This permits reuse of already accepted application content, without new builds,
+platform-image source admission or substitution of current mutable tags.
+
+**Affected artifacts:** Update exploratory design approval status; create
+docs/superpowers/plans/2026-09-16-hf-exploratory-input-readiness.md and reader;
+append this checkpoint and regenerate lineage reader. No production code yet,
+native descriptor receipt, image download, live mutation, request or publication.
+
+**Unresolved questions:** Native input-factory verification and independent
+reviews, then complete lifecycle/evidence implementation and readiness rehearsal.
+Existing strict source synchronization requirements, false completion flags and
+sixteen lifecycle deferrals are not relaxed by this separate experimental scope.
+
+**Next gate:** Execute the input plan with tests first and specification then
+quality review. Continue the dependent exploratory units within approved scope;
+do not invoke the strict launcher or resume the platform-image audit.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

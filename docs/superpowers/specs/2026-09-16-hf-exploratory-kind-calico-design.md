@@ -2,10 +2,10 @@
 
 Date: 2026-09-16
 
-Status: The user selected planning a narrower exploratory live HF test with
-platform-image provenance explicitly unverified, then authorized running it
-when ready. This document proposes the concrete scope for review. No live
-experiment has executed, and no exploratory runner exists yet.
+Status: Approved by "approved proceed" on 2026-09-16 after the concrete scope
+was written. The user authorized running the exploratory test when ready, with
+platform-image provenance explicitly unverified. Implementation is now in
+progress; approval alone establishes no runtime readiness or live result.
 
 ## Question and bounded experiment
 
