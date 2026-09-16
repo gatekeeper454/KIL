@@ -15447,3 +15447,235 @@ Keep exactly the existing 16 default V4 lifecycle methods deferred until
 their separately reviewed completion gate; do not expand skips or live claims.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-307 — 2026-09-16 — V4 control-plane static-manifest source accepted
+
+**Input:** The approved
+`docs/superpowers/specs/2026-09-08-v3b2-control-plane-static-manifest-source-design.md`
+and
+`docs/superpowers/plans/2026-09-15-v4-control-plane-static-manifest-source.md`,
+the user's continuation request, completed Tasks 1–5, independent specification
+and quality reviews, and the final combined/full validation against
+`90aa43c084e3a7e98d4455912183603b6a11d9d8`.
+
+**Interpretation:** Accept the two identity-bracketed private manifest sources
+and their two reconstructable API mirror configurations as one bounded static
+implementation checkpoint. Source capture and retained-only recovery must
+precede image/apply progress, both component expectations must remain
+independent and fixed, all retained run/owned-node/requested-profile authorities
+must agree, and no completion claim may be inferred from configuration or
+uninterpreted status.
+
+**Decision status:** Confirmed static implementation checkpoint; no live claim.
+The accepted claim boundary is the two identity-bracketed private manifest
+sources and their two reconstructable API mirror configurations. Runtime,
+readiness, application completion, V4 completion, and V3C are explicitly
+unclaimed. Effective image realization, historical filesystem/package
+provenance, certificate contents, and configuration freshness are also
+unclaimed.
+
+**Rationale:** The closed two-path source retains the before/read/read/after
+owned-node bracket, bounded raw bytes, closed YAML documents, and raw/semantic
+commitments in a deterministic private, write-once, fsynced checkpoint. Journal
+ordering requires source completion after cluster creation and before image or
+apply work; missing or invalid retained evidence authorizes teardown only, not
+live recollection. Independent kube-apiserver and kube-controller-manager
+validators prove their fixed disk documents, derive only the reviewed five-way
+conditional CA subset, and construct the corresponding owned API expectations
+using reviewed defaults. Both reconstruct their dependencies and join cluster,
+container, lifecycle run, complete owned endpoint/kubeconfig authority, and
+requested node-image/profile authority. Apiserver dynamic addresses join the
+retained owned Node InternalIP. Arbitrary status remains retained but
+uninterpreted; all runtime/application completion fields remain exact false.
+Each component covers all 32 accepted CA subsets and 32 disk/API subset
+mismatches. Review findings and their regression-first corrections remain
+recorded rather than rewriting prior approvals.
+
+**Verification:** The final combined source, checkpoint, both component,
+controller, journal, and proof gate reported `Ran 222 tests in 493.951s`, with
+206 passing methods, exactly 16 expected deferred V4 lifecycle methods, zero
+failures, and zero errors. Full `make validate` reported `Ran 1586 tests in
+807.575s`, with 1,570 passing methods, the same 16 expected skips, zero failures,
+and zero errors; all 76 Markdown readers verified and `git diff --check` passed.
+The final independent mirror-plus-source review also passed 71 methods with
+zero skips. No live Colima, Docker, Kind, kubectl, Kubernetes, request,
+publication, or profile command was executed.
+
+**Test-count accounting clarification:** Python unittest's `Ran N` includes
+skipped methods. Earlier descriptions that called that total “passed” while
+separately listing skips should be read as total discovered methods, not N
+successful methods plus skips. In particular, T-296's Task 4 full result was
+1,563 total methods: 1,547 passes and 16 skips. Its historical text is preserved;
+the present checkpoint reports totals, passes, and skips separately.
+
+**Affected artifacts:** The control-plane manifest source and source-record
+modules/tests; controller, journal, and lifecycle proof integration/tests;
+independent kube-apiserver and kube-controller-manager mirror modules/tests;
+this specialist lineage and its regenerated HTML reader. No live evidence or
+public runtime artifact is produced by this checkpoint.
+
+**Unresolved questions:** All-ten-platform-Pod configuration/image/status/
+readiness composition remains unresolved and is the next design/implementation
+gate. The 16 deferred lifecycle methods remain visible through the explicit V4
+Future target. Any later live dedicated-profile experiment requires its own
+explicit authorization; this acceptance does not grant it.
+
+**Next gate:** Regenerate and verify readers, independently review this bounded
+acceptance entry, commit and push the private implementation branch, and verify
+revision synchronization and CI. The next substantive implementation gate is
+all-ten-platform-Pod configuration/image/status/readiness composition, not
+runtime completion or V3C.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-308 — 2026-09-16 — V4 Task 6 static acceptance specification review approved
+
+**Input:** Independently review the uncommitted T-307 acceptance entry and
+regenerated reader against Task 6 of the approved
+`docs/superpowers/plans/2026-09-15-v4-control-plane-static-manifest-source.md`
+and the approved
+`docs/superpowers/specs/2026-09-08-v3b2-control-plane-static-manifest-source-design.md`,
+the implementation at `90aa43c084e3a7e98d4455912183603b6a11d9d8`, prior
+specification/quality reviews, and the coordinator's fresh combined/full
+static-gate results. Production edits, push, and live/profile calls are excluded.
+
+**Interpretation:** Task 6 accepts only the two identity-bracketed private
+manifest sources and their two reconstructable API mirror configurations.
+Acceptance wording must reflect retained source and producer authority,
+independent fixed component expectations, strict false completion flags, exact
+test-count accounting, and the separate all-ten-platform-Pod composition gate.
+The coordinator's broad gate results are reviewed evidence, not independent
+full-suite execution by this reviewer.
+
+**Decision status:** Confirmed Task 6 static acceptance specification approval:
+zero Critical, zero Important, and zero Minor findings in the reviewed scope;
+no live claim. T-307 meets the approved acceptance-record requirements.
+Independent quality review and the coordinator's final acceptance commit remain
+separate gates.
+
+**Rationale:** T-307 uses the required acceptance heading and decision-status
+wording, names both approved inputs, and states the exact source/API claim
+boundary. It explicitly leaves runtime, readiness, application completion,
+V4 completion and V3C unclaimed, as well as image realization, provenance,
+certificate contents and freshness. Direct source inspection confirms strict
+false flags and reconstructing constructors, the retained identity bracket,
+durable private checkpoint, source-before-image/apply ordering, and retained-
+only recovery. Both consumers join cluster/container, lifecycle run, complete
+owned endpoint/kubeconfig authority and requested image/optional profile
+authority; their fixed disk/API expectations and five-way CA decisions remain
+component-local. Apiserver dynamic addresses bind the retained owned InternalIP;
+arbitrary status and syntax-only `config.seen` do not establish readiness or
+freshness. Both component suites retain 32 accepted subsets and 32 mismatches.
+The explicit T-296 clarification preserves historical wording rather than
+silently rewriting it. All repository-required lineage fields and the canonical
+KTP citation are present, and the next substantive gate is correctly bounded.
+
+**Verification:** Fresh independent source plus apiserver/controller-manager
+execution reported `Ran 53 tests in 16.182s`, `OK`: 53 passes, zero skips,
+zero failures and zero errors. Fresh independent reader checking verified all
+76 Markdown readers, and `git diff --check` passed before this entry. The
+coordinator separately reported the final combined gate as 222 total methods,
+206 passes and 16 expected skips in 493.951 seconds, and full `make validate`
+as 1,586 total methods, 1,570 passes and the same 16 skips in 807.575 seconds,
+with zero failures/errors and all 76 readers verified. Those expensive gates
+were not duplicated by this reviewer. T-306 independently recorded 71 passing
+methods with zero skips. Reader regeneration and checking are the docs-only
+recording gate. No live Colima, Docker, Kind, kubectl, Kubernetes, request,
+publication, push or profile command ran in this review.
+
+**Affected artifacts:** Reviewed the approved design/plan, T-307 Markdown/HTML
+diff, prior review/correction history, source/checkpoint/controller/journal
+integration, both component modules and their independent tests. Changed only
+this lineage entry and its regenerated HTML reader; left them uncommitted for
+quality review and the coordinator's final acceptance commit.
+
+**Unresolved questions:** None within Task 6 specification compliance.
+Independent acceptance quality review, final recording/delivery verification,
+all-ten-platform-Pod configuration/image/status/readiness composition, and any
+separately authorized live experiment remain distinct gates. The existing 16
+deferred lifecycle methods remain visible; this approval does not expand skips
+or authorize live execution.
+
+**Next gate:** Regenerate and verify readers, return the uncommitted acceptance
+and specification approval for independent quality review, then let the
+coordinator perform the final acceptance commit and authorized delivery checks.
+The next substantive design/implementation gate remains all-ten-platform-Pod
+configuration/image/status/readiness composition, not runtime completion or V3C.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-309 — 2026-09-16 — V4 Task 6 acceptance documentation quality review approved
+
+**Input:** Independently quality-review the uncommitted T-307 acceptance and
+T-308 specification approval against Task 6 of the approved static-manifest
+implementation plan and approved design, the previously quality-approved
+code at `90aa43c084e3a7e98d4455912183603b6a11d9d8`, review/correction history,
+and the coordinator's final combined/full gate reports. Do not duplicate
+expensive full runs. Production edits, push and live/profile calls are excluded;
+the coordinator owns the final acceptance commit and delivery checks.
+
+**Interpretation:** Final acceptance documentation must distinguish the two
+authenticated private manifest sources and their reconstructable API mirror
+configurations from runtime or completion evidence. Count discovered methods,
+successful methods and skips separately; attribute broad execution results to
+their actual producer; preserve historical entries and their clarifications.
+The existing deferred lifecycle gate and all-ten-platform-Pod composition
+remain separate from this completed static implementation checkpoint.
+
+**Decision status:** Confirmed Task 6 acceptance documentation quality approval:
+zero Critical, zero Important and zero Minor findings; no live claim. T-307
+and T-308 accurately record the bounded acceptance and evidence available at
+the reviewed code revision. This review does not independently rerun or claim
+the coordinator's expensive combined/full execution.
+
+**Rationale:** The reviewed entries contain the required acceptance heading,
+approved inputs, exact decision-status wording, accepted source/API boundary,
+all required lineage fields and canonical KTP citation. They explicitly leave
+runtime, readiness, application completion, V4 completion and V3C unclaimed,
+along with effective image realization, historical filesystem/package
+provenance, certificate contents and freshness. Their bracket, retained-only
+replay, private checkpoint, ordering, independent fixed disk/API configuration,
+five-way conditional CA authority, apiserver InternalIP and strict false-flag
+descriptions agree with the previously independently reviewed implementation.
+T-303's finding and the consumer corrections remain traceable; no historical
+approval is silently rewritten. The T-296 clarification correctly treats its
+1,563 methods as 1,547 successful methods plus 16 skips. The final counts also
+sum correctly: 206 plus 16 equals 222, and 1,570 plus 16 equals 1,586.
+The next substantive gate stays all-ten-platform-Pod configuration/image/
+status/readiness composition, with live experiments separately authorized.
+
+**Verification:** Fresh independent non-executing unittest discovery confirmed
+222 combined methods with 16 default skips and 206 non-skipped methods, and
+1,586 repository methods with the same 16 skips and 1,570 non-skipped methods.
+All skipped methods belong to the existing controller lifecycle class; this
+is count/skip verification, not independent passing execution. The initial
+discovery harness's module-prefix assertion was corrected for unqualified
+full-discovery test IDs; the final harness completed successfully with both
+count assertions and skip-class assertions. Fresh independent reader checking
+verified all 76 Markdown readers and `git diff --check` passed before this
+entry. The coordinator's reported executions remain 222 methods in 493.951
+seconds and 1,586 methods in 807.575 seconds, with the documented 16 skips
+and zero failures/errors. T-306's independent 71-pass focused execution and
+T-308's independent 53-pass execution are correctly retained and attributed.
+No expensive full execution, live infrastructure/profile call, push, production
+edit, request or publication operation was performed by this review.
+
+**Affected artifacts:** Reviewed the uncommitted lineage Markdown/HTML diff,
+approved design/plan acceptance requirements, T-296/T-303 through T-308 history,
+unchanged code revision, test discovery and existing lifecycle deferral.
+Changed only this appended lineage quality approval and its regenerated HTML
+reader; all Task 6 documentation remains uncommitted for the coordinator.
+
+**Unresolved questions:** None within Task 6 acceptance documentation quality.
+Final reader/diff verification, the prescribed acceptance commit, authorized
+delivery synchronization/CI checks, all-ten-platform-Pod composition and any
+separately authorized live experiment remain distinct gates. No new source,
+API, image-realization, readiness, completion or live claim is introduced.
+
+**Next gate:** Regenerate and verify all 76 readers, return the uncommitted
+T-307 through T-309 documentation to the coordinator, and let the coordinator
+perform the prescribed `docs: record V4 control-plane manifest acceptance`
+commit and authorized delivery checks. Preserve exactly the existing 16
+deferred default lifecycle methods and the explicit later composition gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
