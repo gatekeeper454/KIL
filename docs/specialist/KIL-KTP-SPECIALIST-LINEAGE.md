@@ -19611,3 +19611,63 @@ mutation. A separate explicit scope is required for deletion or subsequent
 DNS/network/runtime-evidence engineering and any eventual lab rehearsal.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-370 — 2026-09-16 — Narrow route to a running HF test proposed; no new implementation or native authority
+
+**Input:** User asks what to do next to get the test running after the approved
+graceful stop and reported private-context preservation exception.
+
+**Interpretation:** Give an actionable bounded sequence, not another platform-
+image audit, an immediate relaunch, or inferred permission to change code or
+delete the stopped residual profile. The requested experiment remains the
+single harmless modeled HF cut point with fixed three tracks and explicitly
+unverified platform-image provenance, not a full historical incident replay.
+
+**Decision status:** PROPOSED next engineering scope: focused exploratory
+launcher compatibility/evidence repair. No implementation, deletion, restart,
+cleanup replay or HF request is authorized by this question or performed here.
+
+**Rationale:** Read-only source inspection confirms creation_binding passes
+both native saved configurations to the same closed parser, whose expected
+DNS-host mapping is empty. The retained native instance mapping differs; fix
+must distinguish and exactly validate the known profile/instance forms, not
+admit arbitrary YAML or disable ownership checks. Exploratory foreign_snapshot
+compares all non-owned Lima child identities, including `_networks`, against
+the original; the observed replacement cause remains unresolved. A targeted
+native networking investigation must establish a safe compatible strategy
+before changing that contract; blanket ignoring shared-directory changes is
+not proposed. Runtime Docker configuration currently lives under the evidence
+store and is included in retained-file checksums; the missing context file
+shows why immutable snapshots must be separated from native-managed runtime
+files. Preserve the old receipt's exception rather than fabricate restoration.
+
+Recommended order: use retained failure observations for regression tests;
+make/review only the bounded DNS/configuration and immutable-runtime-evidence
+repairs while resolving the shared-network gate; separately approve exact
+identity-checked deletion of the stopped lab/profile/data remnant after saving
+required observations; complete one fresh request-free setup/capture/teardown
+rehearsal; only then admit the already scoped fresh one-shot three-track action.
+The existing profile must be absent for the current fresh-launch contract;
+merely restarting the launcher now would refuse preflight or encounter the
+unrepaired gates. Static tests alone cannot establish native readiness. No
+platform-image provenance audit is a prerequisite for this exploratory scope.
+
+**Affected artifacts:** Source inspected:
+src/kil/v3b2_profile_state.py and src/kil/hf_exploratory_native.py. Only this
+appended lineage Markdown and regenerated sibling reader are changed. All
+implementation, private receipts/transcript, native state, accepted evidence,
+strict flags and sixteen lifecycle deferrals remain untouched. Full 0fceddc
+lineage Markdown remains an exact prefix.
+
+**Unresolved questions:** Exact safe shared-network strategy and reviewable
+repair design, future stopped-remnant deletion authority and actual fresh
+rehearsal success remain open. No KIL decision/HF request has occurred in the
+Kind lab. Accepted local-Envoy evidence remains unchanged; platform-image
+provenance remains unverified and full Kind/Calico acceptance not established.
+
+**Next gate:** Save this bounded recommendation and ask whether the user
+authorizes the focused repair phase. A future repair phase starts with
+evidence-backed design/tests and review, not native replay; deletion and
+subsequent live progression retain their separate exact-target gates.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
