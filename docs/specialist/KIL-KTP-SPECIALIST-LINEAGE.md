@@ -18282,3 +18282,93 @@ provenance override, accepted-input factory execution or native operation is
 authorized to this implementation agent by this entry.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-353 — 2026-09-16 — Independent native HF specification review refuses approval
+
+**Input:** Independently review commit
+1e5e6e07672a5cd098fcb97be9a24601f01ea04c against the complete approved
+docs/superpowers/specs/2026-09-16-hf-exploratory-kind-calico-design.md and
+docs/superpowers/plans/2026-09-16-hf-exploratory-native-lifecycle.md. Review
+only src/kil/hf_exploratory_native.py, tools/hf_exploratory_kind.py and
+tests/test_hf_exploratory_native.py; do not trust the implementation report.
+Do not execute accepted verify_inputs, native binaries, downloads, profile/VM,
+Docker, Kind, kubectl, network requests or a live experiment. Owned fixtures
+and source reads are permitted. Append this review without altering prior
+lineage and regenerate its sibling HTML reader.
+
+**Interpretation:** Specification compliance requires the request-free owned
+lifecycle and exact teardown before a fresh action, plus hard stops on native
+read errors and observed identity drift. Bounded readiness retries apply to
+not-yet-ready observations, not replacement or transport failures. The setup
+readiness budget is one monotonic 300-second global deadline, not an independent
+budget for every stage. Existing Calico projection validation must consume an
+authenticated native-derived closed projection without weakening its parser.
+
+**Decision status:** NOT specification-compliant; independent approval is
+withheld. Three actual missing or misunderstood requirements remain. This
+review changes no implementation, strict controller, completion flag, accepted
+input, deferral, platform-image provenance scope or publication boundary. No
+live compatibility, rehearsal, action result or acceptance is established.
+
+**Rationale:** Complete source and requirements were read independently.
+First, src/kil/hf_exploratory_native.py:655-676 retries ValueError, KeyError and
+TypeError by default. Native nonzero read status from observe and observed Pod
+or endpoint identity drift during bind_runtime_inventory therefore become
+polling errors rather than hard stops. The inventory routine assigns fresh
+anchors before its current-Pod bracket, and another attempt can overwrite them.
+Owned full-flow reproductions separately injected one Calico read returning
+status 3 and one ready authz Pod observation with a replacement UID. In both
+cases execute returned status complete at complete_capture and subsequently
+sent all three request-free EOF attaches. These were test-owned temporary
+observations, not native run evidence. The existing permanent-driver-drift
+test exercises the narrower driver-completion retry policy, not this setup path.
+
+Second, src/kil/hf_exploratory_native.py:461,482,492 calls read_until separately
+for Calico, application endpoints and runtime inventory. Each call creates a
+new deadline at line 657 and restores the prior None deadline at line 676.
+There is no single monotonic global setup-readiness deadline or shared maximum
+of sixty complete attempts. Per-command remaining-time bounds do not repair
+this aggregate-budget omission.
+
+Third, src/kil/hf_exploratory_native.py:457-460 passes canonicalized full
+kubectl workload JSON directly to parse_calico_runtime_workload. The existing
+factory requests native DaemonSet/Deployment JSON, while that unchanged parser
+requires a closed flattened spec.containers/spec.initContainers projection.
+The full-flow test dispatcher at tests/test_hf_exploratory_native.py:527-535
+fabricates the flattened projection despite receiving the full-object command.
+An owned native-shaped Deployment fixture with spec.template.spec.containers,
+replicas and selector was rejected with "Calico workload spec has missing or
+extra fields". Canonicalization alone is not the native-to-closed projection
+needed for the promised readiness integration. This is source/fixture evidence,
+not an assertion about an executed native producer or permission to weaken the
+existing strict parser.
+
+Fresh verification used PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and
+/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python
+with -W error::ResourceWarning. The committed native suite passed all 56 tests
+in 5.073 seconds. That result does not invalidate the independently reproduced
+missing safety gates. Source inspection confirms the separate private CLI,
+fresh ordered modes, exact mutation authority, intent latches, producer join
+before later tracks, conservative bound cleanup and false provenance/acceptance
+labels; no extra source change is requested by this review. Broad regression
+results belong to the root and are not claimed here.
+
+**Affected artifacts:** Review scope is the three native source/test files
+above. Only this appended lineage Markdown and its generated sibling HTML
+reader are changed by the reviewer. The Markdown from commit 1e5e6e0 remains
+a byte-for-byte prefix; no earlier entry is rewritten.
+
+**Unresolved questions:** Implementer failing-first regressions and fixes for
+hard-stop error classification, one shared setup-readiness budget and native
+Calico projection are required. Independent quality approval, real native
+compatibility, owned request-free rehearsal, exact live teardown/preservation
+and complete live producer joins remain unestablished. Platform-image
+provenance and full Kind/Calico acceptance remain explicitly unverified.
+
+**Next gate:** Fix these concrete findings using owned fixtures, observe
+RED/GREEN, retain a clean source commit and repeat independent specification
+review. Do not advance to independent quality approval or native execution
+based on the current 56-test GREEN alone. Only the root may consider the
+separate native execution gate after all reviews and its static verification.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
