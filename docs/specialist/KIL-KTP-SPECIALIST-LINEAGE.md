@@ -20309,41 +20309,6 @@ any native run still requires its own gates and authority.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-## T382 — 2026-09-16 — Task 3A independent SPEC review requires final authentication check
-
-**Input:** Independent Task 3A SPEC review of parent d31c423 through 9548961,
-following the approved isolated-runtime design and test-first implementation.
-
-**Interpretation:** The finite evidence component matches the approved scope.
-Runner authentication is not yet complete: after rechecking manifest bytes and
-tool paths, a second executable verification performs IO without subsequently
-rechecking those two authorities before process acquisition.
-
-**Decision status:** SPEC NOT APPROVED. Root inspected the actual check ordering
-and accepts the demonstrated missing final consistency check as an in-scope
-correction, not a new identity audit or native-run authorization.
-
-**Rationale:** The reviewer independently ran all 56 focused tests successfully
-in 3.549s, then reproduced substitution of manifest_bytes during the second
-executable verification with mocked capture still reached. Existing GREEN does
-not establish the missing refusal. The original implementer must first reproduce
-RED for final-verification manifest/tool-path substitutions, then correct the
-runner and obtain SPEC re-review before QUALITY review or Task 3B.
-
-**Affected artifacts:** src/kil/hf_exploratory_io.py and its tests are the
-pending correction scope; this actual-EOF lineage append and its HTML reader
-record the review. No native operations, old receipt edits, strict changes,
-platform-image audit or live HF request occurred.
-
-**Unresolved questions:** Corrected final authentication, independent QUALITY,
-Native/CLI composition and private-home native compatibility remain unverified.
-
-**Next gate:** Render this review entry, then hand the exclusive lineage writer
-to the original runner/evidence implementer for a test-first correction. Require
-fresh independent SPEC approval before the next review stage.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
 ## T381 — 2026-09-16 — Task 3A scoped runner and immutable runtime observations
 
 **Input:** Implement the separately reviewable runner/evidence unit on detached
@@ -20423,3 +20388,44 @@ lineage writer and request independent SPEC then QUALITY review before Task 3B;
 any native run still requires its own gates and authority.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T382 — 2026-09-16 — Task 3A independent SPEC review requires final authentication check
+
+**Input:** Independent Task 3A SPEC review of parent d31c423 through 9548961,
+following the approved isolated-runtime design and test-first implementation.
+
+**Interpretation:** The finite evidence component matches the approved scope.
+Runner authentication is not yet complete: after rechecking manifest bytes and
+tool paths, a second executable verification performs IO without subsequently
+rechecking those two authorities before process acquisition.
+
+**Decision status:** SPEC NOT APPROVED. Root inspected the actual check ordering
+and accepts the demonstrated missing final consistency check as an in-scope
+correction, not a new identity audit or native-run authorization.
+
+**Rationale:** The reviewer independently ran all 56 focused tests successfully
+in 3.549s, then reproduced substitution of manifest_bytes during the second
+executable verification with mocked capture still reached. Existing GREEN does
+not establish the missing refusal. The original implementer must first reproduce
+RED for final-verification manifest/tool-path substitutions, then correct the
+runner and obtain SPEC re-review before QUALITY review or Task 3B.
+
+**Affected artifacts:** src/kil/hf_exploratory_io.py and its tests are the
+pending correction scope; this actual-EOF lineage append and its HTML reader
+record the review. No native operations, old receipt edits, strict changes,
+platform-image audit or live HF request occurred.
+
+**Unresolved questions:** Corrected final authentication, independent QUALITY,
+Native/CLI composition and private-home native compatibility remain unverified.
+
+**Next gate:** Render this review entry, then hand the exclusive lineage writer
+to the original runner/evidence implementer for a test-first correction. Require
+fresh independent SPEC approval before the next review stage.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+**Placement correction — 2026-09-16:** Commit 1ee2c3d accidentally inserted this
+new entry between T380 and T381 using a repeated tail anchor. This commit moves
+only that just-added entry to actual EOF, restores the exact 9548961 Markdown
+prefix, and records the correction explicitly. No prior entry content or review
+verdict is rewritten.
