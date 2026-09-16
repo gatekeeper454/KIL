@@ -19036,3 +19036,65 @@ evidence and exact still-bound cleanup, with no automatic substitution,
 mutation retry or replay.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-363 — 2026-09-16 — Native implementer corrects same-pin Colima version prefix before lab mutation
+
+**Input:** Root's actual launcher preflight stopped after five read-only
+version commands because the saved Colima response was `colima version
+v0.10.3`, while the native unit expected `colima version 0.10.3`. Root reported
+zero lab mutations, profile/VM/cluster operations, request intents or attempts
+and retained the inconclusive private receipt untouched. T-362 (fc1c6a8)
+authorized only this normal preparation-format correction and repeat review.
+
+**Interpretation:** The response identifies the same approved Colima 0.10.3
+pin, not version drift or a native compatibility/readiness result. The exact
+supplied LF-terminated literal, including its git commit line, is 76 bytes.
+An owned fixture may copy those bytes but cannot become actual native evidence.
+
+**Decision status:** One-character source correction confirmed by owned
+RED/GREEN verification, pending repeat SPEC and quality review. The native
+regex now requires `v0.10.3` exactly. The pin, length cap, full-match/LF framing,
+existing git-commit grammar, Lima 2.2.0 check, three authenticated accepted tool
+checks and all lab safety/acceptance boundaries remain unchanged. No optional
+prefix, alternate version or tool substitution was introduced.
+
+**Rationale:** The actual-format regression first failed because the same-pin
+v-prefixed response was refused, and the strict bare-format negative first
+failed because the previous unprefixed spelling was accepted. After the
+one-character fix, those probes plus the existing tool/version gate passed:
+three tests in 0.144 seconds. The positive probe retains the supplied raw
+76-byte command receipt, verifies observed Colima/Lima version strings and
+keeps Docker daemon version UNOBSERVED. Eight negative spellings cover nearby
+versions v0.10.4/v0.10.30, bare/double-v prefixes, extra bytes, CRLF, an invalid
+commit line and missing final LF; each is refused with only read-only commands,
+no profile/cluster attempted flags and no request attempts. Full-flow fixtures
+now use the same realistic supplied native output.
+
+Fresh ResourceWarning-as-error verification passed all 84 native tests in
+14.852 seconds, then 134 focused tests in 17.212 seconds: the four
+hf_exploratory units and v4_future_controller_gate, including its two strict
+controller guards. Counts contain no duplicate probes. No broad passing claim
+or live lab compatibility claim is made by this implementer.
+
+**Affected artifacts:** Only the native source regex in
+src/kil/hf_exploratory_native.py, owned tests/test_hf_exploratory_native.py and
+this appended specialist lineage Markdown/generated HTML reader. The entire
+fc1c6a8 lineage remains a byte-for-byte prefix. CLI, factories, strict code,
+policies, drivers, accepted inputs/flags, plans, deferrals and publication
+artifacts are unchanged. Failed private evidence was neither read nor edited
+by this implementer; no actual accepted tool/input path was accessed.
+
+**Unresolved questions:** Repeat independent SPEC/quality review and root's
+fresh focused/static gate remain required. Actual native lab rehearsal and
+three-track action remain unattempted, as distinct from the earlier read-only
+preflight. This implementer ran no accepted input factory, native binary,
+network/image pull or profile/VM/cluster/request operation. Platform-image
+provenance and full Kind/Calico acceptance remain unverified with both flags
+false. No additional feature or report refactor is proposed.
+
+**Next gate:** Commit the exact bounded preparation fix, repeat SPEC and
+quality checks, then root's final source review. Only after these gates may
+root attempt the first approved native lab rehearsal; genuine readiness failure
+or uncertain mutation/request remains inconclusive and cannot authorize replay.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

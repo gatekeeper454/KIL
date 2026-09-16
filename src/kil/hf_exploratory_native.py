@@ -361,7 +361,7 @@ class ExploratoryLifecycle:
             versions[name] = payload.decode('utf-8', 'strict').strip()
         colima = self.observe(Command(('colima','version'), 10)).stdout_bytes
         lima = self.observe(Command(('limactl','--version'), 10)).stdout_bytes
-        if (len(colima) > 1024 or re.fullmatch(rb'colima version 0\.10\.3\n(?:git commit: [0-9a-f]{7,40}\n)?', colima) is None
+        if (len(colima) > 1024 or re.fullmatch(rb'colima version v0\.10\.3\n(?:git commit: [0-9a-f]{7,40}\n)?', colima) is None
                 or lima.strip() != b'limactl version 2.2.0' or len(lima) > 1024):
             raise ValueError('colima_lima_versions_not_pinned')
         versions.update(colima=colima.decode().strip(), lima=lima.decode().strip())

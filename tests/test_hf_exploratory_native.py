@@ -22,6 +22,7 @@ from kil.v3b2_contracts import TRACKS
 from kil.v3b2_proofs import canonical
 
 COMMIT = 'a' * 40
+COLIMA_VERSION_OUTPUT = b'colima version v0.10.3\ngit commit: 00f6c297e92a82c04a4ab507db0a61435650d7e8\n'
 
 
 def node():
@@ -376,12 +377,46 @@ class NativeTests(unittest.TestCase):
         self.assertTrue(hasattr(self.life, 'verify_versions'), 'version gate missing')
         self.inputs.tool_records = {name:{'version_output':'accepted-'+name} for name in ['docker','kind','kubectl']}
         outputs = [b'accepted-docker\n', b'accepted-kind\n', b'accepted-kubectl\n',
-                   b'colima version 0.10.3\ngit commit: abc1234\n', b'limactl version 2.2.0\n']
+                   COLIMA_VERSION_OUTPUT, b'limactl version 2.2.0\n']
         with patch.object(self.native.platform, 'system', return_value='Darwin'), patch.object(self.native.platform, 'machine', return_value='arm64'), patch.object(self.life, 'observe', side_effect=[CommandResult(0,p.decode(),'',p,b'') for p in outputs]):
             self.life.verify_versions()
         self.assertEqual(self.life.environment['docker_daemon_version'], 'UNOBSERVED')
         with patch.object(self.native.platform, 'system', return_value='Linux'):
             with self.assertRaises(ValueError): self.life.verify_versions()
+
+    def test_actual_colima_v_prefix_same_pin_retains_observed_versions(self):
+        state=self.full_fake_runner(); failure=None
+        with patch.object(self.native.platform,'system',return_value='Darwin'),patch.object(self.native.platform,'machine',return_value='arm64'):
+            try: self.life.verify_versions()
+            except ValueError as error: failure=str(error)
+        receipts=[path.read_bytes() for path in self.store.path.glob('command-*.stdout')]
+        self.assertEqual(len(COLIMA_VERSION_OUTPUT),76); self.assertIn(COLIMA_VERSION_OUTPUT,receipts)
+        self.assertEqual(len(state['calls']),5); self.assertTrue(all(not command.mutating for command in state['calls']))
+        self.assertFalse(self.life.profile_attempted); self.assertFalse(self.life.cluster_attempted)
+        self.assertEqual(self.store.attempts,[])
+        self.assertIsNone(failure,'approved Colima pin with native v prefix was refused: '+str(failure))
+        self.assertEqual(self.life.environment['observed_tool_versions']['colima'],COLIMA_VERSION_OUTPUT.decode().strip())
+        self.assertEqual(self.life.environment['observed_tool_versions']['lima'],'limactl version 2.2.0')
+        self.assertEqual(self.life.environment['docker_daemon_version'],'UNOBSERVED')
+
+    def test_colima_version_nearby_pins_extra_text_and_crlf_refused_before_mutation(self):
+        state=self.full_fake_runner(); original=self.runner.run.side_effect
+        bad_outputs=[COLIMA_VERSION_OUTPUT.replace(b'v0.10.3',value) for value in
+            [b'v0.10.4',b'v0.10.30',b'0.10.3',b'vv0.10.3']]
+        bad_outputs += [COLIMA_VERSION_OUTPUT+b'extra\n',COLIMA_VERSION_OUTPUT.replace(b'\n',b'\r\n'),
+            COLIMA_VERSION_OUTPUT.replace(b'git commit:',b'wrong extra:'),COLIMA_VERSION_OUTPUT[:-1]]
+        for payload in bad_outputs:
+            def version(command):
+                if command.argv==('colima','version'):
+                    state['calls'].append(command)
+                    return CommandResult(0,payload.decode(),'',payload,b'')
+                return original(command)
+            self.runner.run.side_effect=version
+            with patch.object(self.native.platform,'system',return_value='Darwin'),patch.object(self.native.platform,'machine',return_value='arm64'),self.assertRaisesRegex(ValueError,'colima_lima_versions_not_pinned'):
+                self.life.verify_versions()
+        self.assertTrue(all(not command.mutating for command in state['calls']))
+        self.assertFalse(self.life.profile_attempted); self.assertFalse(self.life.cluster_attempted)
+        self.assertEqual(self.store.attempts,[])
 
     def test_driver_incarnation_drift_is_permanent_not_read_retry(self):
         self.install_pods()
@@ -477,7 +512,7 @@ class NativeTests(unittest.TestCase):
             argv = command.argv; executable = Path(argv[0]).name
             if argv[0].startswith('/'):
                 return result(('fixture-'+executable+'\n').encode())
-            if argv==('colima','version'): return result(b'colima version 0.10.3\ngit commit: abc1234\n')
+            if argv==('colima','version'): return result(COLIMA_VERSION_OUTPUT)
             if argv==('limactl','--version'): return result(b'limactl version 2.2.0\n')
             if argv==('docker','context','show'): return result(b'fixture-global\n')
             if argv==('colima','list','--json'):
