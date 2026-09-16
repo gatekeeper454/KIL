@@ -15879,3 +15879,63 @@ Task 1; obtain coordinator-dispatched independent specification and quality
 reviews before implementing the aggregate in Task 2.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-314 — 2026-09-16 — Independent Task 1 specification review approved
+
+**Input:** The coordinator requested independent specification review of Task 1
+at `b7ab127ed7eb67bd068dd760547971f7bb05dc4e` against base `6aa52db`, under
+the user's authorization to execute the approved static configuration plan.
+Review was limited to the two new test files and their observation provenance;
+no implementation, live calls, push or full-suite execution was authorized here.
+
+**Interpretation:** Verify actual code against the approved design and Task 1
+plan rather than relying on the implementer's synopsis. Distinguish the single
+persisted acceptance test from supplemental one-off diagnostics and defer the
+aggregate's broader adversarial requirements to the later planned tasks.
+
+**Decision status:** Confirmed Task 1 specification compliance; no specification
+issues or test/production corrections required. This is independent fixture
+review approval, not aggregate acceptance or platform runtime completion.
+Independent quality review remains a separate gate.
+
+**Rationale:** The helper merges deep-copied deltas from nine existing component
+fixtures against each fixture's own sparse ownership baseline, using the exact
+API version/kind/namespace/name identity and rejecting nonidentical overlapping
+deltas. The merged anchor uses the matched manifest-source identity and run.
+Inspection of the imported fixture chains found test-owned literals and the
+checksummed Calico projection constructing observed platform configurations;
+production application rendering supplies only permitted surrounding ownership
+scaffolding. Fresh raw observations reconstruct the run/sequence/identity/Kind
+image-bound source. Rebase support preserves platform observations while
+rebuilding changed application expectations and Namespace authority. All nine
+validators receive the same reconstructed ownership; Calico receives one pinned
+source/projection pair and both authenticated mirrors receive one source.
+
+**Affected artifacts:** Appended this review entry and regenerated its lineage
+reader only. The reviewed test files and all production files remain unchanged;
+the sixteen deferred controller lifecycle tests remain unchanged.
+
+**Verification:** Fresh focused `PlatformFixtureTest` execution passed one
+method in 0.640 seconds, zero failures and zero skips. Its persisted assertions
+require ten bindings, two CoreDNS bindings, replay of each component constructor
+and singleton-false runtime completion flags. Separate review diagnostics passed
+shared-reference checks, three valid run/cluster-UUID/node-container rebases,
+input-document preservation, sequence-bound source reconstruction and rejection
+of conflicting rich Calico Pod deltas. Those diagnostics are not persisted test
+coverage. Initial diagnostic attempts incorrectly accessed a nonexistent source
+context field, then a wrongly named encoded context key, and selected a row that
+did not have overlapping deltas; inspection of the actual source record schema
+and merge inputs corrected only the one-off diagnostics. These were review-script
+errors, not repository failures. Reader and diff checks precede this review commit.
+
+**Unresolved questions:** Independent Task 1 quality-review outcome. Aggregate
+implementation, adversarial authority joins and full static acceptance remain
+unimplemented later gates. Image realization, readiness and live authorization
+remain outside this review's claim boundary.
+
+**Next gate:** Regenerate and byte-check readers, check the diff and commit this
+documentation-only specification approval. After independent quality approval,
+the coordinator may accept Task 1 and advance to test-first Task 2 under the
+approved static plan; no live or broader completion authority is added.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
