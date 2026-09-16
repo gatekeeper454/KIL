@@ -47,7 +47,7 @@ V3C claim. No new skip or relaxed component validation.
 
 **Files:** Create `tests/v3b2_platform_configuration_fixture.py` and `tests/test_v3b2_platform_pod_configuration.py`.
 
-- [ ] **Step 1: Create the test-only combined fixture and dependency builder**
+- [x] **Step 1: Create the test-only combined fixture and dependency builder**
 
 Use the following code. The delta merge compares each component fixture with its
 own unchanged ownership baseline, so unrelated sparse rows never overwrite a
@@ -181,7 +181,7 @@ def dependencies(args, source, *, calico_source=None, calico_projection=None):
             ownership=ownership, source=source))
 ```
 
-- [ ] **Step 2: Add the fixture acceptance test and execute it**
+- [x] **Step 2: Add the fixture acceptance test and execute it**
 
 ```python
 import unittest
@@ -208,7 +208,7 @@ only after identifying the conflicting literal/relationship; do not change or
 weaken production contracts. Any substantive specification incompatibility
 requires coordinator review before continuing.
 
-- [ ] **Step 3: Review fixture independence, append lineage and commit**
+- [x] **Step 3: Review fixture independence, append lineage and commit**
 
 Confirm none of the fixture imports calls a production expected-spec factory to
 create observed configurations. Run specification then quality review of fixture
@@ -220,7 +220,7 @@ and lineage/readers as `test: compose independent platform configuration fixture
 
 **Files:** Create `src/kil/v3b2_platform_pod_configuration.py`; modify `tests/test_v3b2_platform_pod_configuration.py`.
 
-- [ ] **Step 1: Add acceptance tests before the module exists**
+- [x] **Step 1: Add acceptance tests before the module exists**
 
 Use importlib in test setup so Task 1 still runs independently:
 
@@ -253,7 +253,7 @@ class PlatformCompositionTest(unittest.TestCase):
 
 Run the focused module. Expected RED: `aggregate missing`, not fixture failure.
 
-- [ ] **Step 2: Implement the full fixed aggregate module**
+- [x] **Step 2: Implement the full fixed aggregate module**
 
 The following is the complete implementation shape. Fixed descriptors describe
 the nine explicit proof inputs; they are not an extensible registry.
@@ -417,7 +417,7 @@ def validate_platform_pod_configuration(*, ownership, calico_node, calico_contro
         raise PlatformPodConfigurationError('invalid platform configuration evidence') from error
 ```
 
-- [ ] **Step 3: Run focused GREEN and review before committing**
+- [x] **Step 3: Run focused GREEN and review before committing**
 
 Run: `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src "$KIL_TEST_PYTHON" -m unittest tests.test_v3b2_platform_pod_configuration -v`
 Expected: fixture and aggregate acceptance pass with zero skips. Run specification
@@ -428,7 +428,7 @@ readers/diff. Commit as `feat: compose ten platform Pod configurations`.
 
 **Files:** Modify `tests/test_v3b2_platform_pod_configuration.py`; production aggregate only if a regression demonstrates a defect.
 
-- [ ] **Step 1: Add exact-type, constructor and binding mutation tests**
+- [x] **Step 1: Add exact-type, constructor and binding mutation tests**
 
 Add these methods to `PlatformCompositionTest`:
 
@@ -487,7 +487,7 @@ Add `from copy import deepcopy` at module top.
 Check missing keyword arguments with Python `TypeError` separately
 from explicitly supplied `None`, which must raise the local evidence error.
 
-- [ ] **Step 2: Add independently valid inventory/status mix regressions**
+- [x] **Step 2: Add independently valid inventory/status mix regressions**
 
 ```python
     def test_valid_byte_and_status_variants_cannot_be_mixed(self):
@@ -520,7 +520,7 @@ The alternate source uses freshly constructed `RawObservation` objects.
 `source.raw_observations` contains context-bound encoded bytes, not validator
 input objects, so it must not be passed back as `observations`.
 
-- [ ] **Step 3: Cover valid run/full-identity/profile differences and Calico source equality**
+- [x] **Step 3: Cover valid run/full-identity/profile differences and Calico source equality**
 
 Add these methods. `rebase_args` preserves independent platform observations but
 re-renders the new application expectations; `source_for` joins the changed run,
@@ -530,13 +530,11 @@ before any mixed evidence is claimed independently valid.
 ```python
     def test_independently_valid_authority_changes_cannot_be_mixed(self):
         owned = self.args['owned_identity']
-        profile = self.args['profile']
         workload = self.args['workload']
         variants = (
-            dict(owned_identity=replace(owned, docker_host='unix:///tmp/alternate/docker.sock')),
+            dict(owned_identity=replace(owned, docker_host='unix:///tmp/alternate/kil-v3-lab/docker.sock')),
             dict(owned_identity=replace(owned, kubeconfig='/tmp/alternate/kubeconfig')),
             dict(workload=replace(workload, run_id='v3b2-' + 'd' * 64)),
-            dict(profile=replace(profile, kind_node_image='kindest/node:v1.36.1@sha256:' + 'e' * 64)),
         )
         proof = self.m.validate_platform_pod_configuration(**self.values)
         for changes in variants:
@@ -550,6 +548,16 @@ before any mixed evidence is claimed independently valid.
                             **dict(self.values, **{name: alternate[name]}))
                     with self.assertRaises(self.m.PlatformPodConfigurationError):
                         replace(proof, **{name: alternate[name]})
+
+    def test_pinned_profile_drift_rejects_before_independent_evidence(self):
+        from kil.v3b2_contracts import SchemaError
+        with self.assertRaises(SchemaError):
+            replace(self.args['profile'], kind_node_image='kindest/node:v1.36.1@sha256:' + 'e' * 64)
+        bad = deepcopy(self.values['calico_node'])
+        object.__setattr__(bad.revision.ownership.profile, 'kind_node_image',
+                           'kindest/node:v1.36.1@sha256:' + 'e' * 64)
+        with self.assertRaises(self.m.PlatformPodConfigurationError):
+            self.m.validate_platform_pod_configuration(**dict(self.values, calico_node=bad))
 
     def test_calico_byte_variants_reject_at_existing_content_lock(self):
         revision = self.values['calico_node'].revision
@@ -609,7 +617,7 @@ but must fail component reconstruction through the aggregate:
                 replace(proof, **{name: bad})
 ```
 
-- [ ] **Step 4: Execute adversarial tests and correct only evidenced defects**
+- [x] **Step 4: Execute adversarial tests and correct only evidenced defects**
 
 Run the focused module with `-v`. New tests may already pass because Task 2
 implemented their strict contract; do not claim such tests established RED.
@@ -624,7 +632,7 @@ regenerate/check readers, diff-check, commit as
 
 **Files:** Plan checkboxes, lineage Markdown and generated readers only, unless regression proves an in-scope defect.
 
-- [ ] **Step 1: Run adjacent component, revision, ownership and source tests**
+- [x] **Step 1: Run adjacent component, revision, ownership and source tests**
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src "$KIL_TEST_PYTHON" -m unittest \
@@ -643,7 +651,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src "$KIL_TEST_PYTHON" -m unittest \
 Expected: zero failures/errors/skips. Capture actual method count and elapsed
 time; no estimated count is an acceptance result.
 
-- [ ] **Step 2: Run full discovery and reader verification**
+- [x] **Step 2: Run full discovery and reader verification**
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src "$KIL_TEST_PYTHON" -m unittest discover -s tests -v

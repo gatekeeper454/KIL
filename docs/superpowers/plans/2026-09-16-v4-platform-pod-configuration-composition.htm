@@ -6,7 +6,7 @@
 <title>V4 Platform Pod Configuration Composition Implementation Plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-16-v4-platform-pod-configuration-composition.md">
-<meta name="source-sha256" content="068fa479fad2b56a4781b8ab5edd0e3af58bf6a6084ac1279b7a666c63b7f8ab">
+<meta name="source-sha256" content="7ad07e2899d59ef8e80c945b07b572ca9e503fa001960af2025c9ea437bd2cdb">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-v4-platform-pod-configuration-composition.md</code> (<code>068fa479fad2b56a4781b8ab5edd0e3af58bf6a6084ac1279b7a666c63b7f8ab</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-v4-platform-pod-configuration-composition.md</code> (<code>7ad07e2899d59ef8e80c945b07b572ca9e503fa001960af2025c9ea437bd2cdb</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">V4 Platform Pod Configuration Composition Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-v4-platform-pod-configuration-composition.md</code> (<code>068fa479fad2b56a4781b8ab5edd0e3af58bf6a6084ac1279b7a666c63b7f8ab</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-v4-platform-pod-configuration-composition.md</code> (<code>7ad07e2899d59ef8e80c945b07b572ca9e503fa001960af2025c9ea437bd2cdb</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v4-platform-pod-configuration-composition-implementation-plan">V4 Platform Pod Configuration Composition Implementation Plan</a></li><li class="level-2"><a href="#approved-inputs-execution-environment-and-boundaries">Approved inputs, execution environment and boundaries</a></li><li class="level-2"><a href="#file-map">File map</a></li><li class="level-3"><a href="#task-1-one-independently-observed-inventory-accepted-by-all-nine-components">Task 1: One independently observed inventory accepted by all nine components</a></li><li class="level-3"><a href="#task-2-typed-ten-pod-aggregate-with-complete-reconstruction">Task 2: Typed ten-Pod aggregate with complete reconstruction</a></li><li class="level-3"><a href="#task-3-adversarial-same-source-replay-and-claim-boundary-tests">Task 3: Adversarial same-source, replay and claim-boundary tests</a></li><li class="level-3"><a href="#task-4-combined-regression-and-bounded-static-acceptance">Task 4: Combined regression and bounded static acceptance</a></li><li class="level-2"><a href="#plan-self-review-and-execution-handoff">Plan self-review and execution handoff</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v4-platform-pod-configuration-composition-implementation-plan" href="#v4-platform-pod-configuration-composition-implementation-plan">V4 Platform Pod Configuration Composition Implementation Plan</a></li><li class="level-2"><a data-section-id="approved-inputs-execution-environment-and-boundaries" href="#approved-inputs-execution-environment-and-boundaries">Approved inputs, execution environment and boundaries</a></li><li class="level-2"><a data-section-id="file-map" href="#file-map">File map</a></li><li class="level-3"><a data-section-id="task-1-one-independently-observed-inventory-accepted-by-all-nine-components" href="#task-1-one-independently-observed-inventory-accepted-by-all-nine-components">Task 1: One independently observed inventory accepted by all nine components</a></li><li class="level-3"><a data-section-id="task-2-typed-ten-pod-aggregate-with-complete-reconstruction" href="#task-2-typed-ten-pod-aggregate-with-complete-reconstruction">Task 2: Typed ten-Pod aggregate with complete reconstruction</a></li><li class="level-3"><a data-section-id="task-3-adversarial-same-source-replay-and-claim-boundary-tests" href="#task-3-adversarial-same-source-replay-and-claim-boundary-tests">Task 3: Adversarial same-source, replay and claim-boundary tests</a></li><li class="level-3"><a data-section-id="task-4-combined-regression-and-bounded-static-acceptance" href="#task-4-combined-regression-and-bounded-static-acceptance">Task 4: Combined regression and bounded static acceptance</a></li><li class="level-2"><a data-section-id="plan-self-review-and-execution-handoff" href="#plan-self-review-and-execution-handoff">Plan self-review and execution handoff</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -101,7 +101,7 @@ V3C claim. No new skip or relaxed component validation.</p>
 <h3 id="task-1-one-independently-observed-inventory-accepted-by-all-nine-components">Task 1: One independently observed inventory accepted by all nine components</h3>
 <p><strong>Files:</strong> Create <code>tests/v3b2_platform_configuration_fixture.py</code> and <code>tests/test_v3b2_platform_pod_configuration.py</code>.</p>
 <ul>
-<li>[ ] <strong>Step 1: Create the test-only combined fixture and dependency builder</strong></li>
+<li>[x] <strong>Step 1: Create the test-only combined fixture and dependency builder</strong></li>
 </ul>
 <p>Use the following code. The delta merge compares each component fixture with its
 own unchanged ownership baseline, so unrelated sparse rows never overwrite a
@@ -233,7 +233,7 @@ def dependencies(args, source, *, calico_source=None, calico_projection=None):
             ownership=ownership, source=source))
 </code></pre>
 <ul>
-<li>[ ] <strong>Step 2: Add the fixture acceptance test and execute it</strong></li>
+<li>[x] <strong>Step 2: Add the fixture acceptance test and execute it</strong></li>
 </ul>
 <pre><code class="language-python">import unittest
 from tests.v3b2_platform_configuration_fixture import (
@@ -257,7 +257,7 @@ only after identifying the conflicting literal/relationship; do not change or
 weaken production contracts. Any substantive specification incompatibility
 requires coordinator review before continuing.</p>
 <ul>
-<li>[ ] <strong>Step 3: Review fixture independence, append lineage and commit</strong></li>
+<li>[x] <strong>Step 3: Review fixture independence, append lineage and commit</strong></li>
 </ul>
 <p>Confirm none of the fixture imports calls a production expected-spec factory to
 create observed configurations. Run specification then quality review of fixture
@@ -267,7 +267,7 @@ and lineage/readers as <code>test: compose independent platform configuration fi
 <h3 id="task-2-typed-ten-pod-aggregate-with-complete-reconstruction">Task 2: Typed ten-Pod aggregate with complete reconstruction</h3>
 <p><strong>Files:</strong> Create <code>src/kil/v3b2_platform_pod_configuration.py</code>; modify <code>tests/test_v3b2_platform_pod_configuration.py</code>.</p>
 <ul>
-<li>[ ] <strong>Step 1: Add acceptance tests before the module exists</strong></li>
+<li>[x] <strong>Step 1: Add acceptance tests before the module exists</strong></li>
 </ul>
 <p>Use importlib in test setup so Task 1 still runs independently:</p>
 <pre><code class="language-python">from dataclasses import replace
@@ -297,7 +297,7 @@ class PlatformCompositionTest(unittest.TestCase):
 </code></pre>
 <p>Run the focused module. Expected RED: <code>aggregate missing</code>, not fixture failure.</p>
 <ul>
-<li>[ ] <strong>Step 2: Implement the full fixed aggregate module</strong></li>
+<li>[x] <strong>Step 2: Implement the full fixed aggregate module</strong></li>
 </ul>
 <p>The following is the complete implementation shape. Fixed descriptors describe
 the nine explicit proof inputs; they are not an extensible registry.</p>
@@ -459,7 +459,7 @@ def validate_platform_pod_configuration(*, ownership, calico_node, calico_contro
         raise PlatformPodConfigurationError('invalid platform configuration evidence') from error
 </code></pre>
 <ul>
-<li>[ ] <strong>Step 3: Run focused GREEN and review before committing</strong></li>
+<li>[x] <strong>Step 3: Run focused GREEN and review before committing</strong></li>
 </ul>
 <p>Run: <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src &quot;$KIL_TEST_PYTHON&quot; -m unittest tests.test_v3b2_platform_pod_configuration -v</code>
 Expected: fixture and aggregate acceptance pass with zero skips. Run specification
@@ -468,7 +468,7 @@ readers/diff. Commit as <code>feat: compose ten platform Pod configurations</cod
 <h3 id="task-3-adversarial-same-source-replay-and-claim-boundary-tests">Task 3: Adversarial same-source, replay and claim-boundary tests</h3>
 <p><strong>Files:</strong> Modify <code>tests/test_v3b2_platform_pod_configuration.py</code>; production aggregate only if a regression demonstrates a defect.</p>
 <ul>
-<li>[ ] <strong>Step 1: Add exact-type, constructor and binding mutation tests</strong></li>
+<li>[x] <strong>Step 1: Add exact-type, constructor and binding mutation tests</strong></li>
 </ul>
 <p>Add these methods to <code>PlatformCompositionTest</code>:</p>
 <pre><code class="language-python">    def test_wrong_types_and_subclasses_reject(self):
@@ -524,7 +524,7 @@ readers/diff. Commit as <code>feat: compose ten platform Pod configurations</cod
 Check missing keyword arguments with Python <code>TypeError</code> separately
 from explicitly supplied <code>None</code>, which must raise the local evidence error.</p>
 <ul>
-<li>[ ] <strong>Step 2: Add independently valid inventory/status mix regressions</strong></li>
+<li>[x] <strong>Step 2: Add independently valid inventory/status mix regressions</strong></li>
 </ul>
 <pre><code class="language-python">    def test_valid_byte_and_status_variants_cannot_be_mixed(self):
         variants = [dict(self.args, runtime_objects=self.args['runtime_objects'] + b'\n')]
@@ -555,7 +555,7 @@ from explicitly supplied <code>None</code>, which must raise the local evidence 
 <code>source.raw_observations</code> contains context-bound encoded bytes, not validator
 input objects, so it must not be passed back as <code>observations</code>.</p>
 <ul>
-<li>[ ] <strong>Step 3: Cover valid run/full-identity/profile differences and Calico source equality</strong></li>
+<li>[x] <strong>Step 3: Cover valid run/full-identity/profile differences and Calico source equality</strong></li>
 </ul>
 <p>Add these methods. <code>rebase_args</code> preserves independent platform observations but
 re-renders the new application expectations; <code>source_for</code> joins the changed run,
@@ -563,13 +563,11 @@ endpoint/kubeconfig and requested Kind image. A full alternate must validate
 before any mixed evidence is claimed independently valid.</p>
 <pre><code class="language-python">    def test_independently_valid_authority_changes_cannot_be_mixed(self):
         owned = self.args['owned_identity']
-        profile = self.args['profile']
         workload = self.args['workload']
         variants = (
-            dict(owned_identity=replace(owned, docker_host='unix:///tmp/alternate/docker.sock')),
+            dict(owned_identity=replace(owned, docker_host='unix:///tmp/alternate/kil-v3-lab/docker.sock')),
             dict(owned_identity=replace(owned, kubeconfig='/tmp/alternate/kubeconfig')),
             dict(workload=replace(workload, run_id='v3b2-' + 'd' * 64)),
-            dict(profile=replace(profile, kind_node_image='kindest/node:v1.36.1@sha256:' + 'e' * 64)),
         )
         proof = self.m.validate_platform_pod_configuration(**self.values)
         for changes in variants:
@@ -583,6 +581,16 @@ before any mixed evidence is claimed independently valid.</p>
                             **dict(self.values, **{name: alternate[name]}))
                     with self.assertRaises(self.m.PlatformPodConfigurationError):
                         replace(proof, **{name: alternate[name]})
+
+    def test_pinned_profile_drift_rejects_before_independent_evidence(self):
+        from kil.v3b2_contracts import SchemaError
+        with self.assertRaises(SchemaError):
+            replace(self.args['profile'], kind_node_image='kindest/node:v1.36.1@sha256:' + 'e' * 64)
+        bad = deepcopy(self.values['calico_node'])
+        object.__setattr__(bad.revision.ownership.profile, 'kind_node_image',
+                           'kindest/node:v1.36.1@sha256:' + 'e' * 64)
+        with self.assertRaises(self.m.PlatformPodConfigurationError):
+            self.m.validate_platform_pod_configuration(**dict(self.values, calico_node=bad))
 
     def test_calico_byte_variants_reject_at_existing_content_lock(self):
         revision = self.values['calico_node'].revision
@@ -638,7 +646,7 @@ but must fail component reconstruction through the aggregate:</p>
                 replace(proof, **{name: bad})
 </code></pre>
 <ul>
-<li>[ ] <strong>Step 4: Execute adversarial tests and correct only evidenced defects</strong></li>
+<li>[x] <strong>Step 4: Execute adversarial tests and correct only evidenced defects</strong></li>
 </ul>
 <p>Run the focused module with <code>-v</code>. New tests may already pass because Task 2
 implemented their strict contract; do not claim such tests established RED.
@@ -651,7 +659,7 @@ regenerate/check readers, diff-check, commit as
 <h3 id="task-4-combined-regression-and-bounded-static-acceptance">Task 4: Combined regression and bounded static acceptance</h3>
 <p><strong>Files:</strong> Plan checkboxes, lineage Markdown and generated readers only, unless regression proves an in-scope defect.</p>
 <ul>
-<li>[ ] <strong>Step 1: Run adjacent component, revision, ownership and source tests</strong></li>
+<li>[x] <strong>Step 1: Run adjacent component, revision, ownership and source tests</strong></li>
 </ul>
 <pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src &quot;$KIL_TEST_PYTHON&quot; -m unittest \
   tests.test_v3b2_platform_pod_configuration \
@@ -668,7 +676,7 @@ regenerate/check readers, diff-check, commit as
 <p>Expected: zero failures/errors/skips. Capture actual method count and elapsed
 time; no estimated count is an acceptance result.</p>
 <ul>
-<li>[ ] <strong>Step 2: Run full discovery and reader verification</strong></li>
+<li>[x] <strong>Step 2: Run full discovery and reader verification</strong></li>
 </ul>
 <pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src &quot;$KIL_TEST_PYTHON&quot; -m unittest discover -s tests -v
 &quot;$KIL_TEST_PYTHON&quot; tools/render_markdown.py --check

@@ -16428,3 +16428,91 @@ and bounded static acceptance. This quality review authorizes no live Docker,
 Colima, Kind, kubectl, collector, controller or profile operations.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-322 — 2026-09-16 — Fresh Task 4 static regression evidence; final review pending
+
+**Input:** Execute approved Task 4 against Task 3 code revision `88d4b25`, with
+independent Task 3 specification and quality approvals completed before this
+preliminary record. Run the exact adjacent
+18-module suite and one full repository discovery using the existing project
+environment interpreter; preserve the sixteen existing lifecycle deferrals.
+The coordinator delegated exclusive ownership of the dirty plan, execution
+synopsis and lineage for a preliminary verification-documentation commit only.
+
+**Interpretation:** Verification-before-completion requires fresh complete
+execution evidence, actual method counts and elapsed time, successful exit,
+independent skip-set comparison and bounded claims. A unittest method count
+includes skips but not extra subtests. Passing static tests does not establish
+live capture, atomic/fresh API observations, effective images, status/readiness
+or runtime/application completion. Final acceptance must follow independent
+specification, quality and holistic review; do not preempt those gates.
+
+**Decision status:** Verified static regressions; final review pending. No
+production defect was demonstrated and no production/test code changed in this
+task. Task 4 Steps 1 and 2 are verified; Steps 3 and 4 remain unchecked for the
+coordinator's independent review and separate acceptance record.
+
+**Rationale:** The combined suite exercises the new ten-incarnation aggregate
+alongside all adjacent component, revision, parent-configuration, runtime/node
+ownership and manifest-source contracts. Full discovery completed once without
+interruption; its exact sixteen skipped methods match the unchanged
+`DEFERRED_METHODS` set, and that default-gate test passed. Existing unit,
+temporary subprocess and local HTTP-server fixtures are regression evidence,
+not a newly executed live Kind/Calico or Hugging Face demonstration. Tests invoke
+the aggregate on synthetic observations and create an in-memory typed proof;
+the existing controller is neither modified nor newly wired to it.
+
+The fixed Kind-profile image mutation remains an earlier schema rejection,
+not an independently valid alternate profile. The alternate Docker endpoint
+was corrected to retain `/kil-v3-lab/docker.sock`, while its malformed form
+remains an earlier identity rejection. Earlier ownership test scaffolding was
+corrected to compare existing deployment/node subproofs rather than a nonexistent
+aggregate bindings field. These corrections did not establish a production bug,
+relax validators or supply a new contract RED/GREEN cycle. Existing Calico
+content-lock rejections remain intact.
+
+**Actual verification:** With
+`/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python`,
+`PYTHONDONTWRITEBYTECODE=1` and `PYTHONPATH=src`, the exact requested verbose
+combined suite ran 225 methods in 79.392 seconds: 225 passes, zero failures,
+errors or skips, exit zero (session `64116`). The single full verbose discovery
+ran 1612 methods in 835.159 seconds, footer `OK (skipped=16)`: 1596 passes,
+zero failures/errors and exactly sixteen existing deferrals, exit zero
+(session `57577`). Approved subprocess and `/dev/fd` access served existing
+isolated tests. `set -o pipefail` preceded `2>&1 | tee "$task4_full_log"`, so
+the final zero pipeline exit could not be supplied by `tee` while Python failed.
+Complete output is retained at
+`/private/tmp/kil-task4-full-unittest-XXXXXX.log`; BSD `mktemp` exclusively
+created that literal temporary filename. Whole-log scanning independently
+counted 1612 method starts, 1596 successful results, 16 skips and zero
+failure/error sections, and reviewed remaining diagnostics. Two successful
+results are standalone `ok` lines after intentional argparse rejection text;
+that text is not a unittest error. No duplicate full suite was dispatched.
+
+**Affected artifacts:** Updated only Task 4 verification checkboxes in the
+coordinator-owned plan; added the execution synopsis covering observed host,
+pinned target, exact synthetic inventory/images, KIL actions and actual results;
+appended this entry at actual EOF. Regenerated their readers among all 79
+tracked Markdown readers. Generation/byte-check, working/staged diff checks and
+explicit six-file preliminary documentation commit precede handoff. Earlier
+entries, production, tests, main checkout and other worktrees remain untouched.
+
+**Unresolved questions:** Final independent specification then quality and
+holistic review remain required before bounded static acceptance. Platform
+effective-image authority and component-specific status/readiness composition
+still need separate design and evidence. Exact ten-platform-Pod configuration
+coverage and shared validated source equality do not certify effective image IDs,
+init completion, scheduling/readiness, live policy enforcement or current lab
+state. Both `runtime_contract_complete` and
+`full_application_contract_complete` remain singleton `False`; all sixteen
+lifecycle deferrals are unchanged. V4 and V3C are not complete.
+
+**Next gate:** Commit only the verified plan/synopsis/lineage Markdown and readers
+as preliminary static verification documentation, return ownership to the
+coordinator for final specification, quality and holistic review, then record a
+separate bounded acceptance if approved. Platform effective-image and
+component-specific status/readiness design is the next evidence gate. No live
+Colima, Docker, Kind, kubectl, collector/controller or profile operation,
+application demonstration request, push, PR or publication is authorized here.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
