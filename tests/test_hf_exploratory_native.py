@@ -445,6 +445,10 @@ class NativeTests(unittest.TestCase):
         runtime = json.loads(args['runtime_objects'])
         drivers = driver_fixture(profile=self.inputs.profile,workload=self.inputs.workload,owned_identity=identity)['pods']
         runtime['items'] = [row for row in runtime['items'] if not(row['kind']=='Pod' and row['metadata']['name']=='driver')] + drivers
+        deployments = {(row['metadata']['namespace'],row['metadata']['name']):row
+            for row in runtime['items'] if row['kind']=='Deployment'
+            and row['metadata'].get('namespace') in self.native.NAMESPACES.values()}
+        for row in deployments.values(): row['metadata']['generation']=1
         pods = {}
         for index,row in enumerate(runtime['items']):
             if row['kind']=='Node':
@@ -523,7 +527,8 @@ class NativeTests(unittest.TestCase):
                     if row['kind']=='Service': row=deepcopy(service_map[(row['metadata']['namespace'],row['metadata']['name'])])
                     else: row['metadata'].update(uid=f'applied-{index}',resourceVersion='1')
                     if row['kind']=='Deployment':
-                        row['metadata'].update(uid='deployment-'+row['metadata']['namespace']+'-'+row['metadata']['name'],generation=1)
+                        actual=deployments[(row['metadata']['namespace'],row['metadata']['name'])]
+                        row['metadata'].update(uid=actual['metadata']['uid'],generation=actual['metadata']['generation'])
                         row['status']={'observedGeneration':1,'replicas':1,'readyReplicas':1,'availableReplicas':1,
                             'conditions':[{'type':'Available','status':'True','reason':'MinimumReplicasAvailable'}]}
                     applied.append(row)
@@ -599,6 +604,13 @@ class NativeTests(unittest.TestCase):
         self.assertEqual([row['observed'] for row in report['joined_results']],[['permit',200,1],['permit',200,1],['deny',403,0]])
         self.assertEqual([track for track,_ in state['attached']],list(TRACKS))
         self.assertEqual(len(state['drained']),3)
+        self.assertEqual(len(self.life.deployment_bindings),9)
+        for filename in ('applied-objects.json','runtime-ready-source.json'):
+            actual=json.loads((self.store.path/filename).read_bytes())
+            for row in actual['items']:
+                if row['kind']=='Deployment' and row['metadata'].get('namespace') in self.native.NAMESPACES.values():
+                    metadata=row['metadata']; track=next(track for track,ns in self.native.NAMESPACES.items() if ns==metadata['namespace'])
+                    self.assertEqual((metadata['uid'],metadata['generation']),self.life.deployment_bindings[(track,metadata['name'])])
         rows=[json.loads(line) for line in self.store.journal.read_bytes().splitlines()]
         first_final_target=next(index for index,row in enumerate(rows) if row['event']=='source_capture' and row['details']['track']==TRACKS[0] and row['details']['role']=='target' and 'final' in row['details']['file'])
         second_request=next(index for index,row in enumerate(rows) if row['event']=='request_intent' and row['details']['track']==TRACKS[1])
@@ -1061,6 +1073,81 @@ class NativeTests(unittest.TestCase):
         self.runner.run.side_effect=drift_after_pending; report=self.execute_fake()
         self.assertEqual(report['status'],'inconclusive'); self.assertEqual(state['attached'],[])
         self.assertEqual(self.life.anchors[(TRACKS[0],'authz')]['container_id'],initial)
+
+    def test_action_coherent_wide_deployment_uid_replacement_stops_before_intent(self):
+        from kil.v3b2_proofs import RUNTIME_RESOURCES
+        self.life.mode='action'; state=self.full_fake_runner(); original=self.runner.run.side_effect; wide=0
+        def replacement(command):
+            nonlocal wide
+            result=original(command)
+            if command.argv[3:5]==('get',RUNTIME_RESOURCES):
+                wide+=1; doc=json.loads(result.stdout_bytes)
+                deployment=next(row for row in doc['items'] if row['kind']=='Deployment'
+                    and row['metadata'].get('namespace')=='kil-v3-baseline' and row['metadata']['name']=='authz')
+                old_uid=deployment['metadata']['uid']; deployment['metadata']['uid']='replacement-deployment'
+                for row in doc['items']:
+                    if row['kind']=='ReplicaSet':
+                        for owner in row['metadata'].get('ownerReferences',[]):
+                            if owner['uid']==old_uid: owner['uid']='replacement-deployment'
+                raw=canonical(doc); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=replacement; report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive'); self.assertEqual(report['request_intent_count'],0)
+        self.assertEqual(state['attached'],[]); self.assertEqual(report['joined_results'],[])
+        self.assertEqual(wide,1); self.assertTrue(report['owned_teardown'])
+
+    def test_action_applied_deployment_uid_replacement_stops_before_intent(self):
+        self.life.mode='action'; state=self.full_fake_runner(); original=self.runner.run.side_effect
+        def replacement(command):
+            result=original(command)
+            if command.argv[3:5]==('get','--filename'):
+                desired=json.loads(command.stdin)['items']
+                if len(desired)>1 and any(row['kind']=='Deployment' for row in desired):
+                    doc=json.loads(result.stdout_bytes)
+                    deployment=next(row for row in doc['items'] if row['kind']=='Deployment')
+                    deployment['metadata']['uid']='replacement-applied-deployment'
+                    raw=canonical(doc); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=replacement; report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive'); self.assertEqual(report['request_intent_count'],0)
+        self.assertEqual(state['attached'],[]); self.assertTrue(report['owned_teardown'])
+
+    def test_action_wide_deployment_generation_drift_stops_before_intent(self):
+        from kil.v3b2_proofs import RUNTIME_RESOURCES
+        self.life.mode='action'; state=self.full_fake_runner(); original=self.runner.run.side_effect
+        def replacement(command):
+            result=original(command)
+            if command.argv[3:5]==('get',RUNTIME_RESOURCES):
+                doc=json.loads(result.stdout_bytes)
+                deployment=next(row for row in doc['items'] if row['kind']=='Deployment'
+                    and row['metadata'].get('namespace') in self.native.NAMESPACES.values())
+                deployment['metadata']['generation']=2
+                raw=canonical(doc); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect=replacement; report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive'); self.assertEqual(report['request_intent_count'],0)
+        self.assertEqual(state['attached'],[]); self.assertTrue(report['owned_teardown'])
+
+    def test_deployment_continuity_checks_all_nine_and_rejects_missing_bad_identity(self):
+        self.assertTrue(hasattr(self.life,'require_deployment_continuity'),'continuity check missing')
+        items=[]
+        for track in TRACKS:
+            for role in ('authz','envoy','target'):
+                uid=track+'-'+role; self.life.deployment_bindings[(track,role)]=(uid,1)
+                items.append({'apiVersion':'apps/v1','kind':'Deployment','metadata':{
+                    'namespace':self.native.NAMESPACES[track],'name':role,'uid':uid,'generation':1}})
+        document={'apiVersion':'v1','kind':'List','items':items}
+        self.life.require_deployment_continuity(canonical(document))
+        for index in range(9):
+            for field,value in [('uid','replacement'),('generation',2),('generation',True),('generation','1'),('uid',''),('uid',True)]:
+                changed=deepcopy(document); changed['items'][index]['metadata'][field]=value
+                with self.assertRaises(ValueError): self.life.require_deployment_continuity(canonical(changed))
+        for field in ('uid','generation'):
+            changed=deepcopy(document); changed['items'][-1]['metadata'].pop(field)
+            with self.assertRaises(ValueError): self.life.require_deployment_continuity(canonical(changed))
+        for items in [document['items'][:-1],document['items']+[deepcopy(document['items'][0])]]:
+            with self.assertRaises(ValueError):
+                self.life.require_deployment_continuity(canonical({'apiVersion':'v1','kind':'List','items':items}))
 
 
 class MissingIntegrationTests(unittest.TestCase):

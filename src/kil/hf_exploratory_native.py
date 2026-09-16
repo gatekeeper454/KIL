@@ -554,6 +554,7 @@ class ExploratoryLifecycle:
         nonpods = [*self.groups[0], *self.groups[1], *self.groups[2]]
         applied = self.applied_read(nonpods)
         bindings = validate_applied_objects(nonpods, applied, profile=self.inputs.profile, workload=self.inputs.workload)
+        self.require_deployment_continuity(applied)
         self.store.write('applied-objects.json', applied)
         self.store.write('service-allocations.json', bindings)
         self.reached_gate = 'application_configuration_and_allocations_verified'
@@ -615,6 +616,38 @@ class ExploratoryLifecycle:
                 or (replicas,ready,available)!=(1,1,1) or available_rows[0]['status']!='True'):
             raise ReadPending('authenticated_owned_deployment_not_available')
 
+    def require_deployment_continuity(self, payload):
+        """Join all nine native application Deployments to readiness identities.
+
+        A newly coherent Deployment/ReplicaSet chain is not authority to replace
+        an already selected UID or generation. This helper never adopts rows.
+        """
+        expected = {(track,role) for track in TRACKS for role in ('authz','envoy','target')}
+        if set(self.deployment_bindings)!=expected:
+            raise ValueError('readiness_deployment_bindings_not_complete')
+        try:
+            document = decode(payload)
+            if (type(document) is not dict or document.get('apiVersion')!='v1'
+                    or document.get('kind')!='List' or type(document.get('items')) is not list):
+                raise ValueError('deployment_continuity_source_not_native_list')
+            selected = {}
+            namespaces = {namespace:track for track,namespace in NAMESPACES.items()}
+            for row in document['items']:
+                if row['kind']!='Deployment' or row['metadata'].get('namespace') not in namespaces:
+                    continue
+                metadata = row['metadata']
+                key = (namespaces[metadata['namespace']],metadata['name'])
+                uid,generation = metadata['uid'],metadata['generation']
+                if (row['apiVersion']!='apps/v1' or key not in expected or key in selected
+                        or type(uid) is not str or not uid or type(generation) is not int or generation<1
+                        or 'deletionTimestamp' in metadata or (uid,generation)!=self.deployment_bindings[key]):
+                    raise ValueError('readiness_deployment_identity_changed_or_unbound')
+                selected[key] = (uid,generation)
+            if set(selected)!=expected:
+                raise ValueError('deployment_continuity_inventory_not_exact')
+        except (KeyError,TypeError,AttributeError,IndexError):
+            raise ValueError('deployment_continuity_identity_malformed') from None
+
     def import_application_images(self):
         accepted = {row.role:row for row in ACCEPTED_IMAGES}
         commands = docker_image_import_commands(self.identity, self.inputs.archive,
@@ -672,6 +705,7 @@ class ExploratoryLifecycle:
             raise ValueError('readiness_deadline_exceeded')
         raw = self.observe(Command(('kubectl','--kubeconfig',self.identity.kubeconfig,'get',RUNTIME_RESOURCES,
                                    '--all-namespaces','--output','json'), 10)).stdout_bytes
+        self.require_deployment_continuity(raw)
         ownership = validate_runtime_ownership(profile=self.inputs.profile, workload=self.inputs.workload,
             rendered_objects=self.rendered, owned_identity=self.identity, runtime_objects=raw)
         validate_generated_kil_pod_configuration(ownership=ownership)

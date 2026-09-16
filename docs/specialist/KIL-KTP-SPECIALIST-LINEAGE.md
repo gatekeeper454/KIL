@@ -18654,3 +18654,71 @@ No retry, replacement adoption, parser weakening, platform provenance audit
 or publication is authorized by this entry.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-358 — 2026-09-16 — Native implementer joins Deployment readiness identities through later setup sources
+
+**Input:** Independent SPEC re-review T-357 (59f508f) reproduced a coherent
+application Deployment/ReplicaSet replacement being accepted after native
+readiness had selected an earlier Deployment UID/generation. Root required a
+minimal continuity correction at later applied-object and wide inventory
+readbacks, without changing strict factories, CLI or provenance boundaries.
+
+**Interpretation:** A structurally valid newly coherent owner chain cannot
+replace any of the nine selected application Deployment identities. Later
+configuration and runtime ownership validation must also join the original
+authenticated readiness UID/generation pairs before admitting ready Pods or
+allowing an instruction phase.
+
+**Decision status:** Minimal implementation correction confirmed by owned
+RED/GREEN verification; independent SPEC approval is still required. The
+native unit checks the exact nine application Deployment names/namespaces,
+UIDs and exact-integer generations against the existing readiness latches in
+the subsequent applied non-Pod readback and initial wide runtime inventory.
+Missing, duplicate, malformed, deleting or replaced application identities
+raise a permanent error; no identity is adopted and no retry is permitted.
+Existing configuration and ownership validators remain in place unchanged.
+
+**Rationale:** The new join closes the source-to-source gap rather than
+weakening ownership validation or adding discovery-selected commands. Owned
+fixtures now use the same actual generated Deployment UIDs/generation across
+readiness, applied-object and wide observations, retaining the coherent
+ReplicaSet owner chain. An explicit positive action verifies that both retained
+sources match all nine latches. Negative probes exercise real lifecycle setup,
+dispatch and cleanup with a test-only backend, not a mocked successful execute.
+
+Failing-first verification ran five probes before implementation: coherent
+wide Deployment/ReplicaSet UID replacement, applied-readback UID replacement
+and wide generation drift each incorrectly completed; the missing continuity
+helper assertion also failed. The matching action passed. After the 34-line
+source correction, all five probes passed in 1.978 seconds. Rejected action
+flows retain zero request intents/attaches/joins and perform exact owned cleanup;
+the coherent wide replacement is read once, not retried. All nine identities
+also receive direct mismatch, missing-field, bad-type and cardinality checks.
+
+Fresh ResourceWarning-as-error verification passed all 82 native tests in
+15.064 seconds and then 148 focused tests in 57.036 seconds: the four
+hf_exploratory units, v4_future_controller_gate and both V3B2 application
+boundary units. No duplicate probes inflate these counts. No broad regression
+or actual native compatibility passing claim is made by this implementer.
+
+**Affected artifacts:** Only src/kil/hf_exploratory_native.py,
+tests/test_hf_exploratory_native.py and this appended lineage Markdown/generated
+HTML reader. The entire 59f508f lineage remains a byte-for-byte prefix. CLI,
+strict validators/factories/flags, accepted inputs, plans, deferrals and
+publication code remain unchanged. All native fixtures are exclusively
+test-owned and cannot be emitted as actual experiment evidence.
+
+**Unresolved questions:** Repeat independent SPEC review precedes quality
+review and any native operation. Actual rehearsal/action/capture/teardown and
+native compatibility remain unknown. No accepted input verification, actual
+native tools, image pulls, profile/VM/cluster operation, network or live request
+was performed here. Platform-image provenance and full Kind/Calico acceptance
+remain explicitly unverified with both flags false. No additional architecture
+or scope change is proposed by this correction.
+
+**Next gate:** Commit the exact scoped correction and repeat independent SPEC
+review. Only after that gate may quality review proceed; root alone retains
+authority for any later approved request-free rehearsal and fresh action.
+Uncertainty never permits a resend, retry of a mutation or replacement adoption.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
