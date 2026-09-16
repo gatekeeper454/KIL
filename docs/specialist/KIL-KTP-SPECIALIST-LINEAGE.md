@@ -15822,3 +15822,60 @@ with the shared independent fixture and review checkpoint, preserving all
 existing component contracts and static-only boundaries.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-313 — 2026-09-16 — Independent platform configuration fixture acceptance
+
+**Input:** The user authorized execution of the approved static platform
+configuration composition plan and requested a factual synopsis. The coordinator
+delegated Task 1 only, on detached linked-worktree base
+`6aa52dba7bfdbf39a912a5c495f7d35c845570d6`.
+
+**Interpretation:** Compose existing independent observations into one inventory,
+then prove that all nine unchanged component validators accept it. This is
+test-fixture acceptance, not a new aggregate or runtime/readiness evidence.
+
+**Decision status:** Task 1 test-only assembly implemented and locally verified;
+independent specification and quality reviews remain the next acceptance gate.
+No production contracts, plan checkboxes or lifecycle deferrals changed.
+
+**Rationale:** Each component observation is compared with its own sparse
+ownership baseline before deep-copied deltas are merged into the matched
+apiserver identity/workload baseline. Different deltas for the same API identity
+raise an explicit conflict rather than overwrite another component's richer
+configuration. One reconstructed ownership proof supplies all nine components;
+Calico shares pinned committed source/projection bytes, and the two control-plane
+mirrors share a source constructed from fresh observations and their respective
+independent disk literals/serializers. Rebase support rebuilds application and
+Namespace authority while retaining platform observations.
+
+**Affected artifacts:** Added
+`tests/v3b2_platform_configuration_fixture.py` and
+`tests/test_v3b2_platform_pod_configuration.py`; appended this entry and
+regenerated the lineage reader. Existing entries are preserved unchanged.
+
+**Verification:** Test-first execution produced the expected missing-fixture
+assertion failure (one failure, zero skips). After helper implementation, the
+exact `PlatformFixtureTest` command passed one test in 0.602 seconds; its fresh
+self-review rerun passed one test in 0.578 seconds, zero skips. The acceptance
+checks ten bindings, including two CoreDNS bindings, replays every component
+constructor and requires exact-false runtime completion. Supplemental one-off
+checks accepted changed run, valid cluster UUID and node-container identities,
+reconstructed sequence-bound observations, preserved the input document and
+rejected injected conflicting deltas with the required assertion arguments.
+An initial supplemental non-UUID cluster literal was rejected by the existing
+source-proof format check; systematic debugging traced and corrected only that
+one-off input. Fixture import-chain review found independent platform literals
+and the checksummed Calico projection, not production expected-spec factories
+manufacturing observed platform Pods. Reader generation/check and diff checking
+are the final commit gate. No live commands were performed.
+
+**Unresolved questions:** Independent reviewers must accept fixture assembly
+and helper quality before Task 2. The helper does not make an invalid alternate
+profile image valid; existing exact profile/source boundaries remain unchanged.
+Image realization, readiness and broader runtime completion remain out of scope.
+
+**Next gate:** Regenerate and byte-check readers, check the diff and commit
+Task 1; obtain coordinator-dispatched independent specification and quality
+reviews before implementing the aggregate in Task 2.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
