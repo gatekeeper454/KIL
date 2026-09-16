@@ -12,7 +12,7 @@ from tests.test_v3b2_control_plane_manifest_source import (
     context as source_context, identity as source_identity,
     observations as source_observations,
 )
-from tests.test_v3b2_driver_pod_configuration import IDENTITY as OWNERSHIP_IDENTITY
+from tests.test_v3b2_driver_pod_configuration import WORKLOAD as OWNERSHIP_WORKLOAD
 from tests.test_v3b2_runtime_ownership import fixture as ownership_fixture, encode
 
 
@@ -27,10 +27,9 @@ CA_CANDIDATES = (
     ("usr-local-share-ca-certificates", "/usr/local/share/ca-certificates"),
     ("usr-share-ca-certificates", "/usr/share/ca-certificates"),
 )
-MATCHED_OWNERSHIP_IDENTITY = replace(
-    OWNERSHIP_IDENTITY,
-    cluster_incarnation_uid=source_identity().cluster_incarnation_uid,
-)
+MATCHED_OWNERSHIP_IDENTITY = source_identity()
+MATCHED_WORKLOAD = replace(OWNERSHIP_WORKLOAD,
+                           run_id="v3b2-" + source_context().run_id)
 
 
 def _scalar(value):
@@ -199,8 +198,9 @@ def literal_source_fixture(selected=(), document=None):
             disk_pod(selected) if document is None else document)))
 
 
-def api_document(selected=(), owned_identity=MATCHED_OWNERSHIP_IDENTITY):
-    args = ownership_fixture(owned_identity=owned_identity)
+def api_document(selected=(), owned_identity=MATCHED_OWNERSHIP_IDENTITY,
+                 workload=MATCHED_WORKLOAD):
+    args = ownership_fixture(owned_identity=owned_identity, workload=workload)
     document = json.loads(args["runtime_objects"])
     pod = row(document)
     pod["metadata"].update(generation=1, creationTimestamp="2026-09-16T01:00:00Z",
@@ -210,8 +210,9 @@ def api_document(selected=(), owned_identity=MATCHED_OWNERSHIP_IDENTITY):
     return args, document
 
 
-def literal_runtime_fixture(selected=(), document=None, owned_identity=MATCHED_OWNERSHIP_IDENTITY):
-    args, default = api_document(selected, owned_identity)
+def literal_runtime_fixture(selected=(), document=None, owned_identity=MATCHED_OWNERSHIP_IDENTITY,
+                            workload=MATCHED_WORKLOAD):
+    args, default = api_document(selected, owned_identity, workload)
     args["runtime_objects"] = encode(default if document is None else document)
     return validate_runtime_ownership(**args)
 
@@ -440,6 +441,42 @@ class KubeControllerManagerMirrorConfigurationTest(unittest.TestCase):
             source.__post_init__(); ownership.__post_init__()
             with self.subTest(changes=changes), self.assertRaises(self.error):
                 self.module.validate_kube_controller_manager_mirror_configuration(ownership=ownership, source=source)
+
+    def reject_independently_valid_authority_mismatch(self, **changes):
+        proof = self.validate()
+        self.assertEqual(proof.source.run_id,
+                         proof.ownership.workload.run_id.removeprefix("v3b2-"))
+        self.assertEqual(source_identity(), proof.ownership.owned_identity)
+        ownership = literal_runtime_fixture(**changes)
+        proof.source.__post_init__()
+        ownership.__post_init__()
+        self.assertEqual(proof.source.cluster_uid,
+                         ownership.owned_identity.cluster_incarnation_uid)
+        self.assertEqual(proof.source.node_container_id,
+                         ownership.owned_identity.node_container_id)
+        for boundary in ("validator", "constructor"):
+            with self.subTest(boundary=boundary), self.assertRaises(self.error):
+                if boundary == "validator":
+                    self.module.validate_kube_controller_manager_mirror_configuration(
+                        ownership=ownership, source=proof.source)
+                else:
+                    replace(proof, ownership=ownership)
+
+    def test_independently_valid_run_only_mismatch_is_rejected(self):
+        workload = replace(MATCHED_WORKLOAD, run_id="v3b2-" + "d" * 64)
+        self.assertNotEqual(workload.run_id, MATCHED_WORKLOAD.run_id)
+        self.reject_independently_valid_authority_mismatch(workload=workload)
+
+    def test_independently_valid_docker_endpoint_only_mismatch_is_rejected(self):
+        owned = replace(MATCHED_OWNERSHIP_IDENTITY,
+                        docker_host="unix:///tmp/other/kil-v3-lab/docker.sock")
+        self.assertNotEqual(owned.docker_host, MATCHED_OWNERSHIP_IDENTITY.docker_host)
+        self.reject_independently_valid_authority_mismatch(owned_identity=owned)
+
+    def test_independently_valid_kubeconfig_only_mismatch_is_rejected(self):
+        owned = replace(MATCHED_OWNERSHIP_IDENTITY, kubeconfig="/tmp/other/kubeconfig")
+        self.assertNotEqual(owned.kubeconfig, MATCHED_OWNERSHIP_IDENTITY.kubeconfig)
+        self.reject_independently_valid_authority_mismatch(owned_identity=owned)
 
     def test_exact_constructors_bindings_false_flags_and_frozen_slots(self):
         proof = self.validate(CA_CANDIDATES[:2])

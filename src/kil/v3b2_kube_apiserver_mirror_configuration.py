@@ -27,6 +27,7 @@ import re
 from kil.v3b2_api_defaults import _equal, _managed_fields, _timestamp, matches_configuration
 from kil.v3b2_control_plane_manifest_source import (
     ControlPlaneManifestSourceProof,
+    _retained_authority,
     control_plane_manifest_pod,
 )
 from kil.v3b2_driver_pod_configuration import _rv, _uid
@@ -354,6 +355,15 @@ def _compute(*, ownership, source):
     if source.node_container_id != ownership.owned_identity.node_container_id:
         raise KubeAPIServerMirrorConfigurationError(
             "kube-apiserver source node container differs from ownership")
+    if source.run_id != ownership.workload.run_id.removeprefix("v3b2-"):
+        raise KubeAPIServerMirrorConfigurationError(
+            "kube-apiserver source run differs from ownership")
+    # Dependencies are reconstructed above; recover complete retained authority,
+    # including isolated endpoint and private kubeconfig/Docker-config scope.
+    _context, source_identity = _retained_authority(source.raw_observations)
+    if source_identity != ownership.owned_identity:
+        raise KubeAPIServerMirrorConfigurationError(
+            "kube-apiserver complete source owned authority differs from ownership")
     relations = [row for row in ownership.node_ownership.static_pods
                  if row.component == "kube-apiserver"]
     if len(relations) != 1:

@@ -22,7 +22,7 @@ import re
 
 from kil.v3b2_api_defaults import _equal, _managed_fields, _timestamp, matches_configuration
 from kil.v3b2_control_plane_manifest_source import (
-    ControlPlaneManifestSourceProof, control_plane_manifest_pod,
+    ControlPlaneManifestSourceProof, _retained_authority, control_plane_manifest_pod,
 )
 from kil.v3b2_driver_pod_configuration import _rv, _uid
 from kil.v3b2_runtime_ownership import RuntimeOwnershipProof
@@ -223,6 +223,13 @@ def _compute(*, ownership, source):
         raise KubeControllerManagerMirrorConfigurationError("controller-manager source cluster incarnation differs")
     if source.node_container_id != ownership.owned_identity.node_container_id:
         raise KubeControllerManagerMirrorConfigurationError("controller-manager source node container differs")
+    if source.run_id != ownership.workload.run_id.removeprefix("v3b2-"):
+        raise KubeControllerManagerMirrorConfigurationError("controller-manager source run differs")
+    # Dependencies are reconstructed above; recover complete retained authority,
+    # including isolated endpoint and private kubeconfig/Docker-config scope.
+    _context, source_identity = _retained_authority(source.raw_observations)
+    if source_identity != ownership.owned_identity:
+        raise KubeControllerManagerMirrorConfigurationError("controller-manager complete source owned authority differs")
     relations = [row for row in ownership.node_ownership.static_pods if row.component == _COMPONENT]
     if len(relations) != 1:
         raise KubeControllerManagerMirrorConfigurationError("expected sole controller-manager ownership binding")

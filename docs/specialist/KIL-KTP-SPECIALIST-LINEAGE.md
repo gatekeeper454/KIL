@@ -14841,3 +14841,147 @@ specification acceptance, and return the checkpoint for independent quality
 review before broader static acceptance or delivery.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-299 — 2026-09-16 — V4 Task 5 independent quality review withheld
+
+**Input:** Independently adversarially review the Task 5 controller-manager
+configuration module and tests from
+`13e619120925d4ddbf8fd4396a352959c1cb04b2` through
+`2c7de3eea8ea384e65c93dec048674fa49c1f962`, alongside the approved static-
+manifest design and implementation plan and consumed source, ownership,
+API-default, apiserver, etcd, and scheduler patterns. Do not edit production,
+push, or execute live infrastructure/profile calls.
+
+**Interpretation:** Quality acceptance requires independently reconstructable
+fixed disk and API expectations, exhaustive conditional-pair closure, exact
+types and frozen proof reconstruction, and composition of evidence belonging
+to the same retained run and complete owned authority. The design's run
+identity, exact owned node, isolated endpoint, private Docker authority, and
+replay claims cannot be discharged by joining only cluster-incarnation UID
+and node-container ID strings. Syntax-only timestamps and retained arbitrary
+status remain intentionally outside freshness or readiness claims.
+
+**Decision status:** Task 5 independent quality acceptance withheld: zero
+Critical, one Important, and zero Minor findings. This is a confirmed static
+provenance-composition defect, not a live result or completion claim. No
+production implementation was changed by this review.
+
+**Rationale:** Component-local literals and independent disk/API fixtures,
+all 32 accepted subsets and 32 disk/API mismatch masks, malformed and partial
+pair rejection, exact scalar comparison, closed mirror metadata, reviewed
+default handling, arbitrary status retention, exact dependency/binding
+reconstruction, frozen slots, fresh returned specs, and strict false public
+completion flags are strong. No apiserver expectation factory or conditional
+decision is imported by the controller-manager module. However,
+`v3b2_kube_controller_manager_mirror_configuration.py:221-225` reconstructs
+dependencies and joins only cluster UID and container ID before composition.
+It does not require `source.run_id` to match the unprefixed ownership workload
+run ID or require the complete `OwnedIdentity` reconstructed from retained
+source authority to equal `ownership.owned_identity`. Positive fixtures
+already differ in run ID, Docker endpoint, and kubeconfig. The same missing
+composition boundary exists in the adjacent apiserver validator at
+`v3b2_kube_apiserver_mirror_configuration.py:350-356`.
+
+**Verification:** Fresh execution with repository-required `PYTHONPATH=src`
+of the four prescribed apiserver, controller-manager, etcd, and scheduler
+modules passed all 40 unittest methods in 19.311 seconds with zero skips.
+Separate read-only reproductions aligned the source and ownership run/full
+authority, then varied only the ownership workload run, only the Docker
+endpoint, or only the kubeconfig. Both exact dependencies independently
+reconstructed in every case; both component validators accepted every
+mismatched case while cluster UID and node container ID stayed equal. An
+additional independently constructed source with run `d` repeated 64 times
+also composed with ownership workload `v3b2-` plus `1` repeated 64 times.
+`git diff --check` passed before this entry. Historical RED execution is not
+claimed as independently reproduced. Reader regeneration and verification
+remain the docs-only recording gate. No live Colima, Docker, Kind, kubectl,
+Kubernetes, request, publication, push, or profile command was executed.
+
+**Affected artifacts:** Reviewed the controller-manager module/tests and
+adjacent pure source/ownership/default and mirror validators; changed only
+this lineage and its regenerated HTML reader. Production files remain
+unchanged. The review recording is left uncommitted for remediation
+integration rather than creating an acceptance commit.
+
+**Unresolved questions:** The Important composition defect is unresolved.
+Broader static acceptance, full repository validation, all-ten-platform-Pod
+configuration/image/status/readiness composition, and any explicitly
+authorized later live experiment remain separate gates. No existing
+acceptance entry is silently rewritten by this new finding.
+
+**Next gate:** Narrowly join the retained source run and complete exact owned
+authority to runtime ownership in both component validators; align positive
+fixtures and add independently valid run-only, endpoint-only, and
+kubeconfig-only mismatch rejection regressions through public validation and
+proof reconstruction. Obtain independent specification/quality re-review
+before Task 6 holistic static acceptance. Regenerate and verify the readers
+for this non-acceptance record; do not promote it to acceptance.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-300 — 2026-09-16 — V4 Task 5 run and complete owned-authority correction
+
+**Input:** Remediate the confirmed Important provenance-composition finding
+from T-299 in both the controller-manager Task 5 proof and the prior Task 4
+API-server proof. Preserve and integrate the reviewer's uncommitted T-299
+record, align positive retained-source/runtime fixtures, and use strict TDD
+for independently valid isolated run, Docker endpoint and kubeconfig drift.
+No live infrastructure/profile commands or push are authorized.
+
+**Interpretation:** Reconstruction of each dependency is necessary but not
+sufficient to compose them. The source run must equal the runtime workload's
+run after removing its required `v3b2-` prefix. The complete exact
+`OwnedIdentity` recovered from retained source authority must equal the
+reconstructed runtime ownership identity in all six fields, including the
+isolated Docker endpoint and private kubeconfig scope. Joining only cluster
+UID and node-container ID leaves a cross-run and cross-authority composition
+hole even when both dependencies independently validate.
+
+**Decision status:** Narrow correction implemented and verified locally;
+independent specification and quality re-review remain pending. T-299 remains
+an unchanged historical non-acceptance record rather than being rewritten or
+silently promoted. This correction establishes no runtime/application
+completion, readiness, freshness, V4 acceptance or V3C claim.
+
+**Rationale:** Both components reconstruct their exact dependencies before
+accessing the source module's existing `_retained_authority` decoder. They
+retain explicit cluster/container joins and additionally compare the source
+run and complete reconstructed owned identity. Reusing the existing retained
+authority decoder requires no source-format or public-API change and avoids
+duplicating raw-authority parsing. Component-local fixed expectations and
+conditional-subset decisions remain independent and unchanged. Positive
+fixtures now share the source's complete owned identity and exact prefixed
+run, while each mismatch fixture changes only its named authority dimension.
+
+**Verification:** Before production edits, six new unittest methods (three
+isolated mismatches per component) produced 12 expected assertion failures:
+each public validator and each reconstructing constructor accepted the drift.
+There were zero errors and zero skips; both exact dependencies reconstructed
+and cluster/container identities remained equal. After correction, the focused
+two-component suite ran 28 methods, all 28 passed with zero skips in 13.997
+seconds. The prescribed API-server, controller-manager, etcd and scheduler
+suite ran 46 methods, all 46 passed with zero skips in 19.328 seconds. The
+unchanged source suite additionally ran 19 methods, all 19 passed with zero
+skips in 0.387 seconds. Matrix and constructor subtests are not counted as
+additional methods. `git diff --check` passed. No live Colima, Docker, Kind,
+kubectl, Kubernetes, request, publication, push or profile command ran.
+
+**Affected artifacts:**
+`src/kil/v3b2_kube_apiserver_mirror_configuration.py`,
+`src/kil/v3b2_kube_controller_manager_mirror_configuration.py`,
+`tests/test_v3b2_kube_apiserver_mirror_configuration.py`,
+`tests/test_v3b2_kube_controller_manager_mirror_configuration.py`, this lineage
+(preserving T-299 and appending T-300), and its regenerated HTML reader.
+The shared source module and all public function/constructor signatures are
+unchanged.
+
+**Unresolved questions:** None identified in correction self-review;
+independent specification/quality re-review and broader static/full-repository
+acceptance remain separate gates. Any later live dedicated-profile experiment
+still requires its own explicit authorization.
+
+**Next gate:** Regenerate and verify all readers, commit only this correction
+and preserved review evidence, then supply the exact base/head checkpoint for
+independent specification and quality re-review before Task 6 acceptance.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
