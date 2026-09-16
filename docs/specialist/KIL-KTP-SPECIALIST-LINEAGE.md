@@ -17592,3 +17592,73 @@ with any failing-first corrections and re-review before native orchestration.
 No instruction, retry or replay is authorized by this pure IO review.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-341 — 2026-09-16 — Independent exploratory IO quality review: corrections required
+
+**Input:** Independently inspect actual bounded exploratory IO source and tests
+at correction 5d3ebda, following specification approval e562a04 and original unit
+d8aac72. Run the focused tests freshly without accepted executable reads or
+execution, input factory calls, native labs, downloads or strict lifecycle edits.
+
+**Interpretation:** This is an IO-only quality and failure-path review, not a
+platform-provenance audit or runtime-readiness gate. Passing existing tests is
+evidence for their cases, not proof of crash durability or complete resource
+cleanup. Runtime readiness remains false/unestablished.
+
+**Decision status:** Corrections required before quality approval. Three
+Important findings are confirmed; no Critical or Minor finding is reported.
+Fresh verification passed all 26 focused tests with ResourceWarning promoted to
+errors, zero failures/errors/skips, using the existing Python environment,
+PYTHONDONTWRITEBYTECODE=1 and PYTHONPATH=src. Implementation remains unchanged.
+
+**Rationale:** (1) PrivateStore creates its run directory but never fsyncs the
+containing directory. File fsync and fsync of the run directory persist its
+contents, not the new name in its parent; durable intent therefore lacks a
+required creation-persistence boundary before action. A real-fsync descriptor
+spy around constructor and successful send_once observed ten sync calls and no
+containing-directory inode. The action callback was harmless and test-owned;
+this diagnostic does not claim a physical crash experiment.
+
+(2) PrivateStore.write and record increase total only after all persistence
+steps succeed. Bytes already written before an fsync exception are retained but
+uncharged, permitting subsequent ordinary writes to exceed the private quota.
+A test-owned store with an eight-byte remaining cap retained a failed five-byte
+write, then accepted a second five-byte write: tracked total 38 bytes, actual
+retained bytes 43, cap 41. The same post-sync accounting pattern applies to
+journal appends. Conservatively reserve/account potentially retained bytes or
+permanently refuse further writes after uncertain persistence; do not silently
+reuse the understated quota.
+
+(3) capture_process starts its child before constructing DefaultSelector, but
+its cleanup try/finally starts afterward. Injecting a selector-construction
+OSError left a harmless sleeping local child running and both output pipes open
+after the function raised, bypassing the timeout and cleanup boundary. The
+review diagnostic explicitly killed/reaped the owned process group and closed
+the pipes afterward. Bring selector/process acquisition inside a cleanup-safe
+boundary and add a failing-first acquisition-failure regression.
+
+Closed Command validation, fixed authenticated manifest-derived tool authority,
+environment isolation, bounded output/stdin handling, exact terminal framing,
+TRACKS sequencing, durable per-file intent-before-callback ordering and the
+uncertainty latch were inspected independently. The reported findings concern
+creation durability, failed-write quota accounting and acquisition cleanup, not
+the already-corrected mutable-authority/framing gaps.
+
+**Affected artifacts:** Only this appended review and its regenerated HTML
+reader are changed by the reviewer. Findings refer to
+src/kil/hf_exploratory_io.py and missing failure-path coverage in
+tests/test_hf_exploratory_io.py. Root-owned native plans/readers, implementation,
+strict modules, completion flags and deferrals are not part of this review commit.
+
+**Unresolved questions:** Original implementer must demonstrate failing-first
+coverage and corrections for all three findings, then obtain independent
+re-review. Native lifecycle/evidence, request-free rehearsal, platform-image
+provenance, live enforcement and strict acceptance remain unestablished.
+
+**Next gate:** Original implementer corrects containing-directory persistence,
+failed-persistence quota accounting and selector-acquisition cleanup without
+native execution, then fresh focused verification and independent IO quality
+re-review. No instruction, retry, replay or native orchestration is authorized
+by this review.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
