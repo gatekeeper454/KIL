@@ -234,8 +234,9 @@ class ExploratoryPodTests(ExploratoryCaseTests):
 Add this binding after the new tests fail for the absent function:
 
 ```python
-def bind_pod(value, *, track, role, run_id, requested_image, runtime_image, image_ref, completed=False):
-    if track not in TRACKS or role not in {'driver', 'authz', 'envoy', 'target'} or type(completed) is not bool:
+def bind_pod(value, *, track, role, run_id, requested_image, runtime_image, image_ref, completed=False, require_ready=True):
+    if (track not in TRACKS or role not in {'driver', 'authz', 'envoy', 'target'}
+            or type(completed) is not bool or type(require_ready) is not bool):
         raise ValueError('invalid_exploratory_pod_binding')
     namespace = dict(TRACK_NAMESPACES)[track]
     metadata, spec, status = value['metadata'], value['spec'], value['status']
@@ -270,7 +271,7 @@ def bind_pod(value, *, track, role, run_id, requested_image, runtime_image, imag
         exit_code = state.get('state', {}).get('terminated', {}).get('exitCode')
         if role != 'driver' or status.get('phase') != 'Succeeded' or type(exit_code) is not int or exit_code != 0:
             raise ValueError('driver_not_completed_zero')
-    elif (status.get('phase') != 'Running' or state.get('ready') is not True
+    elif (status.get('phase') != 'Running' or require_ready and state.get('ready') is not True
             or set(state.get('state', {})) != {'running'}):
         raise ValueError('exploratory_container_not_ready')
     for key in ('uid', 'resourceVersion'):
@@ -322,6 +323,6 @@ class ExploratoryJoinTests(ExploratoryCaseTests):
 
 ## Native consumer contract
 
-The next unit must prove two accepted application image alias branches from authenticated CRI/node-store observations, never substitute target digest for config digest. It selects twelve exact ready role Pods from the fresh bound cluster and captures applied rendered objects/policies and Calico readiness before instructions. Capture each source between two `bind_pod` observations and two identical complete reads; retain raw commands, bytes and checksum. Envoy listener refusal and all four zero active gauges, plus zero-exit one-shot drivers, precede final capture. Driver resourceVersion can change on completion but UID/CID must equal the readiness anchor; the frozen before/after observation must itself be identical. Any source cap, parse failure, replacement or incomplete join is inconclusive. No diagnostic plaintext is silently removed; fixed Envoy configuration routes diagnostics to /tmp/envoy.log while stdout carries access JSONL. No public bundle writer/verifier is called.
+The next unit must prove two accepted application image alias branches from authenticated CRI/node-store observations, never substitute target digest for config digest. It selects twelve exact ready role Pods from the fresh bound cluster and captures applied rendered objects/policies and Calico readiness before instructions. Capture each source between two `bind_pod` observations and two identical complete reads; retain raw commands, bytes and checksum. Envoy listener refusal and all four zero active gauges, plus zero-exit one-shot drivers, precede final capture. After listener drain `require_ready=False` permits a running Envoy whose TCP readiness probe has correctly failed; it does not permit termination, restart or replacement. Driver resourceVersion can change on completion but UID/CID must equal the readiness anchor; the frozen before/after observation must itself be identical. Any source cap, parse failure, replacement or incomplete join is inconclusive. No diagnostic plaintext is silently removed; fixed Envoy configuration routes diagnostics to /tmp/envoy.log while stdout carries access JSONL. No public bundle writer/verifier is called.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
