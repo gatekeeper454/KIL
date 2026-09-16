@@ -18801,3 +18801,83 @@ retry, broad cleanup, platform provenance audit or publication is authorized
 to this reviewer by this entry.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-360 — 2026-09-16 — Independent native QUALITY review approves request-free rehearsal gate
+
+**Input:** Independently review the separate exploratory native unit after
+T-359 SPEC approval. Review actual source at
+1fcd7422f060279c8ad6ad65ddfbed5f49f9a216, unchanged by the documentation-only
+67c4827 checkpoint, against the approved design and updated native lifecycle
+plan. Scope is src/kil/hf_exploratory_native.py,
+tools/hf_exploratory_kind.py and tests/test_hf_exploratory_native.py, with
+read-only inspection of reused input, IO, case and command interfaces as
+needed. Use only test-owned observations; do not verify real accepted inputs,
+invoke native tools, download, operate a profile/VM/cluster, use network or
+issue any live request. Append this review only after the prior writer releases
+the lineage artifacts.
+
+**Interpretation:** Assess concrete correctness, conservative ownership and
+cleanup, once-only dispatch, bounded readiness and capture, resource/path
+handling, failure reporting and truthful claims. Quality approval is distinct
+from specification approval and from actual native producer compatibility.
+Large module size alone is not a reason to impose an unrelated refactor or
+expand the platform provenance scope.
+
+**Decision status:** Independent QUALITY approval for the reviewed native
+source snapshot. No Critical, Important or Minor issue was identified in the
+scoped review. Ready for ROOT's request-free native rehearsal: yes, subject to
+root-owned final composed-source and static gates. This does not authorize this
+reviewer to launch anything, assert live readiness or result, merge, publish or
+promote strict completion flags.
+
+**Rationale:** Actual source inspection confirms central closed-command
+authorization, durable receipts and pre-dispatch one-shot mutation latches;
+filesystem/VM, node and kube-system UID rebinding before mutation; refusal of
+unknown/replaced cleanup authority; isolated environment and private kubeconfig;
+ordered policy readback before application/driver creation; one shared bounded
+setup-readiness budget with ReadPending-only retries; native Calico projection
+retaining raw observations without inventing runtime identity; all-nine
+Deployment continuity and all-twelve Pod selection/container latches; empty
+rehearsal EOF followed by complete request-free capture before a fresh action;
+fixed-order intent-before-instruction with no uncertain resend; once-only drain,
+actual refusal and zero gauges; equal complete source bytes bracketed by exact
+incarnations/resource versions; semantic producer joins and exact permit target
+upstream; exact owned teardown, retained checksums and explicitly exploratory
+report/synopsis claims. Reused application image identity proof is unchanged;
+platform observations are not recast as independently verified content.
+
+Fresh verification with PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src,
+/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python
+and -W error::ResourceWarning passed all 82 native tests in 14.757 seconds.
+Two independent full-action test-owned probes changed the second baseline
+target-source read and returned drain_requested false on the first drain,
+respectively. Each returned inconclusive with its concrete capture/drain error,
+exactly one durable request intent and attach, zero joined results, exactly one
+drain, owned_teardown true and manual_recovery false. Neither attempted a later
+track or replayed the mutation. These temporary owned fixtures are not native
+experiment evidence. Broad regression results remain root-owned.
+
+**Affected artifacts:** No implementation, test, strict validator, accepted
+input, lifecycle deferral, plan or publication artifact is changed by this
+reviewer. Only this appended lineage Markdown and regenerated sibling HTML
+reader are modified. The complete 67c4827 Markdown is preserved as a
+byte-for-byte prefix. Reviewed implementation scope remains the three native
+unit files listed above.
+
+**Unresolved questions:** Actual native setup/readiness, producer compatibility,
+capture, foreign/global-state preservation and exact teardown remain unobserved.
+Root must complete the request-free live rehearsal before considering the
+already approved single fresh three-track action. No full HF prevention, all
+eight phases, original exploit, NetworkPolicy enforcement, no-bypass,
+performance, strict V3B2/V4/V3C or publication claim follows. Platform-image
+provenance remains unverified and full Kind/Calico acceptance is not established;
+both flags remain false and all sixteen strict lifecycle deferrals unchanged.
+
+**Next gate:** Commit only this lineage entry and its generated sibling reader
+after reader/diff/prefix verification, then return the clean reviewed checkpoint
+to root. Root owns final static gates and any separately authorized native
+rehearsal/action, using the accepted tool directory in child-tool PATH. A real
+mismatch must stop with retained inconclusive evidence and only exact still-bound
+cleanup; no download, substitution, mutation retry or broad deletion is implied.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
