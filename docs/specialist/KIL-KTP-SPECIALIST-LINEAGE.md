@@ -20758,3 +20758,76 @@ review before root's final composed verification. Native execution requires a
 separate gate; this checkpoint does not authorize it.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T387 — 2026-09-16 — Task 3B independent SPEC review requires handoff corrections
+
+**Input:** Root requested an independent engineering-only SPEC review of the
+Task 3B Native/CLI isolated runtime composition against seven explicit
+requirement groups. The frozen source was checkpointed as
+`0746d157fa1939239dcd821e21af5116cb7d6aa2`; root released the implementer writer
+and explicitly granted this reviewer the exclusive T387 lineage checkpoint.
+Review scope was the actual committed three-path diff from `2d8da3e` in
+`src/kil/hf_exploratory_native.py`, `tools/hf_exploratory_kind.py`, and
+`tests/test_hf_exploratory_native.py`. Previously approved runtime/profile/IO/
+evidence units and broader strict audits were not reopened.
+
+**Interpretation:** Verify the accepted isolated design and its real TempFS
+composition, rather than treating passing boundary doubles as native evidence.
+Check constructor/CLI descriptor release, exact command authority, private and
+FOREIGN inventories, immutable receipts versus live Kind controls, finite
+snapshot-before-teardown behavior, and explicit partial/unknown observations.
+This review does not authorize native execution or claim transactional exclusion
+or elimination of TOCTOU.
+
+**Decision status:** SPEC NOT APPROVED. The fresh designated-interpreter run
+passed all 110 Native/CLI tests in 34.021s, with PYTHONDONTWRITEBYTECODE=1,
+PYTHONPATH=src, and `-W error::ResourceWarning`, but two additional real TempFS
+boundary-runner reproductions establish missing requirements. These are required
+corrections, not proposals to expand scope.
+
+**Rationale:** First, `authorize_mutation` sets `profile_attempted=True` at
+Native line 253 before durable intent and the final runtime guard at line 228.
+Replacing the retained runtime-tmp namespace during the ColimaStart
+`command_intent` record caused the final guard to refuse before runner handoff.
+The observed mutation list was empty, but `profile_attempted` remained true and
+cleanup reported manual recovery. This contradicts the requirement that a known
+pre-dispatch guard refusal must not falsely latch a native attempt. Apply the
+same distinction to all one-shot mutation latches/commitments while preserving
+durable intent before dispatch and uncertainty after actual runner handoff; this
+finding grants no retry/resume permission.
+
+Second, Kind consumer freshness is checked only at Native line 259, before
+endpoint/FOREIGN reads and command-intent persistence. Changing runtime
+`kind-config.yaml` to `changed-consumer-config` during the KindCreate
+`command_intent` record was not detected by the namespace-only final guard at
+line 228. The boundary runner received KindCreate and the full test-owned
+lifecycle reported `status=complete`, `error=None`, and a true cluster-attempt
+latch. Recheck the bounded regular runtime control's concrete initial identity,
+exact expected canonical bytes, and retained immutable Store bytes after intent
+IO, immediately before Create handoff, without applying this unused-control
+requirement to KindDelete or image load. Both reproductions used the existing
+full fixture boundary Runner with real RuntimeAuthority/ProfilePaths and real
+temporary filesystem; no high-level lifecycle guard was mocked. Only source/
+platform/sleep test boundaries were replaced as in the established fixtures.
+
+**Affected artifacts:** This actual-EOF lineage append and its generated HTML
+reader only. No source or test file was edited by the reviewer. The exact
+`0746d15` Markdown prefix is preserved. No actual Colima/Lima/Docker/Kind/kubectl,
+VM, HTTP/HF/network, Ollama, platform-image audit, old receipt edit, metadata
+reconstruction, strict source/test edit, branch move, merge, or push occurred.
+Accepted local Envoy, false provenance/full-acceptance flags, and all 16 V4
+deferrals remain unchanged.
+
+**Unresolved questions:** The original implementer must provide test-first
+corrections for both post-intent boundaries and preserve no-replay behavior after
+an uncertain real handoff. Private-home native compatibility and actual native
+teardown remain unestablished. The four ignored immutable Markdown citation
+omissions remain unchanged and outside this review.
+
+**Next gate:** Render/check all 88 readers, verify exact prior Markdown prefix
+and this two-path-only checkpoint, then release the writer. Root should return
+the findings to the original implementer for observed RED/focused GREEN
+corrections, followed by fresh independent SPEC review before QUALITY and final
+composed verification. Native permission remains a separate gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
