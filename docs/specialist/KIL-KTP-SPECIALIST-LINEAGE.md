@@ -15679,3 +15679,98 @@ commit and authorized delivery checks. Preserve exactly the existing 16
 deferred default lifecycle methods and the explicit later composition gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-310 — 2026-09-16 — Next platform composition gate scoped for design approval
+
+**Input:** The user requested “go next” after the accepted V4 static-manifest
+checkpoint at `cfb337f565dc2dae1fcb2bf40b77d5ab97cf7254`.
+
+**Interpretation:** Continue toward the explicitly recorded all-ten-platform-Pod
+configuration/image/status/readiness composition gate. The completed manifest
+design and six-task plan do not themselves approve this new composition or
+authorize a live experiment. The brainstorming design-approval gate applies
+before changing behavior.
+
+**Decision status:** Proposal awaiting user approval; no implementation,
+runtime, readiness, completion or live claim. Recommend staged static work:
+first a reconstructable ten-Pod configuration composition tied to one retained
+runtime inventory and full owned authority, then independently designed platform
+image and status/readiness authorities and their composition.
+
+**Rationale:** Repository inspection found the ten configuration slices and
+the approved parent plan's incremental acceptance boundaries. The two latest
+mirror slices retain arbitrary status without certifying readiness. The existing
+`NodeImageReferenceProof` supports exactly KIL and Envoy; it cannot be relabeled
+as platform image authority. The existing KIL Pod runtime proof demonstrates
+same-source configuration/incarnation/image joins, but its twelve application
+Pods and fresh-container assumptions are not a platform contract. A single
+large configuration/image/status adapter would couple several new authorities;
+a live experiment would add a separate authorization and evidence boundary.
+The recommended first slice preserves the existing validators and strict false
+runtime/application completion flags, with missing, duplicate, mismatched and
+forged dependency rejection and independent fixture tests.
+
+**Affected artifacts:** Inspected the accepted manifest design/plan, incremental
+nominal plan, configuration module inventory, runtime ownership, KIL runtime,
+node image references, inventory image tests and public image provenance guard.
+Changed only this appended lineage entry and its regenerated HTML reader.
+
+**Unresolved questions:** User approval of the staged static approach and its
+configuration-first scope. Exact aggregate interfaces, retained authority joins,
+platform image source requirements and component-specific status semantics
+remain design work; no expected platform image digest or readiness rule is
+inferred from candidate status or mounts.
+
+**Next gate:** Obtain approval of the configuration-first static design scope,
+write and self-review its design document, obtain user review of that written
+specification, then prepare an implementation plan. Leave controller lifecycle,
+publication, live execution, overall runtime/application completion, V4
+completion and V3C unchanged.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-311 — 2026-09-16 — Configuration-first platform composition design written
+
+**Input:** The user responded “go next” to the recommendation and approval
+question for the configuration-first static scope recorded in T-310.
+
+**Interpretation:** Approval to develop that bounded written design, not approval
+of an unseen implementation plan or authorization for a live experiment. Apply
+the brainstorming skill's written-specification review gate before planning.
+
+**Decision status:** Confirmed configuration-first scope approval; proposed
+written specification awaiting user review. No production behavior changed.
+
+**Rationale:** Nine exact existing component proof types cover ten platform
+Pods because CoreDNS contributes two. The design retains all component proofs,
+reconstructs them, requires complete ownership/raw-byte equality, joins shared
+Calico inputs and manifest source, and derives exact incarnation coverage from
+ownership rather than counting arbitrary Pods. It preserves heterogeneous
+component interfaces and their narrower claim boundaries. Constructor replay,
+independent observations, valid cross-source mix rejection and strict false
+completion flags are explicit. Image realization and status/readiness require
+separate authority designs and are not inferred from this aggregate.
+
+**Affected artifacts:** Added
+`docs/superpowers/specs/2026-09-16-v4-platform-pod-configuration-composition-design.md`
+and its generated reader; appended this lineage entry and regenerated its reader.
+The prior T-310 navigation/design entry is preserved unchanged.
+
+**Verification:** Self-review found no placeholders, conflicting completion
+claims or out-of-scope behavior changes; checked the exact proof types and
+retained ownership/source paths against the existing modules. Fresh reader
+generation and byte-check verified all 77 readers, and `git diff --check` passed.
+The initial sandboxed Git staging attempt could not write the linked worktree's
+external index; the escalated staging step succeeded. No production tests or
+live calls were performed for this documentation-only design checkpoint.
+
+**Unresolved questions:** User review of the written specification. Platform
+image source authority, component-specific runtime/status semantics and later
+integration/live authorization remain deliberately outside this scope.
+
+**Next gate:** Self-review the written design for placeholders, contradictions,
+ambiguity and scope, verify readers and diff, commit the documentation, then
+obtain user approval of the written specification before invoking writing-plans.
+No implementation, lifecycle, publication or live operation is authorized here.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
