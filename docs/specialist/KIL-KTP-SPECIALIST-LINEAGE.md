@@ -17209,3 +17209,56 @@ lifecycle/evidence units and readiness rehearsal; platform-image audit stays
 stopped and strict Kind/Calico/V4/V3C acceptance remains unestablished.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-333 — 2026-09-16 — Independent exploratory input-unit quality review
+
+**Input:** Independently review input-unit implementation from 34c7267 to
+4337644, following the specification-compliant review at 3620a3f; assess
+correctness, bounded reads, acceptance authority, maintainability and focused
+test evidence without running the native factory or lifecycle.
+
+**Interpretation:** This is a pure input-unit quality gate, not proof of native
+availability or runtime readiness. Fixed accepted manifest and archive hashes
+remain authoritative; mutable returned metadata is not an execution-time proof.
+Later lifecycle consumers must reconstruct and recheck executable commitments.
+
+**Decision status:** Fixes required; quality review is not approved. One
+Important defect is confirmed: read_regular opens a pathname with blocking
+O_RDONLY before checking descriptor file type. A static FIFO with no writer
+therefore blocks indefinitely instead of rejecting a nonregular input. No
+Critical issue or additional mandatory correction was identified in this scope.
+
+**Rationale:** The implementation retains exact bytes, validates lowercase
+digests and sizes, authenticates the accepted manifest before parsing, verifies
+the exact three accepted executables and archive, and invokes no native tool.
+However, the regular-file check at src/kil/hf_exploratory_inputs.py:39 cannot be
+reached when os.open at line 36 blocks on a FIFO. This is reproducible without
+hostile concurrent mutation. Proposed correction: open with O_NONBLOCK alongside
+O_NOFOLLOW, then reject nonregular descriptors by fstat before reading; preserve
+the existing bounds, descriptor identity checks and digest authority.
+
+**Verification:** Fresh specified inherited-venv unittest execution passed all
+five focused tests (0.026s). A separate test-owned temporary FIFO probe invoked
+only read_regular in an isolated Python child; it did not return within a
+0.5-second timeout, after which the child was terminated and reaped. The temporary
+fixture was cleaned up. This establishes the hang, not any native factory
+success. No full suite rerun, accepted tool execution, native input-factory
+verification, lab/profile command, download or live result.
+
+**Affected artifacts:** Append this review and regenerate its HTML reader only.
+Reviewed source and tests remain unchanged; unrelated plan artifacts are not
+staged by this review.
+
+**Unresolved questions:** A failing FIFO-rejection regression, nonblocking-open
+correction and fresh independent re-review are required. Full factory success
+coverage remains a nonblocking coverage consideration. Later path replacement,
+executable rechecks, ownership and durable intent remain separate lifecycle
+gates; this review does not broaden input-unit guarantees.
+
+**Next gate:** Original implementer adds the bounded FIFO regression and fixes
+the open flags; rerun focused tests and independently review the correction
+before root-owned native-input verification. Continue dependent exploratory
+units only through their own gates; platform-image audit remains stopped and
+strict acceptance remains unestablished.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
