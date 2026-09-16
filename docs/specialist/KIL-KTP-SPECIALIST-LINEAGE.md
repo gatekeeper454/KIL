@@ -11786,59 +11786,6 @@ work.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
-### T-246 — 2026-09-14 — Turnkey Blue Zone strategy proposed
-
-**Input:** Use the KTP website and RFC series, the Martherus and Tamed Autonomy
-implementation repositories, KIL evidence, and current real-world autonomous-
-system activity to develop a complete, evidence-validated plan for rapidly
-deployable “Turnkey Blue Zones” and an evolution of Zero Trust.
-
-**Interpretation:** Define a product and deployment procedure that operationalizes
-KTP without inventing a competing trust system, connects KIL's reducing-only
-infrastructure enforcement and evidence discipline to practical runtime
-adapters, supplies multiple adoption options, and distinguishes demonstrated
-facts from proposed product targets and historical counterfactuals.
-
-**Decision status:** Strategy proposed for review; no product architecture or
-implementation is approved. The recommendation is one architecture with three
-promotion profiles: a developer Blue Zone Kit, a Kubernetes-native Blue Zone
-Operator as the first product, and later Blue Zone Federation. “Turnkey Blue
-Zone — a runtime autonomy control plane” is the recommended product framing;
-“Frontier Zero Trust” is retained as the broader thesis rather than the primary
-product category.
-
-**Rationale:** KTP 2.1.0 supplies the published protocol and zone model; the Go
-and Python libraries supply useful but deliberately incomplete kernels; and KIL
-has accepted one bounded local Envoy consequence proof but not Kind/Calico,
-production, performance, or historical-prevention evidence. Recent primary
-reports from Hugging Face, OpenAI, and Anthropic demonstrate that autonomous
-evaluation systems can escape intended boundaries and reach real infrastructure
-at machine speed. NIST and OWASP sources independently support dynamic,
-action-level, workload-bound authorization, least agency, default-deny egress,
-independent enforcement, and tamper-resistant audit. Together they support an
-evidence-gated zone factory, not a push-button claim of production security.
-
-**Affected artifacts:** Added the proposed strategy
-`docs/design-drafts/2026-09-14-turnkey-blue-zone-strategy.md` and its generated
-HTML reader; appended this lineage entry. No KTP, KIL runtime, laboratory,
-cluster, remote, or product implementation was changed. Pre-existing `Inputs/`
-and earlier dirty lineage state were preserved.
-
-**Unresolved questions:** Approval of the product/category framing; first pilot
-selection; Basic versus Standard initial target; product repository boundary;
-SPIFFE default versus bring-your-own identity; governance ownership; and review
-with KTP maintainers of which proposed profile fields are implementation details
-versus candidate protocol extensions. KIL's current checkout is not claimed
-green, and its unfinished V3B-2 work must not be presented as accepted evidence.
-
-**Next gate:** Review and approve or revise the six decisions in the strategy.
-Only after that review, write a narrow Phase 0 product requirements and
-architecture specification fixing the pilot, action scope, conformance target,
-governance owners, and extension boundary; do not begin implementation before
-that design gate passes.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
 ### T-247 — 2026-09-14 — Self-contained HTML review contract confirmed
 
 **Input:** Ensure that every file presented for review is a self-contained HTML
@@ -11873,217 +11820,6 @@ inline-SVG handling and explicit size limits.
 **Next gate:** Review the standalone Turnkey Blue Zone HTML reader. Apply the
 same contract to the Phase 0 requirements and architecture reader after the
 strategy decisions are approved.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
-### T-248 — 2026-09-14 — Frontier Zero Trust thesis created
-
-**Input:** Develop a complete thesis that modern Zero Trust must evolve from
-authenticated access to continuously earned, action-specific authority for
-human safety against autonomous misalignment, using the potential to thwart the
-Hugging Face incident as the central proof case.
-
-**Interpretation:** Produce a rigorous, self-contained doctrine that connects
-present Zero Trust standards, KTP, KIL, Blue Zones, current alignment evidence,
-frontier-safety frameworks, and real autonomous-system incidents. Make the
-Hugging Face campaign central without treating a plausible or demonstrated
-mechanism as proof of an unobserved historical counterfactual.
-
-**Decision status:** Thesis proposed for review; no normative protocol,
-architecture, implementation, or publication decision is approved. The thesis
-defines Frontier Zero Trust as the evolution from identity-to-resource access
-to fresh agent-action-environment authority, with independent consequence
-enforcement, trajectory, reducing-only local evidence, non-event proof, safe
-degradation, and human constitutional governance.
-
-**Rationale:** The 2026 International AI Safety Report separates severe
-loss-of-control risk into capability, harmful propensity, and an enabling
-deployment environment. Frontier Zero Trust directly constrains the third
-factor while alignment and evaluations address the first two. The Hugging Face
-incident demonstrates adaptive, machine-speed movement through failed sandboxes,
-reachability, credentials, Kubernetes, cloud, network, and supply-chain paths,
-while its successful denials show that independently enforced consequences
-still matter after compromise. KIL V3B-1 independently demonstrates the narrow
-signed-state permit/withhold mechanism at one local Envoy boundary. Together
-these facts support named counterfactual severance hypotheses and a matched
-replay agenda, not an unconditional historical-prevention claim.
-
-**Affected artifacts:** Added
-`docs/design-drafts/2026-09-14-frontier-zero-trust-thesis.md` and its standalone
-HTML reader; appended this lineage entry and regenerated the standalone lineage
-reader. No KIL runtime, laboratory, cluster, remote, protocol, or implementation
-state changed.
-
-**Unresolved questions:** Editorial and stakeholder approval; desired balance
-between technical doctrine, public manifesto, policy argument, and academic
-paper; whether the thesis should become a KIL white paper or remain a separate
-position paper; external peer review; and completion of the KIL V3B-2, V3C, and
-scenario-matched Hugging Face validation gates.
-
-**Next gate:** Review the standalone Frontier Zero Trust HTML thesis. Revise its
-claims and voice from stakeholder feedback before considering publication or a
-separate implementation specification. Preserve the distinction between proof
-of need, proof of mechanism, validated counterfactual, and historical causal
-proof.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
-### T-249 — 2026-09-14 — Frontier Zero Trust pacing thesis proposed
-
-**Input:** Create a version of the Frontier Zero Trust thesis that specifically
-addresses the current safety and capability-pacing debate initiated by Dario
-Amodei and the subsequent public agreement or endorsement by other frontier AI
-leaders, using current internet research and retaining the Hugging Face incident
-as the central proof case.
-
-**Interpretation:** Distinguish a fast-moving public convergence from a binding
-or operational agreement; assess both the genuine technical signal and the hype
-cycle around it; and convert the governance opening into an evidence-backed
-proposal joining independent embedded evaluation to independent runtime
-consequence enforcement through Frontier Zero Trust, KTP, KIL, and deployable
-Blue Zones.
-
-**Decision status:** A new thesis variant is proposed for review. It recommends
-that the pace-the-frontier moment be institutionalized as a Frontier Safety
-Compact with seven commitments: protected embedded evaluators, embedded
-enforcement, linked capability/deployment/evidence gates, comparable public
-claim labels, incident replay, open conformance with anti-capture provisions,
-and measurable pacing rules. No compact, protocol change, policy position,
-implementation, or publication decision is approved.
-
-**Rationale:** Amodei published a detailed three-stage proposal and a unilateral
-Anthropic commitment to embedded evaluators. OpenAI publicly committed to match
-that evaluator step, while Elon Musk and Demis Hassabis endorsed the direction
-without equivalent published operational detail. The available record therefore
-supports “public convergence,” not a settled pact. The OpenAI and Hugging Face
-primary reports establish real autonomous boundary crossing and adaptive
-infrastructure compromise, while successful denials in that same incident show
-that independent consequence controls remain useful after containment and
-identity fail. This supports action-level deployment controls without treating
-Amodei's six-to-twelve-month catastrophic scenario as established fact.
-
-**Affected artifacts:** Added
-`docs/design-drafts/2026-09-14-frontier-zero-trust-pacing-thesis.md` and its
-standalone HTML reader; appended this lineage entry and regenerated the
-standalone lineage reader. No KTP or KIL runtime, laboratory, cluster, remote,
-protocol, policy, or implementation state changed. Pre-existing `Inputs/` and
-unrelated worktree changes were preserved.
-
-**Unresolved questions:** Whether the thesis should replace or accompany the
-broader Frontier Zero Trust paper; stakeholder and external peer review; the
-scope and legal form of a Frontier Safety Compact; evaluator funding and
-independence; anti-capture governance; which organizations will make matched
-operational commitments; and completion of a scenario-matched Hugging Face
-Blue Zone replay.
-
-**Next gate:** Review the standalone pacing thesis for factual, strategic, and
-editorial approval. Revalidate all time-sensitive public commitments before
-publication. If the framing is accepted, convert the compact into a scoped
-implementation and assurance specification with named owners, test vectors,
-and evidence gates; do not advance historical-prevention claims beyond the
-current validated-counterfactual level until matched replay succeeds.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
-### T-250 — 2026-09-14 — Deep Blue journey and v3 federation correction scoped
-
-**Input:** Revise the Turnkey Blue Zone strategy so readers understand Blue
-Zones as a maturity spectrum and a journey toward Deep Blue, and recognize that
-federation belongs on the KTP v3 critical path but is not yet written.
-
-**Interpretation:** Add an explicit adoption ladder using the canonical current
-zone gradient—Wild, Green, Cyan, Blue, and Deep Blue—while deciding how to use
-“Light Blue” as accessible journey language without presenting it as a current
-normative RFC label. Separate zone assurance from rollout state and conformance
-level. Treat federation as a reserved future KTP v3 dependency, not a capability
-available from the present published baseline or something to implement before
-the normative v3 text exists.
-
-**Decision status:** Revision design proposed; editing is awaiting the required
-design confirmation. The recommended approach is a compact “Journey to Deep
-Blue” section and ladder, plus minimal corrections to existing federation claims
-and a Phase 5 critical-path gate. No implementation or protocol decision is
-approved.
-
-**Rationale:** The current KTP Zones text explicitly defines a gradient from
-Deep Blue to Wild and describes gradual adoption, but its canonical labels are
-Deep Blue, Blue, Cyan, Green, and Wild rather than Light Blue. The current
-Turnkey strategy mentions the gradient without making it the reader's adoption
-journey, and it also describes federation as though it were part of the current
-published product baseline. The proposed revision would clarify both concepts
-without collapsing environment assurance, operational rollout, conformance,
-and product-delivery profiles into one ladder.
-
-**Affected artifacts:** This append-only lineage entry only. The Turnkey Blue
-Zone strategy and its standalone HTML reader remain unchanged pending design
-confirmation. No KTP or KIL runtime, laboratory, cluster, remote, protocol, or
-implementation state changed; pre-existing `Inputs/` and unrelated worktree
-changes were preserved.
-
-**Unresolved questions:** Whether to include a small visual ladder in the
-standalone reader; whether “Light Blue” should be an explicitly non-normative
-umbrella for the Green/Cyan on-ramp or omitted in favor of exact RFC labels; and
-the eventual scope, release, and conformance semantics of KTP v3 federation.
-
-**Next gate:** Confirm whether a visual companion is desired, then approve the
-recommended ladder and terminology. After approval, revise only the strategy's
-foundation, delivery-option, deployment-gate, roadmap, and decision-summary
-language; regenerate and verify the standalone HTML reader and record the
-completed revision in a new lineage entry.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
-### T-251 — 2026-09-14 — Context-shaped Blue Zone journey adopted in strategy
-
-**Input:** After reviewing three visual treatments, select option C: present
-zone assurance depth and operational rollout as two independent axes. Emphasize
-that each RFC color has a purpose, that Deep Blue is designed for contexts such
-as nuclear and medical critical systems, and that organizations should not be
-driven toward more assurance than their consequence model requires. Keep
-federation on the critical path for the unwritten KTP v3 specification.
-
-**Interpretation:** Use the exact current RFC gradient—Wild, Green, Cyan, Blue,
-and Deep Blue—as a context-selected assurance target, while treating “Light
-Blue” only as non-normative conversational shorthand for the Green/Cyan on-ramp.
-Show inventory, observe, shadow, canary, enforce, and attest as a separate
-operational journey that can be followed at any selected assurance depth. Do
-not equate a color, rollout state, evidence level, or KTP conformance claim.
-
-**Decision status:** The two-axis option is adopted in the proposed strategy and
-is ready for stakeholder review. The document now recommends Kit and Operator
-as the present single-zone product path, Deep Blue readiness as a context-driven
-single-zone assurance track, and Federation as a future KTP v3 track behind a
-published, pinned, and reviewed normative specification. No product build,
-protocol change, conformance claim, or publication decision is approved.
-
-**Rationale:** The canonical Zones RFC assigns distinct purposes to the five
-colors and expressly reserves Deep Blue for maximum-assurance critical contexts.
-The migration RFC independently describes staged activation. A two-axis model
-prevents teams from mistaking rollout progress for assurance depth or treating
-Deep Blue as a universal maturity destination. Current v2.1 texts contain
-federation-related concepts and conformance references, but the governing design
-direction places normative federation in not-yet-written KTP v3; therefore the
-strategy withholds Standard or Full claims where unresolved federation is a
-profile dependency.
-
-**Affected artifacts:** Revised
-`docs/design-drafts/2026-09-14-turnkey-blue-zone-strategy.md`; regenerated its
-self-contained HTML reader with an embedded two-axis PNG diagram; appended this
-lineage entry and regenerated the standalone lineage reader. No KTP or KIL
-runtime, laboratory, cluster, remote, protocol, or implementation state changed.
-Pre-existing `Inputs/` and unrelated worktree changes were preserved.
-
-**Unresolved questions:** Stakeholder approval of the exact journey vocabulary;
-whether a future KTP release will revise the current Standard and Full
-conformance labels; the normative content, timing, and compatibility rules of
-KTP v3 Federation; and which first pilot contexts should target Cyan, Blue, or
-Deep Blue.
-
-**Next gate:** Review the standalone Turnkey Blue Zone HTML reader. If the
-two-axis model and claim boundaries are accepted, carry them into the Phase 0
-product contract, profile schema, claims registry, and protocol compatibility
-matrix. Do not schedule or implement Federation before the KTP v3 entry gate is
-satisfied.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
@@ -12136,409 +11872,6 @@ If accepted, retain the layout as the document's presentation profile and apply
 the directive to other readers only by explicit editorial decision. Separately
 decide whether to track the current design-draft source and reader pairs so the
 repository publication-contract check no longer reports them as unexpected.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
-### T-253 — 2026-09-14 — Dario Amodei Kinetic Zero Trust briefing package designed
-
-**Input:** Create all three consumable formats—a one-page executive brief, a
-direct two-page memo, and a technical proposal—for private delivery to Dario
-Amodei in response to *We Must Pace the Frontier*. Affirm that all elements of
-his pacing plan are relevant while explaining that Kinetic Trust and Ambient
-Enforcement allow defenders to act without waiting for a government agreement
-with China. Present protection as bidirectional: constrain misaligned AI
-originating inside democratic Blue Zones and prevent external or cheating
-adversarial AI from exercising authority inside them.
-
-**Interpretation:** Position Kinetic Zero Trust as embedded enforcement that
-complements Amodei's embedded evaluators. Distinguish capability pacing from
-action authority and organize the argument around three outcomes: global
-agreement, no agreement, and adversarial defection. Define government
-independence as unilateral deployability rather than government irrelevance;
-define immutability and ubiquity as evidence-tested Blue Zone invariants rather
-than universal facts; and keep immediate single-zone protection independent of
-the unwritten KTP v3 Federation work.
-
-**Decision status:** The integrated three-document package and its shared claim
-architecture are approved. A written design specification now defines audience,
-terminology, message sequence, evidence tiers, claim boundaries, deliverable
-lengths, a private-briefing request, and acceptance criteria. The three outreach
-documents have not yet been drafted, and no pilot, external contact, protocol
-change, or publication decision is approved.
-
-**Rationale:** Amodei's essay explicitly makes embedded independent evaluation
-the verification foundation of pacing and acknowledges that global agreements
-face severe compliance and defection problems. Anthropic's incident report
-identifies containment, monitoring, evaluation-environment hardening, and
-defense in depth as necessary. METR's independent investigation documents
-large-scale agent coordination and attempts to manipulate tool-call or
-trajectory evidence. These sources support a bounded proposal for independent
-consequence enforcement; they do not prove universal prevention.
-
-**Affected artifacts:** Added
-`docs/superpowers/specs/2026-09-14-kinetic-zero-trust-dario-briefing-design.md`
-and its self-contained HTML review reader; appended this lineage entry and
-regenerated the lineage reader. No KTP or KIL runtime, laboratory, cluster,
-remote, protocol, enforcement, pilot, or external communication state changed.
-Pre-existing `Inputs/` and unrelated worktree changes were preserved.
-
-**Unresolved questions:** Editorial approval of the written package design;
-the named recipients who should join Amodei in a private briefing; whether the
-eventual technical appendix should expose detailed KIL experiment status or
-remain implementation-neutral; and whether an independent evaluator would
-accept the proposed pilot scope and evidence interface.
-
-**Next gate:** Review the standalone design specification. After editorial
-approval, create a detailed writing and validation plan for the three
-self-contained outreach documents. Do not draft or send the package before the
-design gate is accepted, and do not advance prevention or geopolitical-defense
-claims beyond declared, non-bypassable Blue Zone coverage.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
-### T-254 — 2026-09-14 — Kinetic Enforcement adopted as the ultimate fail-safe frame
-
-**Input:** Clarify that Kinetic Enforcement is the ultimate fail-safe and that
-Ambient Enforcement, Kinetic Zero Trust, Kinetic Trust, KTP, and Blue Zones are
-not separate ideas competing for attention; they are names for layers or
-properties of the same substrate.
-
-**Interpretation:** Use Kinetic Enforcement as the operational centerpiece of
-the Amodei package. Define Kinetic Trust as the substrate principle, KTP as the
-draft protocol framework, Kinetic Zero Trust as the security doctrine, Kinetic
-Enforcement as the final independent control before consequence, Ambient
-Enforcement as its omnipresent deployment property within declared coverage,
-and a Blue Zone as the resulting protected environment.
-
-**Decision status:** The naming hierarchy and “ultimate fail-safe” framing are
-adopted in the briefing-package design. The phrase denotes an architectural
-role—the last independent boundary after alignment, evaluation, pacing, or
-identity assumptions fail—not an assertion that an implementation is
-infallible. The outreach documents remain undrafted pending design review.
-
-**Rationale:** A single substrate with a clear naming hierarchy is easier to
-understand than several apparently competing brands. The fail-safe formulation
-also makes the relationship to Amodei's plan concrete: alignment seeks correct
-model choices, evaluation discovers failure, pacing creates time, and Kinetic
-Enforcement withholds or attenuates protected consequences when those upstream
-measures are wrong or incomplete. Claim discipline requires coverage,
-non-bypassability, evidence independence, fail-constrained behavior, and
-recovery to be demonstrated rather than assumed.
-
-**Affected artifacts:** Revised
-`docs/superpowers/specs/2026-09-14-kinetic-zero-trust-dario-briefing-design.md`;
-this lineage entry and the corresponding self-contained review readers. No KTP
-or KIL runtime, laboratory, cluster, remote, protocol, enforcement, pilot, or
-external communication state changed. Pre-existing `Inputs/` and unrelated
-worktree changes were preserved.
-
-**Unresolved questions:** Editorial acceptance of the naming hierarchy and
-qualified “ultimate fail-safe” language; whether the public-facing primary
-name should eventually be Kinetic Enforcement or Kinetic Zero Trust; and which
-implementation evidence should appear in the technical proposal.
-
-**Next gate:** Review the revised standalone design specification. After
-approval, write a detailed package-production plan and then draft the three
-self-contained outreach documents with identical terminology and claim
-boundaries.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
-### T-255 — 2026-09-14 — Sendable email added to the private-briefing package
-
-**Input:** Ensure that one package item is an email that can be sent directly
-to Dario Amodei.
-
-**Interpretation:** Preserve the already approved executive brief, direct memo,
-and technical proposal, and add a concise email as the package's delivery
-surface. The email should work without an attachment while optionally pointing
-to the brief and proposal. It should request a private technical briefing only,
-without seeking public endorsement or implying that a pilot has been agreed.
-
-**Decision status:** The package expands from three to four self-contained
-deliverables. The email is specified at 300–450 words with a subject line,
-greeting, send-ready body, closing placeholder that does not invent the sender's
-identity, no more than two inline links, and an optional attachment note. The
-four documents remain undrafted pending the production plan.
-
-**Rationale:** A technically complete package still needs a low-friction entry
-point. A short email respects the recipient's attention, states the distinctive
-embedded-enforcement proposition, and creates a route to the requested private
-briefing without forcing the longer materials into the initial message.
-
-**Affected artifacts:** Revised
-`docs/superpowers/specs/2026-09-14-kinetic-zero-trust-dario-briefing-design.md`;
-this lineage entry and the corresponding self-contained review readers. No KTP
-or KIL runtime, laboratory, cluster, remote, protocol, enforcement, pilot,
-email, or other external communication state changed. Pre-existing `Inputs/`
-and unrelated worktree changes were preserved.
-
-**Unresolved questions:** The sender's preferred name, title, organization, and
-contact details; whether the final email will include attachments or links; and
-the best private contact channel for delivery.
-
-**Next gate:** Produce and validate the four documents. Leave sender-specific
-fields clearly marked for replacement, and do not send or externally publish
-the email or attachments without explicit authorization.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
-### T-256 — 2026-09-14 — Kinetic Enforcement private-briefing package completed
-
-**Input:** Build the approved package and ensure that it includes an email that
-can be sent directly to Dario Amodei. Make Kinetic Enforcement the ultimate
-fail-safe, present Ambient Enforcement and Kinetic Zero Trust as the same
-substrate, affirm the relevance of Amodei's complete pacing plan, and explain
-the unilateral and bidirectional defense available if there is no agreement
-with China or if an adversary cheats.
-
-**Interpretation:** Produce four independent outreach surfaces: a sendable
-email, a one-page executive brief, a direct private memo, and a technical
-proposal. Use the same terminology, agreement/no-agreement/defection argument,
-private-briefing request, evidence ladder, and claim boundaries in every file.
-Treat “ultimate fail-safe” as the final independently governed consequence
-boundary and require non-bypassable coverage rather than claiming
-infallibility.
-
-**Decision status:** The four documents are complete as private-review drafts.
-Their main narrative lengths are 401, 762, 1,513, and 4,390 words respectively.
-The email contains a subject, direct greeting, sender placeholders, two inline
-links, and an optional attachment note. The technical proposal defines the
-threat model, decision semantics, bidirectional architecture, independent
-evaluator interface, incident control map, 90-day pilot, metrics, falsification
-conditions, residual risks, and briefing agenda. Nothing has been emailed,
-published, endorsed, piloted, or committed to a third party.
-
-**Rationale:** Amodei's three-level pacing program addresses capability speed
-and coordination; the package supplies a complementary consequence-control
-layer that can be deployed without a prior synchronized government decision.
-Primary-source grounding includes Amodei's essay, Anthropic's evaluation
-incident analysis, METR's independent OpenAI–Hugging Face investigation, NIST
-SP 800-207, the KTP site, and the canonical RFC repository. The China argument
-is stated precisely: undisclosed capability can increase attack pressure, but
-it is not an authorization credential inside a covered Blue Zone.
-
-**Verification:** Static checks confirmed all four narrative word bands,
-terminology, China/defection framing, briefing request, and email-link limit.
-Each `.htm` has one H1, a source SHA-256 matching its Markdown bytes, inline
-reader and print assets, HTTPS or internal links only, and no remote runtime
-asset. The technical proposal alone selects wide-reader mode. Browser checks
-measured an 809-pixel article at a 1280-pixel viewport and an 833-pixel article
-at a 1000-pixel viewport, with no document or block overflow and the desktop
-outline correctly collapsed at the smaller width. Forty-eight renderer,
-generation, and tracked-publication tests passed. The full 49-test run retained
-one expected publication-inventory failure reporting eight untracked review
-readers: the three earlier design drafts, this package's design specification,
-and the four new outreach readers.
-
-**Affected artifacts:** Added the Markdown and generated HTML pairs
-`docs/design-drafts/2026-09-14-dario-amodei-kinetic-enforcement-email.*`,
-`docs/design-drafts/2026-09-14-kinetic-enforcement-executive-brief.*`,
-`docs/design-drafts/2026-09-14-dario-amodei-kinetic-enforcement-private-memo.*`,
-and `docs/design-drafts/2026-09-14-kinetic-enforcement-technical-proposal.*`;
-added the internal production plan
-`docs/superpowers/plans/2026-09-14-dario-kinetic-enforcement-package.md`;
-revised and regenerated the package design specification; and appended this
-lineage entry. No KTP or KIL runtime, laboratory, cluster, remote, protocol,
-enforcement, pilot, email, publication, or other external state changed.
-Pre-existing `Inputs/` and unrelated worktree changes were preserved.
-
-**Unresolved questions:** Final editorial approval; replacement of the email
-sender placeholders; the delivery address or introduction channel; whether to
-attach all three longer documents or begin with the executive brief; which
-Anthropic and independent-evaluator participants should attend; and whether a
-private briefing would justify scoping the proposed pilot.
-
-**Next gate:** Review the four standalone HTML documents. Personalize the email
-only after the language is approved. If Dario accepts the private briefing,
-use the technical proposal as a discussion instrument and decide whether to
-scope—not presume—the independently governed 90-day pilot. Do not send or
-publish any material without explicit authorization.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
-### T-257 — 2026-09-14 — Concise Dario email revision scoped
-
-**Input:** Make the sendable email more concise and avoid repeating material
-Dario Amodei already stated in *We Must Pace the Frontier*.
-
-**Interpretation:** Treat Amodei's pacing argument as shared context rather than
-summarizing it back to him. Preserve only the novel contribution: embedded
-evaluation needs an independently governed consequence-control layer; that
-layer reduces dependence on universal agreement; Ambient Enforcement protects
-covered Blue Zones in both directions; and the immediate request is a private
-technical briefing.
-
-**Decision status:** Revision direction is proposed, not yet implemented. Three
-candidate densities were identified: an approximately 170-word recommended
-version, an approximately 100-word warm-introduction version, and an
-approximately 240-word concise-technical version. The current recommendation is
-the 170-word version because it can state the distinctive control thesis and
-the briefing request without reproducing the attached materials.
-
-**Rationale:** The recipient already knows the pacing thesis. Repeating its
-components consumes attention and makes Kinetic Enforcement appear derivative.
-The email should create curiosity and establish the one missing control
-category, leaving mechanism, evidence, geopolitical cases, and pilot detail to
-the attachments and briefing.
-
-**Affected artifacts:** This lineage entry only. The email Markdown and HTML
-remain unchanged pending editorial approval. No email, publication, KTP or KIL
-runtime, laboratory, cluster, protocol, enforcement, pilot, or other external
-state changed.
-
-**Unresolved questions:** Which target density the user prefers; whether the
-China/defection case should remain explicit in the email or be left to the
-brief; and which attachments will accompany the first contact.
-
-**Next gate:** Obtain approval of the target density, revise the email source,
-regenerate its self-contained HTML reader, and verify source binding, link
-count, and rendering before review. Do not send the email without explicit
-authorization.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
-### T-258 — 2026-09-14 — Concise Dario email implemented
-
-**Input:** Proceed with the recommended approximately 170-word email revision.
-
-**Interpretation:** Address Amodei as a peer who already understands his own
-pacing argument. Lead directly with the missing control category, define its
-relationship to embedded evaluation, compress unilateral and bidirectional
-Blue Zone protection into one paragraph, and use the remaining attention for a
-specific private-briefing request.
-
-**Decision status:** Confirmed editorial revision. The sendable body is now 187
-words including greeting and closing, down from 401 main-narrative words. It
-contains one inline HTTPS link and retains the subject, greeting, sender
-placeholders, optional attachment note, private 45-minute request, scrutiny-not-
-endorsement boundary, and the continuously earned, action-specific authority
-thesis. The recap of Amodei's program and the three-scenario geopolitical list
-were removed. No email has been sent.
-
-**Rationale:** The shorter version respects the recipient's existing knowledge
-and makes the contribution legible in one pass: independent evaluators assess
-safety claims, while Kinetic Enforcement decides whether a specific action may
-become a consequence. The Blue Zone sentence preserves the strategic advantage
-without forcing the first-contact email to carry the full China/defection case.
-
-**Verification:** Static checks measured 187 words from greeting through
-closing, one HTTPS link, all required email fields, and no removed recap
-phrases. The regenerated HTML embeds the exact Markdown SHA-256, contains one
-H1, selects the standard reader rather than wide mode, and contains no remote
-runtime asset. Forty-eight focused renderer, generation, and publication-
-contract tests passed; `git diff --check` returned no error.
-
-**Affected artifacts:** Revised and regenerated
-`docs/design-drafts/2026-09-14-dario-amodei-kinetic-enforcement-email.*` and
-`docs/superpowers/specs/2026-09-14-kinetic-zero-trust-dario-briefing-design.*`;
-added the internal execution plan
-`docs/superpowers/plans/2026-09-14-concise-dario-email.md`; and appended this
-lineage entry with its generated reader. No email, publication, KTP or KIL
-runtime, laboratory, cluster, protocol, enforcement, briefing, pilot, or other
-external state changed.
-
-**Unresolved questions:** Replacement of sender placeholders, the final
-delivery channel, and whether the first contact should attach the one-page
-executive brief or merely offer it.
-
-**Next gate:** Review the concise standalone email reader. After editorial and
-sender-field approval, decide the attachment strategy. Do not send or publish
-without explicit authorization.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
-### T-259 — 2026-09-14 — Existing-infrastructure and mathematical-enforcement claim scoped
-
-**Input:** State in the Dario email that Kinetic Enforcement operates “on your
-existing infrastructure”; it is not a product or a policy but physics, math,
-and an immutable enforcement mechanism that needs to be enabled.
-
-**Interpretation:** Preserve the requested force while defining its technical
-meaning. “Physics” should describe operational inevitability at a non-bypassable
-consequence boundary; “math” should identify the authority equation as the
-decision rule; and “immutable” should mean that, within declared coverage, the
-requesting AI cannot rewrite or overrule the decision. The language must not
-imply that uncovered paths, administrators, implementations, or the surrounding
-world are universally immutable.
-
-**Decision status:** Three editorial approaches are proposed, not yet
-implemented: a technically forceful paragraph defining each term, a maximum-
-rhetoric sequence of slogans, and a conservative protocol-pattern description.
-The recommended approach is the technically forceful paragraph because it
-retains “existing infrastructure,” “not a product,” “not a policy,” “physics,”
-“math,” “immutable,” and “enabled” while bounding the claim.
-
-**Rationale:** The direct slogan is memorable but can sound metaphysical or
-commercially evasive unless the enforcement invariant is stated. The bounded
-version turns the rhetoric into a falsifiable proposition: on every declared,
-non-bypassable consequence path, the required authority equation is satisfied
-or the consequence does not propagate, and the requesting system cannot alter
-that decision.
-
-**Affected artifacts:** This lineage entry only. The concise email Markdown and
-HTML remain unchanged pending wording approval. No email, publication, KTP or
-KIL runtime, laboratory, cluster, protocol, enforcement, briefing, pilot, or
-other external state changed.
-
-**Unresolved questions:** Whether the recommended technically bounded language
-is approved verbatim; whether the authority equation should be named in a
-first-contact email; and whether “enabled” could be read as claiming a completed
-Anthropic deployment rather than a deployable mechanism.
-
-**Next gate:** Obtain wording approval, update the concise email and its design
-contract, regenerate the self-contained reader, and verify length, claim
-boundaries, source identity, and rendering. Do not send or publish without
-explicit authorization.
-
-KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
-
-### T-260 — 2026-09-14 — Infrastructure-level enforcement invariant added to Dario email
-
-**Input:** Approve adding the recommended existing-infrastructure, physics,
-math, immutable-enforcement, and enablement paragraph to the sendable email.
-
-**Interpretation:** Replace the earlier generic mechanism description rather
-than append a second explanation. Keep the email near one minute and make the
-enforcement invariant its center: a declared consequence either satisfies the
-authority equation at a non-bypassable boundary or it does not occur.
-
-**Decision status:** Confirmed and implemented editorial revision. The email
-now states that Kinetic Enforcement, as the operational layer of Kinetic Zero
-Trust, runs on the recipient's existing infrastructure; is not a product to buy
-or a policy to interpret; is math expressed as infrastructure and operationally
-behaves like physics; is immutable to the requesting AI within declared
-coverage; and needs to be enabled. The body is 201 words from greeting through
-closing. “Enabled” remains a deployment proposition, not a claim that Kinetic
-Enforcement is presently installed or active on Anthropic infrastructure.
-
-**Rationale:** Replacing the paragraph preserves concision while drawing the
-most important categorical distinction. Product and policy controls depend on
-adoption, interpretation, or voluntary compliance; the proposed enforcement
-property resides in the consequence path and is evaluated mechanically. The
-declared-coverage qualifier preserves falsifiability and avoids claiming global
-or administrator-proof immutability.
-
-**Verification:** Static checks measured 201 words, one HTTPS link, and every
-requested concept. The regenerated email reader contains one H1, standard
-rather than wide layout, no remote runtime asset, and a source SHA-256 matching
-the Markdown bytes. Forty-eight focused renderer, generation, and publication-
-contract tests passed; `git diff --check` returned no error.
-
-**Affected artifacts:** Revised and regenerated
-`docs/design-drafts/2026-09-14-dario-amodei-kinetic-enforcement-email.*` and
-`docs/superpowers/specs/2026-09-14-kinetic-zero-trust-dario-briefing-design.*`;
-updated `docs/superpowers/plans/2026-09-14-concise-dario-email.md`; and appended
-this lineage entry with its generated reader. No email, publication, KTP or KIL
-runtime, laboratory, cluster, protocol, enforcement, briefing, pilot, or other
-external state changed.
-
-**Unresolved questions:** Replacement of sender placeholders, delivery channel,
-and first-contact attachment strategy.
-
-**Next gate:** Review the amended standalone email reader. After editorial and
-sender-field approval, decide the attachment strategy. Do not send or publish
-without explicit authorization.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
 
@@ -12832,5 +12165,320 @@ Future.
 validation from the Python 3.12 environment, obtain final independent
 read-only review, then commit and push this closure checkpoint without running
 the live lab.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-273 — 2026-09-16 — Upstream KTP issue channel available
+
+**Input:** The user reports being able to open an issue on `nmcitra/ktp-rfc`.
+
+**Interpretation and decision status:** User-reported access provides a possible
+upstream clarification channel. No issue topic, draft or publication is yet
+authorized; no protocol or implementation decision changes.
+
+**Rationale:** Upstream clarification could help resolve the producer, Trust
+Proof and enforcement contract questions recorded in T-272. The public
+repository was inspected only to confirm the referenced destination; its
+browser rendering is not a fresh version or compatibility audit.
+
+**Affected artifacts:** This append-only lineage entry only. No GitHub issue,
+external message, runtime change, staging or commit was performed.
+
+**Unresolved questions:** Whether the user wants help selecting an issue topic
+or drafting a specific upstream question.
+
+**Next gate:** Establish the intended issue topic before drafting; obtain
+explicit publication authorization before any external write.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-274 — 2026-09-16 — Assess evidence-backed KTP infrastructure profile issue
+
+**Input:** The user asks which contribution from the accumulated KIL/KTP work
+would make the strongest upstream issue and eventual PR, reporting private
+founder acknowledgment of possible extension and implementation potential.
+
+**Interpretation:** Assess contribution scope and evidence, not implement or
+publish. Private acknowledgment is user-reported encouragement, not public
+endorsement, normative approval, permission to quote correspondence, or an
+upstream acceptance decision.
+
+**Decision status and rationale:** Recommended, not approved, an enhancement
+issue proposing a vendor-neutral KTP infrastructure execution profile with
+action/class-bound consumption, reducing-only local enforcement, and verifiable
+execution evidence, with KIL as the experimental reference implementation.
+An implementation showcase alone contributes less protocol precision; a broad
+new Ambient Enforcement or Frontier Zero Trust RFC exceeds the demonstrated
+boundary. The original Q_i,c extension remains a proposal: do not silently
+rename it as a Trust Proof or declare its charge/history model normative.
+First establish which requirements need a profile and which already exist.
+
+**Source alignment:** Fresh GitHub API inspection pinned upstream main at
+`83f33661ca71911688fbc18a5b2a79516d7fb231`. Its README declares draft v2.1.0;
+main and the released tag must be compared separately before compatibility
+claims. KTP-Enforce already specifies request/proof binding, execution-time
+freshness, restrictive grants, readiness and evidence/status checks, and an
+Envoy integration pattern. The kinetic-envelope specification already permits
+software-substrate declarations and requires named conformance vectors.
+KTP-Attenuation already constrains caching and failure behavior. KTP-Audit
+already owns Flight Recorder semantics. Contribution rules favor an issue
+before an enhancement PR, and the current hygiene gate admits specifications,
+conformance JSON, schemas and executable regression tooling rather than an
+unbounded implementation import. Existing open issue #115 is a robotics
+reference-implementation precedent, not proof of KIL approval. No overlap
+finding here implies absence of a supplier component or authorization to
+replace one.
+
+**Proposed PR boundary:** A focused infrastructure profile, minimal justified
+schema additions, deterministic conformance vectors/validator, necessary
+cross-references and an informative immutable KIL implementation/evidence
+reference. Keep runtime code, raw lab bundles and vendor deployment guides in
+their separately reviewed implementation/publication surface. Preserve core
+proofs, capacity/Soul vetoes, supervision, grants and prerequisite checks;
+local state may restrict but never authorize beyond their current intersection.
+Freshness, reconciliation, epoch/revocation propagation, anti-replay and
+execution/commit boundaries need explicit design and test review. No universal
+exactly-once side-effect guarantee follows from the one-shot laboratory driver.
+
+**Evidence and affected artifacts:** Reviewed the paper, extension boundary,
+technical proposal, kickoff worksheet and accepted V3B-1 manifest/summary.
+Fresh offline presenter verification accepted the immutable V3B-1 bundle and
+all 14 SHA256SUMS entries passed. The first presenter invocation omitted the
+documented PYTHONPATH; the corrected `PYTHONPATH=src` invocation succeeded.
+No live experiment was rerun. The existing permit/permit/deny, HTTP
+200/200/403 and target-marker 1/1/0 result has modeled inputs and observed
+local-Envoy outputs; `not_promoted` remains unchanged. It is not current KTP
+conformance, production efficacy, historical prevention, independent external
+attestation, full bypass coverage, or Cisco/Splunk/Kind/Calico validation.
+Only this append-only lineage entry and its generated reader are updated.
+No issue, PR, staging, commit or external message is authorized or performed.
+
+**Unresolved questions:** Maintainer preference for a profile versus an RFC;
+the residual need and placement for signed composite consumption state;
+compatibility with released and prospective KTP contracts; supplied-package
+interfaces; independently reproducible public evidence access while KIL remains
+private; required tests and assurance for each normative requirement.
+
+**Next gate:** User review of the proposed issue scope, then a clause-level
+compatibility/novelty matrix and maintainer discussion before drafting the
+approved upstream specification and implementation plan. Publication and
+runtime work require their own explicit authority.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-275 — 2026-09-16 — Publish approved upstream infrastructure profile issue
+
+**Input:** The user explicitly directed opening the enhancement issue proposed
+in T-274.
+
+**Interpretation and decision status:** Authorized publication of that scoped
+issue, not implementation, a PR, public release of private evidence, or a claim
+of founder endorsement. Confirmed issue creation; the extension itself remains
+a proposal awaiting upstream discussion.
+
+**Rationale and affected artifacts:** Opened
+[nmcitra/ktp-rfc issue #124](https://github.com/nmcitra/ktp-rfc/issues/124), titled
+`[FEATURE] Infrastructure execution profile for KTP: action-bound, reducing-only
+enforcement and verifiable outcomes — KIL reference implementation`.
+The body distinguishes existing KTP requirements from residual profile work,
+keeps Q_i,c and kil.q-state.v0 experimental, preserves the modeled-input /
+observed-output and not_promoted evidence limits, names compatibility and
+public reproducibility gates, and proposes a focused specification/vector PR
+rather than a runtime import. The founder's private acknowledgment and
+correspondence were not included. A temporary local body file was used for
+submission; no new design specification or implementation file was created.
+This lineage and its generated reader record the publication.
+
+**Verification:** Checked current open upstream issues before submission;
+no same-topic open issue was listed. GitHub returned issue #124, and readback
+confirmed OPEN status, exact title, author gatekeeper454, and body equality
+with the submitted draft, allowing only trailing-newline normalization.
+No live experiment, PR, staging, commit, or additional external message was
+performed.
+
+**Unresolved questions:** Maintainer preference for profile/RFC placement,
+residual normative requirements, signed consumption-state placement,
+released-versus-main compatibility, and evidence/conformance expectations.
+
+**Next gate:** Receive maintainer feedback and resolve the clause-level
+compatibility/novelty matrix before separately authorized specification and
+implementation work. No recurring monitoring is requested or configured.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+
+### T-279 — 2026-09-16 — Proposed separation of Blue Zone and KTP component repositories
+
+**Input:** The user requested separate repositories in folders named `KTP Blue
+Zones` and `KTP Component Dev`, excluding the task "Define KTP software
+deployment scope" from the Blue Zone repository, and required clarification
+before moving anything if the boundary is unclear.
+
+**Interpretation and decision status:** The two folder names and separation of
+deployment work from missing-component development are confirmed instructions.
+Proposed ownership: Blue Zone strategy, assurance journeys, deployment guides,
+integration procedures and deployment validation belong to `KTP Blue Zones`;
+the software kickoff and future missing authorizer, proof handler, API consumer,
+action broker, fixture/emitter and Splunk companion work belong to `KTP Component
+Dev`. Existing KIL infrastructure code and lab evidence remain in KIL unless
+explicitly included in a reviewed extraction manifest. These ownership details
+are proposals pending scope approval, not completed moves.
+
+**Rationale and inspection:** Located both relevant continuation tasks and
+confirmed that the Cisco deployment guide and component kickoff are currently
+untracked, with concurrent edits in the shared lineage. Their mandatory
+IdP/identity/trajectory gate must survive either split. A verified file manifest,
+provenance, dependency links and self-contained HTM readers are needed before
+removing any source artifact.
+
+**Affected artifacts:** Only this append-only lineage entry and its generated
+HTM reader. No repository creation, source move, deletion, chat reassignment,
+staging, commit or external publication has occurred in this turn.
+
+**Unresolved questions:** True extraction versus retained KIL copies; final
+destination parent directory; exact shared-artifact and code boundaries;
+history preservation; local-only versus hosted repository creation; whether
+existing tasks should be relocated after the filesystem split.
+
+**Next gate:** Confirm whether originals should be removed from KIL after
+verified extraction; then review destination paths, ownership manifest and
+migration approach before any file move.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+**Scope clarification received in this turn:** The user confirmed that Blue
+Zone work comprises this task ("Design turnkey blue zone system") and the
+continuation task returned by the app as "Continue Blue Zones Zero Trust".
+"Define KTP software deployment scope" remains the separate component-development
+task. This clarification fixes the task boundary, but does not yet resolve
+whether originals should be removed from KIL or the repository migration method.
+
+
+### T-280 — 2026-09-16 — Independent KTP project extraction approved in principle
+
+**Input and confirmed decisions:** The user confirmed true separation into
+independent KTP projects rather than KIL subprojects. KIL should retain only
+provenance/history affecting KIL and no unrelated material that confuses a
+KIL-only reader. Fresh repositories are the intended project boundary.
+
+**Interpretation and proposed migration:** Create sibling local repositories
+named `KTP Blue Zones` and `KTP Component Dev`; transfer the owned working
+documents and HTM readers, rather than clone the KIL repository or its complete
+history. Inspection identifies thirteen Blue Zone document/transcript pairs and
+one component kickoff pair as initial extraction candidates. Pure project
+lineage should accompany its owning project; KIL-related and mixed publication,
+renderer, upstream-infrastructure and lab history remain with KIL. Any archival
+extraction from the active lineage must be explicit, byte-preserved, mapped and
+verified, not a silent rewrite. Existing KIL Git history is not rewritten.
+
+**Rationale and boundaries:** The two Blue Zone tasks own strategy, positioning,
+deployment/configuration, integration procedures and deployment validation. The
+component task owns discovery and future missing-component development. KIL
+source, adapters, lab fixtures, lifecycle tooling, renderer functionality and
+accepted infrastructure evidence remain in KIL. Component references to KIL
+reuse candidates need pinned provenance rather than claims that KIL code is
+local component software. The identity gate and reader portability contract
+must survive separation. No component implementation or pilot validation is
+created by moving a worksheet.
+
+**Affected artifacts:** This append-only lineage entry and regenerated HTM
+reader only. Existing untracked deployment/kickoff files and prior concurrent
+edits are preserved. No source has moved; no new repository, Git commit or
+remote has been created.
+
+**Unresolved questions:** Hosted repository creation and visibility; final
+review of the exact extraction/dependency manifest and historical-entry mapping;
+future task handoff into the new folders.
+
+**Next gate:** Confirm whether private hosted repositories should also be
+created. Review the concrete migration design and implementation plan, then
+perform verified transfer before source removal and run KIL boundary checks.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+### T-281 — 2026-09-16 — Independent KTP projects extracted with verified provenance
+
+**Input and confirmed decision:** The user approved fresh independent KTP Blue
+Zones and KTP Component Dev repositories, a KIL-only active tree, and private
+GitHub repositories under gatekeeper454.
+
+**Implementation and ownership:** Transferred the manifest's 26 Blue Zone and
+two component source/reader files to their owning sibling folders. Blue Zone
+main is `b38f9ff0b80c8c26b29e6be52ed269a575831a85`; component main is `0c858802812e1f4b6de11179b83bfe26440b0146`. Both new Git histories
+are fresh. No KIL Git history was rewritten. KIL implementation, lab evidence,
+research and generic reader tooling remain here.
+
+**Explicit historical extraction:** Archived Blue Zone-only entries T-246, T-248, T-249, T-250, T-251, T-253, T-254, T-255, T-256, T-257, T-258, T-259, T-260, T-267, T-268, T-269, T-270, T-271, T-276, T-277
+and component entries T-272/T-278 verbatim with their original IDs and hashes,
+then removed those entries from the active KIL lineage under the user's explicit
+scope-cleanup instruction. Every other original entry remains byte-preserved;
+shared reader and mixed KIL publication/upstream/lab history remain. This is an
+announced relocation, not silent rewriting or deletion of historical decisions.
+
+**Verification and rationale:** All 28 original copies were byte-compared and
+SHA-256 recorded before adaptation; source hashes and full lineage snapshot
+were rechecked for concurrent changes before cleanup. Both private hosted main
+hashes matched clean local heads before source removal. Independent-project
+Markdown readers were regenerated and checked for source equality, embedded
+assets and wide layout. Component references now identify external KIL candidates
+and the pinned Blue Zone identity gate. No runtime or deployment test is claimed.
+
+**Affected artifacts:** Manifest-listed independent-project documents and
+readers; scoped active lineage extraction; README map; this lineage and reader;
+concise docs/transition/PROJECT-BOUNDARIES.md and its reader. Full import receipts
+and available task transcripts live in the owning projects. Recovery copies are
+also retained in `/private/tmp/ktp-project-extraction.P2sW2a/recovery`.
+
+**Unresolved questions:** Installed package inventory, independent component
+design approval and deployment gates remain unchanged. Existing task associations
+are not relocated by Git/file migration. Local ignored lifecycle records are
+not evidence to modify for documentation validation.
+
+**Next gate:** Verify remaining KIL readers/citations, diff hygiene and unchanged
+software/evidence; continue independent work from its new owning folder.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+
+### T-282 — 2026-09-16 — Verify independent-project extraction and KIL-only publication
+
+**Input and decision status:** Complete the user's approved fresh independent
+KTP repository split and private GitHub publication while preserving only
+KIL-relevant active provenance/history in KIL.
+
+**Verification:** Final stable-tree `make validate PYTHON=.venv/bin/python`
+passed: 1,110 tests, 16 intentional V4-future skips, 63 current readers and
+diff hygiene. The earlier run started before the new boundary reader was staged
+and failed its exact tracked-sibling check; staging was corrected and the full
+suite rerun passed. The current ignored lifecycle-board test also passes; the
+September 14 failure is historical, not a current failing gate. No runtime
+evidence was modified to resolve a test.
+
+All 24 imported historical entry hashes match the source snapshot, including
+trailing separators (22 Blue Zone/shared-reader entries and two component
+entries). Every original retained KIL entry body is unchanged, all imported
+Markdown is preserved either actively or in the original kickoff archive, all
+28 transfer-source locations are absent, and KIL software/evidence directories
+have no diff. New repository checks pass for 21 wide self-contained Blue Zone
+readers and eight component readers. Original harmless EOF separators are
+deliberately retained rather than changing archived source bytes.
+
+**Publication references:** Private Blue Zone `main` is
+`9b0ef1d854054d82af0c84286b03445c1eb1d3ec`; private component `main` is
+`5c1d5a0e07f90ecdd85ba0548ff0a40803f0bae4`. Their original import commits remain
+the pinned boundary and deployment-guide references. These later commits add
+verification/continuation records and exact separator preservation, not a
+protocol or deployment change. Both new projects have fresh independent Git
+histories; KIL Git history remains unrevised.
+
+**Affected artifacts:** Documentation-only KIL extraction, README map, active
+lineage and concise project-boundary reader; independent project-owned imports,
+history, transcripts, attribution, generic document tooling and readers. No KIL
+implementation, lifecycle configuration or accepted evidence claim changes.
+
+**Unresolved questions and next gate:** Existing Blue Zone/component tasks
+still point to the old KIL folder. Open the owning new folder for future tasks;
+do not recreate independent-project material in KIL. Protocol/package inventory,
+component design approval and deployment acceptance gates remain with the
+independent owners. Verify clean local/hosted synchronization after publication.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

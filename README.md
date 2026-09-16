@@ -123,6 +123,8 @@ KIL is an enforcer and experiment harness. It accepts KTP Risk Factor telemetry
 through stable, documented interfaces and keeps enforcement within
 KIL-controlled infrastructure.
 
+Independent KTP deployment and missing-component projects are outside KIL; see the concise [project-boundary record](docs/transition/PROJECT-BOUNDARIES.md).
+
 ## Repository map
 
 | Path | Responsibility |
@@ -131,7 +133,7 @@ KIL-controlled infrastructure.
 | `docs/drafts/` | Byte-preserved original draft artifacts |
 | `docs/extension/` | Narrow KTP extension proposal and compatibility analysis |
 | `docs/checkpoints/` | Durable pause/resume records for design and consultation |
-| `docs/design-drafts/` | Unapproved architecture visuals and working designs |
+| `docs/design-drafts/` | KIL-only working architecture visuals |
 | `docs/specialist/` | KIL–KTP lineage, decisions, and specialist briefing log |
 | `docs/superpowers/specs/` | Approved design specifications |
 | `research/` | Primary-source register and preserved source material |

@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Wide Review Reader Layout Implementation Plan</title>
+<title>Independent KTP project boundaries</title>
 <meta name="generator" content="KIL Markdown Reader 1">
-<meta name="source-path" content="docs/superpowers/plans/2026-09-14-wide-review-reader-layout.md">
-<meta name="source-sha256" content="9f6db369847417d302760e118555634cf00f41282b2cb51ccbf966897a7665b9">
+<meta name="source-path" content="docs/transition/PROJECT-BOUNDARIES.md">
+<meta name="source-sha256" content="3ef54723531875606340ea3f27f65cd3074e8afbd256b02f238f593bebf937c0">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -50,76 +50,34 @@ input { background: var(--paper); border: 1px solid var(--line); border-radius: 
 #reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
 mark.reader-match { background: #ffe58a; color: #201c10; }
 @media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
-@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }
+body.reader-wide .reader-stage { padding-inline: clamp(1rem, 2.5vw, 2.5rem); }
+body.reader-wide .reader-layout { gap: clamp(1.5rem, 3vw, 2.5rem); grid-template-columns: minmax(12rem, 14rem) minmax(0, 68rem); max-width: 86rem; }
+body.reader-wide #reader-article table { width: 100%; }
+@media (max-width: 1120px) { body.reader-wide .reader-layout { display: block; max-width: 68rem; } body.reader-wide .reader-outline { display: none; } body.reader-wide .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } body.reader-wide .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } body.reader-wide .reader-mobile-outline nav { padding: .7rem 0; } body.reader-wide .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } }</style>
 </head>
-<body>
+<body class="reader-wide">
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-14-wide-review-reader-layout.md</code> (<code>9f6db369847417d302760e118555634cf00f41282b2cb51ccbf966897a7665b9</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/transition/PROJECT-BOUNDARIES.md</code> (<code>3ef54723531875606340ea3f27f65cd3074e8afbd256b02f238f593bebf937c0</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
-<strong class="reader-mobile-title">Wide Review Reader Layout Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+<strong class="reader-mobile-title">Independent KTP project boundaries</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-14-wide-review-reader-layout.md</code> (<code>9f6db369847417d302760e118555634cf00f41282b2cb51ccbf966897a7665b9</code>); edit the Markdown source, not this reader.</p></div>
-<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#wide-review-reader-layout-implementation-plan">Wide Review Reader Layout Implementation Plan</a></li><li class="level-3"><a href="#task-1-add-and-apply-the-wide-reader-mode">Task 1: Add and apply the wide reader mode</a></li></ol></nav></details><div class="reader-layout">
-<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="wide-review-reader-layout-implementation-plan" href="#wide-review-reader-layout-implementation-plan">Wide Review Reader Layout Implementation Plan</a></li><li class="level-3"><a data-section-id="task-1-add-and-apply-the-wide-reader-mode" href="#task-1-add-and-apply-the-wide-reader-mode">Task 1: Add and apply the wide reader mode</a></li></ol></nav>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/transition/PROJECT-BOUNDARIES.md</code> (<code>3ef54723531875606340ea3f27f65cd3074e8afbd256b02f238f593bebf937c0</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#independent-ktp-project-boundaries">Independent KTP project boundaries</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="independent-ktp-project-boundaries" href="#independent-ktp-project-boundaries">Independent KTP project boundaries</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
-<h1 id="wide-review-reader-layout-implementation-plan">Wide Review Reader Layout Implementation Plan</h1>
-<blockquote>
-<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
-</blockquote>
-<p><strong>Goal:</strong> Make the Turnkey Blue Zone review reader wide enough for its tables, diagrams, and preformatted text without changing ordinary KIL readers.</p>
-<p><strong>Architecture:</strong> Add an exact, source-controlled <code>reader-layout: wide</code> Markdown comment directive. The renderer removes the directive from article content, adds a <code>reader-wide</code> body class, and uses responsive CSS that provides a wider article on large screens and collapses the sidebar before it constrains the article on medium screens.</p>
-<p><strong>Tech Stack:</strong> Python 3.12, <code>markdown-it-py</code>, <code>unittest</code>, self-contained HTML/CSS.</p>
-<hr />
-<h3 id="task-1-add-and-apply-the-wide-reader-mode">Task 1: Add and apply the wide reader mode</h3>
-<p><strong>Files:</strong></p>
+<h1 id="independent-ktp-project-boundaries">Independent KTP project boundaries</h1>
+<p>KIL owns the infrastructure implementation and its bounded laboratory evidence. Blue Zone deployment and missing KTP component development are independent projects, not KIL modules.</p>
 <ul>
-<li>
-<p>Modify: <code>tests/test_markdown_html.py</code></p>
-</li>
-<li>
-<p>Modify: <code>tools/render_markdown.py</code></p>
-</li>
-<li>
-<p>Modify: <code>docs/design-drafts/2026-09-14-turnkey-blue-zone-strategy.md</code></p>
-</li>
-<li>
-<p>Generate: <code>docs/design-drafts/2026-09-14-turnkey-blue-zone-strategy.htm</code></p>
-</li>
-<li>
-<p>[x] <strong>Step 1: Write the failing renderer test</strong></p>
-</li>
+<li><a href="https://github.com/gatekeeper454/KTP-Blue-Zones/tree/b38f9ff0b80c8c26b29e6be52ed269a575831a85">KTP Blue Zones</a> owns Blue Zone assurance/strategy, deployment/configuration, integration/validation guides, frontier briefs and the two Blue Zone task histories.</li>
+<li><a href="https://github.com/gatekeeper454/KTP-Component-Dev/tree/0c858802812e1f4b6de11179b83bfe26440b0146">KTP Component Dev</a> owns missing-component discovery and future component implementation/contract tests.</li>
 </ul>
-<p>Add a test that renders <code>&lt;!-- reader-layout: wide --&gt;</code>, requires <code>&lt;body class=&quot;reader-wide&quot;&gt;</code>, requires the directive to be absent from the article, checks the wide 68-rem column and 1120-pixel collapse breakpoint, and confirms an ordinary document still renders <code>&lt;body&gt;</code> without the class.</p>
-<ul>
-<li>[x] <strong>Step 2: Run the focused test and verify failure</strong></li>
-</ul>
-<p>Run: <code>.venv/bin/python -m unittest tests.test_markdown_html.MarkdownRendererTest.test_wide_layout_directive_is_scoped_and_hidden -v</code></p>
-<p>Expected: FAIL because the renderer does not yet recognize the directive.</p>
-<ul>
-<li>[x] <strong>Step 3: Implement the minimal renderer behavior</strong></li>
-</ul>
-<p>Recognize only an exact leading <code>&lt;!-- reader-layout: wide --&gt;</code> line, remove it before Markdown tokenization, keep the original source bytes for the SHA-256 identity, add <code>class=&quot;reader-wide&quot;</code> to <code>&lt;body&gt;</code>, and add scoped wide-layout CSS. Keep the existing standard-reader CSS unchanged.</p>
-<ul>
-<li>[x] <strong>Step 4: Apply the directive to the strategy source</strong></li>
-</ul>
-<p>Place <code>&lt;!-- reader-layout: wide --&gt;</code> before the strategy H1 so regeneration selects the reusable layout without manual HTML edits.</p>
-<ul>
-<li>[x] <strong>Step 5: Run focused and full renderer tests</strong></li>
-</ul>
-<p>Run the focused test, then <code>.venv/bin/python -m unittest tests.test_markdown_html -v</code>.</p>
-<p>Expected: the focused test passes. The full suite remains at its recorded
-publication-contract baseline: one failure for the three intentionally
-untracked design-draft reader pairs, with no additional failures.</p>
-<ul>
-<li>[x] <strong>Step 6: Regenerate and measure the standalone reader</strong></li>
-</ul>
-<p>Regenerate the strategy and lineage readers. At a 1280-pixel viewport, require the article content width to exceed the previous widest 764-pixel block. At 1000 pixels, require the sidebar to collapse and the document body to have no horizontal overflow. Confirm the embedded image, source hash, HTTPS/internal links, inline assets, and print rules remain intact.</p>
-<ul>
-<li>[x] <strong>Step 7: Record the KIL lineage and final checks</strong></li>
-</ul>
-<p>Append the diagnosis, scoped decision, affected artifacts, verification evidence, and next gate to <code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code>; regenerate its standalone HTML reader; run <code>git diff --check</code>; and report the reviewable <code>.htm</code> artifact.</p>
+<p>Extraction date: 2026-09-16. KIL baseline: <code>0099d377ba94d1a1a6490b62e63e7713424d4501</code>. The hosted projects are private; access requires owner authorization. Source paths and SHA-256 import receipts are maintained by the owning projects. KIL Git history remains unchanged, so prior versions remain recoverable.</p>
+<p>Independent-project-only entries were explicitly archived with their owner, not silently discarded: Blue Zone IDs T-246, T-248, T-249, T-250, T-251, T-253, T-254, T-255, T-256, T-257, T-258, T-259, T-260, T-267, T-268, T-269, T-270, T-271, T-276, T-277; component IDs T-272 and T-278. Their original bodies and identifiers are preserved. Shared reader entries T-247/T-252 and mixed KIL publication, architecture, lab and upstream-infrastructure entries remain in KIL. The generic wide reader is still maintained here because it affects KIL documentation.</p>
+<p>No KIL source, adapter, fixture, runtime/lifecycle tool, scenario, evidence source or KIL-specific transcript was removed. Imported proposals are not KIL implementation claims. Nothing in this administrative split expands accepted lab evidence, KTP conformance, historical prevention or production coverage.</p>
+<p>Future work should use its owning project's folder; old Blue Zone/component tasks are still bound to the KIL folder and must not generate new independent-project artifacts here.</p>
 <p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
 </article></main>
 </div></div>
