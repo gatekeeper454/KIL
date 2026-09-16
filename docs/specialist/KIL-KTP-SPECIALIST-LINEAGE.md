@@ -19976,3 +19976,62 @@ exclusive lineage writer to independent SPEC re-review; do not begin another
 unit or native execution until its gate is explicitly cleared.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T376 — 2026-09-16 — Task 1 independent SPEC re-review approved after focused corrections
+
+**Input:** Re-review the Task 1 corrections at 76b60cf against the full approved
+runtime authority/finite Colima adapter specification and the three T374
+findings. Inspect actual changes since 7666144 and independently repeat the
+failure probes rather than accepting the implementer's T375 report.
+
+**Interpretation:** Verify the complete standalone Task 1 contract and whether
+its focused corrections resolve the demonstrated gaps. This is SPEC only,
+not QUALITY, integration, native compatibility or experiment acceptance.
+Continue engineering-only temporary-filesystem tests with the existing
+interpreter and ResourceWarning fatal; no native process or request.
+
+**Decision status:** CONFIRMED SPEC APPROVED for Task 1 at 76b60cf. No remaining
+Task 1 specification issue was identified. Independent targeted verification
+passed all 28 runtime tests in 0.188s; separately repeated versions of all
+three original probes now produce the required outcomes. This dated decision
+supersedes the T374 changes-required gate without rewriting its history.
+
+**Rationale:** The runtime owns one no-follow retained ancestor walk rather
+than calling the strict helper with its uncovered failure path. The actual
+first-ancestor fstat-fault probe observed zero leaked descriptors and no
+runtime creation. A live store chmod755 now refuses before any sibling is
+created. Store mode/owner and regular single-link mode0600 owned named lock
+are checked before mkdir; guard also rejects a newly introduced lock hardlink.
+The restrictive umask0200 probe now successfully creates the exact mode0600
+control with unchanged payload. The exclusive fd is validated, fchmod sets
+the exact mode, named/fd identity is checked before writing, and failure
+regressions prove descriptor cleanup while preserving exclusive artifacts.
+Inspection also confirmed matching lowercase digest/store shape, fresh
+exclusive private layout, derived paths, retained ancestor/home identities,
+stale/symlink/replaced authority refusal, closed exact types, descriptor-only
+close, bounded full-write/fsync control behavior and the unchanged freshly
+validated finite Colima grammar with exactly four derived environment keys.
+The full change set from 2511578 still contains only the new runtime/test
+units and lineage readers; no strict source/tests or integration was edited.
+The reported combined 162-test result and historical RED sequence were not
+independently rerun/witnessed in this focused re-review; approval rests on
+actual source inspection, the fresh 28-test run and independent repro probes.
+
+**Affected artifacts:** This actual-EOF append and generated lineage reader
+only. Reviewed the runtime/test corrections and unchanged strict boundary.
+No implementation fix, native tool/VM, HTTP/HF request, Ollama operation,
+platform-image audit, old receipt, accepted evidence or other unit changed.
+
+**Unresolved questions:** Independent QUALITY review remains required before
+the subsequent implementation gate. Runner/lifecycle integration, profile
+binding, runtime evidence lifetime, native-home compatibility and full
+Kind/Calico acceptance remain subsequent gates, not inferred from SPEC approval.
+Platform-image provenance remains unverified; missing historical metadata is
+not reconstructed.
+
+**Next gate:** Render/check all 88 readers, preserve the exact 76b60cf Markdown
+prefix, diff-check and commit only the two lineage paths. Release the exclusive
+lineage writer and hand Task 1 to independent QUALITY review. SPEC approval
+does not authorize integration, another native run or any request.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
