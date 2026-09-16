@@ -18180,3 +18180,105 @@ execution gate. No request retry, replay or native execution is authorized by
 this review result.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-352 — 2026-09-16 — Separate exploratory HF native integration implementation
+
+**Input:** Implement the independently approved, narrower exploratory modeled
+HF harmless administrative cut-point integration as one separate native
+lifecycle module, one CLI, and test-owned fixtures. Preserve the detached
+host-managed worktree and the existing strict V3B2 lifecycle, flags, deferrals,
+provenance audits and publication boundaries. The implementation agent is not
+authorized to execute accepted input readiness, native binaries, profile/VM,
+Docker, Kind, kubectl, downloads, pulls, network requests or a live experiment.
+
+**Interpretation:** The CLI must permit one request-free setup/capture/teardown
+rehearsal and only then one fresh three-track action, conditional on complete
+rehearsal and exact owned teardown. Application image aliases and existing
+partial ownership/configuration checks support this separate observational
+path; they do not complete platform-image provenance or strict acceptance.
+Every mutation is an unreplayable attempt with a durable command intent.
+Action attach additionally requires the retained one-shot instruction and
+durable request intent. Only POST /consequential/admin with the laboratory
+credential and zero body bytes is allowed. There is no host HTTP sender.
+
+**Decision status:** Implementation complete with fresh test-owned verification,
+pending independent specification and quality reviews. No native execution or
+live outcome is established. Expected permit/200/1, permit/200/1, deny/403/0
+tuples remain a hypothesis, not a success condition or causal HF-prevention
+proof. Unexpected complete joins are retained as observed with actual adapter,
+engine and untrusted-header reasons. Both provenance and full acceptance flags
+remain false. The integration stays within the prescribed three source/test
+files despite its substantial safety-gate surface; no unplanned split was made.
+
+**Rationale:** Initial RED was exactly two missing-module/CLI assertion failures,
+not import errors. Subsequent observed RED/GREEN cycles covered durable intent
+ordering, command failure-prefix retention, mutation authority/purpose refusal,
+nonreplay, exact node/Pod incarnation bindings, boolean profile preservation,
+one-shot drains and exact zero gauges, and bounded remaining-deadline reads.
+The valid replacement-profile fixture independently confirms unchanged returns
+false for a new valid profile directory; that false result refuses mutation.
+Driver completion retries only an otherwise bound running driver, never UID,
+container or image drift. Request-free capture and final sources use complete
+double reads bracketed by exact UID/container/resourceVersion and image aliases.
+Permit upstreams must equal the retained ready target endpoint, not a subnet.
+
+Fake full-flow tests exercise actual existing image-reference, ownership,
+generated-Pod, driver-Pod, applied-object and Service-allocation validators.
+They verify three empty EOF rehearsal attaches, no rehearsal instructions or
+request intent, full per-track joins before the next action, and exact cleanup.
+Test-owned first uncertain action, node/profile/kube-system UID replacement,
+unbound creation, source UID/resourceVersion drift, truncation and quiescence
+failure remain inconclusive without later requests or unsafe deletion.
+Owned zero-store removal retains the entire post-delete capture and checks the
+exact file twice before descriptor-anchored unlink/fsync; preexisting, nonzero,
+changed, symlink, unbound or incompletely deleted state refuses this operation.
+Foreign preservation failure after proved owned deletion is not mislabeled as
+ambiguous remaining owned resources. An absent foreign roster parent becoming
+present is a genuine preservation change, not a fabricated unchanged identity.
+
+The CLI checks reviewed clean LOCAL HEAD before creating private ancestry,
+holds one nonblocking fd-anchored profile lock across both fresh modes, preserves
+existing .tools permissions, fsyncs creation entries, and refuses replacement
+or conflicts while closing descriptors. Recursive retained-file checks include
+native-created private configuration/scratch files, reject symlinks and enforce
+8 MiB per file / 256 MiB aggregate retained-evidence limits. These limits do not
+claim control of transient native filesystem capacity. Oversized retained native
+scratch is inconclusive; it is not broadly erased or represented by partial sums.
+Private reports retain observed environment, node info, placement/IP, requested
+versus runtime images, unverified platform references/IDs, commitments, meaningful
+reached gates, actual join reasons and conservative teardown/recovery state.
+Requested VM resources are labeled requested; no Docker daemon version is invented.
+
+Fresh verification used PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and
+/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python
+with -W error::ResourceWarning. The native module suite passed all 56 tests in
+5.005 seconds. The final combined native, exploratory case/IO/input and strict
+application-boundary/runtime-boundary suite passed all 120 tests in 46.569
+seconds. git diff --check passed. All native command responses and profile
+fixtures in these tests are test-owned, not emitted as real native evidence.
+Root-owned broad regression execution and its sandbox diagnostics are separate
+work; this entry does not claim their completion or modify strict source files.
+
+**Affected artifacts:** New src/kil/hf_exploratory_native.py,
+tools/hf_exploratory_kind.py and tests/test_hf_exploratory_native.py; this appended
+lineage Markdown and its generated same-directory HTML reader only. Existing
+strict files, accepted inputs, plan, flags, deferrals and publication artifacts
+are unchanged. The complete T-351 Markdown remains a byte-for-byte prefix.
+
+**Unresolved questions:** Independent specification and quality approval,
+actual native producer compatibility, request-free rehearsal, exact live
+teardown/preservation and joined live action evidence remain unestablished.
+Native pretty JSON is only duplicate-safe canonicalized before the existing
+closed Calico parser; an incompatible actual producer shape is inconclusive,
+not authorization to weaken that parser. Platform-image provenance, full
+Kind/Calico acceptance, full HF prevention/all eight phases, original exploit,
+performance, NetworkPolicy enforcement, no-bypass, V3B2 acceptance, V4 and V3C
+claims remain excluded.
+
+**Next gate:** Independently review this committed native unit for specification,
+then quality. Only the root may consider native execution after those reviews
+and the root-owned static verification gate. No retry, recovery, resume,
+provenance override, accepted-input factory execution or native operation is
+authorized to this implementation agent by this entry.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
