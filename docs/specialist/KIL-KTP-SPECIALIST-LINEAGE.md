@@ -16196,3 +16196,87 @@ the diff and commit this documentation-only approval. Hand lineage ownership bac
 to the coordinator for Task 2 checkpoint acceptance and test-first Task 3.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-319 — 2026-09-16 — Persisted platform authority-continuity regressions
+
+**Input:** The coordinator delegated Task 3 against approved design
+`docs/superpowers/specs/2026-09-16-v4-platform-pod-configuration-composition-design.md`
+and Task 2 implementation/specification/quality approvals at `585ec88`, `df6f2bf`
+and `a5a4f61`. Persist adversarial same-source, constructor replay and claim-boundary
+tests; preserve the coordinator-owned plan and execution synopsis. Continuous
+static execution was authorized, not live execution or broader completion.
+
+**Interpretation:** Extend the independent combined-inventory acceptance suite
+without weakening existing component, profile, endpoint or content-lock contracts.
+Require each genuinely independent authority variant to validate as a complete
+aggregate before mixing one retained dependency into the original. Keep earlier
+schema/identity/Calico failures distinct from aggregate join failures. Exercise
+both aggregate validation and constructor replay for forged retained evidence.
+
+**Decision status:** Confirmed persisted Task 3 existing-contract regression
+coverage, ready for independent specification and quality review. No production
+defect was demonstrated and no production code was changed. These tests are not
+a new feature RED/GREEN cycle: the strict Task 2 contract already rejects the
+adversarial inputs. The initial failures were test-scaffolding errors, not
+production defects. Configuration coverage remains distinct from runtime,
+effective image, status/readiness, application, V4 and V3C completion.
+
+**Rationale:** The suite now rejects wrong exact types, lookalikes and subclasses
+for all ten inputs, distinguishes missing Python keywords from explicit `None`,
+and rejects malformed aggregate/component binding tuples, reordered or duplicate
+coverage, binding subclasses, projected name/UID/resourceVersion drift and forged
+component/namespace values. Both completion flags reject `True`, `0`, `None` and
+`'false'`. Every component has persisted nested binding-UID forgery and observed
+container-image drift replay cases. The latter independently reconstruct valid
+runtime ownership with unchanged ownership bindings before aggregate rejection;
+ownership does not certify configuration or readiness. Malformed retained JSON
+produces local aggregate errors with retained causes. No mocks, new skips, broad
+exception catches or artificial programming-defect injections were added.
+
+Independent complete variants accept whitespace-only and arbitrary Pod-status
+inventories, changed Docker endpoint and kubeconfig, and changed workload run;
+each of their ten individually mixed inputs then fails both aggregate boundaries.
+A fresh RawObservation-based manifest source at sequence 6 accepts as a complete
+aggregate but fails when either source-bearing component is mixed. Pinned Kind
+image mutation rejects earlier at `SchemaError`; Calico source/projection byte
+variants reject earlier at existing content locks, while nested source/profile
+forgeries fail aggregate reconstruction. The initially supplied alternate Docker
+endpoint lacked the required `/kil-v3-lab/docker.sock` suffix. The coordinator
+approved using `unix:///tmp/alternate/kil-v3-lab/docker.sock` for the independently
+valid variant and persisting the supplied malformed endpoint's earlier
+`JournalError` instead of relaxing endpoint grammar.
+
+**Affected artifacts:** Extended only
+`tests/test_v3b2_platform_pod_configuration.py`, appended this lineage entry and
+regenerated its reader. Existing fixture helpers and production validators remain
+unchanged. Coordinator-owned dirty plan Markdown/reader and untracked execution
+synopsis were preserved and excluded from this commit.
+
+**Actual evidence:** The repository environment Python with
+`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src` first ran 24 methods in 27.615 seconds:
+22 successful methods, two methods with ten test-scaffolding subtest errors and
+zero skips. Nine errors assumed a nonexistent `RuntimeOwnershipProof.bindings`
+field; source inspection confirmed the separate deployment/node proofs and the
+test was corrected to compare both. The tenth error exposed the endpoint suffix
+boundary described above. A corrected verbose run passed 25 methods in 31.641
+seconds with zero failures/errors/skips. After adding forged aggregate binding
+component/namespace replay coverage, the fresh final focused run passed all 26
+methods in 32.233 seconds, zero failures/errors/skips. Self-review matched the
+persisted cases against the approved design, confirmed no production/fixture
+changes and ran a clean diff check. Reader generation/byte verification and
+explicit-file commit precede handoff.
+
+**Unresolved questions:** Independent Task 3 specification and quality review,
+adjacent focused suites and full repository acceptance remain separate gates.
+Unexpected programming-defect propagation was not persisted using artificial
+mock behavior; prior Task 2 review diagnostics and the narrow exception policy
+remain evidence for that boundary. Effective platform image and component-specific
+status/readiness authorities still require separate design and evidence.
+
+**Next gate:** Regenerate and byte-check all 78 tracked Markdown readers, verify
+the diff and commit the Task 3 test/lineage files. Hand back to the coordinator
+for independent specification then quality review before Task 4 combined and
+repository static acceptance. No live Docker, Colima, Kind, kubectl or profile
+calls were performed or authorized by this regression task.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
