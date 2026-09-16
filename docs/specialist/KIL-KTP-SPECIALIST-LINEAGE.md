@@ -16832,3 +16832,75 @@ local commits; do not push, create a PR, publish or delete the worktree under th
 static acceptance. Deliver the exact synopsis to the user.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-326 — 2026-09-16 — Next-gate exploration: independent platform image authority first
+
+**Input:** After static configuration acceptance `d9c5103` and its exact
+environment/actions synopsis, the user requested "go next". The recorded next
+gate is platform effective-image authority and component-specific status/readiness
+design, with live execution requiring separate scope and authorization.
+
+**Interpretation:** Advance the next design conversation, not infer permission
+to launch a lab, collect host-runtime evidence or implement an unapproved image/
+readiness contract. Use brainstorming to inspect current authorities and propose
+a bounded first sub-project. No implementation skill or production/test change
+is introduced before design approval.
+
+**Decision status:** Proposed image-authority-first decomposition, awaiting user
+approval of this design direction. The prior ten-Pod configuration acceptance is
+unchanged; image realization, status/readiness, runtime/application completion,
+V4 and V3C remain unclaimed.
+
+**Rationale:** Actual source inspection shows ExpectedNodeImage and its command/
+reference contract in v3b2_node_image_references.py are fixed to kil and envoy.
+The verifier-owned accepted-image contract likewise covers those two workload
+families only. The production inventory parser skips image projection for most
+reviewed platform Pods and retains a narrower legacy digest representation check
+for Calico. These existing contracts cannot be relabeled as independent effective-
+image authority for all ten platform Pods.
+
+Fresh invocation of the accepted combined fixture and aggregate confirmed ten
+platform Pods, ten regular-container placements, three Calico init-container
+placements and ten distinct requested image references. The existing proof's
+two completion flags remain False. These counts describe configuration coverage,
+not successful container initialization, effective image identities or readiness.
+
+Recommended approach: first design a separate verifier-owned platform image
+authority, with independently sourced expected content identities and explicit
+requested-reference/target/config distinctions. Bind subsequent observations to
+the complete owned Node/run/source and exact configuration Pod/container
+placements; candidate status imageID must never supply its own expectation.
+Retain separate image and component-specific status/readiness claim boundaries.
+Do not widen the accepted KIL/Envoy API merely to accommodate platform families.
+
+Alternatives for user consideration are status/readiness-first (image authority
+would remain unresolved) and a combined image/status gate (fewer checkpoints but
+couples distinct sources and claim boundaries). Sequential image then status
+design is recommended for a reviewable, independently testable next slice.
+
+**Affected artifacts:** Inspected existing accepted-image, node-image-reference,
+inventory and configuration-composition source/tests/specification; appended this
+entry at actual lineage EOF and regenerated the lineage reader. No production,
+test, collector, controller, schema, journal or acceptance-report modification.
+No live Colima/Docker/Kind/kubectl operation, demonstration request or publication.
+
+**Verification:** Read-only worktree status was clean at exploration start.
+The fresh fixture/aggregate diagnostic returned the placement/reference counts
+above and both false flags, exit zero. This turn does not rerun or relabel the
+previous full-suite result as new verification. Reader byte verification,
+append-only verification and diff checks precede the documentation-only
+proposal checkpoint; implementation and runtime acceptance remain absent.
+
+**Unresolved questions:** User approval of image-authority-first scope; the
+independent artifact/provenance source for expected platform content identities,
+including tagged images supplied by the pinned Kind image and Calico platform
+selection; exact runtime reference semantics and later component-specific
+status/readiness requirements. No content digest or source chain is invented.
+
+**Next gate:** Obtain approval of the bounded design direction, then refine and
+present image authority, reconstruction, source/incarnation joins, failure and
+test boundaries. Write and self-review the approved design specification for
+user review before implementation planning. Preserve the existing worktree and
+local commits; no live operations, push, PR or broader completion claim.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
