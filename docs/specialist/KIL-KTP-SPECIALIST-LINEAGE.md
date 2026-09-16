@@ -14184,3 +14184,57 @@ execution remain separate gates.
 static and integration gates before accepting Task 3 or proceeding to Task 4.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-288 — 2026-09-15 — Legacy timeout-proof harness covers both runner paths
+
+**Input:** A full `make validate` run using the project virtual environment
+executed 1,552 tests and reported one failure:
+`ObservedLifecycleTest.test_image_load_timeout_proof_retains_partial_bytes_before_owned_teardown`
+returned `unknown` instead of `teardown_only`. Reproduce the failure, update
+only the test harness to mock both production runner paths while preserving the
+generic `node_images` timeout under test, rerun focused sets, and do not weaken
+the Task 3 production bound.
+
+**Interpretation:** T-287 correctly routes the exact control-plane node-inspect
+commands through `_run_bounded_capture`. The older timeout-proof test replaced
+only `subprocess.run`, so its two identity-bracketing inspect observations
+escaped the fake runner and reached an unavailable real Docker executable. The
+resulting `unknown` outcome was a harness isolation defect, not a production
+proof, recovery, or capture failure.
+
+**Decision status:** Confirmed test-harness correction in
+`93abaea9f64efcfba541a86be82787fc2b5177f7`. Production code is unchanged.
+The test now redirects the bounded runner path to the established fake runner,
+asserts exactly two bounded node-inspect calls, and retains the original
+`subprocess.run` `TimeoutExpired` for the generic `node_images` observation.
+
+**Rationale:** Mocking both process paths matches the production dispatch
+introduced by Task 3 without disabling or bypassing its byte bounds globally.
+The proof registry, observation validation, timeout raw-byte retention,
+terminal writer, teardown-only decision, and durable proof assertions remain
+real within the test. An exact bounded-call count prevents the harness from
+silently ceasing to exercise both identity-bracketing observations.
+
+**Verification:** Before the harness correction, the focused test was RED with
+`AssertionError: 'unknown' != 'teardown_only'`. After correction, it passed in
+0.162 seconds. The complete observed-lifecycle module passed 20 tests in
+20.341 seconds; the relevant Task 3 controller, bounded-runner, recovery, and
+stdin-free grammar set passed 17 tests in 63.029 seconds; and four generic
+runner regressions passed in 0.183 seconds. `git diff --check` passed. The full
+1,552-test `make validate` command was not rerun in this correction turn. No
+live Colima, Docker, Kind, kubectl, Kubernetes, request, publication, or profile
+command was executed.
+
+**Affected artifacts:** `tests/test_v3b2_observed_lifecycle.py`,
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`, and its regenerated
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm` reader.
+
+**Unresolved questions:** The full `make validate` gate and remote CI still
+need to confirm the focused correction in the broader repository. Branch
+integration, Task 4+, and live dedicated-profile execution remain separate
+gates.
+
+**Next gate:** Regenerate and verify the lineage reader, rerun full
+`make validate`, and proceed only if the broader static gate is green.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
