@@ -18965,3 +18965,74 @@ inconclusive evidence and only exact still-bound cleanup; no download,
 substitution, mutation retry or broad deletion is implied.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-362 — 2026-09-16 — Root retains failed read-only launcher preflight and diagnoses exact Colima formatting bug
+
+**Input:** The user approved proceeding with the narrower exploratory live HF
+test. All four units passed independent SPEC and quality review; T-361 approved
+the composed nine-file source. Root fresh focused verification passed 132 tests
+in 18.723 seconds with ResourceWarnings as errors. At reviewed clean commit
+aeba16f2f0a2773c32ffe54e340db6937a9b0583, root verified source bytes unchanged,
+85 readers, diff checks, CLI arguments and accepted child-tool PATH resolution,
+then executed the exact separately approved launcher outside the sandbox.
+
+**Interpretation:** The launcher returned one inconclusive rehearsal preflight
+receipt before any native lab mutation. The retained journal contains only five
+read-only version commands, all return status zero with empty stderr. There is
+no profile-start, VM, image import/pull, cluster, driver, drain, HTTP instruction
+or request intent. A request-free live lab rehearsal and action remain
+unattempted. This is a source parser formatting defect, not a different native
+software version, genuine VM/cluster readiness failure or uncertain request.
+
+**Decision status:** Retain the failed private run unchanged. The literal
+Colima parser expected `colima version 0.10.3` while the actual retained output
+is `colima version v0.10.3`, followed by git commit
+00f6c297e92a82c04a4ab507db0a61435650d7e8. Lima actually reports 2.2.0. The pinned
+Colima identity remains 0.10.3; no upgrade, substitution or acceptance bypass
+is approved. Original implementer will correct this minimal preparation bug
+test-first using the exact captured bytes, then repeat review and root static
+gates. The user has been notified. No attempted VM or HTTP operation exists
+to replay; the approved maximum remains one fresh three-track action.
+
+**Rationale:** Actual stdout bytes and hex inspection isolate the leading `v`
+as the sole mismatch in the regex at verify_versions. Version commands for
+the content-verified retained Docker 29.7.2 build a7dcaa6, Kind v0.32.0
+go1.26.3 darwin/arm64 and kubectl v1.36.3 all matched their authenticated
+accepted outputs; their executable/archive commitments are retained. Host
+observations are Darwin arm64, macOS 26.6.2, kernel 25.6.0. No Node, Pod,
+Docker daemon version or actual 4-CPU/8-GiB/60-GiB/20-GiB VM exists as an
+observation of this run; those VM resources are only requested configuration.
+The report's owned_teardown false means no owned lifecycle was begun, not an
+abandoned created VM; manual_recovery is false. Original foreign/global
+preflight was not reached, so no fresh post-roster preservation proof is claimed.
+
+Root inspected report.json, synopsis.md and journal.jsonl. All thirteen retained
+file checksums verified with shasum -a 256 -c SHA256SUMS. The exact actual error
+is ValueError: colima_lima_versions_not_pinned at
+inconclusive_at_reviewed_clean_local_source. Request intent and attempt counts
+are both zero; joined results and observed Pod placements are empty. The broad
+outside-sandbox full regression run at earlier source 4c44684 remains running;
+no completed broad passing claim is made.
+
+**Affected artifacts:** Immutable private evidence in
+.tools/hf-exploratory-private/hf-exploratory-5507a11d6dd49a2ddca0d2588e7ad484b2bcf808ec3744d05b1aa966a746d7e2/;
+only this appended lineage Markdown and generated HTML are changed by root.
+The original implementer owns the pending minimal native source/test fix.
+Accepted local-Envoy artifacts, strict flags, sixteen deferrals and publication
+boundary remain unchanged. Earlier lineage bytes remain intact.
+
+**Unresolved questions:** The version-format fix and repeat review/static gates
+remain required. Actual lab setup, request-free rehearsal, three-track action,
+producer joins, native environment and teardown remain unestablished. Independent
+platform-image provenance remains unverified and full Kind/Calico acceptance is
+not established; the accepted local-Envoy result is not invalidated.
+
+**Next gate:** T-363 original implementer demonstrates the actual-format
+RED/GREEN regression and wrong-version rejection, commits its exact small fix,
+then repeat independent review and root checks. Only after that preparation
+may the separate launcher attempt its first native lab lifecycle. A genuine
+native compatibility/readiness failure or uncertain request still stops for
+evidence and exact still-bound cleanup, with no automatic substitution,
+mutation retry or replay.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
