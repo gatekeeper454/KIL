@@ -19852,3 +19852,61 @@ independent SPEC followed by QUALITY review. Do not automatically start any
 native tool, mutate a VM, send a request or expand scope.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T374 — 2026-09-16 — Task 1 independent SPEC review requires focused corrections
+
+**Input:** Independently review Task 1 against the approved isolated-runtime
+design and full authority/adapter requirements, comparing base 2511578 with
+implementation ada7c1f. Review actual source and tests rather than accepting
+the implementer's report. Engineering-only scope; no native integration or
+QUALITY review is authorized at this gate.
+
+**Interpretation:** Verify the standalone derived runtime authority, private
+namespace, descriptor lifetime, exclusive control writer and exact finite
+Colima adapter. Existing strict units must remain byte-for-byte unchanged.
+Use the existing interpreter, ResourceWarning-fatal unittest and real temporary
+filesystem probes only; no VM, native tool, HTTP/HF, Ollama or platform audit.
+
+**Decision status:** CONFIRMED SPEC changes required; Task 1 is not approved
+for the subsequent QUALITY gate. The 21 targeted runtime tests independently
+passed in 0.149s, but three focused probes reproduced requirement gaps. No
+implementation or test correction was made during this review.
+
+**Rationale:** The exact digest/store types, derived sibling layout, exclusive
+directory creation, retained namespace checks, closed constructors, derived
+environment and finite strict-command validation match the requested unit.
+The actual change set contains only the two new unit/test files and lineage
+readers, so existing strict source/tests are unchanged. However, creation's
+call to the reused strict `_parent` helper at runtime source line 57 leaks one
+just-opened ancestor descriptor if its initial fstat fails: that helper retains
+the child only after identity capture. This violates construction-failure
+descriptor cleanup and was reproduced without invoking any native process.
+Also, a live receipt directory changed to mode755 is rejected only by the
+final guard after all runtime directories have already been created; validate
+the receipt's private mode/owner before creation rather than spending the
+fresh namespace on an invalid store. Finally, the control writer's mode600
+open at lines 176-177 is filtered by process umask: umask0200 successfully
+produces mode0400, without enforcing/checking the specified exact mode600.
+Each probe used its own temporary store; the leaked descriptor was explicitly
+closed after observation and umask was restored immediately. Existing passing
+tests do not exercise these three failure/precondition cases.
+
+**Affected artifacts:** This append-only lineage entry and generated reader
+only. Reviewed src/kil/hf_exploratory_runtime.py and its 21 tests, relevant
+PrivateStore/Command/no-follow helper callers, and saved approved design/plan.
+The implementation, strict units, original receipt/evidence, accepted inputs,
+old native resources and platform-image provenance remain untouched.
+
+**Unresolved questions:** The original implementer must add behavior-first
+regressions and correct the ancestor-failure cleanup, precreation private-store
+validation and exact control mode without editing strict units or deleting
+partial filesystem state. Integration, private-native-home compatibility and
+full Kind/Calico acceptance remain unverified subsequent gates.
+
+**Next gate:** Return the three concrete findings to the original implementer
+for test-first corrections, then independently re-review SPEC before QUALITY.
+Render/check all 88 readers, preserve the ada7c1f Markdown as an exact prefix,
+diff-check and checkpoint only the two lineage paths; release the exclusive
+lineage writer after recording this review. No native execution is implied.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
