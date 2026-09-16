@@ -14653,3 +14653,62 @@ quality acceptance, and return the resulting checkpoint to the parent task
 before beginning Task 5.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-296 — 2026-09-15 — V4 Task 4 delivery gate verified
+
+**Input:** Execute approved V4 plan Task 4, including the kube-apiserver
+authenticated disk/API mirror proof, exhaustive conditional-CA matrices,
+independent specification and quality review, repository-wide static
+validation, and delivery to the established private implementation branch.
+
+**Interpretation:** Task 4 is deliverable only when the fixed kube-apiserver
+disk manifest and its sole owned API mirror reconstruct from exact retained
+source and ownership proofs, both cluster-incarnation and node-container
+identities join across those proofs, all five conditional CA combinations are
+exhaustively accepted or rejected as specified, completion flags remain
+strictly false, independent reviews have no unresolved findings, and the full
+repository gate passes without live infrastructure execution.
+
+**Decision status:** Confirmed Task 4 implementation and delivery checkpoint;
+no live claim. The accepted static boundary proves the reviewed
+kube-apiserver disk configuration and independently reconstructed owned API
+mirror for the retained source/ownership incarnation. It does not establish
+runtime completion, readiness, effective image realization, application
+completion, V4 completion, or V3C.
+
+**Rationale:** The implementation derives only the conditional CA subset from
+the authenticated disk Pod, constructs the expected API shape from verifier-
+owned literals plus the retained owned Node InternalIP, rejects cross-cluster
+and cross-node proof composition, and preserves arbitrary status without using
+it as configuration evidence. The original specification review found the
+missing cross-proof identity join; the focused TDD correction closed it, and
+both specification re-review and fresh quality review then reported no
+Critical, Important, or Minor findings.
+
+**Verification:** The final prescribed kube-apiserver, etcd, scheduler, and
+API-default suite passed all 52 tests. Full `make validate` passed all 1,563
+tests in 801.885 seconds with exactly 16 expected deferred V4 lifecycle skips;
+76 Markdown readers were verified and `git diff --check` passed. No live
+Colima, Docker, Kind, kubectl, Kubernetes, request, publication, or profile
+command was executed.
+
+**Affected artifacts:**
+`src/kil/v3b2_kube_apiserver_mirror_configuration.py`,
+`tests/test_v3b2_kube_apiserver_mirror_configuration.py`, this specialist
+lineage, and its regenerated HTML reader. The implementation commits are
+`47ce73375997e4fdcf365db34e06e9f6084f62db` and
+`9539119f6ecd60cc2474689ed2f002be7a124ca4`; specification and quality
+approvals are recorded in `0ef08346e868e2511b199cb942600ff941bab677` and
+`231a077b7f8d42a9c2cf62a4fef878837169f84e`.
+
+**Unresolved questions:** None within Task 4. The independent
+kube-controller-manager disk/API mirror proof, combined V4 static acceptance,
+all-ten-platform-Pod configuration/image/status/readiness composition, and any
+later explicitly authorized live dedicated-profile experiment remain
+separate gates.
+
+**Next gate:** Commit this delivery evidence, push and verify the private
+implementation branch and CI, then begin approved plan Task 5 only on explicit
+continuation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
