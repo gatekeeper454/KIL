@@ -2,3 +2,6 @@
 *.png binary
 *.pdf binary
 
+# Preserve native serializer whitespace in exact-byte Colima fixtures.
+tests/fixtures/hf-colima-0.10.3-profile.yaml whitespace=-blank-at-eol
+tests/fixtures/hf-colima-0.10.3-instance.yaml whitespace=-blank-at-eol
