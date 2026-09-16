@@ -19793,3 +19793,62 @@ SPEC/QUALITY gates, final composition review and fresh local verification.
 Record actual failures/corrections and checkpoint without any native execution.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T373 — 2026-09-16 — Derived exploratory runtime authority and finite Colima adapter checkpoint
+
+**Input:** Approved isolated launcher repair, Task 1 engineering instruction:
+derive a fresh runtime sibling only from a live matching exploratory private
+store; retain no-follow namespace authority; expose only the existing finite
+Colima command grammar through fixed derived native-home bindings. Preserve
+the externally managed detached linked worktree and existing strict boundary.
+
+**Interpretation:** Implement and test the standalone authority/adapter unit,
+not native dispatch integration, profile configuration binding or a renewed
+runtime/HF attempt. Temporary test directories are the only exercised runtime
+namespace. No Colima, Lima, Docker, Kind, kubectl, Ollama, HTTP/HF, platform audit,
+old private receipt or native resource is used or mutated.
+
+**Decision status:** CONFIRMED engineering checkpoint, pending independent
+SPEC/QUALITY review. Fresh exact-store-derived directories, retained ancestor
+and home descriptor identities, named receipt-lock checks, bounded exclusive
+Kind control writes and exact-type finite Colima wrapping are implemented.
+No native compatibility, rehearsal, dispatch integration or KIL acceptance
+decision is claimed. The strict Command source remains unchanged.
+
+**Rationale:** Test-driven development first observed the requested assertion
+RED, "isolated runtime authority is missing", rather than an import failure.
+Subsequent REDs exposed missing/replaced namespace acceptance, missing control
+and adapter behavior, replaced named receipt-lock acceptance and creation
+before named-lock validation. The foreign-environment fixture was corrected
+to satisfy the existing strict grammar before its adapter RED was observed.
+Fault-injection self-review exposed a just-opened directory descriptor leak
+when identity capture failed before anchor retention; a failing assertion
+proved the leak and the fix closes that descriptor locally. Negative existing
+rejections are retained as regression tests. Construction and write failures
+preserve filesystem artifacts, close owned descriptors, and never adopt/delete
+partial or preexisting directories. Lazy exact PrivateStore imports avoid an
+IO/runtime composition import cycle. Fresh local verification: 21 runtime
+tests plus all original 132 exploratory tests passed (153 total, 20.869s),
+using ResourceWarning-fatal unittest and the existing interpreter. Tests use
+real temporary files/directories and minimal syscall fault injection; no live
+native subprocess is invoked by the new tests.
+
+**Affected artifacts:** New src/kil/hf_exploratory_runtime.py and
+tests/test_hf_exploratory_runtime.py; this append-only lineage entry and its
+generated reader. Original HEAD lineage Markdown remains an exact prefix.
+No strict source/tests, sixteen deferrals, accepted manifest/evidence, existing
+exploratory modules, old receipts or residual VM state is changed.
+
+**Unresolved questions:** Independent review may require focused unit
+corrections. Profile parsing/binding, runner/lifecycle composition and lifetime
+handling remain subsequent engineering gates. Actual private-native-home
+compatibility requires a separately authorized request-free rehearsal.
+Platform-image provenance remains unverified; full Kind/Calico acceptance is
+not established. Original missing context metadata is not reconstructed.
+
+**Next gate:** Render/check Markdown readers, verify the exact lineage prefix
+and diff hygiene, checkpoint only the named unit/test/lineage artifacts, then
+independent SPEC followed by QUALITY review. Do not automatically start any
+native tool, mutate a VM, send a request or expand scope.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
