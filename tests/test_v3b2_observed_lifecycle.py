@@ -249,9 +249,16 @@ class ObservedLifecycleTest(unittest.TestCase):
             env = tuple((key, kwargs["env"][key]) for key in ("DOCKER_CONFIG", "DOCKER_HOST") if key in kwargs["env"])
             result = self.runner.run(Command(argv, 60, env=env))
             return subprocess.CompletedProcess(argv, result.returncode, result.stdout_bytes, result.stderr_bytes)
+
+        def bounded_process(_runner, _argv, command, _environment, _maximum):
+            return self.runner.run(command)
+
         controller.runner = SubprocessCommandRunner()
-        with patch("kil.v3b2_controller.subprocess.run", side_effect=process):
+        with patch("kil.v3b2_controller.subprocess.run", side_effect=process), patch.object(
+                SubprocessCommandRunner, "_run_bounded_capture", autospec=True,
+                side_effect=bounded_process) as bounded_capture:
             observations = controller._collect_observations(context)
+        self.assertEqual(bounded_capture.call_count, 2)
         decision = append_observed_terminal(controller.journal_path, context, observations)
         self.assertEqual(decision.outcome, "teardown_only")
         journal = load_journal(controller.journal_path)
