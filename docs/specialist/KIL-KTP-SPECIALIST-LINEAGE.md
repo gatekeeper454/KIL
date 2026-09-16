@@ -18881,3 +18881,87 @@ mismatch must stop with retained inconclusive evidence and only exact still-boun
 cleanup; no download, substitution, mutation retry or broad deletion is implied.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-361 — 2026-09-16 — Independent final composed-code review approves conditional rehearsal gate
+
+**Input:** Independently review the complete new exploratory implementation
+after all four units received SPEC and QUALITY approval. Compare approved
+design at docs/superpowers/specs/2026-09-16-hf-exploratory-kind-calico-design.md
+with the actual nine-file implementation change from design checkpoint
+34c7267 through source checkpoint 1fcd7422f060279c8ad6ad65ddfbed5f49f9a216.
+Review current HEAD 8d6a469266fd9609d82d1fc5af3f5288edd147c0 after the previous
+lineage writer released the artifacts. Use read-only source inspection and
+test-owned local verification only; do not invoke native accepted-input
+verification, platform tools, profile/VM/cluster operations or live requests.
+
+**Interpretation:** Assess composition across pure input readiness, bounded
+durable IO, fixed fixtures/evidence joins, conservative native orchestration
+and the automatic rehearsal-then-fresh-action CLI. Identify concrete missing
+gates or cross-unit correctness defects, not unrelated refactors, platform
+provenance scope expansion or publication acceptance. Approval of composed
+code is not evidence of actual native producer compatibility or live readiness.
+
+**Decision status:** Independent FINAL composed-code review APPROVED for the
+reviewed source bytes. No Critical, Important or Minor finding was identified
+in the nine-file scope. Ready for ROOT's request-free native rehearsal: yes,
+conditional on root-owned final exact CLI, static accepted-input and child-tool
+PATH gates. This reviewer does not authorize or perform a launch, merge,
+publication, retry or promotion of strict completion flags.
+
+**Rationale:** Full inspection of all five implementation files and four new
+test files confirms their interfaces compose without weakening strict paths.
+Authenticated immutable manifest/tool/archive commitments feed the bounded
+runner; its sanitized environment retains the exact private endpoints and
+kubeconfig. Durable request intent precedes the once-only attach, and completed
+attach alone does not admit a later track: same-incarnation driver completion,
+once-only bound Envoy drain/refusal/zero gauges, equal bounded complete raw
+source reads bracketed by UID/container/resource-version observations and the
+semantic four-producer join must complete first. Unexpected complete results
+are reported without retry; incomplete transport, capture or joins stop later
+instructions. Request-free readiness excludes consequential application records
+while retaining the driver's authenticated readiness record. Exact owned
+cleanup and foreign/global preservation gates remain conservative. Reports
+separate requested resources and observed bindings, preserve the exact
+exploratory label, and leave both platform-provenance and full-acceptance flags
+false. The CLI holds one private lab lock across two distinct fresh run stores
+and requires complete rehearsal plus true owned teardown before action creation.
+
+Fresh independent verification with PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src,
+/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python
+and -W error::ResourceWarning ran the exact four new test modules: 130 tests
+passed in 17.111 seconds. This count is the reviewer's own observed suite,
+not a borrowed broader regression result. Git comparison confirms the nine
+reviewed files are unchanged between 1fcd742 and 8d6a469; the design-to-HEAD
+implementation diff contains exactly those nine files, and git diff --check
+returned clean. Test-owned fixtures are not native experiment evidence.
+
+**Affected artifacts:** Reviewed src/kil/hf_exploratory_inputs.py,
+src/kil/hf_exploratory_io.py, src/kil/hf_exploratory_case.py,
+src/kil/hf_exploratory_native.py, tools/hf_exploratory_kind.py and their four
+tests/test_hf_exploratory_*.py modules. No code, tests, accepted artifacts,
+deploy configuration, Makefile, strict launcher, publication writer or lifecycle
+deferral is changed by this reviewer. Only this appended lineage Markdown and
+its generated sibling HTML reader are modified; the complete 8d6a469 Markdown
+is preserved as a byte-for-byte prefix.
+
+**Unresolved questions:** Actual content-verified native input availability,
+tool/profile producer compatibility, setup/readiness, capture, live
+foreign/global-state preservation and exact teardown remain unestablished by
+this review. Root owns broad regression results and final static gates. A
+complete request-free native setup/evidence/teardown rehearsal must precede
+the already approved single fresh three-track modeled action. No causal HF
+prevention, all-eight-phase replay, original exploit, NetworkPolicy enforcement,
+no-bypass, performance, strict V3B2/V4/V3C or publication claim follows.
+Independent platform-image provenance remains unverified; full Kind/Calico
+acceptance remains not established. All sixteen strict lifecycle deferrals
+remain unchanged.
+
+**Next gate:** Verify the preserved prefix, regenerate and check all tracked
+readers, diff-check, and commit only this lineage entry and its sibling reader.
+Return the clean checkpoint to root. Root may then finish exact source/input,
+CLI and accepted child-tool PATH checks and consider the separately authorized
+request-free native rehearsal. Any real mismatch stops progression with
+inconclusive evidence and only exact still-bound cleanup; no download,
+substitution, mutation retry or broad deletion is implied.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
