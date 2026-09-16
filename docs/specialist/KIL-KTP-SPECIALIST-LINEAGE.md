@@ -15774,3 +15774,51 @@ obtain user approval of the written specification before invoking writing-plans.
 No implementation, lifecycle, publication or live operation is authorized here.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-312 — 2026-09-16 — Approved platform configuration design translated into plan
+
+**Input:** The user explicitly approved the written configuration composition
+design and requested continuation: “approved - continue”.
+
+**Interpretation:** Record the written-specification approval and prepare its
+bounded implementation plan using writing-plans. The execution workflow choice
+remains the handoff; no live or broader runtime authorization is inferred.
+
+**Decision status:** Confirmed written design approval; implementation plan
+prepared and self-reviewed, awaiting execution-workflow selection. Documentation
+only; no implemented aggregate or passing implementation test claim.
+
+**Rationale:** The four-task plan first establishes one independent combined
+inventory accepted by all existing component validators, then adds the typed
+aggregate, adversarial authority/replay tests and reviewed static acceptance.
+It supplies explicit proof fields, ownership paths, complete computation code,
+fixed coverage projections, fixture delta-merging and exact commands with the
+actual available interpreter. Review identified context-bound source bytes as
+unsuitable validator inputs; alternate source tests reconstruct observations.
+Calico's exact source/projection content locks reject unequal byte variants at
+the earlier validator boundary; the plan records that distinction without
+loosening the lock or mislabeling such variants independently valid. Sixteen
+existing lifecycle deferrals and exact-false completion flags remain unchanged.
+
+**Affected artifacts:** Updated the approved design's status; added
+`docs/superpowers/plans/2026-09-16-v4-platform-pod-configuration-composition.md`
+and its reader; appended this lineage entry and regenerated changed readers.
+No production or test files were created or modified.
+
+**Verification:** Self-review mapped each approved specification section to
+the four tasks and checked existing proof names, binding fields, ownership
+paths and source input types. All eight planned Python code blocks parsed with
+`ast.parse`; the unresolved-placeholder scan found none. This is planning
+syntax/coverage verification, not test execution or implementation acceptance.
+Reader generation/check and diff checks are the final documentation gate.
+
+**Unresolved questions:** User choice of subagent-driven or inline execution.
+Runtime image realization, status/readiness semantics and any live authorization
+remain separate later design gates.
+
+**Next gate:** Verify generated readers and diff, commit the planning checkpoint,
+then select and invoke subagent-driven-development or executing-plans. Begin
+with the shared independent fixture and review checkpoint, preserving all
+existing component contracts and static-only boundaries.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

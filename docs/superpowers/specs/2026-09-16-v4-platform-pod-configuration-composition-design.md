@@ -2,8 +2,9 @@
 
 Date: 2026-09-16
 
-Status: Configuration-first scope approved in conversation; written specification
-awaiting user review. No implementation approval is inferred from this status.
+Status: Written specification approved by the user on 2026-09-16. Approval
+authorizes implementation planning for this static configuration-only slice;
+it does not authorize live execution or any broader completion claim.
 
 ## Purpose and claim boundary
 

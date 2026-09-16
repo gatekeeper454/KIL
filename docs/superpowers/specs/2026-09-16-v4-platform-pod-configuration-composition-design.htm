@@ -6,7 +6,7 @@
 <title>V4 platform Pod configuration composition</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/specs/2026-09-16-v4-platform-pod-configuration-composition-design.md">
-<meta name="source-sha256" content="9a55f8e52d586e15a9c2301a81b960ee7685fcf50a49904875d7308bdbf1f8e4">
+<meta name="source-sha256" content="df28352756166e1cd8f8f466b284f6c59c06edf5ffbc3770969b7fd7c115b692">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,19 +55,20 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-09-16-v4-platform-pod-configuration-composition-design.md</code> (<code>9a55f8e52d586e15a9c2301a81b960ee7685fcf50a49904875d7308bdbf1f8e4</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-09-16-v4-platform-pod-configuration-composition-design.md</code> (<code>df28352756166e1cd8f8f466b284f6c59c06edf5ffbc3770969b7fd7c115b692</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">V4 platform Pod configuration composition</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-09-16-v4-platform-pod-configuration-composition-design.md</code> (<code>9a55f8e52d586e15a9c2301a81b960ee7685fcf50a49904875d7308bdbf1f8e4</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-09-16-v4-platform-pod-configuration-composition-design.md</code> (<code>df28352756166e1cd8f8f466b284f6c59c06edf5ffbc3770969b7fd7c115b692</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#v4-platform-pod-configuration-composition">V4 platform Pod configuration composition</a></li><li class="level-2"><a href="#purpose-and-claim-boundary">Purpose and claim boundary</a></li><li class="level-2"><a href="#selected-approach">Selected approach</a></li><li class="level-2"><a href="#interface-and-retained-records">Interface and retained records</a></li><li class="level-2"><a href="#reconstruction-and-authority-joins">Reconstruction and authority joins</a></li><li class="level-2"><a href="#tests-and-acceptance">Tests and acceptance</a></li><li class="level-2"><a href="#next-gates">Next gates</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="v4-platform-pod-configuration-composition" href="#v4-platform-pod-configuration-composition">V4 platform Pod configuration composition</a></li><li class="level-2"><a data-section-id="purpose-and-claim-boundary" href="#purpose-and-claim-boundary">Purpose and claim boundary</a></li><li class="level-2"><a data-section-id="selected-approach" href="#selected-approach">Selected approach</a></li><li class="level-2"><a data-section-id="interface-and-retained-records" href="#interface-and-retained-records">Interface and retained records</a></li><li class="level-2"><a data-section-id="reconstruction-and-authority-joins" href="#reconstruction-and-authority-joins">Reconstruction and authority joins</a></li><li class="level-2"><a data-section-id="tests-and-acceptance" href="#tests-and-acceptance">Tests and acceptance</a></li><li class="level-2"><a data-section-id="next-gates" href="#next-gates">Next gates</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
 <h1 id="v4-platform-pod-configuration-composition">V4 platform Pod configuration composition</h1>
 <p>Date: 2026-09-16</p>
-<p>Status: Configuration-first scope approved in conversation; written specification
-awaiting user review. No implementation approval is inferred from this status.</p>
+<p>Status: Written specification approved by the user on 2026-09-16. Approval
+authorizes implementation planning for this static configuration-only slice;
+it does not authorize live execution or any broader completion claim.</p>
 <h2 id="purpose-and-claim-boundary">Purpose and claim boundary</h2>
 <p>Compose the existing platform configuration validators into one reconstructable
 proof that exactly ten owned platform Pod incarnations satisfy their respective
