@@ -20560,3 +20560,75 @@ writer. Require independent QUALITY approval before considering Task 3B; native
 execution remains separately gated.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T385 — 2026-09-16 — Task 3A independent QUALITY approval
+
+**Input:** Independently review the approved Task 3A exploratory runner/evidence
+unit from d31c423 through corrected source checkpoint
+4b22320c1845aa29ca89803a59531147ab6e862e for failure handling, authority ordering,
+scope and bounds, resource errors, test realism and maintainability. Root granted
+this exclusive lineage writer after the T384 SPEC reviewer committed 3423172
+and released its writer; the Native Task 3B worker holds documentation, rendering
+and commits until this writer is released.
+
+**Interpretation:** QUALITY review evaluates the actual corrected source and
+tests, not implementation reports or the accepted design anew. Runtime/profile
+dependencies are read-only. Temporary-file and mocked process-boundary tests
+establish engineering behavior only; they do not demonstrate native compatibility,
+configuration admission, VM behavior or cleanup.
+
+**Decision status:** QUALITY APPROVED for Task 3A source at 4b22320. No actionable
+Critical, Important or Minor issues were found within the scoped runner/evidence
+change. This completes the independent QUALITY gate following T384 SPEC approval;
+Task 3B composition is a separate implementation and review unit, and native
+execution remains separately gated.
+
+**Rationale:** The reviewer read the actual source/test diff and current code,
+including the retained runtime authority, strict Command grammar and reused
+bounded observer dependencies. Fresh independent focused verification passed
+all 58 runner/evidence tests in 3.717s using the designated repository Python,
+PYTHONPATH=src, PYTHONDONTWRITEBYTECODE=1 and fatal ResourceWarning. The source
+range passed git diff --check. Root's broader combined 375-test result is not
+represented as this reviewer's independent execution.
+
+The runner keeps exact type and finite grammar checks, global read-only Colima
+version/list separation, private Colima's four derived environment bindings,
+actual passwd HOME and existing aggregate 8 MiB/900-second capture limits.
+Fresh authentication and three-tool metadata checks precede a fresh adapter
+authority guard and dispatch fingerprint; final manifest-byte type/content and
+tool-path comparisons perform no authentication IO before capture. Real temporary
+files and boundary-only mocks exercise late manifest/tool-path substitution,
+valid command replacement, metadata drift and stale runtime homes without
+inventing a Colima executable hash or changing strict command families.
+
+The evidence unit has a small finite surface: seven fixed files, bounded nofollow
+singly linked regular-file observations, full original bytes and hashes, stable
+double capture, original-store authority binding and eight-name immutable
+preflight. Capture and persistence failures propagate, partially retained bytes
+remain visible, and the documented caller obligation refuses native teardown
+after failure. Leftover observations cover only five named directory rosters,
+bounded to 4096 entries and explicitly partial/observed-only; they do not inspect
+VM disks, recursively traverse children, delete anything or assert full absence.
+Tests use real temporary files for identity/byte drift, links, oversize inputs,
+retention and roster bounds; process/authentication mocks remain boundary leaves.
+
+**Affected artifacts:** This actual-EOF T385 append and its generated HTML reader
+only. The complete exact 3423172 Markdown remains a prefix; earlier entries are
+not moved or revised. This reviewer made no source/test edits and ran no native
+Colima/Lima/Docker/Kind/kubectl command, VM, HTTP/HF request, Ollama operation,
+platform-image audit, old receipt write or external branch/move/merge/push.
+Concurrent Task 3B source changes, if present, are preserved and excluded from
+this documentation-only commit.
+
+**Unresolved questions:** Task 3B snapshot-before-first-teardown composition and
+its independent reviews, private-home native compatibility, Kind/Calico
+acceptance, platform-image provenance and native cleanup remain unestablished.
+The known four ignored immutable Markdown receipts lacking citations remain a
+broad-scan limitation; this review neither edits them nor claims their resolution.
+
+**Next gate:** Render/check all 88 readers, confirm the exact prior Markdown
+prefix and documentation-only staged diff, commit only this lineage pair and
+release the exclusive writer. Continue separately scoped Task 3B engineering
+implementation and independent review; no native run is authorized by this entry.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
