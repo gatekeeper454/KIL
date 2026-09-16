@@ -217,15 +217,20 @@ class ExploratoryLifecycle:
             strict = replace(strict,timeout_s=min(command.timeout_s,10,int(remaining)))
             command = (ExploratoryColimaCommand(strict,self.runtime)
                        if type(command) is ExploratoryColimaCommand else strict)
+        dispatch = (command.argv,command.env,command.stdin,command.timeout_s,command.mutating)
         if command.mutating:
             self.authorize_mutation(command)
-        self.runtime.guard()
+        self.require_dispatch_unchanged(command,dispatch)
         self.sequence += 1
         name = 'command-%04d' % self.sequence
         self.store.record('command_intent', {'sequence': self.sequence, 'argv': list(command.argv),
             'env': dict(command.env), 'mutating': command.mutating, 'timeout_s':command.timeout_s,
             'stdin_sha256': None if command.stdin is None else sha256(command.stdin).hexdigest()})
-        self.runtime.guard()
+        if command.mutating and command.argv[:2] == ('kind','create'):
+            self.require_kind_control()
+        self.require_dispatch_unchanged(command,dispatch)
+        if command.mutating:
+            self.commit_mutation(command)
         result = self.runner.run(command)
         out_hash = self.store.write(name + '.stdout', result.stdout_bytes)
         err_hash = self.store.write(name + '.stderr', result.stderr_bytes)
@@ -236,7 +241,19 @@ class ExploratoryLifecycle:
             raise ValueError('native_command_failed_%s' % result.returncode)
         return result
 
+    def require_dispatch_unchanged(self, command, dispatch):
+        """Join fresh grammar/authority to the authorized durable intent bytes."""
+        if type(command) not in (Command,ExploratoryColimaCommand):
+            raise ValueError('closed_command_required')
+        command.__post_init__()
+        if type(command) is ExploratoryColimaCommand and command.authority is not self.runtime:
+            raise ValueError('foreign_colima_runtime_authority')
+        self.runtime.guard()
+        if dispatch != (command.argv,command.env,command.stdin,command.timeout_s,command.mutating):
+            raise ValueError('command_changed_during_native_authorization_or_intent')
+
     def authorize_mutation(self, command):
+        """Validate dispatch eligibility without claiming a runner handoff."""
         argv = command.argv
         if (argv[0] == 'limactl' or (argv[0] == 'colima' and command.env != self.colima_env)
                 or (argv[0] in ('docker','kind') and command.env != self.docker_env)
@@ -249,9 +266,6 @@ class ExploratoryLifecycle:
             require_pristine(self.paths)
             self.private_inventory(empty=True)
             self.require_foreign_preserved()
-            self.started_pristine = True
-            self.profile_attempted = True
-            self.reached_gate = 'profile_start_attempted'
         elif argv == kind_create_command(self.identity).argv:
             if self.cluster_attempted:
                 raise ValueError('cluster_create_already_attempted')
@@ -260,28 +274,23 @@ class ExploratoryLifecycle:
             if self.endpoint_rows():
                 raise ValueError('fresh_owned_endpoint_not_empty')
             self.require_foreign_preserved()
-            self.cluster_attempted = True
-            self.reached_gate = 'cluster_create_attempted'
         elif argv == kind_delete_command(self.identity).argv:
             if self.cluster_delete_attempted or self.cluster_removed:
                 raise ValueError('cluster_delete_already_attempted')
             self.guard_cluster()
             self.ensure_runtime_snapshot()
             self.require_foreign_preserved()
-            self.cluster_delete_attempted = True
         elif argv == ('colima', 'stop', '--profile', 'kil-v3-lab'):
             if self.profile_stop_attempted or (self.cluster_attempted and not self.cluster_removed):
                 raise ValueError('profile_stop_not_authorized')
             self.guard_profile()
             self.ensure_runtime_snapshot()
             self.require_foreign_preserved()
-            self.profile_stop_attempted = True
         elif argv == ('colima', 'delete', '--profile', 'kil-v3-lab', '--force', '--data'):
             if self.profile_delete_attempted or not self.profile_stopped:
                 raise ValueError('profile_delete_not_authorized')
             self.guard_profile(stopped=True)
             self.require_foreign_preserved()
-            self.profile_delete_attempted = True
         else:
             self.require_allowed_other_mutation(command)
             self.guard_cluster()
@@ -289,7 +298,31 @@ class ExploratoryLifecycle:
             if commitment in self.mutation_commitments:
                 raise ValueError('mutation_already_attempted')
             self.require_foreign_preserved()
-            self.mutation_commitments.add(commitment)
+
+    def commit_mutation(self, command):
+        """Commit one-shot state immediately before handoff; never roll it back.
+
+        Authorization, durable intent and fresh consumer/runtime checks have
+        completed. No native handoff is claimed for a known earlier refusal;
+        an opaque runner exception after this point remains an uncertain attempt.
+        """
+        argv = command.argv
+        if argv[:2] == ('colima','start'):
+            self.started_pristine = True
+            self.profile_attempted = True
+            self.reached_gate = 'profile_start_attempted'
+        elif argv[:2] == ('kind','create'):
+            self.cluster_attempted = True
+            self.reached_gate = 'cluster_create_attempted'
+        elif argv[:2] == ('kind','delete'):
+            self.cluster_delete_attempted = True
+        elif argv[:2] == ('colima','stop'):
+            self.profile_stop_attempted = True
+        elif argv[:2] == ('colima','delete'):
+            self.profile_delete_attempted = True
+        else:
+            self.mutation_commitments.add((argv,command.env,
+                None if command.stdin is None else sha256(command.stdin).hexdigest()))
             if argv[0]=='kubectl' and argv[3]=='attach':
                 track = next(track for track,namespace in TRACK_NAMESPACES if namespace==argv[6])
                 self.attach_attempted.add(track)

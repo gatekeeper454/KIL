@@ -1164,6 +1164,105 @@ class NativeTests(unittest.TestCase):
         self.assertIn('runtime leftovers unknown',report['error'])
         self.assertFalse(report['filesystem_fully_removed'])
 
+    def test_start_namespace_drift_during_durable_intent_is_known_no_handoff(self):
+        self.full_fake_runner()
+        record = self.store.record
+        def drift(event, details):
+            record(event, details)
+            if event=='command_intent' and details['argv'][:2]==['colima','start']:
+                self.life.runtime.tmp.rename(self.life.runtime.tmp.with_name('retained-original-tmp'))
+                self.life.runtime.tmp.mkdir(mode=0o700)
+        with patch.object(self.store,'record',side_effect=drift): report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertEqual([command for command in self.state['calls'] if command.mutating],[])
+        self.assertFalse(self.life.profile_attempted)
+        self.assertFalse(self.life.started_pristine)
+        self.assertFalse(report['manual_recovery'])
+
+    def test_kind_control_drift_during_durable_intent_is_known_no_create_handoff(self):
+        self.full_fake_runner()
+        record = self.store.record
+        original = []
+        def drift(event, details):
+            record(event, details)
+            if event=='command_intent' and details['argv'][:2]==['kind','create']:
+                original.append((self.store.path/'kind-config.yaml').read_bytes())
+                self.life.runtime.kind_config.write_bytes(b'changed-during-create-intent')
+        with patch.object(self.store,'record',side_effect=drift): report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertFalse(any(command.argv[:2]==('kind','create') for command in self.state['calls']))
+        self.assertFalse(self.life.cluster_attempted)
+        self.assertEqual((self.store.path/'kind-config.yaml').read_bytes(),original[0])
+        self.assertTrue(report['owned_teardown'])
+        self.assertFalse(report['manual_recovery'])
+
+    def test_kind_namespace_drift_during_durable_intent_does_not_latch_create(self):
+        self.full_fake_runner()
+        record = self.store.record
+        def drift(event, details):
+            record(event, details)
+            if event=='command_intent' and details['argv'][:2]==['kind','create']:
+                self.life.runtime.tmp.rename(self.life.runtime.tmp.with_name('retained-original-tmp'))
+                self.life.runtime.tmp.mkdir(mode=0o700)
+        with patch.object(self.store,'record',side_effect=drift): report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertFalse(any(command.argv[:2]==('kind','create') for command in self.state['calls']))
+        self.assertFalse(self.life.cluster_attempted)
+        self.assertTrue(self.life.profile_attempted)
+        self.assertTrue(report['manual_recovery'])
+
+    def test_valid_start_command_substitution_during_intent_never_authorizes_delete(self):
+        self.full_fake_runner()
+        command = self.native.colima_start_command()
+        record = self.store.record
+        def substitute(event, details):
+            record(event, details)
+            if event=='command_intent' and details['argv'][:2]==['colima','start']:
+                object.__setattr__(command,'argv',('colima','delete','--profile','kil-v3-lab','--force','--data'))
+        with patch.object(self.native,'colima_start_command',return_value=command), patch.object(self.store,'record',side_effect=substitute): report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertEqual([row for row in self.state['calls'] if row.mutating],[])
+        self.assertFalse(self.life.profile_attempted)
+        self.assertFalse(self.life.profile_delete_attempted)
+        self.assertFalse(report['manual_recovery'])
+
+    def test_valid_start_command_substitution_during_nested_authorization_is_refused(self):
+        self.full_fake_runner()
+        command = self.native.colima_start_command()
+        record = self.store.record
+        changed = []
+        scoped_reads = []
+        def substitute(event, details):
+            record(event, details)
+            if event=='command_intent' and details['argv']==['colima','list','--json'] and details['env']:
+                scoped_reads.append(True)
+                if len(scoped_reads)==2 and not changed:
+                    changed.append(True)
+                    object.__setattr__(command,'argv',('colima','delete','--profile','kil-v3-lab','--force','--data'))
+        with patch.object(self.native,'colima_start_command',return_value=command), patch.object(self.store,'record',side_effect=substitute): report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertEqual([row for row in self.state['calls'] if row.mutating],[])
+        self.assertFalse(self.life.profile_attempted)
+        self.assertFalse(self.life.profile_delete_attempted)
+        intents=[json.loads(line)['details'] for line in self.store.journal.read_bytes().splitlines()
+                 if json.loads(line)['event']=='command_intent']
+        self.assertFalse(any(row['mutating'] for row in intents))
+
+    def test_valid_ordinary_kind_command_substitution_during_intent_is_refused(self):
+        self.full_fake_runner()
+        command = kind_create_command(self.life.identity)
+        record = self.store.record
+        def substitute(event, details):
+            record(event, details)
+            if event=='command_intent' and details['argv'][:2]==['kind','create']:
+                object.__setattr__(command,'argv',kind_delete_command(self.life.identity).argv)
+        with patch.object(self.native,'kind_create_command',return_value=command), patch.object(self.store,'record',side_effect=substitute): report=self.execute_fake()
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertFalse(any(row.argv[:2] in [('kind','create'),('kind','delete')] for row in self.state['calls']))
+        self.assertFalse(self.life.cluster_attempted)
+        self.assertFalse(self.life.cluster_delete_attempted)
+        self.assertTrue(report['owned_teardown'])
+
     def test_read_until_never_retries_command_schema_or_identity_error(self):
         for error_type in [ValueError,KeyError,TypeError]:
             operation=Mock(side_effect=[error_type('permanent'),True])

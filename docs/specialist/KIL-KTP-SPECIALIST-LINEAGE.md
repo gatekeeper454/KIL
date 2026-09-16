@@ -20831,3 +20831,103 @@ corrections, followed by fresh independent SPEC review before QUALITY and final
 composed verification. Native permission remains a separate gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T388 — 2026-09-16 — Task 3B post-intent authority and handoff corrections
+
+**Input:** Independent SPEC review at T387 did not approve Task 3B source
+0746d15: a real runtime namespace replacement during durable Colima Start intent
+correctly refused Runner dispatch but incorrectly retained an early native-attempt
+latch/manual recovery claim, and a runtime Kind control edit during durable Kind
+Create intent incorrectly reached Create dispatch and a complete report. After
+the reviewer checkpointed 0fd55d3 and released its writer, root returned these
+findings to the original implementation worker with source scope limited to
+`src/kil/hf_exploratory_native.py` and `tests/test_hf_exploratory_native.py` and
+exclusive next-EOF T388 writer ownership. Before checkpoint, root also verified
+that replacing a held exact Start Command's argv with valid strict Colima Delete
+argv during Start intent could dispatch Delete without a creation binding; this
+was added to the same Native authorization/intent correction scope.
+
+**Interpretation:** Durable command intent is an intention, not evidence of native
+handoff. Native authorization must remain joined to the original immutable
+dispatch fingerprint across nested guard IO, durable intent IO and final consumer
+checks. Known refusal before Runner handoff must not consume native attempt
+latches; an opaque exception after Runner handoff remains uncertain and must
+consume its existing one-shot latch. Request Store durable attempt/uncertainty
+semantics are separate and remain unchanged. Only Kind Create consumes the Kind
+control, so fresh consumer verification must not block deletion or image loading
+because of an unused control. These are finite boundary checks, not transactional
+exclusion or a zero-TOCTOU guarantee, and do not establish native compatibility.
+
+**Decision status:** CORRECTED, TEST-VERIFIED ENGINEERING CHECKPOINT, pending
+fresh independent SPEC re-review then QUALITY and root's final composed gates.
+This entry preserves T387's nonapproval and all earlier entries rather than
+rewriting the record or treating previous GREEN results as proof of these gaps.
+
+**Rationale:** The worker used the review-reception, systematic-debugging,
+test-first and verification disciplines. Two initial real-filesystem/full-boundary
+Runner regressions reproduced the review findings RED: Start namespace drift
+left `profile_attempted=True` with zero mutating Runner calls, and Kind control
+drift produced `status=complete`. Validation now checks eligibility without
+mutating native attempt/commitment/attach state. After durable intent, Kind Create
+freshly compares its nofollow bounded regular runtime control, initial concrete
+identity, original expected canonical bytes and immutable Store copy. Final
+runtime checks precede a small IO-free commit phase immediately before Runner
+handoff; Start/Create/Delete/Stop latches and other mutation/attach commitments
+are not rolled back after an uncertain handoff. The first focused GREEN passed
+six boundary and existing uncertainty/no-replay tests in 0.432s. A third real
+composition case verifies that Kind namespace drift does not claim a Create
+handoff, while manual recovery correctly remains necessary for its previously
+handed-off private Colima profile.
+
+Root's valid command-substitution finding reproduced RED, as did two additional
+same-boundary regressions: Start-to-Delete substitution during nested authorization
+IO, and ordinary Kind Create-to-Delete substitution during durable intent. These
+use real RuntimeAuthority/ProfilePaths, real Store persistence and temporary
+files; no high-level resource/consumer guard is mocked. The nested test changes
+the held Command during the second private scoped list, inside authorization,
+not the earlier setup preflight. Native now captures an immutable tuple of exact
+argv, environment, stdin bytes, timeout and mutation flag before authorization.
+After nested authorization and again after durable intent/final consumer IO, it
+freshly revalidates exact command grammar, exact adapter authority, runtime
+namespace and that complete original fingerprint. Late substitutions are refused
+explicitly before any native attempt mark or Runner handoff, including valid
+finite substitutions and ordinary Commands. Supplied foreign data is not
+silently normalized. The final focused GREEN passed all nine new-boundary and
+existing mutation no-replay tests in 0.882s.
+
+Fresh final Native/CLI verification passed all 116 tests in 34.124s, preserving
+all 84 original protections and adding six correction regressions to the prior
+110-test checkpoint. Required combined verification passed all 407 tests across
+the same 15 modules in 86.794s with the designated repository interpreter,
+PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and fatal ResourceWarning. The earlier
+404-test run passing in 86.456s preceded the fingerprint correction and is not
+represented as evidence that the substitution gap was fixed. The worker
+self-reviewed the actual two-path source/test diff and `git diff --check`
+passed. No source outside those two files was changed for this correction.
+
+**Affected artifacts:** The two assigned source/test paths, this actual-EOF T388
+append and its generated HTML reader only. The exact 0fd55d3 Markdown remains a
+prefix, with T387 and earlier entries unmodified. CLI, reviewed IO/runtime/profile/
+evidence dependencies, strict modules/tests, accepted inputs/local Envoy, existing
+claim exclusions and all 16 V4 deferrals are unchanged. No actual native
+Colima/Lima/Docker/Kind/kubectl, VM, HTTP/HF/network, Ollama or platform-image
+operation occurred. No old receipt/citation write, metadata repair, adoption of
+the FOREIGN stopped default-home lab, branch move, merge or push occurred. The
+detached externally managed worktree is preserved.
+
+**Unresolved questions:** Fresh independent SPEC/QUALITY review and final
+composed verification remain pending. Root separately identified and queued a
+runner metadata-boundary correction; it is outside this Native worker's scope
+and is not claimed resolved here. Actual native compatibility/teardown, full
+Kind/Calico acceptance and platform-image provenance remain unestablished and
+their report flags remain false. The four known ignored immutable Markdown
+citation omissions remain unchanged, not concealed by receipt or test edits.
+
+**Next gate:** Render/check all 88 readers, verify exact prior Markdown prefix
+and the four-path staged scope, checkpoint only this correction/lineage set and
+release the exclusive writer. Then obtain fresh independent Task 3B SPEC
+re-review before QUALITY; handle root's separately queued IO correction in its
+own bounded unit before final composed verification. Native execution remains a
+separate permission gate and is not authorized by this checkpoint.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
