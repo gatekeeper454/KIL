@@ -6,7 +6,7 @@
 <title>Exploratory HF native lifecycle Implementation Plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-16-hf-exploratory-native-lifecycle.md">
-<meta name="source-sha256" content="cf1e8f203afbb7e548b7614084560723139ca4e479701fb940129862aa65979b">
+<meta name="source-sha256" content="5593397b9ad549a3bba4bf75e92cf28d0a88b95a42a059b39f95e98ca1827c1b">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-exploratory-native-lifecycle.md</code> (<code>cf1e8f203afbb7e548b7614084560723139ca4e479701fb940129862aa65979b</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-exploratory-native-lifecycle.md</code> (<code>5593397b9ad549a3bba4bf75e92cf28d0a88b95a42a059b39f95e98ca1827c1b</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Exploratory HF native lifecycle Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-exploratory-native-lifecycle.md</code> (<code>cf1e8f203afbb7e548b7614084560723139ca4e479701fb940129862aa65979b</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-exploratory-native-lifecycle.md</code> (<code>5593397b9ad549a3bba4bf75e92cf28d0a88b95a42a059b39f95e98ca1827c1b</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#exploratory-hf-native-lifecycle-implementation-plan">Exploratory HF native lifecycle Implementation Plan</a></li><li class="level-2"><a href="#file-responsibilities-and-fixed-interfaces">File responsibilities and fixed interfaces</a></li><li class="level-2"><a href="#task-1-exact-owned-authority-and-durable-command-receipts">Task 1: Exact owned authority and durable command receipts</a></li><li class="level-2"><a href="#task-2-exact-fresh-setup-and-readiness-no-requests">Task 2: Exact fresh setup and readiness, no requests</a></li><li class="level-2"><a href="#task-3-nonreplayable-action-frozen-capture-conservative-cleanup">Task 3: Nonreplayable action, frozen capture, conservative cleanup</a></li><li class="level-2"><a href="#task-4-reviewed-source-cli-and-private-result">Task 4: Reviewed source CLI and private result</a></li><li class="level-2"><a href="#root-owned-execution-gate">Root-owned execution gate</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="exploratory-hf-native-lifecycle-implementation-plan" href="#exploratory-hf-native-lifecycle-implementation-plan">Exploratory HF native lifecycle Implementation Plan</a></li><li class="level-2"><a data-section-id="file-responsibilities-and-fixed-interfaces" href="#file-responsibilities-and-fixed-interfaces">File responsibilities and fixed interfaces</a></li><li class="level-2"><a data-section-id="task-1-exact-owned-authority-and-durable-command-receipts" href="#task-1-exact-owned-authority-and-durable-command-receipts">Task 1: Exact owned authority and durable command receipts</a></li><li class="level-2"><a data-section-id="task-2-exact-fresh-setup-and-readiness-no-requests" href="#task-2-exact-fresh-setup-and-readiness-no-requests">Task 2: Exact fresh setup and readiness, no requests</a></li><li class="level-2"><a data-section-id="task-3-nonreplayable-action-frozen-capture-conservative-cleanup" href="#task-3-nonreplayable-action-frozen-capture-conservative-cleanup">Task 3: Nonreplayable action, frozen capture, conservative cleanup</a></li><li class="level-2"><a data-section-id="task-4-reviewed-source-cli-and-private-result" href="#task-4-reviewed-source-cli-and-private-result">Task 4: Reviewed source CLI and private result</a></li><li class="level-2"><a data-section-id="root-owned-execution-gate" href="#root-owned-execution-gate">Root-owned execution gate</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -338,7 +338,7 @@ action instructions still have the stricter PrivateStore TRACKS/uncertainty latc
 <tr>
 <td>13</td>
 <td>two kubectl_calico_workload_command reads</td>
-<td>Canonicalize duplicate-safe decoded native response before existing parse_calico_runtime_workload; desired/ready 1/1</td>
+<td>Retain full duplicate-safe decoded native response; explicitly project nested native template containers, identity and readiness counts into the existing closed parse_calico_runtime_workload input; desired/ready 1/1</td>
 </tr>
 <tr>
 <td>14</td>
@@ -386,7 +386,39 @@ groups += [[item for item in rendered if item['kind'] not in {'Namespace', 'Netw
 payloads = [canonical({'apiVersion': 'v1', 'kind': 'List', 'items': group}) for group in groups]
 </code></pre>
 <p>Node image proof expected inputs are constructed only from ACCEPTED_IMAGES: KIL root media type application/vnd.oci.image.manifest.v1+json, allowed tag exactly its requested_image, allowed digest kil.local/kil-v3b2@target; Envoy root media application/vnd.oci.image.index.v1+json, no tag, allowed digest exactly its requested_image; saved_container_image is config_digest, not root. Two <code>RawObservation</code> labels cri_image_0/cri_image_1 (stdout &lt;=16KiB) and node_images (&lt;=256KiB); exact command env/argv and bound OwnedIdentity feed validate_node_image_references. Save canonical proof bindings, not strict completion flags.</p>
-<p>Readiness loops retry READS ONLY: monotonic global setup-readiness deadline 300s, per-read/wait command timeout at most10s (wait itself1s), sleep0.5s max between read sets, &lt;=60 complete attempts. No request/mutation retries. Native errors stop setup rather than weakening a parser. Every command receipt is retained within 256MiB aggregate. Native wide inventory remains an observation of platform software, not a comprehensive platform acceptance proof.</p>
+<p>Readiness loops retry READS ONLY: one monotonic global setup-readiness deadline
+300s and one shared maximum of 60 complete attempts across Calico, application
+endpoints and runtime inventory, starting at the first Calico readiness phase.
+Intervening policy/workload applications consume elapsed wall time but must not
+reset that deadline or attempt budget. Per-read/wait command timeout at most10s
+and no greater than remaining time (wait itself1s), sleep0.5s max between read
+sets. No request/mutation retries. Retry only an explicitly classified
+<code>ReadPending</code> from an authenticated, structurally valid observation of a known
+not-yet-ready state. Nonzero native status, malformed/schema errors, ownership
+or UID/container/endpoint drift stop setup immediately. Do not catch broad
+ValueError/KeyError/TypeError as pending. Bind initial application identities
+without allowing another inventory attempt to replace existing anchors; fresh
+bracket comparisons must reject any replacement. Every command receipt is
+retained within 256MiB aggregate. Native wide inventory remains an observation
+of platform software, not a comprehensive platform acceptance proof.</p>
+<p>The Calico readiness adapter is an explicit narrow source projection, not
+canonicalization of a native object into an incompatible flattened schema.
+Require the native apps/v1 DaemonSet or Deployment, expected kube-system name,
+nonempty UID/resourceVersion, dict spec.template.spec and exact container arrays.
+Copy only metadata namespace/name/uid/resourceVersion; from native
+spec.template.spec copy regular/init container name/image pairs (absent
+initContainers means an empty array); copy DS desiredNumberScheduled/numberReady
+or Deployment replicas/readyReplicas as exact nonnegative integer counts. Retain
+the full native command receipt and separately persist the canonical projection
+and its commitment, explicitly labelled readiness/configuration projection.
+Pass the closed projection to the unchanged existing Calico parser; wrong image
+requests, unexpected/duplicate containers or malformed native structure are hard
+errors, not pending. Only validated expected containers and incomplete readiness
+counts may produce ReadPending; no missing identity or malformed count is repaired.
+Tests must supply real native-shaped nested templates and extra native metadata,
+spec, container and status fields, not preflattened objects pretending to be the
+native command response. This does not prove the independently expected platform
+image identities, comprehensive Calico configuration or full Kind/Calico acceptance.</p>
 <p>Application ownership selection: select exactly one Pod per track+role, no deleting/restarted Pod or extra application-namespace Pod. App Pod ownerReferences exactly one controlling ReplicaSet; ReplicaSet owner exactly one controlling Deployment with expected role, namespace/run annotation and sole reviewed Pod template; join exact UIDs, confirm Deployment/ReplicaSet desired/ready1 and observedGeneration current. Driver Pod has no owner and exact run annotation. Fixed rendered commands, resources, volumes and safety flags are checked against native Pods, allowing only independently documented API/scheduling/CNI defaults; do not silently strip arbitrary fields. Bind requested/spec image separately from CRI-derived runtime image and ImageRef. A source is read only using the selected exact Pod from the readiness anchor.</p>
 <p>Reuse the existing pure partial ownership and application configuration validators
 instead of reimplementing their API defaults. These validators do not depend on

@@ -232,7 +232,7 @@ action instructions still have the stricter PrivateStore TRACKS/uncertainty latc
 | 10 | kind_load_command twice exact accepted refs | Accepted KIL and Envoy content only |
 | 11 | authenticated node image CRI inspect commands and node-store images check | Existing validate_node_image_references proves two application alias branches; no platform-image proof |
 | 12 | kubectl_apply_calico_command exact private vendored bytes | Retained profile checksum verified before start and rechecked before apply; no upstream download/substitution |
-| 13 | two kubectl_calico_workload_command reads | Canonicalize duplicate-safe decoded native response before existing parse_calico_runtime_workload; desired/ready 1/1 |
+| 13 | two kubectl_calico_workload_command reads | Retain full duplicate-safe decoded native response; explicitly project nested native template containers, identity and readiness counts into the existing closed parse_calico_runtime_workload input; desired/ready 1/1 |
 | 14 | kubectl_apply_command canonical Lists: namespaces, policies, then non-Pod workloads | Default-deny applied and read back BEFORE workloads/drivers; no manifest alteration |
 | 15 | nine kubectl_workload_ready_command reads and nine kubectl_ready_endpoint_command reads | Each service EndpointSlice ready one, exact Pod UID/IP, retained responses |
 | 16 | read applied exact rendered non-Pod objects via `get --filename - --output json` | Existing validate_applied_objects with profile/workload proves source config/service allocations; save returned allocation bindings |
@@ -258,7 +258,40 @@ payloads = [canonical({'apiVersion': 'v1', 'kind': 'List', 'items': group}) for 
 
 Node image proof expected inputs are constructed only from ACCEPTED_IMAGES: KIL root media type application/vnd.oci.image.manifest.v1+json, allowed tag exactly its requested_image, allowed digest kil.local/kil-v3b2@target; Envoy root media application/vnd.oci.image.index.v1+json, no tag, allowed digest exactly its requested_image; saved_container_image is config_digest, not root. Two `RawObservation` labels cri_image_0/cri_image_1 (stdout <=16KiB) and node_images (<=256KiB); exact command env/argv and bound OwnedIdentity feed validate_node_image_references. Save canonical proof bindings, not strict completion flags.
 
-Readiness loops retry READS ONLY: monotonic global setup-readiness deadline 300s, per-read/wait command timeout at most10s (wait itself1s), sleep0.5s max between read sets, <=60 complete attempts. No request/mutation retries. Native errors stop setup rather than weakening a parser. Every command receipt is retained within 256MiB aggregate. Native wide inventory remains an observation of platform software, not a comprehensive platform acceptance proof.
+Readiness loops retry READS ONLY: one monotonic global setup-readiness deadline
+300s and one shared maximum of 60 complete attempts across Calico, application
+endpoints and runtime inventory, starting at the first Calico readiness phase.
+Intervening policy/workload applications consume elapsed wall time but must not
+reset that deadline or attempt budget. Per-read/wait command timeout at most10s
+and no greater than remaining time (wait itself1s), sleep0.5s max between read
+sets. No request/mutation retries. Retry only an explicitly classified
+`ReadPending` from an authenticated, structurally valid observation of a known
+not-yet-ready state. Nonzero native status, malformed/schema errors, ownership
+or UID/container/endpoint drift stop setup immediately. Do not catch broad
+ValueError/KeyError/TypeError as pending. Bind initial application identities
+without allowing another inventory attempt to replace existing anchors; fresh
+bracket comparisons must reject any replacement. Every command receipt is
+retained within 256MiB aggregate. Native wide inventory remains an observation
+of platform software, not a comprehensive platform acceptance proof.
+
+The Calico readiness adapter is an explicit narrow source projection, not
+canonicalization of a native object into an incompatible flattened schema.
+Require the native apps/v1 DaemonSet or Deployment, expected kube-system name,
+nonempty UID/resourceVersion, dict spec.template.spec and exact container arrays.
+Copy only metadata namespace/name/uid/resourceVersion; from native
+spec.template.spec copy regular/init container name/image pairs (absent
+initContainers means an empty array); copy DS desiredNumberScheduled/numberReady
+or Deployment replicas/readyReplicas as exact nonnegative integer counts. Retain
+the full native command receipt and separately persist the canonical projection
+and its commitment, explicitly labelled readiness/configuration projection.
+Pass the closed projection to the unchanged existing Calico parser; wrong image
+requests, unexpected/duplicate containers or malformed native structure are hard
+errors, not pending. Only validated expected containers and incomplete readiness
+counts may produce ReadPending; no missing identity or malformed count is repaired.
+Tests must supply real native-shaped nested templates and extra native metadata,
+spec, container and status fields, not preflattened objects pretending to be the
+native command response. This does not prove the independently expected platform
+image identities, comprehensive Calico configuration or full Kind/Calico acceptance.
 
 Application ownership selection: select exactly one Pod per track+role, no deleting/restarted Pod or extra application-namespace Pod. App Pod ownerReferences exactly one controlling ReplicaSet; ReplicaSet owner exactly one controlling Deployment with expected role, namespace/run annotation and sole reviewed Pod template; join exact UIDs, confirm Deployment/ReplicaSet desired/ready1 and observedGeneration current. Driver Pod has no owner and exact run annotation. Fixed rendered commands, resources, volumes and safety flags are checked against native Pods, allowing only independently documented API/scheduling/CNI defaults; do not silently strip arbitrary fields. Bind requested/spec image separately from CRI-derived runtime image and ImageRef. A source is read only using the selected exact Pod from the readiness anchor.
 

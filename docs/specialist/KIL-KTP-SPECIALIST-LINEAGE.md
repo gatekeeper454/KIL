@@ -18372,3 +18372,66 @@ based on the current 56-test GREEN alone. Only the root may consider the
 separate native execution gate after all reviews and its static verification.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-354 — 2026-09-16 — Root resolves native readiness integration findings before live execution
+
+**Input:** The user approved proceeding with the narrower exploratory live HF
+test. Independent native specification review T-353 found broad read-error
+retries, three reset readiness budgets and a native Calico wire-format mismatch.
+
+**Interpretation:** These are preparatory implementation gaps within the
+approved separate exploratory lifecycle, not grounds to resume the platform
+image-provenance audit or reinterpret test-owned GREEN as live compatibility.
+Root inspected the native setup/read_until/inventory code and unchanged closed
+Calico parser. The factory returns nested spec.template.spec containers while
+the parser requires a documented closed projection; canonicalization alone
+cannot perform that mapping.
+
+**Decision status:** Confirmed implementation-plan clarification: retain the
+full native raw response, explicitly persist a narrow Calico readiness/config
+projection and feed that to the unchanged parser. Require ReadPending-only
+authenticated readiness retries, immediate hard stops for native errors/schema
+or identity drift, nonreplaceable initial anchors and one shared 300-second/
+60-attempt setup readiness budget. The user has been notified of the mapping
+adjustment. The approved test scope, native mutation authority, three maximum
+harmless action instructions and unverified provenance/acceptance labels remain
+unchanged. No native execution is yet authorized by completed code review.
+
+**Rationale:** The source/parser mismatch is a concrete local integration
+issue, not evidence of a particular live platform failure. An explicit retained
+projection accurately identifies what is checked and avoids both fabricated
+native fixtures and any weakening of the strict parser. Known not-ready states
+can be polled without treating native transport errors or observed replacements
+as recoverable readiness. A global budget bounds the complete setup readiness
+sequence rather than each stage separately.
+
+Fresh committed focused verification at 1e5e6e0 passed 106 tests in 7.038 seconds
+with ResourceWarnings as errors, including the four new units and strict future
+controller boundary guard. This does not satisfy the independently reproduced
+missing native safety gates. An earlier sandbox full discovery run completed
+1660 tests in 841.225 seconds with seven failures and 16 expected skips: all
+failure traces were existing Envoy producer tests denied Bash /dev/fd handles.
+Two affected unchanged tests passed outside the sandbox in 0.019 seconds. A
+full outside-sandbox rerun is still running and has one unresolved failure;
+its final trace and a fresh focused reproduction remain required. No broad
+passing claim, native compatibility claim or live HF result is made.
+
+**Affected artifacts:** Updated native lifecycle implementation plan Markdown
+and its generated HTML reader; this appended lineage Markdown/HTML. Native
+source corrections and owned failing-first regressions are delegated back to
+the original unit implementer after this clarification is committed. Earlier
+lineage bytes remain intact.
+
+**Unresolved questions:** Native correction and repeat independent SPEC/quality
+review, broad-run failure diagnosis, final composed-source review and real
+request-free setup/capture/teardown rehearsal remain open. Actual live action
+and exact environment observations do not yet exist. Platform-image provenance
+and full Kind/Calico acceptance remain explicitly unverified.
+
+**Next gate:** Original implementer demonstrates the three corrections with
+owned RED/GREEN tests; repeat independent SPEC review, then independent quality
+review. Only after complete source review and root verification may the separate
+CLI attempt request-free rehearsal and one fresh three-track action. Runtime
+uncertainty is inconclusive and cannot cause an automatic native replay.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
