@@ -17962,3 +17962,60 @@ review the native unit. The launcher proceeds automatically through rehearsal
 then one fresh action only if all existing readiness and teardown gates pass.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-348 — 2026-09-16 — Independent pure HF case specification review
+
+**Input:** Independently review commit e6240eb's pure exploratory case unit,
+src/kil/hf_exploratory_case.py and tests/test_hf_exploratory_case.py, against
+the retained instruction, bounded JSONL, frozen identity, complete producer
+join and narrow partial Pod observation contracts. No implementation edits,
+native operations, live requests or downloads are authorized for this review.
+
+**Interpretation:** This is the specification gate before quality review and
+native implementation, not an acceptance or provenance determination. Actual
+code and producer adapter semantics were inspected independently. Root T-347
+was committed as d3089c3 before this entry was appended at actual EOF.
+
+**Decision status:** Not specification-compliant yet: two demonstrated boundary
+gaps require correction. The six focused tests pass, but do not cover these
+counterexamples. No implementation or native changes were made by the reviewer.
+
+**Rationale:** At case lines 60-63, frozen_source accepts equal empty dictionaries
+or equal UID/container-ID dictionaries omitting resource_version; its dictionary
+equality check cannot establish that required source identity is present. Both
+counterexamples returned successful empty-source SHA-256/count records. Require
+nonempty uid, container_id and resource_version fields before accepting the
+unchanged identity, and test omitted/empty fields separately. At lines 42-45,
+records checks the payload's terminal LF but bytes.splitlines also splits a bare
+CR: records(b'{}\\r{"x":1}\\n') returned two records even though the first had no
+LF terminator. Split only on LF, preserve the valid empty payload, and reject
+bare-CR-separated/truncated records while allowing ordinary JSON whitespace.
+
+Instruction constants match the retained fixture on inspection. Complete joins
+delegate to the existing producer adapter, retain observed reasons and classify
+a complete unexpected tuple rather than retrying. The Pod fixture independently
+uses requested/runtime root b-times-64 versus imageID config c-times-64, and the
+partial observation disclaims provenance/full-Pod acceptance. Independent exact
+signed-claims/key assertions and broader negative Pod identity/security/status
+coverage remain useful test strengthening; they do not replace the two required
+boundary regressions. Focused verification used PYTHONDONTWRITEBYTECODE=1,
+PYTHONPATH=src and the project's .venv/bin/python with -W error::ResourceWarning:
+python -m unittest tests.test_hf_exploratory_case -v returned six passing tests
+(0.083 seconds). Separate read-only probes demonstrated both gaps.
+
+**Affected artifacts:** This appended lineage Markdown and regenerated HTML
+reader only. Reviewed implementation/tests, strict launcher, native plan,
+completion flags and lifecycle deferrals remain unchanged.
+
+**Unresolved questions:** Required boundary fixes and their independent
+specification re-review, subsequent quality review, native implementation and
+reviews, request-free rehearsal, joined live evidence, platform provenance and
+full Kind/Calico acceptance remain unresolved. Passing pure tests establishes
+none of the live gates.
+
+**Next gate:** Original implementer corrects required identity presence and
+LF-only record framing with focused negative tests; independently re-review the
+result before quality/native gates. No request retry or native execution is
+authorized by this review result.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
