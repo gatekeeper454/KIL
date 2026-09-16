@@ -16356,3 +16356,75 @@ lineage Markdown/reader, and return lineage ownership to the coordinator for
 independent Task 3 quality review before Task 4 static acceptance.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-321 — 2026-09-16 — Independent Task 3 quality review approved
+
+**Input:** The coordinator requested independent Task 3 quality review after
+specification approval at `80b54ba`, reviewing the implemented test range
+`a5a4f61..88d4b25` against the approved configuration-composition design and plan.
+Read the actual 129-line fixture helper, 299-line test module and 234-line
+production aggregate; run fresh focused tests without duplicating the separately
+running full repository verifier. Exclusive lineage ownership was delegated for
+this documentation-only review. Do not fix, publish, push or perform live calls.
+
+**Interpretation:** Apply the requesting-code-review template and the
+subagent-driven-development quality gate only after specification approval.
+Assess maintainability, real validator behavior, independent observations,
+constructor replay, error provenance, unchanged contracts and scoped file growth.
+Use verification-before-completion evidence before approving; preserve the
+coordinator-owned dirty plan Markdown/reader and untracked execution synopsis.
+
+**Decision status:** Confirmed Task 3 quality approval, with no critical,
+important or minor issues identified. Ready to proceed to Task 4 combined
+regression and bounded static acceptance, not a merge/publication or overall
+completion authorization. No effective platform image, status/readiness,
+runtime/application, V4 or V3C completion claim is established.
+
+**Rationale:** The small test helpers express heterogeneous retained ownership
+paths explicitly and share both-boundary rejection checks without mocks or
+production candidate factories. Complete alternative inventories accept and
+constructor-replay before all ten individual input mixes are rejected. The
+fixture merges only independent observation deltas, rejects conflicts and uses
+test-owned literals or checksummed Calico projection plus independent admitted
+serialization. Exact dependency types, subclasses/lookalikes, fixed cardinality,
+canonical coverage, forged nested records and singleton-false flags are exercised
+with attributable subtests. The files remain cohesive and reviewable; Task 3
+changes neither production nor fixture and adds no skip or relaxed contract.
+
+Read-only additional diagnostics independently replayed the ownership retained
+by each of the nine image-drift components successfully, directly invoked each
+real component reconstruction, and confirmed the aggregate validator and
+constructor chain that exact component-specific configuration error class.
+Thus those cases reject at component reconstruction, not merely the later
+ownership comparison. Existing earlier profile, endpoint and Calico content-lock
+boundaries are correctly distinguished from valid complete authority variants.
+Malformed retained JSON preserves the local evidence error's cause, and the
+production aggregate uses bounded malformed-evidence exceptions rather than a
+catch-all. No new RED/GREEN cycle is claimed for previously implemented contracts.
+
+**Affected artifacts:** Appended this entry at the actual lineage EOF and
+regenerated the lineage reader. Reviewed production, fixture, tests and all
+previous lineage entries remain unchanged. Coordinator-owned plan Markdown/
+reader and untracked synopsis are excluded from this documentation-only commit.
+
+**Verification:** Fresh execution with the approved environment interpreter,
+PYTHONDONTWRITEBYTECODE=1 and PYTHONPATH=src ran the requested focused module:
+26 total methods in 33.406 seconds, 26 successful methods, zero failures, errors
+or skips. The additional no-mock component-cause diagnostic exited zero and
+confirmed all nine exact cause classes at both aggregate boundaries. Git diff
+inspection independently confirmed production and fixture are unchanged in the
+Task 3 range. Reader regeneration, all 78 tracked reader byte checks and diff
+checks precede the explicit lineage-only commit; no duplicate full suite was run.
+
+**Unresolved questions:** Task 4 adjacent component/ownership/source and full
+repository acceptance, followed by final specification and quality review,
+remain separate gates. Platform effective-image authority and component-specific
+status/readiness still require independent design and evidence. The sixteen
+deferred lifecycle tests remain unchanged and outside this static slice.
+
+**Next gate:** Commit only the verified lineage Markdown/reader and return
+exclusive lineage ownership to the coordinator for Task 4 evidence collation
+and bounded static acceptance. This quality review authorizes no live Docker,
+Colima, Kind, kubectl, collector, controller or profile operations.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
