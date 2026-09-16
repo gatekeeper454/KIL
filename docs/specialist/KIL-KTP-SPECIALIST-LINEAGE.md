@@ -17535,3 +17535,60 @@ review before any later native-orchestration gate. No instruction retry or repla
 any malformed or incomplete terminal permanently blocks subsequent tracks.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-340 — 2026-09-16 — Corrected bounded exploratory IO specification approval
+
+**Input:** Independently re-review correction 5d3ebda against previous review
+701250e and the durable IO requirements. Inspect actual source and tests, freshly
+verify both confirmed gaps, and avoid native tools, factory, lab or download actions.
+
+**Interpretation:** This is the bounded IO specification re-review gate only.
+Approval does not establish native lifecycle safety, runtime readiness, platform
+provenance, live enforcement evidence or strict acceptance.
+
+**Decision status:** Corrected bounded IO unit approved against the reviewed
+specification. Both T-338 gaps are closed in actual code; no additional bounded
+IO specification gap was identified. Fresh focused verification passed 26 tests
+with ResourceWarning promoted to errors, zero failures/errors/skips.
+
+**Rationale:** BoundedRunner.run now authenticates exact retained manifest_bytes
+against fixed ACCEPTED_MANIFEST_SHA256 at every dispatch, derives fresh accepted
+tool records from those authenticated bytes, and refuses caller metadata unless
+it has the exact three names, matching values and field types. Docker, Kind and
+kubectl dispatch selection depends on the fixed tool-name set, not mutable record
+membership. Their retained absolute executable is bounded-read and checked against
+the freshly derived accepted digest/size immediately before capture. Missing rows,
+matching arbitrary byte/digest substitutions, malformed authority, substituted
+manifest and post-construction manifest mutation all fail before mocked dispatch.
+The tests use the tracked authenticated manifest and inert/test-owned inputs,
+not accepted executable execution.
+
+PrivateStore.send_once preserves each record's actual framing through
+splitlines(keepends=True), checks the one-or-two-record count, and passes unchanged
+record bytes to parse_result. Missing LF and CRLF regressions now reject and keep
+uncertainty latched; later instructions are refused. Supplemental fresh local
+diagnostics confirmed readiness-plus-complete succeeds, while readiness-only,
+wrong expected track, duplicate result and empty output permanently block the
+next track. These used test-owned temporary stores and harmless callbacks only.
+
+The original closed-command, environment, capture/time/output bounds, owned
+session, durable intent-before-action, exact request sequence, private-store
+anchor/permission/quota and close-refusal requirements remain unchanged by the
+correction and were re-inspected with the focused tests. No retries or replay
+mechanism, strict lifecycle edit or completion-flag change was introduced.
+
+**Affected artifacts:** Append this independent review at actual lineage EOF and
+regenerate only its HTML reader. Module, tests and reviewed plans are not changed
+by the reviewer. Root committed its case/native plans separately as f7ee717;
+neither those plans nor their readers belong to this lineage-only review commit.
+
+**Unresolved questions:** Independent quality review remains required and may
+identify failure-path or resource-handling edge cases beyond this specification
+re-review. Native lifecycle/evidence gates, request-free rehearsal, platform-image
+provenance and strict acceptance remain unestablished.
+
+**Next gate:** Independent quality review of the corrected bounded IO unit,
+with any failing-first corrections and re-review before native orchestration.
+No instruction, retry or replay is authorized by this pure IO review.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
