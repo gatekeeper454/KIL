@@ -6,7 +6,7 @@
 <title>Isolated exploratory HF launcher repair Implementation Plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-16-hf-exploratory-launcher-repair.md">
-<meta name="source-sha256" content="5f998b6ddcc9ba7fcbee9bc56684c0258c67b1491a2b7856a8da221d0becccaa">
+<meta name="source-sha256" content="3f55ced0c3c7a9a049050dd7de441ec35181121283eba7451b8f2c833e91bd46">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,14 +55,14 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-exploratory-launcher-repair.md</code> (<code>5f998b6ddcc9ba7fcbee9bc56684c0258c67b1491a2b7856a8da221d0becccaa</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-exploratory-launcher-repair.md</code> (<code>3f55ced0c3c7a9a049050dd7de441ec35181121283eba7451b8f2c833e91bd46</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Isolated exploratory HF launcher repair Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-exploratory-launcher-repair.md</code> (<code>5f998b6ddcc9ba7fcbee9bc56684c0258c67b1491a2b7856a8da221d0becccaa</code>); edit the Markdown source, not this reader.</p></div>
-<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#isolated-exploratory-hf-launcher-repair-implementation-plan">Isolated exploratory HF launcher repair Implementation Plan</a></li><li class="level-2"><a href="#approved-scope-and-execution-constraints">Approved scope and execution constraints</a></li><li class="level-2"><a href="#file-structure-and-stable-interfaces">File structure and stable interfaces</a></li><li class="level-3"><a href="#task-1-derived-runtime-authority-and-finite-colima-adapter">Task 1: Derived runtime authority and finite Colima adapter</a></li><li class="level-3"><a href="#task-2-exact-exploratory-saved-forms-and-resource-binding">Task 2: Exact exploratory saved forms and resource binding</a></li><li class="level-3"><a href="#task-3-integrate-two-inventory-domains-and-frozen-evidence-lifetime">Task 3: Integrate two inventory domains and frozen evidence lifetime</a></li><li class="level-2"><a href="#final-verification-and-next-gate">Final verification and next gate</a></li><li class="level-2"><a href="#plan-self-review-2026-09-16">Plan self-review — 2026-09-16</a></li></ol></nav></details><div class="reader-layout">
-<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="isolated-exploratory-hf-launcher-repair-implementation-plan" href="#isolated-exploratory-hf-launcher-repair-implementation-plan">Isolated exploratory HF launcher repair Implementation Plan</a></li><li class="level-2"><a data-section-id="approved-scope-and-execution-constraints" href="#approved-scope-and-execution-constraints">Approved scope and execution constraints</a></li><li class="level-2"><a data-section-id="file-structure-and-stable-interfaces" href="#file-structure-and-stable-interfaces">File structure and stable interfaces</a></li><li class="level-3"><a data-section-id="task-1-derived-runtime-authority-and-finite-colima-adapter" href="#task-1-derived-runtime-authority-and-finite-colima-adapter">Task 1: Derived runtime authority and finite Colima adapter</a></li><li class="level-3"><a data-section-id="task-2-exact-exploratory-saved-forms-and-resource-binding" href="#task-2-exact-exploratory-saved-forms-and-resource-binding">Task 2: Exact exploratory saved forms and resource binding</a></li><li class="level-3"><a data-section-id="task-3-integrate-two-inventory-domains-and-frozen-evidence-lifetime" href="#task-3-integrate-two-inventory-domains-and-frozen-evidence-lifetime">Task 3: Integrate two inventory domains and frozen evidence lifetime</a></li><li class="level-2"><a data-section-id="final-verification-and-next-gate" href="#final-verification-and-next-gate">Final verification and next gate</a></li><li class="level-2"><a data-section-id="plan-self-review-2026-09-16" href="#plan-self-review-2026-09-16">Plan self-review — 2026-09-16</a></li></ol></nav>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-exploratory-launcher-repair.md</code> (<code>3f55ced0c3c7a9a049050dd7de441ec35181121283eba7451b8f2c833e91bd46</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#isolated-exploratory-hf-launcher-repair-implementation-plan">Isolated exploratory HF launcher repair Implementation Plan</a></li><li class="level-2"><a href="#approved-scope-and-execution-constraints">Approved scope and execution constraints</a></li><li class="level-2"><a href="#file-structure-and-stable-interfaces">File structure and stable interfaces</a></li><li class="level-3"><a href="#task-1-derived-runtime-authority-and-finite-colima-adapter">Task 1: Derived runtime authority and finite Colima adapter</a></li><li class="level-3"><a href="#task-2-exact-exploratory-saved-forms-and-resource-binding">Task 2: Exact exploratory saved forms and resource binding</a></li><li class="level-3"><a href="#task-3-integrate-two-inventory-domains-and-frozen-evidence-lifetime">Task 3: Integrate two inventory domains and frozen evidence lifetime</a></li><li class="level-2"><a href="#final-verification-and-next-gate">Final verification and next gate</a></li><li class="level-2"><a href="#plan-self-review-2026-09-16">Plan self-review — 2026-09-16</a></li><li class="level-2"><a href="#execution-outcome-2026-09-16">Execution outcome — 2026-09-16</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="isolated-exploratory-hf-launcher-repair-implementation-plan" href="#isolated-exploratory-hf-launcher-repair-implementation-plan">Isolated exploratory HF launcher repair Implementation Plan</a></li><li class="level-2"><a data-section-id="approved-scope-and-execution-constraints" href="#approved-scope-and-execution-constraints">Approved scope and execution constraints</a></li><li class="level-2"><a data-section-id="file-structure-and-stable-interfaces" href="#file-structure-and-stable-interfaces">File structure and stable interfaces</a></li><li class="level-3"><a data-section-id="task-1-derived-runtime-authority-and-finite-colima-adapter" href="#task-1-derived-runtime-authority-and-finite-colima-adapter">Task 1: Derived runtime authority and finite Colima adapter</a></li><li class="level-3"><a data-section-id="task-2-exact-exploratory-saved-forms-and-resource-binding" href="#task-2-exact-exploratory-saved-forms-and-resource-binding">Task 2: Exact exploratory saved forms and resource binding</a></li><li class="level-3"><a data-section-id="task-3-integrate-two-inventory-domains-and-frozen-evidence-lifetime" href="#task-3-integrate-two-inventory-domains-and-frozen-evidence-lifetime">Task 3: Integrate two inventory domains and frozen evidence lifetime</a></li><li class="level-2"><a data-section-id="final-verification-and-next-gate" href="#final-verification-and-next-gate">Final verification and next gate</a></li><li class="level-2"><a data-section-id="plan-self-review-2026-09-16" href="#plan-self-review-2026-09-16">Plan self-review — 2026-09-16</a></li><li class="level-2"><a data-section-id="execution-outcome-2026-09-16" href="#execution-outcome-2026-09-16">Execution outcome — 2026-09-16</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
 <h1 id="isolated-exploratory-hf-launcher-repair-implementation-plan">Isolated exploratory HF launcher repair Implementation Plan</h1>
 <blockquote>
@@ -129,7 +129,7 @@ maintain original protection assertions and add composition regressions.</li>
 </ul>
 <h3 id="task-1-derived-runtime-authority-and-finite-colima-adapter">Task 1: Derived runtime authority and finite Colima adapter</h3>
 <ul>
-<li>[ ] Write a behavior assertion before implementing the missing module:</li>
+<li>[x] Write a behavior assertion before implementing the missing module:</li>
 </ul>
 <pre><code class="language-python">def test_runtime_is_a_fresh_receipt_sibling(self):
     self.assertIsNotNone(importlib.util.find_spec('kil.hf_exploratory_runtime'),
@@ -152,7 +152,7 @@ each failing assertion to ensure no descriptor leak. Run
 authority is missing, not an import error.</p>
 <ul>
 <li>
-<p>[ ] Implement creation only after RED. Validate lowercase 64-hex digest and
+<p>[x] Implement creation only after RED. Validate lowercase 64-hex digest and
 exact matching receipt basename, receipt live fd identity, canonical absolute
 parent with the expected <code>.tools/hf-exploratory-private</code> suffix, effective-uid
 ownership/private mode. Open each ancestor with <code>_parent</code>; retain parent fd.
@@ -165,7 +165,7 @@ root/Colima/Lima/Docker/tmp deletion, symlink, inode/mode/owner substitution
 refuses. Guard does not freeze mutable native directory contents.</p>
 </li>
 <li>
-<p>[ ] Add failing adapter tests for exact four namespace variables, foreign
+<p>[x] Add failing adapter tests for exact four namespace variables, foreign
 env, non-Colima argv, subclass/wrong authority, grammar substitution and a
 deleted/replaced private Colima home. Implement the finite wrapper:</p>
 </li>
@@ -199,19 +199,19 @@ class ExploratoryColimaCommand:
                 ('TMPDIR', str(self.authority.tmp)))
 </code></pre>
 <ul>
-<li>[ ] Add failing exclusive-control tests: only kind-config.yaml, bytes &lt;=64K,
+<li>[x] Add failing exclusive-control tests: only kind-config.yaml, bytes &lt;=64K,
 no overwrite, no symlink adoption, stale authority refuses. Implement write
 with guarded root fd, O_EXCL|O_NOFOLLOW mode600, full write loop/fsync and root
 fsync. Derived kubeconfig is a native output, not written by this helper.</li>
-<li>[ ] Run runtime tests and existing IO/native tests; expect all pass with
+<li>[x] Run runtime tests and existing IO/native tests; expect all pass with
 runtime not yet integrated. Self-review; append lineage, render/check readers,
 diff-check, commit <code>feat: bind exploratory Colima to isolated runtime state</code>.</li>
-<li>[ ] Independent SPEC review followed by QUALITY review; correct/re-review
+<li>[x] Independent SPEC review followed by QUALITY review; correct/re-review
 any important issue with test-first corrections before Task 2.</li>
 </ul>
 <h3 id="task-2-exact-exploratory-saved-forms-and-resource-binding">Task 2: Exact exploratory saved forms and resource binding</h3>
 <ul>
-<li>[ ] Write independent full generated-instance bytes from the retained failure
+<li>[x] Write independent full generated-instance bytes from the retained failure
 (not from the parser under test). The saved profile retains empty dnsHosts;
 instance has exactly this two-line block within the network section:</li>
 </ul>
@@ -233,13 +233,13 @@ capacities and 512 zero header bytes; no VM disk contents or native tools.
 Run <code>tests.test_hf_exploratory_profile -v</code>; expect the named missing-feature
 assertion before production code.</p>
 <ul>
-<li>[ ] Implement derived ProfilePaths with actual home + runtime (not fake HOME).
+<li>[x] Implement derived ProfilePaths with actual home + runtime (not fake HOME).
 Require exact lowercase digest runtime basename and private parent shape.
 Pure document decoding accepts exactly two string fields. Collector paths
 are runtime/.colima, its _lima, kil-v3-lab, colima-kil-v3-lab disk/instance,
 _store/name.json and runtime/runtime-tmp/name.yaml. Re-export collectors only
 where useful; never edit strict code.</li>
-<li>[ ] Implement exact instance syntax recognition, followed by strict scalar
+<li>[x] Implement exact instance syntax recognition, followed by strict scalar
 validation on an internal validation-only copy; raw observations stay intact:</li>
 </ul>
 <pre><code class="language-python">def parse_saved_instance(payload):
@@ -253,40 +253,40 @@ validation on an internal validation-only copy; raw observations stay intact:</l
     return result
 </code></pre>
 <ul>
-<li>[ ] Add failing negative tests for wrong alias/value, extra/duplicate hosts,
+<li>[x] Add failing negative tests for wrong alias/value, extra/duplicate hosts,
 duplicate dnsHosts, tags/anchors, extra keys/mounts, profile generated mapping,
 instance empty mapping, ambiguous indentation and byte overflow. Verify RED
 individually before adding corresponding rejection where not already strict.</li>
-<li>[ ] Implement creation binding with <code>validate_capture</code>, protected/startup
+<li>[x] Implement creation binding with <code>validate_capture</code>, protected/startup
 absence, eight concrete directory/file identities, strict profile parse,
 generated instance parse, raw byte hashes, raw60GiB data/raw20GiB root, full
 Lima bytes/hash, exact lock target equal to the derived private instance.
 Return existing six-field binding schema; validate_binding remains strict.
 No capture normalization enters the binding or receipt.</li>
-<li>[ ] Write failing changed-resource/stopped/absence tests. Recompute the same
+<li>[x] Write failing changed-resource/stopped/absence tests. Recompute the same
 binding before mutation; stopped missing lock is admitted only as an internal
 pure validation probe with corresponding directory entry. Protected or
 substituted config/disk/id/lock remains rejected. Absence requires no profile,
 instance, disk or startup and absent/exact zero native store. No orphan cleanup.</li>
-<li>[ ] Run runtime/profile tests plus strict profile tests; all pass and strict
+<li>[x] Run runtime/profile tests plus strict profile tests; all pass and strict
 source/tests unchanged. Append lineage, render/check, diff-check; commit
 <code>fix: bind exact exploratory Colima generated configuration</code>.</li>
-<li>[ ] Independent SPEC then QUALITY review, test-first corrections and re-review.</li>
+<li>[x] Independent SPEC then QUALITY review, test-first corrections and re-review.</li>
 </ul>
 <h3 id="task-3-integrate-two-inventory-domains-and-frozen-evidence-lifetime">Task 3: Integrate two inventory domains and frozen evidence lifetime</h3>
 <ul>
-<li>[ ] Migrate native fixtures to the exact source-bound receipt basename and
+<li>[x] Migrate native fixtures to the exact source-bound receipt basename and
 private runtime layout, patch only passwd-home lookup to temporary user home.
 Preserve original fixed-track/no-replay/incarnation assertions. Fake Colima
 dispatch differentiates default read-only list from private adapter env and
 writes the independent exact generated config form under private paths.
 Do not mock guards or binding in composition regressions.</li>
-<li>[ ] Write failing runtime dispatch tests in existing IO tests: scoped commands
+<li>[x] Write failing runtime dispatch tests in existing IO tests: scoped commands
 use four derived variables with true passwd HOME, inherited overrides absent,
 strict extra-env Command still rejects, replaced home refuses before Popen.
 Implement exact-type adapter recognition and guard both at entry and after
 tool verification, immediately before bounded capture. Keep bounds unchanged.</li>
-<li>[ ] Write failing native composition assertions before wiring the lifecycle:</li>
+<li>[x] Write failing native composition assertions before wiring the lifecycle:</li>
 </ul>
 <pre><code class="language-python">def test_same_name_default_profile_remains_foreign(self):
     from tests.test_v3b2_profile_state import create_profile
@@ -323,13 +323,13 @@ def test_native_context_removal_does_not_invalidate_receipts(self):
 <p>Use the existing full lifecycle double as the starting point; retain real
 binding/receipt validation. Tests observe production behavior, not just calls.</p>
 <ul>
-<li>[ ] Lifecycle creates RuntimeAuthority from live Store + workload digest and
+<li>[x] Lifecycle creates RuntimeAuthority from live Store + workload digest and
 owns descriptors. <code>close()</code> releases descriptors only. Move identity kubeconfig
 to runtime.kubeconfig and derive Docker/Kind env from runtime. Keep a separate
 strict default ProfilePaths(actual_home, receipt). Wrap scoped empty-env Colima
 commands; default inventory uses only exact plain read-only list through an
 explicit global dispatch path. No arbitrary global Colima mutation.</li>
-<li>[ ] Guard runtime on every dispatch and exact commands before durable intent.
+<li>[x] Guard runtime on every dispatch and exact commands before durable intent.
 Preserve start/create/stop/delete one-attempt latches and intent-before-action.
 Private preflight bracket is complete/empty. Private live bracket allows only
 creation-bound kil-v3-lab and known reserved Lima entries, exact running/stopped
@@ -338,11 +338,11 @@ Default bracket includes EVERY row/child with no same-name filter. Snapshot
 <code>_config/networks.yaml</code> no-follow raw identity/bytes &lt;=64K and compare before/
 after; any default roster/file/config change fails. Preserve default Docker
 context/config identity and inherited/default kubeconfig commitments unchanged.</li>
-<li>[ ] Prepare canonical one-node kind config in both immutable Store and runtime
+<li>[x] Prepare canonical one-node kind config in both immutable Store and runtime
 exclusive control helper; Kind reads only runtime copy and use requires fresh
 exact retained-byte verification. Do not mkdir runtime dirs inside receipt.
 Keep Calico/object manifests immutable in Store and all workload joins unchanged.</li>
-<li>[ ] Evidence helper snapshots a finite set: runtime kind-config.yaml/kubeconfig,
+<li>[x] Evidence helper snapshots a finite set: runtime kind-config.yaml/kubeconfig,
 private profile+instance colima.yaml/lima.yaml, runtime Docker config.json and
 exact contexts/meta/SHA256(colima-kil-v3-lab)/meta.json. No generic directory
 walker. Use <code>_read</code>/no-follow helpers (64KiB per file, stable identity/full
@@ -351,29 +351,29 @@ canonical observed-only path/identity/size/hash ledger exclusively into Store.
 Guard before/after capture. Snapshot once before stop, also before reporting
 partial setup failures when safely observable. Snapshot failure refuses native
 cleanup rather than erasing evidence under uncertainty.</li>
-<li>[ ] Write RED tests for context removal, symlink/oversize/replaced snapshot
+<li>[x] Write RED tests for context removal, symlink/oversize/replaced snapshot
 targets, private network reset permitted, default network reset rejected,
 extra private profile rejected and stale controls refusing Kind. Implement
 immutable snapshots, default/private guard differentiation and commitment
 checks. Report explicit runtime vs receipt vs default paths and bounded,
 explicitly partial leftover directory observations after cleanup. Never
 recursively remove runtime siblings; native exact-owned deletion only.</li>
-<li>[ ] CLI finally closes lifecycle (if constructed) then Store. Construction
+<li>[x] CLI finally closes lifecycle (if constructed) then Store. Construction
 errors close authority fds. No new command-line options, retry or auto resume.</li>
-<li>[ ] Run runtime/profile/evidence/all four exploratory test modules plus strict
+<li>[x] Run runtime/profile/evidence/all four exploratory test modules plus strict
 profile/inventory/journal tests and driver boundary guards; expect all pass.
 Append lineage, readers/check, diff-check, commit
 <code>fix: isolate exploratory native lifecycle and freeze runtime evidence</code>.</li>
-<li>[ ] Independent SPEC then QUALITY review; correct and re-review all important
+<li>[x] Independent SPEC then QUALITY review; correct and re-review all important
 gaps. Final reviewer inspects the entire repair against the approved design.</li>
 </ul>
 <h2 id="final-verification-and-next-gate">Final verification and next gate</h2>
 <ul>
-<li>[ ] Fresh full unittest discovery with ResourceWarning fatal; distinguish
+<li>[x] Fresh full unittest discovery with ResourceWarning fatal; distinguish
 intentional opt-in skips from failures. No native opt-in variables enabled.</li>
-<li>[ ] Verify strict source/test diff empty relative to 89a641a, immutable earlier
+<li>[x] Verify strict source/test diff empty relative to 89a641a, immutable earlier
 lineage prefix, reader check, diff check, clean local source checkpoint.</li>
-<li>[ ] Record actual test counts/reviews/limitations, not native compatibility
+<li>[x] Record actual test counts/reviews/limitations, not native compatibility
 claims. Append root lineage and checkpoint. No merge, push or native test.</li>
 <li>[ ] Next user gate is permission for a fresh request-free PRIVATE native
 setup/capture/teardown rehearsal. Only a successful fully retained rehearsal
@@ -389,6 +389,61 @@ regressions, not redesign. Interface names above are shared across units.
 Negative cases receive RED verification before rejection changes; already
 rejected cases remain regression tests. No native operation is a plan step.</p>
 <p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+<h2 id="execution-outcome-2026-09-16">Execution outcome — 2026-09-16</h2>
+<p>The approved engineering design is implemented and independently reviewed.
+Task checkboxes record performed engineering steps; they do not assert a green
+full repository suite or authorize native execution. The last permission gate
+above remains unchecked.</p>
+<ul>
+<li>Task 1: derived RuntimeAuthority and closed Colima adapter; 28 runtime tests.</li>
+<li>Task 2: exact exploratory saved-form/resource binding; 18 profile tests.
+Two independent full saved YAML fixtures preserve their original bytes.
+The .gitattributes exception is limited to those two fixture paths, solely
+to retain native trailing-space blank lines.</li>
+<li>Task 3 was split into IO/evidence (3A) and Native/CLI composition (3B), with
+49 IO, 12 evidence and 116 Native tests. Real temporary filesystem authority,
+collectors and retained-byte binding remain active in composition tests;
+native process capture/command boundaries are doubled.</li>
+<li>Review corrections were test-first: fd/lock authority edges; late manifest,
+executable-path and exact metadata-map drift; durable-intent namespace and
+Kind consumer freshness; valid-command substitution and handoff latches.
+Final metadata regressions produced nine expected pre-fix failures.</li>
+<li>Final source checkpoint is 06e6c35. Runtime/profile/IO SPEC and QUALITY,
+Native SPEC/QUALITY and final composed review are approved. Final correction
+review receipts: bcef18a (SPEC), 1f0bb62 (QUALITY), 30376e2 (Native QUALITY),
+094c12f (final composed review). The composed reviewer independently passed
+73 targeted tests in 9.505s; Native QUALITY passed 116 in 37.735s.</li>
+</ul>
+<p>Root's fresh required 15-module suite passed <strong>410 tests in 93.542s</strong>, with
+ResourceWarning fatal and bytecode generation disabled. Fresh full repository
+discovery, with future-controller opt-in disabled and the preverified local
+AF_UNIX/bash descriptor fixtures allowed outside the sandbox, ran <strong>1,849 tests
+in 907.006s: one failure, 16 intentional skips, no errors</strong>. The failure is
+test_every_kil_authored_markdown_document_cites_ktp, identifying exactly four
+existing ignored immutable historical documents:</p>
+<ul>
+<li>.tools/hf-exploratory-private/hf-exploratory-4bf272a01cfdb5c96ab08a70def03ecbd7a29ef375bbe957ae0be6b991409bfe/synopsis.md</li>
+<li>.tools/hf-exploratory-private/hf-exploratory-5507a11d6dd49a2ddca0d2588e7ad484b2bcf808ec3744d05b1aa966a746d7e2/synopsis.md</li>
+<li>.tools/hf-recovery-private/2026-09-16/README.md</li>
+<li>.tools/hf-recovery-private/2026-09-16/manual-stop-4bf272a0-post-verification.md</li>
+</ul>
+<p>Those files and citation-test exemptions were not changed. The new plan's own
+citation omission was corrected in 5fb0b53; tracked nonexempt Markdown has no
+citation omission. The broader suite is <strong>not green</strong>, so no merge/PR is offered.</p>
+<p>Strict V3/V4 source/tests/tools, accepted inputs/local-Envoy artifacts and all
+sixteen deferrals remain unchanged relative to 89a641a. Its 1,140,588-byte
+lineage prefix is preserved exactly. Final reader/prefix/diff checks and root
+lineage checkpoint accompany this progress update.</p>
+<p>No actual Colima/Lima/Docker/Kind/kubectl, VM operation, HTTP/HF request, Ollama
+operation, platform-image audit, old receipt/export edit, metadata reconstruction,
+branch move, merge or push occurred. The externally managed detached worktree
+is retained. Platform-image provenance remains unverified and full Kind/Calico
+acceptance remains false; the accepted local-Envoy result is unaffected.</p>
+<p>Next action requires separate permission for a fresh request-free PRIVATE
+setup/capture/teardown rehearsal from the clean reviewed local checkpoint.
+Only successful fully retained rehearsal evidence can gate the separate fresh
+fixed-three-track action. No historic replay, native compatibility or complete
+filesystem-removal claim follows from these engineering tests.</p>
 </article></main>
 </div></div>
 <script>(() => {

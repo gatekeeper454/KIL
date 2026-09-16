@@ -74,7 +74,7 @@ named unit and documentation; no integration, branch movement or push.
 
 ### Task 1: Derived runtime authority and finite Colima adapter
 
-- [ ] Write a behavior assertion before implementing the missing module:
+- [x] Write a behavior assertion before implementing the missing module:
 
 ```python
 def test_runtime_is_a_fresh_receipt_sibling(self):
@@ -98,7 +98,7 @@ each failing assertion to ensure no descriptor leak. Run
 `tests.test_hf_exploratory_runtime -v`; expected assertion failure stating the
 authority is missing, not an import error.
 
-- [ ] Implement creation only after RED. Validate lowercase 64-hex digest and
+- [x] Implement creation only after RED. Validate lowercase 64-hex digest and
   exact matching receipt basename, receipt live fd identity, canonical absolute
   parent with the expected `.tools/hf-exploratory-private` suffix, effective-uid
   ownership/private mode. Open each ancestor with `_parent`; retain parent fd.
@@ -110,7 +110,7 @@ authority is missing, not an import error.
   root/Colima/Lima/Docker/tmp deletion, symlink, inode/mode/owner substitution
   refuses. Guard does not freeze mutable native directory contents.
 
-- [ ] Add failing adapter tests for exact four namespace variables, foreign
+- [x] Add failing adapter tests for exact four namespace variables, foreign
   env, non-Colima argv, subclass/wrong authority, grammar substitution and a
   deleted/replaced private Colima home. Implement the finite wrapper:
 
@@ -144,19 +144,19 @@ class ExploratoryColimaCommand:
                 ('TMPDIR', str(self.authority.tmp)))
 ```
 
-- [ ] Add failing exclusive-control tests: only kind-config.yaml, bytes <=64K,
+- [x] Add failing exclusive-control tests: only kind-config.yaml, bytes <=64K,
   no overwrite, no symlink adoption, stale authority refuses. Implement write
   with guarded root fd, O_EXCL|O_NOFOLLOW mode600, full write loop/fsync and root
   fsync. Derived kubeconfig is a native output, not written by this helper.
-- [ ] Run runtime tests and existing IO/native tests; expect all pass with
+- [x] Run runtime tests and existing IO/native tests; expect all pass with
   runtime not yet integrated. Self-review; append lineage, render/check readers,
   diff-check, commit `feat: bind exploratory Colima to isolated runtime state`.
-- [ ] Independent SPEC review followed by QUALITY review; correct/re-review
+- [x] Independent SPEC review followed by QUALITY review; correct/re-review
   any important issue with test-first corrections before Task 2.
 
 ### Task 2: Exact exploratory saved forms and resource binding
 
-- [ ] Write independent full generated-instance bytes from the retained failure
+- [x] Write independent full generated-instance bytes from the retained failure
   (not from the parser under test). The saved profile retains empty dnsHosts;
   instance has exactly this two-line block within the network section:
 
@@ -182,13 +182,13 @@ capacities and 512 zero header bytes; no VM disk contents or native tools.
 Run `tests.test_hf_exploratory_profile -v`; expect the named missing-feature
 assertion before production code.
 
-- [ ] Implement derived ProfilePaths with actual home + runtime (not fake HOME).
+- [x] Implement derived ProfilePaths with actual home + runtime (not fake HOME).
   Require exact lowercase digest runtime basename and private parent shape.
   Pure document decoding accepts exactly two string fields. Collector paths
   are runtime/.colima, its _lima, kil-v3-lab, colima-kil-v3-lab disk/instance,
   _store/name.json and runtime/runtime-tmp/name.yaml. Re-export collectors only
   where useful; never edit strict code.
-- [ ] Implement exact instance syntax recognition, followed by strict scalar
+- [x] Implement exact instance syntax recognition, followed by strict scalar
   validation on an internal validation-only copy; raw observations stay intact:
 
 ```python
@@ -203,40 +203,40 @@ def parse_saved_instance(payload):
     return result
 ```
 
-- [ ] Add failing negative tests for wrong alias/value, extra/duplicate hosts,
+- [x] Add failing negative tests for wrong alias/value, extra/duplicate hosts,
   duplicate dnsHosts, tags/anchors, extra keys/mounts, profile generated mapping,
   instance empty mapping, ambiguous indentation and byte overflow. Verify RED
   individually before adding corresponding rejection where not already strict.
-- [ ] Implement creation binding with `validate_capture`, protected/startup
+- [x] Implement creation binding with `validate_capture`, protected/startup
   absence, eight concrete directory/file identities, strict profile parse,
   generated instance parse, raw byte hashes, raw60GiB data/raw20GiB root, full
   Lima bytes/hash, exact lock target equal to the derived private instance.
   Return existing six-field binding schema; validate_binding remains strict.
   No capture normalization enters the binding or receipt.
-- [ ] Write failing changed-resource/stopped/absence tests. Recompute the same
+- [x] Write failing changed-resource/stopped/absence tests. Recompute the same
   binding before mutation; stopped missing lock is admitted only as an internal
   pure validation probe with corresponding directory entry. Protected or
   substituted config/disk/id/lock remains rejected. Absence requires no profile,
   instance, disk or startup and absent/exact zero native store. No orphan cleanup.
-- [ ] Run runtime/profile tests plus strict profile tests; all pass and strict
+- [x] Run runtime/profile tests plus strict profile tests; all pass and strict
   source/tests unchanged. Append lineage, render/check, diff-check; commit
   `fix: bind exact exploratory Colima generated configuration`.
-- [ ] Independent SPEC then QUALITY review, test-first corrections and re-review.
+- [x] Independent SPEC then QUALITY review, test-first corrections and re-review.
 
 ### Task 3: Integrate two inventory domains and frozen evidence lifetime
 
-- [ ] Migrate native fixtures to the exact source-bound receipt basename and
+- [x] Migrate native fixtures to the exact source-bound receipt basename and
   private runtime layout, patch only passwd-home lookup to temporary user home.
   Preserve original fixed-track/no-replay/incarnation assertions. Fake Colima
   dispatch differentiates default read-only list from private adapter env and
   writes the independent exact generated config form under private paths.
   Do not mock guards or binding in composition regressions.
-- [ ] Write failing runtime dispatch tests in existing IO tests: scoped commands
+- [x] Write failing runtime dispatch tests in existing IO tests: scoped commands
   use four derived variables with true passwd HOME, inherited overrides absent,
   strict extra-env Command still rejects, replaced home refuses before Popen.
   Implement exact-type adapter recognition and guard both at entry and after
   tool verification, immediately before bounded capture. Keep bounds unchanged.
-- [ ] Write failing native composition assertions before wiring the lifecycle:
+- [x] Write failing native composition assertions before wiring the lifecycle:
 
 ```python
 def test_same_name_default_profile_remains_foreign(self):
@@ -275,13 +275,13 @@ def test_native_context_removal_does_not_invalidate_receipts(self):
 Use the existing full lifecycle double as the starting point; retain real
 binding/receipt validation. Tests observe production behavior, not just calls.
 
-- [ ] Lifecycle creates RuntimeAuthority from live Store + workload digest and
+- [x] Lifecycle creates RuntimeAuthority from live Store + workload digest and
   owns descriptors. `close()` releases descriptors only. Move identity kubeconfig
   to runtime.kubeconfig and derive Docker/Kind env from runtime. Keep a separate
   strict default ProfilePaths(actual_home, receipt). Wrap scoped empty-env Colima
   commands; default inventory uses only exact plain read-only list through an
   explicit global dispatch path. No arbitrary global Colima mutation.
-- [ ] Guard runtime on every dispatch and exact commands before durable intent.
+- [x] Guard runtime on every dispatch and exact commands before durable intent.
   Preserve start/create/stop/delete one-attempt latches and intent-before-action.
   Private preflight bracket is complete/empty. Private live bracket allows only
   creation-bound kil-v3-lab and known reserved Lima entries, exact running/stopped
@@ -290,11 +290,11 @@ binding/receipt validation. Tests observe production behavior, not just calls.
   `_config/networks.yaml` no-follow raw identity/bytes <=64K and compare before/
   after; any default roster/file/config change fails. Preserve default Docker
   context/config identity and inherited/default kubeconfig commitments unchanged.
-- [ ] Prepare canonical one-node kind config in both immutable Store and runtime
+- [x] Prepare canonical one-node kind config in both immutable Store and runtime
   exclusive control helper; Kind reads only runtime copy and use requires fresh
   exact retained-byte verification. Do not mkdir runtime dirs inside receipt.
   Keep Calico/object manifests immutable in Store and all workload joins unchanged.
-- [ ] Evidence helper snapshots a finite set: runtime kind-config.yaml/kubeconfig,
+- [x] Evidence helper snapshots a finite set: runtime kind-config.yaml/kubeconfig,
   private profile+instance colima.yaml/lima.yaml, runtime Docker config.json and
   exact contexts/meta/SHA256(colima-kil-v3-lab)/meta.json. No generic directory
   walker. Use `_read`/no-follow helpers (64KiB per file, stable identity/full
@@ -303,29 +303,29 @@ binding/receipt validation. Tests observe production behavior, not just calls.
   Guard before/after capture. Snapshot once before stop, also before reporting
   partial setup failures when safely observable. Snapshot failure refuses native
   cleanup rather than erasing evidence under uncertainty.
-- [ ] Write RED tests for context removal, symlink/oversize/replaced snapshot
+- [x] Write RED tests for context removal, symlink/oversize/replaced snapshot
   targets, private network reset permitted, default network reset rejected,
   extra private profile rejected and stale controls refusing Kind. Implement
   immutable snapshots, default/private guard differentiation and commitment
   checks. Report explicit runtime vs receipt vs default paths and bounded,
   explicitly partial leftover directory observations after cleanup. Never
   recursively remove runtime siblings; native exact-owned deletion only.
-- [ ] CLI finally closes lifecycle (if constructed) then Store. Construction
+- [x] CLI finally closes lifecycle (if constructed) then Store. Construction
   errors close authority fds. No new command-line options, retry or auto resume.
-- [ ] Run runtime/profile/evidence/all four exploratory test modules plus strict
+- [x] Run runtime/profile/evidence/all four exploratory test modules plus strict
   profile/inventory/journal tests and driver boundary guards; expect all pass.
   Append lineage, readers/check, diff-check, commit
   `fix: isolate exploratory native lifecycle and freeze runtime evidence`.
-- [ ] Independent SPEC then QUALITY review; correct and re-review all important
+- [x] Independent SPEC then QUALITY review; correct and re-review all important
   gaps. Final reviewer inspects the entire repair against the approved design.
 
 ## Final verification and next gate
 
-- [ ] Fresh full unittest discovery with ResourceWarning fatal; distinguish
+- [x] Fresh full unittest discovery with ResourceWarning fatal; distinguish
   intentional opt-in skips from failures. No native opt-in variables enabled.
-- [ ] Verify strict source/test diff empty relative to 89a641a, immutable earlier
+- [x] Verify strict source/test diff empty relative to 89a641a, immutable earlier
   lineage prefix, reader check, diff check, clean local source checkpoint.
-- [ ] Record actual test counts/reviews/limitations, not native compatibility
+- [x] Record actual test counts/reviews/limitations, not native compatibility
   claims. Append root lineage and checkpoint. No merge, push or native test.
 - [ ] Next user gate is permission for a fresh request-free PRIVATE native
   setup/capture/teardown rehearsal. Only a successful fully retained rehearsal
@@ -343,3 +343,63 @@ Negative cases receive RED verification before rejection changes; already
 rejected cases remain regression tests. No native operation is a plan step.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Execution outcome — 2026-09-16
+
+The approved engineering design is implemented and independently reviewed.
+Task checkboxes record performed engineering steps; they do not assert a green
+full repository suite or authorize native execution. The last permission gate
+above remains unchecked.
+
+- Task 1: derived RuntimeAuthority and closed Colima adapter; 28 runtime tests.
+- Task 2: exact exploratory saved-form/resource binding; 18 profile tests.
+  Two independent full saved YAML fixtures preserve their original bytes.
+  The .gitattributes exception is limited to those two fixture paths, solely
+  to retain native trailing-space blank lines.
+- Task 3 was split into IO/evidence (3A) and Native/CLI composition (3B), with
+  49 IO, 12 evidence and 116 Native tests. Real temporary filesystem authority,
+  collectors and retained-byte binding remain active in composition tests;
+  native process capture/command boundaries are doubled.
+- Review corrections were test-first: fd/lock authority edges; late manifest,
+  executable-path and exact metadata-map drift; durable-intent namespace and
+  Kind consumer freshness; valid-command substitution and handoff latches.
+  Final metadata regressions produced nine expected pre-fix failures.
+- Final source checkpoint is 06e6c35. Runtime/profile/IO SPEC and QUALITY,
+  Native SPEC/QUALITY and final composed review are approved. Final correction
+  review receipts: bcef18a (SPEC), 1f0bb62 (QUALITY), 30376e2 (Native QUALITY),
+  094c12f (final composed review). The composed reviewer independently passed
+  73 targeted tests in 9.505s; Native QUALITY passed 116 in 37.735s.
+
+Root's fresh required 15-module suite passed **410 tests in 93.542s**, with
+ResourceWarning fatal and bytecode generation disabled. Fresh full repository
+discovery, with future-controller opt-in disabled and the preverified local
+AF_UNIX/bash descriptor fixtures allowed outside the sandbox, ran **1,849 tests
+in 907.006s: one failure, 16 intentional skips, no errors**. The failure is
+test_every_kil_authored_markdown_document_cites_ktp, identifying exactly four
+existing ignored immutable historical documents:
+
+- .tools/hf-exploratory-private/hf-exploratory-4bf272a01cfdb5c96ab08a70def03ecbd7a29ef375bbe957ae0be6b991409bfe/synopsis.md
+- .tools/hf-exploratory-private/hf-exploratory-5507a11d6dd49a2ddca0d2588e7ad484b2bcf808ec3744d05b1aa966a746d7e2/synopsis.md
+- .tools/hf-recovery-private/2026-09-16/README.md
+- .tools/hf-recovery-private/2026-09-16/manual-stop-4bf272a0-post-verification.md
+
+Those files and citation-test exemptions were not changed. The new plan's own
+citation omission was corrected in 5fb0b53; tracked nonexempt Markdown has no
+citation omission. The broader suite is **not green**, so no merge/PR is offered.
+
+Strict V3/V4 source/tests/tools, accepted inputs/local-Envoy artifacts and all
+sixteen deferrals remain unchanged relative to 89a641a. Its 1,140,588-byte
+lineage prefix is preserved exactly. Final reader/prefix/diff checks and root
+lineage checkpoint accompany this progress update.
+
+No actual Colima/Lima/Docker/Kind/kubectl, VM operation, HTTP/HF request, Ollama
+operation, platform-image audit, old receipt/export edit, metadata reconstruction,
+branch move, merge or push occurred. The externally managed detached worktree
+is retained. Platform-image provenance remains unverified and full Kind/Calico
+acceptance remains false; the accepted local-Envoy result is unaffected.
+
+Next action requires separate permission for a fresh request-free PRIVATE
+setup/capture/teardown rehearsal from the clean reviewed local checkpoint.
+Only successful fully retained rehearsal evidence can gate the separate fresh
+fixed-three-track action. No historic replay, native compatibility or complete
+filesystem-removal claim follows from these engineering tests.

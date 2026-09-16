@@ -21361,3 +21361,77 @@ execution still requires its separate permission gate and a fully retained,
 request-free private rehearsal before the separate fresh three-track action.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T395 — 2026-09-16 — Approved exploratory repair root verification and handoff
+
+**Input:** The user requested “go design approval under the brainstorming skill,
+then test-first implementation.” Root completed the approved engineering plan,
+independent reviews and fresh verification, retaining the requested safe app-reload
+stopping point.
+
+**Interpretation:** Approval covers the recommended isolated-runtime design and
+test-first engineering only. It does not authorize native setup/teardown, a live
+HF request, platform-image audit or modification of prior immutable evidence.
+
+**Decision status:** Engineering implemented and SPEC/QUALITY/composed reviews
+approved. Root's fresh required 15-module suite passed 410 tests in 93.542s.
+Fresh full discovery ran 1,849 tests in 907.006s with one failure, 16 intentional
+skips and no errors. The repository suite is NOT green; merge/PR and native
+compatibility/acceptance are not claimed. Preserve this detached local checkpoint.
+
+**Rationale:** Isolated fd-anchored native state separates native network/context
+lifetime from foreign default-home resources and immutable receipts. Exact raw
+generated-instance binding admits only the pinned DNS alias form without widening
+strict parsing. Durable-intent fingerprints and fresh consumer/authority checks
+preserve one-shot handoffs; failed evidence persistence refuses teardown. These
+are finite bounded freshness checks, not transactional exclusion or zero TOCTOU.
+
+Runtime/profile/IO SPEC and QUALITY are approved; final metadata correction
+06e6c35 received independent SPEC bcef18a and QUALITY 1f0bb62. Native SPEC
+8325767 and QUALITY 30376e2 approve corrected Native source 2d8fa87. Final
+composed review 094c12f found no required fixes and independently passed 73
+targeted tests in 9.505s. Test-first corrections include fd/lock authority, late
+manifest/tools/metadata substitutions, namespace and Kind control drift during
+durable intent, valid-command substitution and accurate handoff latches. Final
+metadata RED independently reproduced nine expected failures against prior code.
+
+Full discovery disabled the future-controller opt-in, kept ResourceWarning fatal
+and bytecode off, and ran outside the sandbox for previously verified local
+AF_UNIX/bash descriptor fixtures. Its only failure is the citation scanner's
+four existing ignored immutable documents: the 4bf272a0 and 5507a11d exploratory
+synopses, recovery README and manual-stop-4bf272a0-post-verification. They remain
+untouched; citation-test exemptions are unchanged. Root corrected only the new
+plan's citation omission in 5fb0b53. Tracked nonexempt Markdown has no omission.
+The T382 placement mistake was explicitly corrected in 58e86be; no earlier
+lineage was silently rewritten.
+
+**Affected artifacts:** Approved design/implementation plan and generated readers;
+new exploratory runtime/profile/evidence units and tests; exploratory IO/Native
+and CLI source/tests; two independent full saved YAML fixtures; fixture-only
+.gitattributes handling. This final phase updates only the implementation plan,
+its reader, this actual-EOF root entry and its reader. Reviewed source is frozen
+at 06e6c35. Root verified the empty 89a641a range diff for strict V3/V4
+source/tests/tools, accepted inputs/local-Envoy artifacts and citation tests;
+all sixteen deferrals and experiment exclusions are unchanged. Its exact
+1,140,588-byte lineage prefix and the full 094c12f prefix remain preserved.
+
+No actual Colima/Lima/Docker/Kind/kubectl, VM, HTTP/HF/network, Ollama or
+platform-image audit occurred. No old receipt/export edit, metadata reconstruction,
+default-home adoption, branch movement, merge, push or worktree cleanup occurred.
+Accepted local Envoy remains unaffected; platform-image provenance remains
+unverified and full Kind/Calico acceptance remains false.
+
+**Unresolved questions:** Native compatibility and exact-owned live teardown are
+not established by filesystem/command-boundary tests. The four historical
+citation omissions remain a broader-suite limitation; changing preserved evidence
+or exemptions would require a separate decision, not an implementation bypass.
+
+**Next gate:** Generate/check all 88 readers, verify exact prefixes and scoped
+diff/clean checkpoint, then hand off with no repair workers or unit-test process
+remaining. It is safe to reload the app after checkpoint. Separate explicit
+permission for a fresh request-free PRIVATE setup/capture/teardown rehearsal
+must precede native execution; only fully retained successful rehearsal evidence
+can gate a separate fresh fixed-three-track action. No historic replay or full
+Kind/Calico acceptance is inferred.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
