@@ -14775,3 +14775,69 @@ implementation, then provide the exact base/head checkpoint to independent
 specification and quality reviewers before any broader acceptance or delivery.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-298 — 2026-09-16 — V4 Task 5 independent specification review approved
+
+**Input:** Independently review approved V4 Task 5 against the approved
+`2026-09-08-v3b2-control-plane-static-manifest-source-design.md` and
+`2026-09-15-v4-control-plane-static-manifest-source.md` implementation plan.
+Review range: `13e619120925d4ddbf8fd4396a352959c1cb04b2` through
+`0530fac10b9a2fbd4e7e2b19c4cf91704aa2af66`. Do not trust implementation
+reports, edit production, push, or execute live infrastructure/profile calls.
+
+**Interpretation:** Specification acceptance requires independent disk/API
+fixtures, the literal five conditional CA pairs, all 32 acceptance and all 32
+disk/API disagreement masks, three unconditional pairs, exact fixed
+controller-manager fields, reviewed defaults and metadata, retained arbitrary
+status, reconstructable exact dependencies and bindings, cross-proof cluster
+and node-container identity joins, frozen constructors, and strict false
+completion flags. Only the authenticated disk five-way subset may select an
+expected configuration decision; API candidates cannot supply expectations.
+
+**Decision status:** Confirmed Task 5 specification acceptance with no Critical,
+Important, or Minor findings; no live claim. This accepts the bounded
+controller-manager disk-to-owned-API-mirror configuration proof, not runtime,
+readiness, image realization, application completion, V4 completion, or V3C.
+
+**Rationale:** Full changed code and tests, the approved Task 5 requirements,
+and consumed source/ownership/default-comparison dependencies were inspected.
+The independent fixture builders do not call production expected factories or
+each other for disk/API expectations. Fixed expectations and conditional
+decisions stay component-local without apiserver factory imports. Both exact
+proofs reconstruct before composition; cluster-incarnation UID and owned
+node-container ID must match. Literal disk closure precedes independently
+constructed API comparison. Mirror metadata is closed, `config.seen` supplies
+syntax only, opaque hashes remain ownership joins, and arbitrary status stays
+retained without configuration authority. Pinned upstream kubeadm
+controller-manager command/resource/probe definitions, Kind's hostpath option,
+and the shared pinned API-default implementation were also checked. Some
+upstream pages were unavailable through the read-only browser cache; no
+additional expectation or widening was inferred from those unavailable pages.
+
+**Verification:** Fresh independent execution of the prescribed apiserver,
+controller-manager, etcd, and scheduler modules passed all 40 unittest methods
+in 21.105 seconds with zero skips; these include the exhaustive matrix and
+closure subtests. The first invocation lacked the repository-required
+`PYTHONPATH=src` and failed module imports; the corrected prescribed invocation
+passed. Historical RED execution was reported by the implementer but is not
+claimed as independently reproduced here. `git diff --check` passed before
+this entry. Reader regeneration and verification are the final docs-only gate
+for this review. No live Colima, Docker, Kind, kubectl, Kubernetes, request,
+publication, push, or profile command was executed.
+
+**Affected artifacts:** Reviewed
+`src/kil/v3b2_kube_controller_manager_mirror_configuration.py` and
+`tests/test_v3b2_kube_controller_manager_mirror_configuration.py`; changed only
+this specialist lineage and its regenerated HTML reader.
+
+**Unresolved questions:** None within Task 5 specification compliance.
+Independent quality review, combined V4 static acceptance, full repository
+validation, all-ten-platform-Pod configuration/image/status/readiness
+composition, and any explicitly authorized later live experiment remain
+separate gates.
+
+**Next gate:** Regenerate and verify the reader, commit this docs-only
+specification acceptance, and return the checkpoint for independent quality
+review before broader static acceptance or delivery.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
