@@ -14712,3 +14712,66 @@ implementation branch and CI, then begin approved plan Task 5 only on explicit
 continuation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-297 — 2026-09-16 — V4 Task 5 controller-manager proof implementation
+
+**Input:** Implement approved V4 Task 5 only: independent controller-manager
+disk/API fixtures, all 32 conditional-CA acceptance and 32 disagreement cases,
+an authenticated disk-to-owned-mirror configuration proof, focused and adjacent
+verification, and a local implementation commit. Live infrastructure commands,
+profile inspection or mutation, and pushing are outside this task.
+
+**Interpretation:** The disk source may select only the five pinned conditional
+CA pairs. Every other controller-manager field remains verifier-owned and
+local to this component, including three unconditional mounts, kubeconfig
+`FileOrCreate`, the Kind hostpath-provisioner option, fixed IPv4 network and
+cluster options, CPU `200m`, port `10257`, and liveness/startup `/healthz`
+probes with no readiness probe. Both exact dependencies must reconstruct and
+join cluster-incarnation UID and node-container ID before composition can
+establish a same-source configuration binding.
+
+**Decision status:** Implemented Task 5 candidate for independent specification
+and quality review; not yet accepted by those gates. The required public
+binding component and `runtime_complete`/`application_complete` flags are
+available, alongside established contract-completion vocabulary. All four
+completion flags admit only exact `False`. No readiness, effective image,
+freshness, runtime completion, application completion, V4 completion or V3C
+claim is made.
+
+**Rationale:** Component-local literals and conditional-pair validation avoid
+using the observed API configuration as its own authority or mechanically
+inheriting API-server fixed expectations. Reviewed kubelet/API additions are
+explicit and the shared pinned-default comparator tolerates only reviewed
+serialization defaults. Complete mirror metadata, ownership relations and
+binding constructors fail closed, while arbitrary status remains retained
+without interpretation. Independently valid cross-cluster and cross-container
+proofs are rejected rather than merely rejecting malformed dependencies.
+
+**Verification:** Strict TDD began with 11 focused methods, all failing on the
+intentional absent-module assertion. The first implementation run exposed a
+test-only serializer incompatibility: JSON-style root mappings are outside the
+repository's conservative YAML subset. Replacing only that serializer with
+independent block YAML preserved the literal expected configurations. The
+focused suite then ran 11 methods, all 11 passed with zero skips in 9.267
+seconds. The prescribed API-server, controller-manager, etcd and scheduler
+suite ran 40 methods, all 40 passed with zero skips in 18.670 seconds. Those
+method counts include the matrix and closure subtests; subtests are not
+reported as additional unittest methods. Self-review confirmed local fixed
+expectations, exact dependency joins and strictly false claim boundaries.
+No live Colima, Docker, Kind, kubectl, Kubernetes or profile command ran.
+
+**Affected artifacts:**
+`src/kil/v3b2_kube_controller_manager_mirror_configuration.py`,
+`tests/test_v3b2_kube_controller_manager_mirror_configuration.py`, this lineage,
+and its regenerated HTML reader.
+
+**Unresolved questions:** None identified in the implementation self-review;
+independent specification and quality reviews, combined V4 static acceptance,
+full repository validation and any later explicitly authorized live experiment
+remain separate gates.
+
+**Next gate:** Regenerate and verify the lineage reader, commit the Task 5
+implementation, then provide the exact base/head checkpoint to independent
+specification and quality reviewers before any broader acceptance or delivery.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
