@@ -1,7 +1,10 @@
 import hashlib
 import importlib
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -50,6 +53,30 @@ class ExploratoryInputTests(unittest.TestCase):
             missing = Path(directory).resolve() / 'missing'
             with self.assertRaisesRegex(ValueError, 'exploratory_inputs_unavailable_or_invalid'):
                 self.inputs.verify_inputs(repository, missing, missing, 'a' * 64)
+
+    def test_fifo_without_writer_is_rejected_without_blocking(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fifo = Path(directory).resolve() / 'fifo'
+            os.mkfifo(fifo)
+            child = (
+                'from pathlib import Path\n'
+                'import sys\n'
+                'from kil.hf_exploratory_inputs import read_regular\n'
+                'try:\n'
+                '    read_regular(Path(sys.argv[1]), 3)\n'
+                'except ValueError as error:\n'
+                '    assert str(error) == "exploratory_input_not_bounded_regular_file"\n'
+                'else:\n'
+                '    raise AssertionError("FIFO was accepted")\n'
+            )
+            try:
+                result = subprocess.run(
+                    [sys.executable, '-c', child, str(fifo)],
+                    capture_output=True, text=True, timeout=2,
+                )
+            except subprocess.TimeoutExpired:
+                self.fail('read_regular blocked on a FIFO without a writer for 2 seconds')
+            self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == '__main__':

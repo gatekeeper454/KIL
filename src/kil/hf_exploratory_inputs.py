@@ -33,7 +33,7 @@ def read_regular(path: Path, maximum: int) -> bytes:
             or not path.is_absolute() or path.is_symlink()
             or path.resolve(strict=True) != path):
         raise ValueError('unsafe_exploratory_input_path_or_bound')
-    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode) or before.st_size > maximum:

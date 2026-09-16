@@ -17262,3 +17262,43 @@ units only through their own gates; platform-image audit remains stopped and
 strict acceptance remains unestablished.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-334 — 2026-09-16 — Bounded FIFO regression and nonblocking input open
+
+**Input:** Quality review confirmed one Important input-readiness defect: a
+static FIFO with no writer blocks in os.open before descriptor-type validation.
+Fix that item only and independently re-review before native input verification.
+
+**Interpretation:** Preserve the accepted manifest/archive authority, exact
+sizes and digests, canonical path checks and retained-byte bounds. Opening must
+not wait for FIFO writers before the existing fstat regular-file rejection.
+
+**Decision status:** Confirmed narrow correction and observed focused unit
+verification; independent re-review remains pending. No native readiness or
+runtime success is asserted.
+
+**Rationale:** Source inspection located blocking O_RDONLY before fstat and
+existing repository readers demonstrated the nonblocking-open pattern. The new
+test-owned temporary FIFO regression invokes only read_regular in an isolated
+Python child, bounded to two seconds. RED: six tests in 2.047s, five passing and
+one expected assertion failure after child timeout; subprocess.run terminated
+and reaped the child and the temporary fixture was cleaned. Add only O_NONBLOCK
+beside O_RDONLY and O_NOFOLLOW; the existing fstat rejects the nonregular file
+before read. GREEN: all six focused tests passed in 0.083s.
+
+**Affected artifacts:** Update src/kil/hf_exploratory_inputs.py and
+tests/test_hf_exploratory_inputs.py; append this entry and regenerate its reader.
+No accepted-input factory invocation, accepted tool execution, profile/lab
+command, image download or lifecycle mutation occurred.
+
+**Unresolved questions:** Independent correction re-review and root-owned
+native input verification remain gates. Prior factory success coverage and
+later executable rechecking/ownership concerns remain unchanged; this correction
+does not add any execution-time identity guarantee.
+
+**Next gate:** Independent re-review of the FIFO regression and one-line open
+flag correction, then root-owned native input verification. Continue separately
+gated exploratory lifecycle work; strict acceptance remains unestablished and
+the platform-image audit remains stopped.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
