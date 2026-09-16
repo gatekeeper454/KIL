@@ -18114,3 +18114,69 @@ native implementation gates. No request retry, replay or native execution is
 authorized by this review result.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-351 — 2026-09-16 — Independent corrected pure HF case quality approval
+
+**Input:** Independently quality-review corrected pure unit 3a910cc, selective
+case and test files from base a4502c0, after specification approval 9de140c.
+Use the senior reviewer strengths/issues/assessment template, inspect actual
+code and tests, run fresh focused tests and independent pure probes, and retain
+the complete committed lineage prefix. No source edits, input factory,
+downloads, binaries, native lifecycle or live operations are authorized here.
+
+**Interpretation:** Assess actual pure-unit quality and boundary impacts, not
+platform-image provenance or strict lifecycle acceptance. The native consumer
+must independently supply authenticated runtime/config image aliases, rendered
+configuration checks and actual Pod identity brackets. This module provides
+only partial safety/incarnation checks and observational semantic joins.
+
+**Decision status:** Confirmed independent quality approval for the corrected
+pure unit. No Critical or Important issue was identified; ready to proceed to
+the native implementation/review gates, not native execution or live acceptance.
+One nonblocking Minor test-maintenance recommendation remains a proposal.
+
+**Rationale:** Strengths include reuse of the existing closed producer adapter
+instead of duplicating semantic validation, complete-byte commitments rather
+than reserialization, both-side identity validation with full-map equality,
+LF-only duplicate-safe framing, exact boolean/integer checks on safety gates,
+actual reason retention and explicit unexpected-complete classification. The
+Pod helper names its partial scope and caller-supplied alias dependency; matching
+the expected tuple is explicitly not causal proof.
+
+Fresh independent verification used PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src
+and /Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python
+with -W error::ResourceWarning -m unittest tests.test_hf_exploratory_case -v:
+all eight tests passed in 0.104 seconds. Separate read-only pure probes passed
+14 invalid-input rejections covering nonpositive/noninteger issued times,
+nonbytes, interior empty records, reordered equivalent duplicates, nested
+duplicate keys, nonfinite values, exact 1MiB rejection, complete-map drift and
+nonbytes second reads. Positive probes confirmed deterministic signed fixtures
+with ten-second validity, hedge/retry fixture boundaries, source acceptance at
+1MiB minus one byte, escaped CR content, original-byte SHA-256 retention, and
+unexpected-complete reporting for all three tracks. These observations do not
+claim independently rerun RED or completion of the root regression suite.
+
+Minor recommendation: tests/test_hf_exploratory_case.py:16-25 does not persist
+explicit TTL, deterministic fixture and spoofed-header assertions; lines 28-45
+do not persist the exact accepted size boundary or additional-field identity
+drift cases. The corresponding implementation behavior passed independent
+probes; adding those assertions would prevent future fixture/boundary regression
+from escaping the focused suite. This is not an observed functional failure
+and does not block this narrow quality approval.
+
+**Affected artifacts:** This appended lineage Markdown and regenerated HTML
+reader only. The complete 9de140c Markdown remains a byte-for-byte prefix.
+Reviewed case/test files, native plans, strict code and completion flags remain
+unchanged by the quality reviewer.
+
+**Unresolved questions:** Native lifecycle implementation and independent
+reviews, request-free rehearsal, joined live evidence, platform provenance and
+full Kind/Calico acceptance remain separate gates. Pure quality approval
+establishes none of them; tuple equality alone does not establish denial cause.
+
+**Next gate:** Implement the approved separate native unit, then complete its
+independent specification and quality reviews before any root-owned native
+execution gate. No request retry, replay or native execution is authorized by
+this review result.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
