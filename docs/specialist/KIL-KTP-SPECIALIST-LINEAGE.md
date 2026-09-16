@@ -19910,3 +19910,69 @@ diff-check and checkpoint only the two lineage paths; release the exclusive
 lineage writer after recording this review. No native execution is implied.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T375 — 2026-09-16 — Task 1 SPEC corrections reproduced and isolated runtime checkpoint repaired
+
+**Input:** T374 independent SPEC feedback and root-confirmed correction gate:
+close the actual first-ancestor identity-fault leak without editing strict
+helpers; reject invalid live store/lock metadata before runtime creation; and
+enforce exact mode0600 for the exclusive Kind control under restrictive umask.
+
+**Interpretation:** Apply only the three focused runtime-unit corrections and
+their temporary-filesystem regressions, using receiving-code-review,
+systematic-debugging, TDD and verification-before-completion. No subsequent
+unit implementation or native action is authorized before SPEC reapproval.
+
+**Decision status:** CONFIRMED engineering correction checkpoint; independent
+SPEC reapproval is pending and QUALITY remains gated. Each reported cause was
+verified against actual source, independently reproduced as assertion RED,
+corrected and followed by a GREEN runtime suite. Previous entries remain
+unchanged; T373's completion evidence did not cover these three identified
+edge cases and T374's changes-required decision is not silently superseded.
+
+**Rationale:** First-ancestor fstat fault injection on the actual construction
+path observed one leaked descriptor (fd6). The duplicate strict `_parent`
+observation walk was removed; the runtime's existing retained openat/
+O_NOFOLLOW walk now solely owns full ancestry and closes each just-opened
+descriptor if its identity capture fails. The strict helper/source remains
+byte-for-byte untouched. Fault errors now propagate directly from this owned
+walk, and two existing fault tests were adjusted from helper-wrapped errors
+to their original syscall errors. Runtime GREEN after this correction: 22.
+Store mode755 RED showed a sibling created before refusal; lock mode0400 RED
+showed acceptance, and a separate guard RED showed a new lock hardlink was
+accepted. Live store mode0700/effective UID and lock regular-file mode0600/
+effective UID/single-link/named identity are now checked before any runtime
+mkdir; named and retained lock single-link checks also remain live in guard.
+Runtime GREEN after this correction: 25. Finally, umask0200 RED produced
+successful control mode0400 (256 != 384); the exclusive new fd is now checked
+for regular type, ownership and single-link status, explicitly fchmod0600,
+then verified for exact mode and named/fd identity/single-link status before
+full write and existing file/parent fsyncs. Umask is restored in finally.
+Runtime GREEN after this correction: 26. Additional passing regressions cover
+fchmod failure descriptor cleanup/preserved exclusive empty file and a
+hardlink inserted during permission enforcement refusing before payload.
+Fresh combined verification passed 162 tests in 19.069s: 28 runtime, all
+original 132 exploratory, and both strict future-controller-boundary guards,
+with ResourceWarning fatal and the existing interpreter. Self-review checked
+no-follow ancestry ownership, precreation metadata placement, descriptor-only
+close, exclusive failure preservation, finite grammar and unchanged scope.
+
+**Affected artifacts:** src/kil/hf_exploratory_runtime.py and its tests only,
+plus this actual-EOF append and generated lineage reader. The original
+7666144 lineage Markdown remains an exact prefix. No strict unit/test, finite
+strict Command grammar, sixteen deferrals, accepted evidence, old receipt,
+HTTP/HF request, native subprocess/tool, VM or platform audit was changed or
+executed. Tests exercise temporary files and minimal syscall fault injection.
+
+**Unresolved questions:** Independent SPEC must determine whether the focused
+corrections satisfy all Task 1 requirements; QUALITY review remains later.
+Runner/lifecycle composition, private-native-home compatibility and full
+Kind/Calico acceptance remain subsequent unverified gates. Platform-image
+provenance remains unverified and original missing metadata is not rebuilt.
+
+**Next gate:** Preserve the exact HEAD lineage prefix, render/check all readers,
+diff-check and commit only the named runtime/test/lineage paths. Release the
+exclusive lineage writer to independent SPEC re-review; do not begin another
+unit or native execution until its gate is explicitly cleared.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

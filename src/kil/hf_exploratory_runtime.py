@@ -8,7 +8,6 @@ import re
 import stat
 from typing import TYPE_CHECKING
 
-from kil.v3b2_profile_state import _parent
 from kil.v3b2_journal import Command
 
 if TYPE_CHECKING:
@@ -54,45 +53,50 @@ class RuntimeAuthority:
             anchors.append((parent, name, fd, identity))
             return fd
         try:
-            with _parent(store.path) as observed_parent:
-                if observed_parent is None:
-                    raise ValueError('runtime_store_parent_missing')
-                fd = retain(None, '/')
-                for part in store.path.parent.parts[1:]:
-                    fd = retain(fd, part)
-                parent_fd = fd
-                row = os.fstat(parent_fd)
-                if (_identity(row) != _identity(os.fstat(observed_parent))
-                        or stat.S_IMODE(row.st_mode) != 0o700 or row.st_uid != os.geteuid()):
-                    raise ValueError('runtime_parent_not_private')
-                store_fd = retain(parent_fd, store.path.name)
-                if _identity(os.fstat(store_fd)) != _identity(os.fstat(store._directory)):
-                    raise ValueError('runtime_store_reanchored')
-                lock_identity = _identity(os.fstat(store._lock))
-                if _identity(os.stat('lock', dir_fd=store_fd, follow_symlinks=False)) != lock_identity:
-                    raise ValueError('runtime_store_lock_reanchored')
-                path = store.path.parent / ('hf-exploratory-runtime-' + run_digest)
-                def fresh(parent, name):
-                    os.mkdir(name, mode=0o700, dir_fd=parent)
-                    os.fsync(parent)
-                    child = retain(parent, name)
-                    row = os.fstat(child)
-                    if stat.S_IMODE(row.st_mode) != 0o700 or row.st_uid != os.geteuid():
-                        raise ValueError('runtime_directory_not_private')
-                    return child
-                root = fresh(parent_fd, path.name)
-                colima = fresh(root, '.colima')
-                fresh(colima, '_lima')
-                fresh(root, 'docker-config')
-                fresh(root, 'runtime-tmp')
-                authority = object.__new__(cls)
-                for name, value in (('path', path), ('_store', store), ('_digest', run_digest),
-                                    ('_anchors', tuple(anchors)),
-                                    ('_lock_identity', lock_identity),
-                                    ('_closed', False)):
-                    object.__setattr__(authority, name, value)
-                authority.guard()
-                return authority
+            # One retained walk owns every descriptor from open through failure.
+            fd = retain(None, '/')
+            for part in store.path.parent.parts[1:]:
+                fd = retain(fd, part)
+            parent_fd = fd
+            row = os.fstat(parent_fd)
+            if stat.S_IMODE(row.st_mode) != 0o700 or row.st_uid != os.geteuid():
+                raise ValueError('runtime_parent_not_private')
+            store_fd = retain(parent_fd, store.path.name)
+            store_row = os.fstat(store_fd)
+            if (_identity(store_row) != _identity(os.fstat(store._directory))
+                    or stat.S_IMODE(store_row.st_mode) != 0o700
+                    or store_row.st_uid != os.geteuid()):
+                raise ValueError('runtime_store_reanchored')
+            lock_row = os.fstat(store._lock)
+            lock_identity = _identity(lock_row)
+            named_lock = os.stat('lock', dir_fd=store_fd, follow_symlinks=False)
+            if (_identity(named_lock) != lock_identity or not stat.S_ISREG(lock_row.st_mode)
+                    or stat.S_IMODE(lock_row.st_mode) != 0o600
+                    or lock_row.st_uid != os.geteuid() or lock_row.st_nlink != 1
+                    or named_lock.st_nlink != 1):
+                raise ValueError('runtime_store_lock_reanchored')
+            path = store.path.parent / ('hf-exploratory-runtime-' + run_digest)
+            def fresh(parent, name):
+                os.mkdir(name, mode=0o700, dir_fd=parent)
+                os.fsync(parent)
+                child = retain(parent, name)
+                row = os.fstat(child)
+                if stat.S_IMODE(row.st_mode) != 0o700 or row.st_uid != os.geteuid():
+                    raise ValueError('runtime_directory_not_private')
+                return child
+            root = fresh(parent_fd, path.name)
+            colima = fresh(root, '.colima')
+            fresh(colima, '_lima')
+            fresh(root, 'docker-config')
+            fresh(root, 'runtime-tmp')
+            authority = object.__new__(cls)
+            for name, value in (('path', path), ('_store', store), ('_digest', run_digest),
+                                ('_anchors', tuple(anchors)),
+                                ('_lock_identity', lock_identity),
+                                ('_closed', False)):
+                object.__setattr__(authority, name, value)
+            authority.guard()
+            return authority
         except BaseException:
             for _, _, fd, _ in reversed(anchors):
                 os.close(fd)
@@ -139,6 +143,9 @@ class RuntimeAuthority:
                     or _identity(os.stat('lock', dir_fd=store._directory,
                                          follow_symlinks=False)) != self._lock_identity):
                 raise ValueError('invalid_or_closed_runtime_authority')
+            if (os.fstat(store._lock).st_nlink != 1
+                    or os.stat('lock', dir_fd=store._directory, follow_symlinks=False).st_nlink != 1):
+                raise ValueError('runtime_store_lock_hardlinked')
             # Validate the retained layout as well as its filesystem identities.
             n = len(store.path.parent.parts)
             names = ('/', *store.path.parent.parts[1:], store.path.name, self.path.name,
@@ -176,6 +183,17 @@ class RuntimeAuthority:
         fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                      0o600, dir_fd=root)
         try:
+            row = os.fstat(fd)
+            if (not stat.S_ISREG(row.st_mode) or row.st_uid != os.geteuid()
+                    or row.st_nlink != 1):
+                raise ValueError('runtime_control_not_owned_regular_file')
+            os.fchmod(fd, 0o600)
+            row = os.fstat(fd)
+            named = os.stat(name, dir_fd=root, follow_symlinks=False)
+            if (stat.S_IMODE(row.st_mode) != 0o600
+                    or _identity(row) != _identity(named) or row.st_nlink != 1
+                    or named.st_nlink != 1):
+                raise ValueError('runtime_control_not_private')
             view = memoryview(payload)
             while view:
                 count = os.write(fd, view)

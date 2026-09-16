@@ -219,6 +219,32 @@ class RuntimeTests(unittest.TestCase):
             self.authority()
         self.assertFalse((self.parent / ('hf-exploratory-runtime-' + self.digest)).exists())
 
+    def test_create_rejects_nonprivate_store_before_runtime_creation(self):
+        self.store.path.chmod(0o755)
+        with self.assertRaises(ValueError):
+            self.authority()
+        self.assertFalse((self.parent / ('hf-exploratory-runtime-' + self.digest)).exists())
+        self.assertTrue((self.store.path / 'lock').exists())
+
+    def test_create_rejects_nonprivate_or_hardlinked_lock_before_runtime_creation(self):
+        lock = self.store.path / 'lock'
+        lock.chmod(0o400)
+        with self.assertRaises(ValueError):
+            self.authority()
+        self.assertFalse((self.parent / ('hf-exploratory-runtime-' + self.digest)).exists())
+        lock.chmod(0o600)
+        os.link(lock, self.store.path / 'lock-hardlink')
+        with self.assertRaises(ValueError):
+            self.authority()
+        self.assertFalse((self.parent / ('hf-exploratory-runtime-' + self.digest)).exists())
+        self.assertEqual(lock.stat().st_nlink, 2)
+
+    def test_guard_rejects_new_receipt_lock_hardlink(self):
+        authority = self.authority()
+        os.link(self.store.path / 'lock', self.store.path / 'lock-hardlink')
+        with self.assertRaises(ValueError):
+            authority.guard()
+
     def test_uninitialized_adapter_is_rejected_as_invalid(self):
         self.assertTrue(hasattr(self.runtime, 'ExploratoryColimaCommand'))
         forged = object.__new__(self.runtime.ExploratoryColimaCommand)
@@ -296,9 +322,9 @@ class RuntimeTests(unittest.TestCase):
             return real_mkdir(name, *args, **kwargs)
         with patch.object(self.runtime.os, 'open', side_effect=tracked_open), \
                 patch.object(self.runtime.os, 'mkdir', side_effect=fail_mkdir):
-            with self.assertRaises(ValueError) as failure:
+            with self.assertRaises(OSError) as failure:
                 self.authority()
-        self.assertEqual(str(failure.exception.__cause__), 'injected mkdir failure')
+        self.assertEqual(str(failure.exception), 'injected mkdir failure')
         for fd in set(opened):
             with self.assertRaises(OSError):
                 os.fstat(fd)
@@ -324,11 +350,44 @@ class RuntimeTests(unittest.TestCase):
             return real_fstat(fd)
         with patch.object(self.runtime.os, 'open', side_effect=tracked_open), \
                 patch.object(self.runtime.os, 'fstat', side_effect=fail_fstat):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(OSError):
                 self.authority()
         for fd in set(opened):
             with self.assertRaises(OSError):
                 real_fstat(fd)
+
+    def test_first_ancestor_identity_failure_closes_every_opened_fd_without_deletion(self):
+        opened, failing = [], []
+        real_open, real_fstat = os.open, os.fstat
+        first_ancestor = self.store.path.parts[1]
+        marker = self.store.path / 'preserved'
+        marker.write_bytes(b'keep')
+        def tracked_open(name, *args, **kwargs):
+            fd = real_open(name, *args, **kwargs)
+            opened.append(fd)
+            if name == first_ancestor:
+                failing.append(fd)
+            return fd
+        def fail_fstat(fd):
+            if fd in failing:
+                raise OSError('injected first ancestor identity failure')
+            return real_fstat(fd)
+        # Capture the actual construction path, including any called helper.
+        with patch.object(self.runtime.os, 'open', side_effect=tracked_open), \
+                patch.object(self.runtime.os, 'fstat', side_effect=fail_fstat):
+            with self.assertRaises((ValueError, OSError)):
+                self.authority()
+        leaked = []
+        for fd in set(opened):
+            try:
+                real_fstat(fd)
+            except OSError:
+                continue
+            leaked.append(fd)
+            os.close(fd)
+        self.assertEqual(marker.read_bytes(), b'keep')
+        self.assertFalse((self.parent / ('hf-exploratory-runtime-' + self.digest)).exists())
+        self.assertEqual(leaked, [], 'construction leaked first ancestor descriptor')
 
     def test_control_empty_payload_full_short_writes_and_fsync_failure_close_fd(self):
         authority = self.authority()
@@ -354,6 +413,51 @@ class RuntimeTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 os.fstat(fd)
         self.assertEqual(authority.kind_config.read_bytes(), b'preserved')
+
+    def test_control_exact_mode_is_not_filtered_by_restrictive_umask(self):
+        authority = self.authority()
+        previous = os.umask(0o200)
+        try:
+            authority.write_control('kind-config.yaml', b'private')
+        finally:
+            os.umask(previous)
+        row = authority.kind_config.stat()
+        self.assertTrue(stat.S_ISREG(row.st_mode))
+        self.assertEqual(stat.S_IMODE(row.st_mode), 0o600)
+        self.assertEqual(row.st_uid, os.geteuid())
+        self.assertEqual(row.st_nlink, 1)
+        self.assertEqual(authority.kind_config.read_bytes(), b'private')
+
+    def test_control_permission_failure_closes_fd_and_preserves_exclusive_file(self):
+        authority = self.authority()
+        opened = []
+        real_open = os.open
+        def tracked_open(*args, **kwargs):
+            fd = real_open(*args, **kwargs)
+            opened.append(fd)
+            return fd
+        with patch.object(self.runtime.os, 'open', side_effect=tracked_open), \
+                patch.object(self.runtime.os, 'fchmod', side_effect=OSError('injected fchmod failure')):
+            with self.assertRaisesRegex(OSError, 'injected fchmod failure'):
+                authority.write_control('kind-config.yaml', b'not-written')
+        for fd in opened:
+            with self.assertRaises(OSError):
+                os.fstat(fd)
+        self.assertEqual(authority.kind_config.read_bytes(), b'')
+        with self.assertRaises(FileExistsError):
+            authority.write_control('kind-config.yaml', b'no-overwrite')
+
+    def test_control_rejects_hardlink_added_during_permission_enforcement(self):
+        authority = self.authority()
+        real_fchmod = os.fchmod
+        def linked_fchmod(fd, mode):
+            real_fchmod(fd, mode)
+            os.link(authority.kind_config, authority.path / 'control-hardlink')
+        with patch.object(self.runtime.os, 'fchmod', side_effect=linked_fchmod):
+            with self.assertRaises(ValueError):
+                authority.write_control('kind-config.yaml', b'not-written')
+        self.assertEqual(authority.kind_config.read_bytes(), b'')
+        self.assertEqual(authority.kind_config.stat().st_nlink, 2)
 
     def test_zero_control_write_closes_fd_and_does_not_remove_file(self):
         authority = self.authority()
