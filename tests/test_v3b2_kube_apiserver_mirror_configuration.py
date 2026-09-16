@@ -13,6 +13,7 @@ from tests.test_v3b2_control_plane_manifest_source import (
     identity as source_identity,
     observations as source_observations,
 )
+from tests.test_v3b2_driver_pod_configuration import IDENTITY as OWNERSHIP_IDENTITY
 from tests.test_v3b2_runtime_ownership import fixture as ownership_fixture, encode
 
 
@@ -26,6 +27,10 @@ CA_CANDIDATES = (
     ("etc-pki-tls-certs", "/etc/pki/tls/certs"),
     ("usr-local-share-ca-certificates", "/usr/local/share/ca-certificates"),
     ("usr-share-ca-certificates", "/usr/share/ca-certificates"),
+)
+MATCHED_OWNERSHIP_IDENTITY = replace(
+    OWNERSHIP_IDENTITY,
+    cluster_incarnation_uid=source_identity().cluster_incarnation_uid,
 )
 
 
@@ -219,8 +224,9 @@ def literal_source_fixture(selected=(), ip=DEFAULT_IP, document=None):
         observations=source_observations(owned, apiserver=yaml_bytes(manifest)))
 
 
-def api_document(selected=(), ip=DEFAULT_IP):
-    args = ownership_fixture()
+def api_document(selected=(), ip=DEFAULT_IP,
+                 owned_identity=MATCHED_OWNERSHIP_IDENTITY):
+    args = ownership_fixture(owned_identity=owned_identity)
     document = json.loads(args["runtime_objects"])
     node = row(document, "Node", NODE)
     node["status"] = {"addresses": [
@@ -240,8 +246,9 @@ def api_document(selected=(), ip=DEFAULT_IP):
     return args, document
 
 
-def literal_runtime_fixture(selected=(), ip=DEFAULT_IP, document=None):
-    args, default = api_document(selected, ip)
+def literal_runtime_fixture(selected=(), ip=DEFAULT_IP, document=None,
+                            owned_identity=MATCHED_OWNERSHIP_IDENTITY):
+    args, default = api_document(selected, ip, owned_identity)
     args["runtime_objects"] = encode(default if document is None else document)
     return validate_runtime_ownership(**args)
 
@@ -476,6 +483,31 @@ class KubeAPIServerMirrorConfigurationTest(unittest.TestCase):
             with self.subTest(path=path), self.assertRaises(
                     self.module.KubeAPIServerMirrorConfigurationError):
                 replace(proof, ownership=ownership)
+
+    def test_cross_proof_cluster_incarnation_mismatch_is_rejected(self):
+        ownership = literal_runtime_fixture(owned_identity=replace(
+            MATCHED_OWNERSHIP_IDENTITY,
+            cluster_incarnation_uid="5b9f7ce2-9876-4f55-9a23-a9f00fbbde11",
+        ))
+        source = literal_source_fixture()
+        ownership.__post_init__(); source.__post_init__()
+        self.assertNotEqual(source.cluster_uid,
+                            ownership.owned_identity.cluster_incarnation_uid)
+        with self.assertRaises(self.module.KubeAPIServerMirrorConfigurationError):
+            self.module.validate_kube_apiserver_mirror_configuration(
+                ownership=ownership, source=source)
+
+    def test_cross_proof_node_container_mismatch_is_rejected(self):
+        ownership = literal_runtime_fixture(owned_identity=replace(
+            MATCHED_OWNERSHIP_IDENTITY, node_container_id="b" * 64,
+        ))
+        source = literal_source_fixture()
+        ownership.__post_init__(); source.__post_init__()
+        self.assertNotEqual(source.node_container_id,
+                            ownership.owned_identity.node_container_id)
+        with self.assertRaises(self.module.KubeAPIServerMirrorConfigurationError):
+            self.module.validate_kube_apiserver_mirror_configuration(
+                ownership=ownership, source=source)
 
     def test_constructors_exact_dependencies_bindings_and_false_flags(self):
         proof = self.validate(CA_CANDIDATES[:2])

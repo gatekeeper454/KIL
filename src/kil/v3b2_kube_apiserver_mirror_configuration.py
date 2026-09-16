@@ -348,6 +348,12 @@ def _compute(*, ownership, source):
         raise KubeAPIServerMirrorConfigurationError(
             "kube-apiserver source dependency must be exact")
     source.__post_init__()
+    if source.cluster_uid != ownership.owned_identity.cluster_incarnation_uid:
+        raise KubeAPIServerMirrorConfigurationError(
+            "kube-apiserver source cluster incarnation differs from ownership")
+    if source.node_container_id != ownership.owned_identity.node_container_id:
+        raise KubeAPIServerMirrorConfigurationError(
+            "kube-apiserver source node container differs from ownership")
     relations = [row for row in ownership.node_ownership.static_pods
                  if row.component == "kube-apiserver"]
     if len(relations) != 1:

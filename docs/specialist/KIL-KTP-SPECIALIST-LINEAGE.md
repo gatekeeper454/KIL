@@ -14424,3 +14424,119 @@ checkpoint, then submit the exact commit range for independent specification
 and quality review before starting Task 5.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-292 — 2026-09-15 — V4 Task 4 specification review found a cross-incarnation source join gap
+
+**Input:** Independently review Task 4 commit
+`47ce73375997e4fdcf365db34e06e9f6084f62db` against the approved
+kube-apiserver disk/API proof contract, including the exhaustive conditional
+CA matrices, fixed disk and API configuration, dependency reconstruction,
+coordinated tamper resistance, and exact-owned-node boundary.
+
+**Interpretation:** Reconstructing the retained source proof and runtime
+ownership proof independently is necessary but not sufficient. The component
+proof must also join their shared incarnation authorities: the manifest
+source's cluster UID and node-container ID must equal the runtime ownership
+proof's retained cluster-incarnation UID and node-container ID. Otherwise two
+individually valid proofs from different clusters or node containers can be
+composed into a false disk-to-API same-source claim.
+
+**Decision status:** Task 4 specification review is not approved. One Important
+finding is open: `v3b2_kube_apiserver_mirror_configuration._compute`
+reconstructs both dependencies but does not compare their cluster or node
+identities before validating the disk/API relation. No Critical or Minor
+finding was identified in this review.
+
+**Rationale:** The approved design authenticates manifests from the exact owned
+Kind node, requires every retained identity and source commitment to
+reconstruct, and consumes the same source together with exact runtime
+ownership. The current fixtures already pair source cluster UID
+`4b9f7ce2-9876-4f55-9a23-a9f00fbbde11` with runtime cluster UID `cluster-uid`
+and accept it. An additional independent reproduction constructed a valid
+manifest source for node-container ID `dddd...dddd`, paired it with valid
+runtime ownership for `aaaa...aaaa`, and the validator still returned one
+binding. That composition defeats the exact-owned-node join even though each
+dependency is internally valid.
+
+**Verification:** The prescribed kube-apiserver, etcd, scheduler, and API
+defaults suite passed all 50 tests in 9.730 seconds. The mismatch reproductions
+then showed both the existing cross-cluster fixture and a deliberately
+cross-node pair being accepted. Official pinned Kubernetes v1.36.1
+`manifests.go`, `volumes.go`, and static-Pod utility sources were also checked;
+no separate fixed-field discrepancy was found. No live infrastructure command
+was executed.
+
+**Affected artifacts:** This review records the finding only in
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` and its regenerated
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm` reader. The corrective change
+belongs in `src/kil/v3b2_kube_apiserver_mirror_configuration.py` and
+`tests/test_v3b2_kube_apiserver_mirror_configuration.py`.
+
+**Unresolved questions:** The implementation must define and test the explicit
+cross-proof equality join for both cluster-incarnation UID and node-container
+ID, align the accepted fixture identities, and demonstrate rejection when
+either shared authority differs. Task 4 remains blocked from quality review and
+Task 5 until specification re-review closes this finding.
+
+**Next gate:** Add failing cross-cluster and cross-node composition tests, make
+the smallest local identity-join correction before disk/API comparison, rerun
+the prescribed 50-test gate, regenerate the lineage reader, and resubmit the
+resulting commit for independent specification re-review.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-293 — 2026-09-15 — V4 Task 4 cross-proof identity join corrected
+
+**Input:** Address the independent Task 4 specification review's Important
+finding that the kube-apiserver validator reconstructed its source and runtime
+ownership dependencies separately but did not join the source cluster
+incarnation or source node-container identity to the retained ownership
+authority. Add test-first regressions for both independently valid mismatched
+compositions, apply a narrow correction, and perform no live infrastructure
+execution.
+
+**Interpretation:** Independent validity is insufficient for a composed proof.
+Before any source/API comparison can authorize a binding, the authenticated
+manifest source's `cluster_uid` and `node_container_id` must equal the exact
+`cluster_incarnation_uid` and `node_container_id` in the reconstructed
+`RuntimeOwnershipProof.owned_identity`. Otherwise evidence from another valid
+cluster incarnation or Kind node could be substituted.
+
+**Decision status:** Confirmed implementation correction; independent
+specification re-review remains pending. The validator now fails locally with
+`KubeAPIServerMirrorConfigurationError` on either cross-proof identity
+mismatch. No other Task 4 expectation or claim boundary changed.
+
+**Rationale:** The correction performs two literal equality joins immediately
+after exact-type checks and full reconstruction of both dependencies. This
+preserves the existing fixed disk validation, conditional CA-subset derivation,
+owned-Node InternalIP rules, independently transformed API comparison,
+constructor reconstruction, and strict false runtime/application flags while
+closing only the reviewed composition gap.
+
+**Verification:** Before the correction, two new regressions constructed
+individually valid dependency pairs with a mismatched cluster-incarnation UID
+and a mismatched 64-hex node-container ID; both were RED because validation
+incorrectly returned a proof instead of raising. After the correction, the
+focused kube-apiserver module passed 11 tests in 4.405 seconds, including both
+new joins and both existing 32-mask loops. The prescribed kube-apiserver,
+etcd, scheduler, and API-default set passed 52 tests in 9.979 seconds. No live
+Colima, Docker, Kind, kubectl, Kubernetes, request, publication, or profile
+command was executed.
+
+**Affected artifacts:**
+`src/kil/v3b2_kube_apiserver_mirror_configuration.py`,
+`tests/test_v3b2_kube_apiserver_mirror_configuration.py`,
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`, and its regenerated
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm` reader.
+
+**Unresolved questions:** Independent specification and quality re-review,
+the combined V4 static acceptance gate, Task 5, full repository validation,
+branch delivery, and any live dedicated-profile experiment remain separate
+gates.
+
+**Next gate:** Regenerate and verify the lineage reader, commit this focused
+identity-join correction without pushing, and return the exact commit range to
+independent review before starting Task 5.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
