@@ -155,3 +155,26 @@ unverified; full Kind/Calico acceptance remains not established. This recovery
 does not measure KIL behavior or historical HF incident prevention.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Execution record — 2026-09-16
+
+User authorized this runbook with `approved, yes`. Tasks 1–3 passed their
+preconditions and exactly one graceful stop completed with return code zero.
+Task 4 confirms the VM Stopped, profile/config and 60 GiB data/20 GiB root-disk
+identities retained, foreign profiles/pre-stop roster unchanged, and global
+Docker context/kubeconfig state unchanged. The original shared `_networks`
+identity mismatch remains. No force, deletion, retry or HF request occurred.
+
+**Preservation exception:** The old receipt verified all 29 listed files
+before stop; after stop its private Docker-context `meta.json` is missing,
+while the other 28 files still verify. Thus the requirement to preserve the
+complete old receipt was not met. Its original checksum manifest remains
+untouched; bytes were not fabricated/restored. All 32 files in the separate
+new recovery receipt and all five transcript-export files verify.
+
+New ignored recovery evidence:
+`.tools/hf-recovery-private/2026-09-16/manual-stop-4bf272a0/`.
+The adjacent `manual-stop-4bf272a0-post-verification.md` records the later
+checksum exception without changing the checksummed native outcome.
+This runbook is spent: no second stop, startup or deletion is authorized.
+Full execution rationale and next gate are recorded in lineage T-369.

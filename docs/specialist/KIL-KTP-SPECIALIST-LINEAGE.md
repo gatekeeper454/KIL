@@ -19505,3 +19505,109 @@ private transcript links. Ask whether the user authorizes the proposed one
 graceful-stop-only recovery. Do not execute it in this preparation turn.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-369 — 2026-09-16 — Approved one graceful stop confirms residual VM Stopped; old private context receipt exception
+
+**Input:** User approved the graceful-stop-only residual VM recovery plan
+with `approved, yes`. The preceding authorization question excluded deletion
+and retry; preserve disks and evidence and stop at the runbook's next boundary.
+
+**Interpretation:** Execute the manual runbook at clean local documentation
+checkpoint 9bcc964, not the exploratory launcher or strict lifecycle. Existing
+host-managed linked worktree is retained detached and unchanged in topology.
+Use separate manual-stop authority based on retained/fresh concrete footprint
+continuity, complete inventory and empty container observations. Do not turn
+the failed strict creation binding into a successful acceptance assertion.
+
+**Decision status:** Exactly one approved graceful stop CONFIRMED. Profile
+kil-v3-lab is Stopped; original profile/config and root/data-disk identities
+and capacities retained. Foreign profiles and foreign roster match the fresh
+pre-stop baseline; global Docker/kubeconfig state unchanged. No startup,
+force, VM/profile/data deletion instruction, retry, parser repair, shared-state
+restoration or HF request was issued. However, complete preservation of the
+old private receipt FAILED: its runtime Docker-context metadata file disappeared
+across shutdown. This exception is explicitly retained and not repaired or
+hidden by rewriting old evidence. Recovery is at its stopping place.
+
+**Rationale:** Root verified the original 29-file receipt and five-file
+transcript export before mutation, including retained inconclusive/null-binding/
+manual-recovery/zero-request premise. Existing LabLock was held continuously
+across checks, durable intent, stop and post-observation; it was released after
+evidence finalization. Root warned against concurrent native operations.
+Native children used sanitized passwd HOME, accepted-tool PATH and private
+Docker configuration; no inherited context/host/TLS/kubeconfig/Colima/Lima
+override. Existing bounded process capture supplied 10-second read limits,
+300-second stop limit and 8 MiB aggregate output bounds.
+
+Docker executable matched the retained accepted digest; exact Colima v0.10.3
+commit 00f6c297e92a82c04a4ab507db0a61435650d7e8 and Lima 2.2.0 observations passed.
+Stable roster-bracketed inventory contained exactly the two original Stopped
+foreign profiles and Running kil-v3-lab with 4 CPUs/8 GiB/60 GiB Docker/aarch64
+resources. Two equal no-follow native captures matched the retained concrete
+profile/instance/disk/config/root/data/lock records byte-for-byte; protected VM
+and startup artifact were absent. Only the already known shared `_networks`
+inode difference was admitted as an explicit manual-recovery observation, not
+as successful original strict preservation. Global context remained default;
+inherited/default kubeconfig remained absent. The explicit lab endpoint's
+complete Docker container roster was empty.
+
+An exclusive new PrivateStore retained pre-stop observations and fsynced
+immutable manual_stop_intent.json before dispatch. All continuity, inventory,
+global-state and empty-container guards were repeated immediately before the
+instruction. The thirteen-command journal includes twelve read-only commands
+and just one mutation, sequence 11:
+`/Users/mistorm/.local/bin/colima stop --profile kil-v3-lab`.
+Its result is zero; stdout records native host-agent SIGINT, socket forwarding
+shutdown, disk unmount, VZ Stopped and instance shutdown. These are Colima's
+internal graceful-stop operations, not root-discovered process killing.
+Bounded post-stop complete inventory confirms all three profiles Stopped.
+Config and disk identities/sizes are retained, disk lock is released, foreign
+rows and roster are unchanged from pre-stop and global state unchanged.
+Data disk remains 64424509440 bytes, root disk 21474836480 bytes. The original
+shared `_networks` inode mismatch 596062288 versus 612747935 remains; no
+additional captured foreign identity difference was introduced by the stop.
+
+All 32 checksummed new recovery files verify. The five transcript-export files
+also still verify. A later original-receipt check verifies 28 of its 29 files
+but cannot open
+`docker-config/contexts/meta/d20cf16ae8c77f5a748a65a4d9591ae1f23609e20ea3b4b49c5200acf3cea8f8/meta.json`:
+it is now absent. This private runtime path was provided to the native stop
+as DOCKER_CONFIG; disappearance across the one stop is observed, but an
+independent internal deletion trace was not captured. The original manifest,
+profile-created capture, journal, report, synopsis and all command streams
+still verify. Original metadata-byte recoverability is not established.
+Root notified the user and did not recreate guessed bytes, rewrite checksums,
+change the original report or issue another native instruction. The failed
+receipt is no longer wholly immutable/fully verifying; earlier preservation
+expectations must not be repeated as achieved facts. Systematic-debugging and
+verification instructions caused this exception to be checked and surfaced
+before completion claims; no corrective implementation is authorized here.
+
+**Affected artifacts:** New ignored private recovery receipt:
+`.tools/hf-recovery-private/2026-09-16/manual-stop-4bf272a0/`, containing command
+streams, once-only intent, pre/post raw observations, journal, outcome and
+checksums. Adjacent manual-stop-4bf272a0-post-verification.md separately records
+the later preservation exception. The native stop left the profile and both
+disks in place but removed or coincided with loss of the named private runtime
+context file. This entry, its regenerated reader, and an appended execution
+record in the plan/reader are the only tracked edits. Full prior 9bcc964
+lineage Markdown remains an exact prefix. No implementation, tests, deployment,
+accepted evidence, publication artifact, strict flag or deferral is changed.
+Ollama was not started, used, stopped or otherwise operated on.
+
+**Unresolved questions:** Native DNS-host configuration parsing, original
+shared-network replacement cause, and how to isolate immutable receipts from
+native runtime-context removal remain separate engineering questions. No
+remaining data/profile deletion or another lab launch is authorized. The
+stopped preserved profile still prevents fresh exploratory preflight. No KIL
+permit/deny behavior or HF incident action was exercised. Accepted local-Envoy
+evidence is unaffected; platform-image provenance remains unverified and full
+Kind/Calico acceptance not established. All sixteen strict deferrals remain.
+
+**Next gate:** Verify exact lineage prefix, generated readers, tracked-doc-only
+scope and diff; save the execution record and hand off the Stopped state,
+preserved disks and private-context exception. End without further native
+mutation. A separate explicit scope is required for deletion or subsequent
+DNS/network/runtime-evidence engineering and any eventual lab rehearsal.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
