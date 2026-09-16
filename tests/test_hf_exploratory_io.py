@@ -296,3 +296,106 @@ class IOTests(unittest.TestCase):
             store.write('quota', b'x')
         with self.assertRaises(ValueError):
             store.record('quota', {})
+
+    def test_containing_parent_is_synced_before_action(self):
+        parent = Path(self.temp.name).resolve()
+        identity = lambda row: (row.st_dev, row.st_ino)
+        expected = identity(parent.stat())
+        synced = []
+        real_sync = os.fsync
+        def sync(fd):
+            synced.append(identity(os.fstat(fd)))
+            real_sync(fd)
+        with patch.object(self.io.os, 'fsync', side_effect=sync):
+            store = self.store()
+            def action():
+                self.assertIn(expected, synced)
+                return terminal(TRACKS[0])
+            store.send_once(TRACKS[0], b'instruction\n', action)
+
+    def test_parent_sync_failure_closes_constructor_resources(self):
+        parent = Path(self.temp.name).resolve()
+        expected = (parent.stat().st_dev, parent.stat().st_ino)
+        descriptors = []
+        real_open, real_sync = os.open, os.fsync
+        def opened(*args, **kwargs):
+            fd = real_open(*args, **kwargs)
+            descriptors.append(fd)
+            return fd
+        def sync(fd):
+            row = os.fstat(fd)
+            if (row.st_dev, row.st_ino) == expected:
+                raise OSError('parent persistence')
+            real_sync(fd)
+        with patch.object(self.io.os, 'open', side_effect=opened), patch.object(self.io.os, 'fsync', side_effect=sync):
+            with self.assertRaises(OSError):
+                store = self.io.PrivateStore(parent / 'run')
+                self.addCleanup(store.close)
+        for fd in descriptors:
+            with self.assertRaises(OSError):
+                os.fstat(fd)
+
+    def test_failed_file_persistence_reserves_quota(self):
+        store = self.store()
+        base = store.total
+        with patch.object(self.io, 'MAX_PRIVATE_TOTAL_BYTES', base + 8):
+            with patch.object(self.io.os, 'fsync', side_effect=OSError('disk')):
+                with self.assertRaises(OSError):
+                    store.write('failed', b'12345')
+            self.assertEqual((store.path / 'failed').read_bytes(), b'12345')
+            with self.assertRaises(ValueError):
+                store.write('later', b'12345')
+            self.assertEqual(store.total, base + 5)
+
+    def test_failed_journal_persistence_reserves_quota(self):
+        store = self.store()
+        base = store.total
+        payload = self.io.canonical({'event': 'failed', 'details': {}})
+        with patch.object(self.io, 'MAX_PRIVATE_TOTAL_BYTES', base + len(payload) + 1):
+            with patch.object(self.io.os, 'fsync', side_effect=OSError('disk')):
+                with self.assertRaises(OSError):
+                    store.record('failed', {})
+            self.assertTrue(store.journal.read_bytes().endswith(payload))
+            with self.assertRaises(ValueError):
+                store.record('later', {})
+            self.assertEqual(store.total, base + len(payload))
+
+    def test_selector_failure_prevents_process_acquisition(self):
+        with patch.object(self.io.selectors, 'DefaultSelector', side_effect=OSError('selector')), patch.object(self.io.subprocess, 'Popen') as spawn:
+            with self.assertRaises(OSError):
+                self.io.capture_process((sys.executable, '-c', 'pass'), {}, None, 1, 64, Path.cwd())
+            spawn.assert_not_called()
+
+    def test_spawn_failure_closes_selector(self):
+        selector = self.io.selectors.DefaultSelector()
+        self.addCleanup(selector.close)
+        with patch.object(self.io.selectors, 'DefaultSelector', return_value=selector), patch.object(self.io.subprocess, 'Popen', side_effect=OSError('spawn')):
+            with self.assertRaises(OSError):
+                self.io.capture_process((sys.executable, '-c', 'pass'), {}, None, 1, 64, Path.cwd())
+        self.assertIsNone(selector.get_map())
+
+    def test_partial_journal_failure_reserves_full_payload(self):
+        store = self.store()
+        base = store.total
+        before = store.journal.read_bytes()
+        payload = self.io.canonical({'event': 'partial', 'details': {}})
+        real_write = os.write
+        calls = []
+        def partial(fd, view):
+            if calls:
+                raise OSError('partial append')
+            calls.append(1)
+            return real_write(fd, view[:5])
+        with patch.object(self.io, 'MAX_PRIVATE_TOTAL_BYTES', base + len(payload)):
+            with patch.object(self.io.os, 'write', side_effect=partial):
+                with self.assertRaises(OSError):
+                    store.record('partial', {})
+            self.assertEqual(store.journal.read_bytes(), before + payload[:5])
+            self.assertEqual(store.total, base + len(payload))
+            with self.assertRaises(ValueError):
+                store.write('later', b'x')
+
+    def test_successful_totals_equal_persisted_bytes(self):
+        store = self.store()
+        store.send_once(TRACKS[0], b'instruction\n', lambda: terminal(TRACKS[0]))
+        self.assertEqual(store.total, sum(path.stat().st_size for path in store.path.iterdir()))

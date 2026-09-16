@@ -17713,3 +17713,44 @@ existing approval; stop and report a genuine native blocker without retry or
 substitution. Exact reset-store bytes, if ever removed, remain in private capture.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-343 — 2026-09-16 — Exploratory IO persistence and acquisition corrections
+
+**Input:** Independent quality review T-341 found three important IO gaps:
+missing containing-directory fsync, failed-persistence quota escape and process
+acquisition preceding selector allocation. Correct only local IO/tests/lineage.
+
+**Interpretation:** Request-capable creation requires durable containment;
+possibly persisted bytes consume quota even when durability fails; no child may
+exist outside cleanup authority during selector/process initialization.
+
+**Decision status:** Confirmed corrections implemented, pending independent
+quality re-review. Fresh verification passed 34 IO tests and six accepted-input
+tests with ResourceWarning promoted to errors, plus a clean diff check.
+
+**Rationale:** Six new regressions failed first as assertions. Anchored parent
+opening, mkdir/open relative to that descriptor and containing-parent fsync before
+lock/journal creation cleared two failures; constructor failure closes all acquired
+resources. Full-payload quota reservation immediately after validation, before
+any file open/write/fsync, cleared two more; reservations are never refunded on
+failure. This preserves successful byte totals while conservatively accounting
+failed and partial persistence. Selector acquisition now precedes Popen, whose
+failure is inside selector cleanup authority, clearing the remaining two failures.
+Additional passing checks cover partial journal append failure and exact successful
+totals. The RED-to-GREEN progression was six, four, two, then zero failures.
+Tests used only temporary local files, mocked acquisition probes and harmless
+Python children; no accepted executable bytes were read or executed.
+
+**Affected artifacts:** src/kil/hf_exploratory_io.py,
+tests/test_hf_exploratory_io.py, this appended lineage entry and generated reader.
+Root-owned plans, strict modules, completion flags and deferrals remain untouched.
+
+**Unresolved questions:** Independent IO quality re-review remains required.
+Native lifecycle/evidence readiness, platform-image provenance, live enforcement
+and strict acceptance remain unestablished by this local correction.
+
+**Next gate:** Original independent quality reviewer rechecks these three failure
+paths and the full IO unit. Only after that gate may the next pure/native unit
+work proceed; no instruction, retry, replay or native action occurred here.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

@@ -32,20 +32,21 @@ def capture_process(argv, environment, stdin, timeout, maximum, cwd):
             or type(maximum) is not int or not 0 < maximum <= MAX_OUTPUT_BYTES
             or not isinstance(cwd, Path) or not cwd.is_absolute()):
         raise ValueError('invalid_capture_parameters')
-    process = subprocess.Popen(argv, cwd=cwd, env=environment,
-        stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
-    selector = selectors.DefaultSelector()
     output = [bytearray(), bytearray()]
     pending = memoryview(stdin or b'')
     deadline = time.monotonic() + timeout
     failure = None
+    process = None
     def kill():
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+    selector = selectors.DefaultSelector()
     try:
+        process = subprocess.Popen(argv, cwd=cwd, env=environment,
+            stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
         for index, stream in enumerate((process.stdout, process.stderr)):
             os.set_blocking(stream.fileno(), False)
             selector.register(stream, selectors.EVENT_READ, index)
@@ -97,12 +98,13 @@ def capture_process(argv, environment, stdin, timeout, maximum, cwd):
             process.wait(timeout=2)
     finally:
         selector.close()
-        for stream in (process.stdin, process.stdout, process.stderr):
-            if stream is not None:
-                stream.close()
-        if process.poll() is None:
-            kill()
-            process.wait(timeout=2)
+        if process is not None:
+            for stream in (process.stdin, process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
+            if process.poll() is None:
+                kill()
+                process.wait(timeout=2)
     raw_out, raw_err = map(bytes, output)
     return CommandResult(failure if failure is not None else process.returncode,
         raw_out.decode('utf-8', 'replace'), raw_err.decode('utf-8', 'replace'), raw_out, raw_err)
@@ -171,9 +173,13 @@ class PrivateStore:
         self.uncertain = False
         self._lock = None
         self._directory = None
-        path.mkdir(mode=0o700)
+        parent = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
-            self._directory = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            os.mkdir(path.name, mode=0o700, dir_fd=parent)
+            self._directory = os.open(path.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                      dir_fd=parent)
+            # The new directory entry must survive before any request-capable store exists.
+            os.fsync(parent)
             self._lock = os.open('lock', os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600,
                                  dir_fd=self._directory)
             fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -181,6 +187,8 @@ class PrivateStore:
         except BaseException:
             self.close()
             raise
+        finally:
+            os.close(parent)
 
     def close(self):
         if self._lock is not None:
@@ -209,6 +217,8 @@ class PrivateStore:
         if type(name) is not str or re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', name) is None:
             raise ValueError('unsafe_private_filename')
         self._bound(payload, MAX_OUTPUT_BYTES)
+        # Conservatively reserve before persistence; failed or partial writes never refund.
+        self.total += len(payload)
         fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600,
                      dir_fd=self._directory)
         try:
@@ -219,12 +229,12 @@ class PrivateStore:
         finally:
             os.close(fd)
         self._sync_parent()
-        self.total += len(payload)
         return sha256(payload).hexdigest()
 
     def record(self, event, details):
         payload = canonical({'event': event, 'details': details})
         self._bound(payload, 65536)
+        self.total += len(payload)
         fd = os.open('journal.jsonl', os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600,
                      dir_fd=self._directory)
         try:
@@ -238,7 +248,6 @@ class PrivateStore:
         finally:
             os.close(fd)
         self._sync_parent()
-        self.total += len(payload)
 
     def send_once(self, track, instruction, action):
         if self.uncertain or len(self.attempts) >= 3 or track != TRACKS[len(self.attempts)]:
