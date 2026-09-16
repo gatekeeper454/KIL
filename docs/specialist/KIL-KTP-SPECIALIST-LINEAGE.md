@@ -20494,3 +20494,69 @@ for the original SPEC reviewer to re-review; proceed to QUALITY only after SPEC
 approval, and to Task 3B only after both independent reviews approve.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T384 — 2026-09-16 — Task 3A independent corrected SPEC approval
+
+**Input:** Independently re-review the Task 3A runner/evidence implementation
+from d31c423 through corrected source checkpoint
+4b22320c1845aa29ca89803a59531147ab6e862e, resolving the final-authentication
+ordering finding in T382 without broadening the scope to Native/CLI composition.
+The original implementer released the lineage writer before this append.
+
+**Interpretation:** SPEC review concerns the exact closed runner dispatch and
+finite immutable observations only. Passing temporary-file tests is engineering
+evidence, not native compatibility, configuration admission or cleanup proof.
+The correction must refuse manifest and tool-path substitutions made during the
+second executable authentication, before any process acquisition.
+
+**Decision status:** SPEC APPROVED for corrected Task 3A source at 4b22320.
+Independent QUALITY review remains a separate gate. This approval supersedes the
+pending corrected-unit SPEC question in T383 without rewriting earlier entries;
+it does not authorize Task 3B implementation or any native run.
+
+**Rationale:** The reviewer inspected the actual original and correction diffs,
+source, finite evidence paths and tests rather than accepting implementation
+reports. The corrected runner places exact manifest-byte type/content and
+retained tool-path comparisons after executable authentication, all three tool
+metadata comparisons, the adapter authority guard and dispatch fingerprint,
+immediately before capture; no authentication IO follows these final checks.
+The exact accepted Docker/Kind/kubectl manifest remains unchanged, with no Colima
+identity invented. Closed Command semantics, scoped Colima's four derived
+bindings, global read-only version/list restriction, sanitized child environment
+and existing bounds remain intact.
+
+Two independent standalone reproductions used the real authenticated tracked
+manifest and temporary executable-verification leaf fixtures. Substituting
+manifest_bytes and substituting tools during the second executable verification
+each raised ValueError, reached exactly two executable checks and left mocked
+capture uncalled. Fresh independent focused verification passed all 58 IO/evidence
+tests in 3.564s using the designated repository Python, PYTHONPATH=src,
+PYTHONDONTWRITEBYTECODE=1 and fatal ResourceWarning. Root separately reported
+fresh combined verification passing all 375 tests in 67.678s; that broader run
+is attributed to root, not represented as this reviewer's independent execution.
+
+The evidence unit matches the seven fixed input files and retained aliases,
+64 KiB nofollow singly linked regular-file observations, stable double capture,
+guarded original-store binding, raw-byte hashes, exclusive bounded persistence,
+partial-failure preservation and repeat preflight including an absent ledger.
+Leftovers remain two stable observations of five named directories only, each
+bounded to 4096 entries and explicitly observed-only and partial. There is no
+recursive traversal, VM disk inspection, deletion or full-tree absence claim.
+
+**Affected artifacts:** This actual-EOF T384 append and its generated HTML
+reader only. The exact complete 4b22320 Markdown remains a prefix. Source and
+tests at that checkpoint match the correction reviewed before commit and are
+not edited by this reviewer. No strict changes, old receipt writes, native
+Colima/Lima/Docker/Kind/kubectl invocation, VM, HTTP/HF request, Ollama operation
+or platform-image audit occurred.
+
+**Unresolved questions:** Independent QUALITY approval, Task 3B snapshot-before-
+first-teardown composition, private-home native compatibility, Kind/Calico
+acceptance, platform-image provenance and native cleanup remain unestablished.
+
+**Next gate:** Render/check all 88 readers, verify the exact checkpoint prefix
+and two-path diff, commit only this lineage pair and release the exclusive
+writer. Require independent QUALITY approval before considering Task 3B; native
+execution remains separately gated.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
