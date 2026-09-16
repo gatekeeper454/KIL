@@ -19241,3 +19241,75 @@ genuine failure still requires inconclusive evidence, no replay and only exact
 still-bound cleanup.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-366 — 2026-09-16 — Bounded FINAL composition recheck approves exact Colima prefix correction
+
+**Input:** Recheck composition of the exact Colima version-format correction
+at 40d9b13bc72fd80a148ac2960f766fe6ea9b56f3 against the prior T-361 approved
+aeba16f baseline after separate T-364 SPEC and T-365 QUALITY approval.
+Inspect actual source/test differences and use only test-owned local version
+observations. Append after writer release at current clean HEAD
+c1abcb772c1752edf1c72d9699836d1ef50e4bf4, preserving its complete lineage prefix.
+
+**Interpretation:** Root reports the earlier actual preparation stopped after
+five successful read-only version commands because the adapter omitted the
+native v prefix on the same pinned Colima 0.10.3 version. Root reports zero
+profile/VM/cluster/pull/driver/HTTP operations, request intents or attempts,
+with the failed thirteen-file checksummed receipt preserved. These actual
+observations are supplied context, not independently re-observed by this
+reviewer. The correction addresses format, not genuine version drift or an
+observed lab-readiness failure; there is no attempted lab mutation or request
+to replay.
+
+**Decision status:** Bounded independent FINAL composition recheck APPROVED.
+No Critical, Important or Minor finding identified. Ready for ROOT's first
+actual native lab rehearsal: yes, contingent on root-owned final clean source,
+exact CLI/static accepted-input and accepted child-tool PATH gates. This is
+not actual native readiness, a live result, merge or publication approval.
+
+**Rationale:** The implementation delta from the prior composed approval is
+exactly one literal v added to the anchored Colima full-match regex. It now
+requires v0.10.3, without optional-prefix broadening or version substitution.
+The existing byte bound, commit/newline grammar, pinned Lima comparison and
+observed-versus-UNOBSERVED reporting remain unchanged. The tests retain the
+supplied 76-byte native output literal and reject eight malformed or nearby
+outputs before mutation. All other input/IO/case source, CLI, ownership and
+continuity checks, policy ordering, durable intent, fixed track order,
+once-only commands, frozen evidence joins, exact cleanup, claim exclusions,
+false provenance/acceptance flags and strict deferrals remain unchanged.
+
+Fresh independent verification with PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src,
+/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python
+and -W error::ResourceWarning passed the three exact version-format tests in
+0.144 seconds. The positive case observes five read-only calls and no lab flags
+or requests; the negative case refuses .4, .30, bare prefix, double v, extra
+line, CRLF, malformed commit line and missing final newline. Git comparison
+confirms all nine previously reviewed source/test files remain unchanged from
+40d9b13 to c1abcb7, and git diff --check is clean. No broad newest-source suite
+claim is inferred from root's earlier full-suite snapshot.
+
+**Affected artifacts:** Reviewed correction scope is only
+src/kil/hf_exploratory_native.py and tests/test_hf_exploratory_native.py.
+This reviewer changes only this appended lineage Markdown and regenerated
+sibling HTML reader. No code, accepted/private evidence, CLI, strict artifact,
+deployment policy, publication artifact or lifecycle deferral is changed.
+The complete c1abcb7 Markdown remains a byte-for-byte prefix.
+
+**Unresolved questions:** Actual native lab compatibility, first request-free
+setup/capture/teardown rehearsal, live foreign/global preservation and fresh
+three-track action remain unestablished by this review. Platform-image
+provenance remains unverified and full Kind/Calico acceptance not established.
+All sixteen strict lifecycle deferrals and existing claim exclusions remain.
+No real accepted-input verification, native tool invocation, profile/VM/
+cluster/network operation or live request was performed by this reviewer.
+
+**Next gate:** Verify prefix, regenerate/check all 85 readers, diff-check and
+commit only this lineage entry and its reader; release writer ownership to
+root. Root finishes exact clean-source/static/CLI/child-tool PATH checks before
+the separately authorized first request-free native rehearsal. Only complete
+rehearsal and exact owned teardown admit the approved fresh three-track action.
+Genuine failure or uncertainty still stops progression, with inconclusive
+evidence and only exact still-bound cleanup; no download, substitution, retry
+or broad deletion is implied.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
