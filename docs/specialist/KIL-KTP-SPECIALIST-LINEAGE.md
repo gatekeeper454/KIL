@@ -16733,3 +16733,102 @@ and component-specific status/readiness composition next; live execution require
 separate authorization. No V4/V3C completion, push, PR or publication.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-325 — 2026-09-16 — Static platform configuration composition accepted; exact execution synopsis
+
+**Input:** The user requested execution of the approved plan and a synopsis of
+exactly what the environment looks like and exactly what KIL did. Inputs are the
+approved 2026-09-16 platform configuration-composition design/plan, implementation
+revision `88d4b25`, completed regression evidence `549d72d`, final independent
+specification approval `bc1279e` and quality/whole-implementation approval
+`89a0276`. Execute continuously across all four tasks within the static-only
+boundary, preserving the existing host-managed linked worktree and main checkout.
+
+**Interpretation:** Implement and verify an in-memory reconstructable typed
+configuration proof, not launch or inspect a live cluster. Distinguish actual
+execution-host facts, pinned target design and synthetic retained observations.
+Require independently observed component configurations, complete dependency
+replay, authority equality and owned Pod-incarnation coverage. Record exact
+successful method counts rather than estimated totals or subtest counts.
+
+**Decision status:** Confirmed static platform configuration composition; no
+live or readiness claim. All four plan tasks are accepted after specification
+then quality review at each implementation checkpoint and final independent
+specification then quality/holistic review, with no outstanding review issues.
+This is infrastructure-evidence preparation, not a newly executed Hugging Face
+counterfactual, runtime/application completion, V4 completion or V3C result.
+
+**Rationale:** The new aggregate reconstructs explicit RuntimeOwnershipProof and
+all nine exact component proof types. It joins their complete profile/workload/
+owned identity/raw inventory, equal retained Calico source/projection bytes and
+the complete API-server/controller-manager manifest-source record. It compares
+the canonical component projection with independently reconstructed ownership
+coverage and exactly one retained raw Pod per expected incarnation. The accepted
+domain is exactly ten unique namespace/name and UID identities, including two
+CoreDNS Pods and one Pod for each other reviewed component. Bindings retain
+component, namespace, Pod name, UID and resourceVersion. Constructor replay and
+the validator share the same computation; malformed evidence is locally chained
+without swallowing unexpected defects. Both completion flags remain singleton
+False and Pod status remains uninterpreted.
+
+The independent combined fixture contains 57 records: 12 Deployments, 12
+ReplicaSets, 22 Pods, one Node, two DaemonSets, one Namespace anchor, two
+ControllerRevisions and five ServiceAccounts. Ten Pods are platform and twelve
+application scaffolding; nine application Deployment chains plus three direct
+driver Pods represent the three tracks. Four platform Deployment-backed Pods
+have no nodeName; six daemon/static Pods use host networking on the owned Node.
+The exact synopsis lists all platform names/UIDs/resourceVersions and requested
+images and clearly labels its synthetic addresses, identity and paths.
+
+Actual read-only host checks confirmed macOS 26.6.2 build 25G83, arm64 and Python
+3.12.13 in the existing linked worktree. The configured single-control-plane
+Kind 0.32.0/Kubernetes 1.36.1/Calico 3.32.0 target and Colima/Lima resource pins
+are source facts, not fresh installed-binary or running-image observations. No
+live Colima/Docker/Kind/kubectl operation, demonstration application request or
+new live inventory/checkpoint occurred. Existing regression-local HTTP servers
+and subprocess fixtures are not a live Kind/Calico/Hugging Face demonstration.
+
+Task 2 established feature RED before implementation and exports GREEN after
+correction. Task 3's adversarial regressions verified its already-strict contract;
+they are not relabeled as a new contract RED. Test scaffolding was corrected to
+respect the immutable profile's earlier SchemaError and the Docker endpoint's
+required kil-v3-lab/docker.sock suffix. The invalid original endpoint is retained
+as an earlier-boundary regression. Calico byte variants reject at existing content
+locks. No production contract was loosened and no production defect was found.
+
+**Affected artifacts:** New production aggregate, independent fixture and
+26-method test module; accepted plan checkboxes; exact environment/actions
+synopsis and its reader; this appended lineage entry and regenerated readers.
+Existing component validators, controller, collectors, journal, inventory schema,
+authorization kernel and sixteen lifecycle deferrals are unchanged. Earlier
+lineage entries are preserved, not rewritten. The final update changes only
+plan/synopsis/lineage Markdown and generated readers.
+
+**Verification:** The exact 18-module adjacent gate passed 225 methods in
+79.392 seconds, zero skips/failures/errors, exit zero. Full discovery ran once:
+1612 methods in 835.159 seconds, OK (skipped=16), meaning 1596 successful methods
+and zero failures/errors. All sixteen skipped names match the unchanged deferred
+lifecycle set; its default-gate regression passed. Completed pipeline exit zero
+with pipefail and the full local log were independently inspected by coordinator
+and both final reviewers, including two intentional argparse diagnostics followed
+by standalone successful ok results. The new module's 26 methods all passed
+within full discovery. Final specification focused gate passed 26 in 33.270
+seconds; final quality focused gate passed 26 in 32.521 seconds, each with zero
+skips/failures/errors. Coordinator post-check passed four persisted acceptance
+smoke methods in 2.438 seconds with zero skips/failures/errors. Final reader
+generation/byte checks, append-only verification and working/staged diff checks
+precede the explicit documentation-only acceptance commit.
+
+**Unresolved questions:** Actual running lab state is unknown from this static
+run. Platform effective-image authority and component-specific status/readiness
+semantics still need separate design and evidence. The sixteen future lifecycle
+deferrals and false runtime/application completion flags remain intentional;
+there is no new demonstration allow/deny or historical-prevention claim.
+
+**Next gate:** Design platform effective-image authority and component-specific
+status/readiness composition. Live collection/execution requires separate scope
+and authorization. Preserve the externally managed detached linked worktree and
+local commits; do not push, create a PR, publish or delete the worktree under this
+static acceptance. Deliver the exact synopsis to the user.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

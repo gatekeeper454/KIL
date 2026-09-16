@@ -178,10 +178,12 @@ kernel's baseline/signed/local-reduce comparison remains unchanged.
 
 ## Fresh static regression verification
 
-Decision status: **Verified static regressions; final review pending**. The code
-under regression is Task 3 revision `88d4b25`; its specification and quality
-reviews preceded this preliminary evidence record. Final specification, quality
-and holistic review are separate gates, not inferred from passing tests.
+Decision status: **Confirmed static platform configuration composition; no live
+or readiness claim**. The code under regression is Task 3 revision `88d4b25`.
+Final independent specification review (`bc1279e`) followed by quality and
+whole-implementation review (`89a0276`) approved this bounded scope with no
+critical, important or minor issues. Passing tests alone were not treated as
+review approval or a runtime/application completion result.
 
 The approved existing Python interpreter above ran with
 `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src`. Actual unittest method results were:
@@ -221,10 +223,18 @@ performed. Platform coverage stays exactly ten incarnations; both completion
 flags stay singleton `False`, and platform effective-image/status/readiness
 authority remains outside this checkpoint.
 
-All 79 tracked Markdown readers are regenerated and byte-checked for this
-preliminary documentation handoff, with clean working and staged diff checks.
-Task 4 Steps 1 and 2 record verification; Steps 3 and 4 remain pending review
-and a separate bounded acceptance record.
+The coordinator also freshly ran four persisted acceptance smoke methods:
+fixture acceptance, canonical ten-incarnation coverage, retained-input replay and
+singleton-false flags. All four passed in 2.438 seconds, with zero skips,
+failures or errors. This additional focused gate does not change the full-suite
+method count above.
+
+All four implementation-plan tasks are accepted. Lineage T-325 records the final
+bounded acceptance; earlier verification/review entries remain unchanged. All
+79 tracked Markdown readers are regenerated and byte-checked for the final
+handoff, with clean working and staged diff checks. The existing externally
+managed detached worktree is preserved; commits remain local, with no push,
+pull request or publication.
 
 ## Next evidence gate
 

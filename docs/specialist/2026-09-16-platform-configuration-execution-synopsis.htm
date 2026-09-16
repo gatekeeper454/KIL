@@ -6,7 +6,7 @@
 <title>Platform configuration execution: environment and KIL actions</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/specialist/2026-09-16-platform-configuration-execution-synopsis.md">
-<meta name="source-sha256" content="1efa6c2000c80f2ae1a6eade975c1fdfb0b9d655685bd2d90303bb9be009d8f5">
+<meta name="source-sha256" content="43180d8bfc5afa4322a4221f2f85835fb6045eb0f28bb32644c225ab3705db07">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/specialist/2026-09-16-platform-configuration-execution-synopsis.md</code> (<code>1efa6c2000c80f2ae1a6eade975c1fdfb0b9d655685bd2d90303bb9be009d8f5</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/specialist/2026-09-16-platform-configuration-execution-synopsis.md</code> (<code>43180d8bfc5afa4322a4221f2f85835fb6045eb0f28bb32644c225ab3705db07</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Platform configuration execution: environment and KIL actions</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/specialist/2026-09-16-platform-configuration-execution-synopsis.md</code> (<code>1efa6c2000c80f2ae1a6eade975c1fdfb0b9d655685bd2d90303bb9be009d8f5</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/specialist/2026-09-16-platform-configuration-execution-synopsis.md</code> (<code>43180d8bfc5afa4322a4221f2f85835fb6045eb0f28bb32644c225ab3705db07</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#platform-configuration-execution-environment-and-kil-actions">Platform configuration execution: environment and KIL actions</a></li><li class="level-2"><a href="#actual-execution-host">Actual execution host</a></li><li class="level-2"><a href="#configured-target-not-a-newly-launched-lab">Configured target, not a newly launched lab</a></li><li class="level-2"><a href="#exact-inventory-exercised-by-the-new-fixture">Exact inventory exercised by the new fixture</a></li><li class="level-2"><a href="#what-kil-does-in-this-slice">What KIL does in this slice</a></li><li class="level-2"><a href="#fresh-static-regression-verification">Fresh static regression verification</a></li><li class="level-2"><a href="#next-evidence-gate">Next evidence gate</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="platform-configuration-execution-environment-and-kil-actions" href="#platform-configuration-execution-environment-and-kil-actions">Platform configuration execution: environment and KIL actions</a></li><li class="level-2"><a data-section-id="actual-execution-host" href="#actual-execution-host">Actual execution host</a></li><li class="level-2"><a data-section-id="configured-target-not-a-newly-launched-lab" href="#configured-target-not-a-newly-launched-lab">Configured target, not a newly launched lab</a></li><li class="level-2"><a data-section-id="exact-inventory-exercised-by-the-new-fixture" href="#exact-inventory-exercised-by-the-new-fixture">Exact inventory exercised by the new fixture</a></li><li class="level-2"><a data-section-id="what-kil-does-in-this-slice" href="#what-kil-does-in-this-slice">What KIL does in this slice</a></li><li class="level-2"><a data-section-id="fresh-static-regression-verification" href="#fresh-static-regression-verification">Fresh static regression verification</a></li><li class="level-2"><a data-section-id="next-evidence-gate" href="#next-evidence-gate">Next evidence gate</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -392,10 +392,12 @@ does not supply new demonstration HTTP allow/deny outcomes, target markers, or c
 what would have prevented a historical incident. The separate authorization
 kernel's baseline/signed/local-reduce comparison remains unchanged.</p>
 <h2 id="fresh-static-regression-verification">Fresh static regression verification</h2>
-<p>Decision status: <strong>Verified static regressions; final review pending</strong>. The code
-under regression is Task 3 revision <code>88d4b25</code>; its specification and quality
-reviews preceded this preliminary evidence record. Final specification, quality
-and holistic review are separate gates, not inferred from passing tests.</p>
+<p>Decision status: <strong>Confirmed static platform configuration composition; no live
+or readiness claim</strong>. The code under regression is Task 3 revision <code>88d4b25</code>.
+Final independent specification review (<code>bc1279e</code>) followed by quality and
+whole-implementation review (<code>89a0276</code>) approved this bounded scope with no
+critical, important or minor issues. Passing tests alone were not treated as
+review approval or a runtime/application completion result.</p>
 <p>The approved existing Python interpreter above ran with
 <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src</code>. Actual unittest method results were:</p>
 <table>
@@ -454,10 +456,17 @@ kubectl operation, application demonstration request, push or publication was
 performed. Platform coverage stays exactly ten incarnations; both completion
 flags stay singleton <code>False</code>, and platform effective-image/status/readiness
 authority remains outside this checkpoint.</p>
-<p>All 79 tracked Markdown readers are regenerated and byte-checked for this
-preliminary documentation handoff, with clean working and staged diff checks.
-Task 4 Steps 1 and 2 record verification; Steps 3 and 4 remain pending review
-and a separate bounded acceptance record.</p>
+<p>The coordinator also freshly ran four persisted acceptance smoke methods:
+fixture acceptance, canonical ten-incarnation coverage, retained-input replay and
+singleton-false flags. All four passed in 2.438 seconds, with zero skips,
+failures or errors. This additional focused gate does not change the full-suite
+method count above.</p>
+<p>All four implementation-plan tasks are accepted. Lineage T-325 records the final
+bounded acceptance; earlier verification/review entries remain unchanged. All
+79 tracked Markdown readers are regenerated and byte-checked for the final
+handoff, with clean working and staged diff checks. The existing externally
+managed detached worktree is preserved; commits remain local, with no push,
+pull request or publication.</p>
 <h2 id="next-evidence-gate">Next evidence gate</h2>
 <p>Design platform effective-image authority and component-specific status/readiness
 composition. Only separately authorized live collection could establish what

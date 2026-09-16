@@ -664,14 +664,14 @@ Compute actual passes as total methods minus skips; `Ran N` includes skips.
 An interrupted process is not a passing run. Full discovery is equivalent to
 the test part of `make validate` while avoiding its unquoted interpreter path.
 
-- [ ] **Step 3: Obtain final specification then quality review**
+- [x] **Step 3: Obtain final specification then quality review**
 
 Review exact accepted scope, full dependency reconstruction, authority and
 incarnation joins, test independence, false flags and unchanged deferrals.
 Resolve review findings regression-first; rerun affected gates. Do not dispatch
 an expensive duplicate full suite merely to recount coordinator evidence.
 
-- [ ] **Step 4: Record acceptance and commit**
+- [x] **Step 4: Record acceptance and commit**
 
 Append a new numbered lineage entry with approved design/plan as input,
 “Confirmed static platform configuration composition; no live or readiness
