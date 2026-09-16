@@ -18063,3 +18063,54 @@ quality review or native implementation. No retry, replay or native execution
 is authorized by the corrected helper tests.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-350 — 2026-09-16 — Corrected pure HF case specification gate passes
+
+**Input:** Independently re-review correction commit 3a910cc against the original
+pure-case specification and the two demonstrated T-348 boundary gaps. Preserve
+the committed T-349 prefix; make no implementation, native, factory, live-request
+or download changes.
+
+**Interpretation:** Re-inspect the actual correction and regressions, independently
+repeat the original counterexamples, and rerun the complete focused pure-case
+suite. This specification gate does not substitute for quality review or live
+readiness and does not establish platform provenance or full acceptance.
+
+**Decision status:** Confirmed specification-compliant for the reviewed pure case
+scope after correction. Both required T-348 gaps are closed; no remaining blocking
+specification finding was identified in this re-review. Quality review is next.
+
+**Rationale:** Case lines 60-65 validate each identity independently as an exact
+dictionary containing nonempty exact string uid, container_id and
+resource_version before retaining complete-map equality and byte equality. Case
+lines 42-45 reject raw CR and split only at LF. Focused negative regressions
+cover missing/empty/nonstring identity fields on both sides, bare-CR framing and
+CRLF. The unchanged helpers retain complete bounded duplicate-safe object JSONL,
+valid empty payloads, fixed instruction fixtures, complete producer semantics,
+actual reasons and unexpected tuple reporting, and narrow partial Pod observation
+without provenance/full-acceptance claims.
+
+Fresh independent verification used PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src
+and the project's .venv/bin/python with -W error::ResourceWarning -m unittest
+tests.test_hf_exploratory_case -v: all eight tests passed (0.100 seconds). Separate
+read-only probes confirmed empty identity, missing resource_version, the original
+bare-CR counterexample and CRLF now raise ValueError. Empty bytes remain valid;
+a noncanonical-whitespace JSONL payload retains SHA-256 and count of its original
+full bytes, not a normalized representation. The implementer's earlier RED
+report was not independently rerun and is not claimed as reviewer evidence.
+
+**Affected artifacts:** This appended lineage Markdown and regenerated HTML
+reader only. The complete 3a910cc lineage prefix is preserved byte-for-byte;
+reviewed case/test implementation, native plan, strict code, completion flags
+and lifecycle deferrals are unchanged by the reviewer.
+
+**Unresolved questions:** Independent quality review, native lifecycle
+implementation and reviews, request-free rehearsal, joined live evidence,
+platform provenance and full Kind/Calico acceptance remain separate gates.
+Pure specification compliance establishes none of those outcomes.
+
+**Next gate:** Independent quality review of the corrected pure unit before
+native implementation gates. No request retry, replay or native execution is
+authorized by this review result.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
