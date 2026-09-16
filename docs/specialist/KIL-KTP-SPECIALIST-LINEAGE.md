@@ -19313,3 +19313,110 @@ evidence and only exact still-bound cleanup; no download, substitution, retry
 or broad deletion is implied.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-367 — 2026-09-16 — First actual exploratory lab start fails binding; zero HF requests and manual recovery required
+
+**Input:** User approved proceeding with the narrower exploratory live HF
+test, explicitly leaving platform-image provenance unverified. Execute the
+reviewed request-free rehearsal before admitting any fresh three-track action,
+and report the actual environment and exactly what KIL did.
+
+**Interpretation:** T-362's earlier five-command read-only preparation failure
+performed no lab mutation. After the exact version-format correction and its
+separate SPEC, QUALITY and bounded FINAL approvals, root launched the first
+actual lab attempt from clean reviewed local source
+a7c18c55b899158f9e5f6bb1c445b1569eb19da0. This is separate exploratory evidence,
+not strict acceptance, a production HF exploit, or a replay of an attempted
+consequential request. Genuine native failure now requires stopping, preserving
+inconclusive evidence and refusing cleanup without an ownership binding.
+
+**Decision status:** Actual request-free rehearsal INCONCLUSIVE. Native
+progression STOPPED. No fresh action run was admitted. Exactly one launcher
+Colima start instruction completed with return code zero, but creation binding
+failed. The launcher exited one with `ValueError: profile_start_unbound`,
+`manual_recovery: true`, null profile binding and `owned_teardown: false`.
+Zero request intents, zero request attempts and zero joined results are
+retained. No Kind cluster creation, image load/pull instruction, Calico or
+application deployment, driver attachment, Envoy drain, or launcher stop/delete
+instruction followed the start. No KIL permit/deny decision was exercised.
+
+**Rationale:** Five pinned read-only tool-version observations passed, followed
+by complete pristine/foreign inventory and unchanged global context checks.
+The tenth and final journaled command was the single reviewed Colima start.
+Its stdout records local cached guest-image use, VZ startup, Docker provisioning,
+private Docker context creation and a Colima-internal stop/restart within that
+same instruction. This is not a second launcher start or a request retry.
+The platform guest-image identity remains an observation, not independently
+verified provenance. The logs also record failed DNS port-53 forwarding attempts
+because the host address was already occupied; no HF application was deployed.
+
+Root's read-only replay of the pure `creation_binding` validator over retained
+`profile-created.json` isolates the first binding rejection. The profile's saved
+configuration passes `parse_saved`; the instance's saved configuration contains
+`network.dnsHosts` with the native entry
+`host.docker.internal: host.lima.internal`, whereas the closed parser expects an
+empty mapping and cannot parse the valueless nested `dnsHosts:` header. It raises
+`ProfileStateError: invalid saved configuration` from a TypeError. No parser
+change, bypass, substitution, native correction or automatic retry was made
+after this actual lab mutation. A name alone is not deletion authority.
+
+Actual post-failure read-only complete inventory, bracketed by stable Lima
+roster observations, reports `kil-v3-lab` Running, aarch64, Docker runtime,
+4 CPUs, 8589934592 bytes RAM and 64424509440 bytes data disk. The retained
+raw footprint observes a 21474836480-byte root disk and VZ Lima configuration,
+no host-mount entry, and private Docker/containerd socket forwarding plus
+native broad auto-forward rules. These are observations only; creation-bound
+resource acceptance remains false. Host observations are Darwin/macOS 26.6.2,
+arm64, kernel 25.6.0. Client versions are Docker 29.7.2 build a7dcaa6,
+Kind 0.32.0, kubectl 1.36.3, Colima v0.10.3 commit
+00f6c297e92a82c04a4ab507db0a61435650d7e8 and Lima 2.2.0. Docker daemon version
+is UNOBSERVED; Kind and kubectl version checks do not establish a cluster.
+
+Both foreign inventory rows still match the original: `default` Stopped with
+4 CPUs/4 GiB RAM/20 GiB disk and `attackswarm` Stopped with
+4 CPUs/6 GiB RAM/30 GiB disk, both aarch64/containerd. Global Docker context
+remains `default`, inherited KUBECONFIG remains absent and the default kubeconfig
+file remains absent. The shared Lima parent and all other captured foreign
+child identities match EXCEPT `_networks`: its inode changed from 596062288
+to 612747935 on device 16777232, with mode 16877 unchanged. Thus strict foreign
+roster preservation is not established and would independently refuse later
+progression. This temporal difference does not establish which internal
+operation replaced the directory or authorize restoration of shared state.
+The first sandboxed diagnostic inventory was rejected by the closed decoder;
+the same read-only comparison outside the sandbox succeeded. Neither check
+mutated or cleaned the lab.
+
+Fresh root verification before launch passed 134 focused tests, including the
+strict guard, in 17.392 seconds with ResourceWarning treated as error, all 85
+readers, clean diff and clean source gates. The older broad-suite process also
+finished with 1738 tests passing, 16 skipped, in 862.946 seconds; it began before
+the later Deployment-continuity and version-format corrections, so it is NOT
+represented as a full newest-source verification. Actual native failure takes
+precedence over static and mocked success.
+
+**Affected artifacts:** Immutable ignored private receipt:
+`.tools/hf-exploratory-private/hf-exploratory-4bf272a01cfdb5c96ab08a70def03ecbd7a29ef375bbe957ae0be6b991409bfe/`.
+It retains the ten command stdout/stderr pairs, raw profile footprint, original
+foreign state, journal, report, synopsis and private Docker context metadata.
+All 29 files listed in `SHA256SUMS` verify successfully after diagnosis.
+The earlier zero-mutation failed receipt remains untouched. Root changes only
+this appended lineage entry and its regenerated sibling HTML reader, preserving
+the full a7c18c5 lineage Markdown prefix. No source, strict launcher, deployment,
+accepted evidence, publication artifact, acceptance flag or lifecycle deferral
+is changed. The residual VM/profile/data disk remain; no deletion occurred.
+
+**Unresolved questions:** How to safely recover the unbound residual VM and
+address the native DNS-host configuration and shared-network identity behavior
+requires an explicitly scoped decision. No HF/Envoy/KIL runtime behavior was
+measured. The accepted local-Envoy result is unaffected. Platform-image
+provenance remains unverified; full Kind/Calico acceptance remains not
+established. All sixteen strict lifecycle deferrals and claim exclusions remain.
+
+**Next gate:** Verify lineage prefix, regenerate/check all 85 readers and diff,
+commit only the lineage Markdown/HTML, then hand the inconclusive result and
+residual-state synopsis to the user. Ask for direction on a narrowly scoped
+manual-recovery plan. Do not stop/delete the unbound VM, restore shared Lima
+state, modify the parser, retry setup, or send a workload request without that
+new scoped authorization and the applicable reviewed recovery gates.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
