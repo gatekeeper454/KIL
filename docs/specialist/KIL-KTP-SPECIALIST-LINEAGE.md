@@ -17662,3 +17662,54 @@ re-review. No instruction, retry, replay or native orchestration is authorized
 by this review.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-342 — 2026-09-16 — Exploratory lifecycle plan and exact owned residue
+
+**Input:** Persist with approved exploratory HF execution while independent IO
+quality findings are corrected before any native mutation.
+
+**Interpretation:** Compose existing partial ownership/application configuration
+validators without admitting platform image provenance or calling the strict
+launcher. Two fresh lifecycles require exact residue cleanup rather than relaxed
+pristine preflight. Local guard tests are harness verification, not repetition of
+the stopped platform-image audit.
+
+**Decision status:** Confirmed planning choice within approved owned cleanup:
+retain strict absent/pristine initial resources and only remove a zero-valued
+Colima profile-store residue after this exact lifecycle's bound stop/delete and
+proved absence. Unchanged inode/mode/bytes, anchored parent, durable intent and
+fsync are required; unbound/pre-existing/changed/nonzero/symlink stores are refused.
+This path is planned, not native-tested. IO quality remains unapproved pending
+three failing-first corrections and independent re-review.
+
+**Rationale:** Existing profile_state.absent recognizes a valid reset store,
+whereas require_pristine correctly refuses any existing store. Silently relaxing
+fresh preflight would lose ownership; exact single-file removal after proved owned
+teardown preserves both gates. Existing pure ownership and application template
+validators already retain false completion flags and do not require independently
+expected platform image identities. Reuse those units instead of building an
+acceptance bypass or duplicating broad platform validation.
+
+**Verification:** Fresh root combined input/IO/strict-boundary run passed 34 tests
+(2.236s), including exact unchanged sixteen deferred test methods. Independent
+IO quality supplemental probes nevertheless found missing containing-directory
+fsync, failed-persistence quota evasion and selector-acquisition process leakage;
+passing focused tests do not negate those findings. Read-only native profile
+pristine/complete inventory checks found stopped attackswarm/default only; Docker
+global context default and no global .kube/config. Available host disk approximately
+315 GiB. No native profile start, cluster, pull or consequential request.
+
+**Affected artifacts:** Native lifecycle plan and reader, this appended lineage
+and reader. IO correction remains original-implementer-owned. Strict files,
+accepted local-Envoy evidence, completion flags and deferrals are unchanged.
+
+**Unresolved questions:** IO correction/re-review, pure case review, native
+implementation/full change review, clean source and request-free rehearsal remain
+open. Platform-image provenance explicitly unverified; no live result established.
+
+**Next gate:** Finish IO quality gate, then pure case/evidence and exact native
+lifecycle units. Run rehearsal before the one fresh three-track action under
+existing approval; stop and report a genuine native blocker without retry or
+substitution. Exact reset-store bytes, if ever removed, remain in private capture.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

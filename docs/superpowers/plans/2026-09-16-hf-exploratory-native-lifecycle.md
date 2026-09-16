@@ -312,6 +312,87 @@ After all drivers complete/canceled, drain each exact Envoy with kubectl_envoy_q
 
 Cleanup order: validate unchanged profile and guard_cluster; kind_delete_command once; require empty owned endpoint and kube-system unreachable/no named node (absence is not success on an unknown transport); validate profile unchanged; colima stop exact once with private env; validate stopped filesystem binding; colima delete exact --force --data once; require profile_state.absent, complete roster equals original foreign rows, Docker global context equals original and original global Kubernetes config fingerprints unchanged. Do not use Lima disk fallback, broad filesystem deletion or resource discovery-selected targets. If cluster creation was attempted but exact node/UID not bound, refuse Kind deletion and profile deletion as ambiguous/manual recovery. If no cluster attempt occurred and exact profile binding is still valid, scoped profile cleanup is safe. Profile start failure without binding is manual recovery, never a blind delete. Private artifacts remain retained.
 
+Colima may retain its zero-valued profile store after delete; `absent` recognizes
+that reset file, whereas the fresh-action `require_pristine` intentionally refuses
+it. If and only if this lifecycle started from strict pristine absence, acquired
+the profile binding, completed its exact delete, and captured proved absence,
+remove that single unchanged zero store before the next fresh run. Retain the
+full post-delete observation, journal its identity/digest before removal and
+fsync its anchored parent. Never remove a pre-existing, changed or nonzero store.
+This is exact owned residue cleanup, not a relaxed preflight or broad deletion.
+
+```python
+def clear_owned_reset_store(self, observed):
+    from kil.v3b2_profile_state import _parent, _read
+    if (not self.started_pristine or self.profile_binding is None
+            or not self.profile_delete_completed
+            or not absent(self.paths.document(), observed)):
+        raise ValueError('reset_store_cleanup_not_owned')
+    row = observed['store']
+    if row is None:
+        return
+    payload = bytes.fromhex(row['hex'])
+    self.store.record('reset_store_remove_intent', {'device': row['device'], 'inode': row['inode'],
+        'mode': row['mode'], 'sha256': sha256(payload).hexdigest()})
+    if _read(self.paths.store) != row:
+        raise ValueError('reset_store_changed')
+    with _parent(self.paths.store) as parent:
+        if parent is None or _read(self.paths.store) != row:
+            raise ValueError('reset_store_parent_changed')
+        actual = os.stat(self.paths.store.name, dir_fd=parent, follow_symlinks=False)
+        if (actual.st_dev, actual.st_ino, actual.st_mode) != (row['device'], row['inode'], row['mode']):
+            raise ValueError('reset_store_identity_changed')
+        os.unlink(self.paths.store.name, dir_fd=parent)
+        os.fsync(parent)
+    self.store.record('reset_store_remove_complete', {'sha256': sha256(payload).hexdigest()})
+    require_pristine(self.paths)
+```
+
+Add these failing-first test-owned filesystem tests. The exact reset bytes are
+recoverable from the private post-delete capture; no user data or foreign cache
+is deleted.
+
+```python
+from kil.v3b2_profile_state import ProfilePaths, capture, require_pristine
+
+
+class ExploratoryResetStoreTests(ExploratoryNativeTests):
+    def reset_fixture(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name).resolve()
+        home = root / 'home'
+        (home / '.colima' / '_store').mkdir(parents=True)
+        store = PrivateStore(root / 'run')
+        self.addCleanup(store.close)
+        lifecycle = self.module.ExploratoryLifecycle.__new__(self.module.ExploratoryLifecycle)
+        lifecycle.paths = ProfilePaths(home, store.path)
+        lifecycle.store = store
+        lifecycle.started_pristine, lifecycle.profile_delete_completed = True, True
+        lifecycle.profile_binding = {'test_owned_binding': True}
+        lifecycle.paths.store.write_bytes(b'{"disk_formatted":false,"disk_runtime":"","ramalama_provisioned":false}\n')
+        return lifecycle, capture(lifecycle.paths)
+
+    def test_only_owned_unchanged_zero_store_is_removed(self):
+        lifecycle, observed = self.reset_fixture()
+        lifecycle.clear_owned_reset_store(observed)
+        self.assertFalse(lifecycle.paths.store.exists())
+        require_pristine(lifecycle.paths)
+
+    def test_unbound_or_changed_reset_store_is_never_removed(self):
+        for mutation in (
+            lambda x: setattr(x, 'started_pristine', False),
+            lambda x: setattr(x, 'profile_binding', None),
+            lambda x: x.paths.store.write_bytes(b'{"disk_formatted":true}\n'),
+            lambda x: (x.paths.store.rename(x.paths.store.with_suffix('.original')), x.paths.store.symlink_to(x.paths.store.with_suffix('.original'))),
+        ):
+            lifecycle, observed = self.reset_fixture()
+            mutation(lifecycle)
+            with self.assertRaises((ValueError, OSError)):
+                lifecycle.clear_owned_reset_store(observed)
+            self.assertTrue(lifecycle.paths.store.exists() or lifecycle.paths.store.is_symlink())
+```
+
 Global Kubernetes fingerprint: retain inherited KUBECONFIG value and each canonical nonsymlink file's bounded bytes SHA/size plus absence; default passwd-home/.kube/config if variable absent. Do not create missing .kube, read contexts using global mutation, or rewrite kubeconfigs. Private Kind kubeconfig remains isolated. Preserve global Docker config path via BoundedRunner global context read.
 
 ## Task 4: Reviewed source CLI and private result
