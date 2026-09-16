@@ -14099,3 +14099,88 @@ rerun the prescribed suite and reader checks, and obtain independent Task 3
 quality re-review before proceeding to Task 4 or integration.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-287 — 2026-09-15 — V4 Task 3 successful capture bounded in flight
+
+**Input:** Resolve the Important quality finding recorded by T-286: a
+successful control-plane source subprocess could retain arbitrary stdout or
+stderr before the one-MiB proof bound was evaluated. Confirm the root cause,
+add production-runner regressions for each stream, preserve timeout raw bytes
+and the fixed stdin-free command grammar, fail closed before downstream
+mutation, and make no live infrastructure claim.
+
+**Interpretation:** The source proof's byte ceiling is a process-transport
+property, not merely a post-capture validation rule. Each of the exact
+inspect/read/read/inspect source commands must stream stdout and stderr into
+separately bounded prefixes, terminate the process group when either stream
+crosses one MiB, and return the reserved unsuccessful truncated status. A
+timeout below the cap must continue to return the reserved timeout status with
+the exact raw prefixes observed before termination. Retained-checkpoint replay
+does not execute this forward-only process path.
+
+**Decision status:** Confirmed implementation in
+`0c0d81792e96ae72097580cc86e6349f31f320fd`; independent Task 3 quality
+re-review approved it with no Critical, Important, or Minor findings. The
+source commands retain their closed nonmutating, stdin-free grammar, and the
+bounded path rejects a non-`None` stdin defensively before spawning.
+
+**Rationale:** The root cause was the generic runner's successful
+`subprocess.run(..., capture_output=True)` path: it materialized the complete
+payload before source validation. The correction selects only the exact source
+inspect and reviewed manifest-read commands for selector-driven pipe draining,
+keeps at most 1,048,576 raw bytes from each stream, detects the first excess
+byte without retaining it, kills the isolated process group, and reports
+`-1001`. Other commands retain the established runner path. The existing
+journal constructor continues to reject stdin for these Docker reads, and the
+specialized runner adds an explicit invariant so it cannot silently discard
+stdin. An initial independent review found that an exited direct child could
+leave a background descendant holding a capture pipe beyond the deadline; the
+amended implementation keeps the deadline active until the pipes close, kills
+the source process group even after its leader exits, and stops waiting on
+terminated capture pipes once no retained bytes remain ready. A second review
+found that a descendant escaping the group could keep a pipe continuously
+readable; the final implementation unconditionally closes the capture boundary
+after processing at most the current ready-event batch once timeout or
+truncation is established. A third review reproduced intermittent full-timeout
+latency on short successful processes when pipe EOF readiness was delayed; all
+pre-terminal selector waits are therefore capped at 50-millisecond slices while
+the absolute command deadline remains authoritative.
+
+**Verification:** The production-runner stdout regression was RED before the
+fix with `AssertionError: 0 != -1001`: a completed synthetic manifest read
+retained 1,048,577 bytes and returned success. After the fix, thirteen focused
+Task 3 ordering, failure-barrier, bounded-capture, publication, and retained-only
+recovery tests initially passed in 61.368 seconds. The independent review's
+inherited-pipe regression was then RED with `AssertionError: 0 != -1000` after
+3.473 seconds and passed after the deadline correction. The escaped continuously
+readable-pipe regression was then RED because 3.424515541999881 seconds was not
+less than its two-second ceiling and passed after unconditional terminal
+capture cleanup. The final fifteen-test Task 3 set passed in 63.571 seconds;
+the six stdout-overflow, stderr-overflow, timeout-raw-byte, inherited-pipe,
+escaped-pipe, and stdin-free grammar checks passed in 4.846 seconds. Four
+generic process-authority, timeout, oversized-timeout, and source grammar
+regressions passed in 0.189 seconds. The bounded-selector regression was then
+RED because the runner requested a 1.9999937079996926-second selector wait,
+exceeding the 0.05-second slice ceiling. After the polling correction, the
+final sixteen-test Task 3 set passed in 62.868 seconds, seven process-boundary
+and grammar checks passed in 5.184 seconds, and the four generic runner checks
+passed in 0.183 seconds. The final independent re-review passed ten focused
+tests in 11.724 seconds and observed ten repeated short-success probes complete
+in 6–58 milliseconds with exact raw bytes. `git diff --check` passed. These
+were static tests using local synthetic executables; no live Colima, Docker,
+Kind, kubectl, Kubernetes, request, publication, or profile command was
+executed.
+
+**Affected artifacts:** `src/kil/v3b2_controller.py`,
+`tests/test_v3b2_controller.py`,
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md`, and its regenerated
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm` reader.
+
+**Unresolved questions:** The broader prescribed suite, full repository and
+remote CI, branch integration, Task 4+, and any live dedicated-profile
+execution remain separate gates.
+
+**Next gate:** Regenerate and verify the lineage reader, then run broader
+static and integration gates before accepting Task 3 or proceeding to Task 4.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
