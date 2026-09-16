@@ -21144,3 +21144,61 @@ and continue the separately coordinated Native review and final composition.
 Any live private rehearsal remains behind its separate native permission gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T392 — 2026-09-16 — Final runner metadata correction independent QUALITY approval
+
+**Input:** Independently review only the IO source/test metadata correction in
+`8325767..06e6c35`, following T391 independent SPEC approval. Root granted this
+exclusive lineage writer after the SPEC reviewer committed `bcef18a` and released
+its writer. Native QUALITY recording remains separately coordinated.
+
+**Interpretation:** Review the actual correction for final authority ordering,
+failure normalization, exact metadata shape/types, realistic regressions and
+maintainability. The contract is finite fresh validation immediately before
+bounded capture, not transactional exclusion, race-free filesystem operation or
+protection against arbitrary hostile in-process code. Native compatibility,
+VM behavior, teardown and platform-image auditing are outside this review.
+
+**Decision status:** QUALITY APPROVED for the metadata correction at `06e6c35`.
+No actionable Critical, Important or Minor issue was found in the scoped two-path
+change. Native QUALITY and root's final composed verification remain separate
+gates; this approval grants no live runtime execution.
+
+**Rationale:** The reviewer inspected the actual two-path diff and current
+`BoundedRunner.run`. The final consistency block re-reads the caller-owned map
+after the final adapter validation and dispatch fingerprint, including the
+fingerprint's last guarded env access. It checks exact dict type and authenticated
+three-tool keys, exact row dict type, full equality and exact value types before
+capture; equal-valued floats, map/row subclasses and missing/extra keys refuse
+with the existing normalized authority error. No authentication or adapter IO
+follows these checks. Existing manifest/tool-path consistency checks and capture
+limits remain unchanged.
+
+The three added regression methods retain real manifest authentication and real
+RuntimeAuthority guards on temporary files. They mutate metadata specifically
+after the last real adapter guard, exercise nine late row/map/shape/type cases,
+require the normalized refusal and verify capture remains uncalled; explicit
+counts confirm two manifest checks and two final guards. Fresh independent
+verification passed all 61 IO/evidence tests in 3.880s with the designated Python,
+PYTHONPATH=src, PYTHONDONTWRITEBYTECODE=1 and fatal ResourceWarning. The scoped
+diff passed git diff --check. T391's independent nine-case failing-baseline
+reproduction and root's broader runs are not represented as this reviewer's own
+execution.
+
+**Affected artifacts:** This actual-EOF T392 append and generated HTML reader
+only. The complete exact `bcef18a` Markdown remains a prefix. Source/tests and
+dependencies were inspected but not edited. No native Colima/Lima/Docker/Kind/
+kubectl command, VM, HTTP/HF/network request, Ollama operation, platform-image
+audit, old receipt write, branch/move/merge or push occurred. The four known
+ignored immutable citation omissions remain unchanged and unresolved.
+
+**Unresolved questions:** Native QUALITY and root's final composed verification
+remain pending. Process-boundary engineering fixtures do not establish native
+compatibility, owned teardown, full Kind/Calico acceptance or platform provenance.
+
+**Next gate:** Render/check all 88 readers, verify the exact prior Markdown prefix
+and two-lineage-path staged diff, commit this lineage pair and release the writer.
+Complete separately coordinated Native QUALITY and root verification; any live
+private rehearsal remains subject to its separate native permission gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
