@@ -17349,3 +17349,44 @@ and readiness rehearsal. Platform-image audit remains stopped and strict
 acceptance remains unestablished.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-336 — 2026-09-16 — Native accepted inputs available; pure case plan
+
+**Input:** Continue the approved exploratory HF action when ready, without
+restarting the platform-image provenance audit. Apply the confirmed FIFO read
+correction and independent quality re-review before native input checks.
+
+**Interpretation:** Input availability, bounded IO and source joins are separate
+readiness gates. A verified retained application archive does not establish a
+running cluster, platform provenance or an enforcement result.
+
+**Decision status:** Confirmed read-only native input availability after input
+quality approval. The fixed accepted manifest, exact three executables and
+48,647,168-byte KIL archive passed verify_inputs. Colima 0.10.3, Lima 2.2.0,
+macOS 26.6.2 arm64, Docker CLI 29.7.2, Kind 0.32.0 and kubectl 1.36.3 were
+observed at the expected versions. No lab start, image download or request.
+
+**Rationale:** Reuse the accepted archive in the retained V3B-1 rerun staging
+directory and accepted executable bytes in the saved project's .tools/bin,
+read-only. No newly built image or caller-supplied digest authority is admitted.
+The FIFO defect was reproduced with a test-owned child and fixed through a
+failing-first regression; independent re-review passed six tests. The durable IO
+unit is being implemented independently; the next pure case/evidence unit is
+planned with exact fixture, bounded source and config-vs-target alias handling.
+
+**Affected artifacts:** Input module/test and prior entries already committed by
+implementer/reviewers. Add docs/superpowers/plans/2026-09-16-hf-exploratory-case-evidence.md
+and its HTML reader; append this lineage entry and regenerate its reader.
+Strict controller/verifier, completion flags and sixteen deferrals are unchanged.
+
+**Unresolved questions:** Durable IO and pure case/evidence reviews, native
+lifecycle implementation/review, clean reviewed source checkpoint and request-free
+rehearsal remain required. No runtime or live test result has been established.
+Independent platform-image provenance remains explicitly unverified.
+
+**Next gate:** Complete bounded IO and pure source-evidence units through
+specification and quality gates, then exact owned lifecycle/rehearsal. A successful
+fresh rehearsal authorizes one fresh three-track action under the existing user
+approval; uncertainty blocks later instructions, never triggers a retry.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
