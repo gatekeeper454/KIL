@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HF Residual VM Recovery Implementation Plan</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/plans/2026-09-16-hf-residual-vm-recovery.md">
+<meta name="source-sha256" content="2fc50ff420e68cbf964a11e2c43f2013ae895e93f5249eff5dd14a34234a1af4">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-residual-vm-recovery.md</code> (<code>2fc50ff420e68cbf964a11e2c43f2013ae895e93f5249eff5dd14a34234a1af4</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">HF Residual VM Recovery Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-residual-vm-recovery.md</code> (<code>2fc50ff420e68cbf964a11e2c43f2013ae895e93f5249eff5dd14a34234a1af4</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#hf-residual-vm-recovery-implementation-plan">HF Residual VM Recovery Implementation Plan</a></li><li class="level-2"><a href="#status-and-authority">Status and authority</a></li><li class="level-2"><a href="#exact-targets-and-files">Exact targets and files</a></li><li class="level-2"><a href="#confirmed-failure-and-last-observed-environment">Confirmed failure and last observed environment</a></li><li class="level-2"><a href="#task-1-verify-preserved-evidence-and-acquire-exclusive-local-execution">Task 1: Verify preserved evidence and acquire exclusive local execution</a></li><li class="level-2"><a href="#task-2-establish-a-fresh-narrowly-scoped-manual-stop-candidate">Task 2: Establish a fresh, narrowly scoped manual-stop candidate</a></li><li class="level-2"><a href="#task-3-record-intent-and-issue-at-most-one-graceful-stop">Task 3: Record intent and issue at most one graceful stop</a></li><li class="level-2"><a href="#task-4-observe-post-state-preserve-disks-and-hand-off">Task 4: Observe post-state, preserve disks and hand off</a></li><li class="level-2"><a href="#stop-conditions-and-explicit-exclusions">Stop conditions and explicit exclusions</a></li><li class="level-2"><a href="#verification-and-handoff-criteria">Verification and handoff criteria</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="hf-residual-vm-recovery-implementation-plan" href="#hf-residual-vm-recovery-implementation-plan">HF Residual VM Recovery Implementation Plan</a></li><li class="level-2"><a data-section-id="status-and-authority" href="#status-and-authority">Status and authority</a></li><li class="level-2"><a data-section-id="exact-targets-and-files" href="#exact-targets-and-files">Exact targets and files</a></li><li class="level-2"><a data-section-id="confirmed-failure-and-last-observed-environment" href="#confirmed-failure-and-last-observed-environment">Confirmed failure and last observed environment</a></li><li class="level-2"><a data-section-id="task-1-verify-preserved-evidence-and-acquire-exclusive-local-execution" href="#task-1-verify-preserved-evidence-and-acquire-exclusive-local-execution">Task 1: Verify preserved evidence and acquire exclusive local execution</a></li><li class="level-2"><a data-section-id="task-2-establish-a-fresh-narrowly-scoped-manual-stop-candidate" href="#task-2-establish-a-fresh-narrowly-scoped-manual-stop-candidate">Task 2: Establish a fresh, narrowly scoped manual-stop candidate</a></li><li class="level-2"><a data-section-id="task-3-record-intent-and-issue-at-most-one-graceful-stop" href="#task-3-record-intent-and-issue-at-most-one-graceful-stop">Task 3: Record intent and issue at most one graceful stop</a></li><li class="level-2"><a data-section-id="task-4-observe-post-state-preserve-disks-and-hand-off" href="#task-4-observe-post-state-preserve-disks-and-hand-off">Task 4: Observe post-state, preserve disks and hand off</a></li><li class="level-2"><a data-section-id="stop-conditions-and-explicit-exclusions" href="#stop-conditions-and-explicit-exclusions">Stop conditions and explicit exclusions</a></li><li class="level-2"><a data-section-id="verification-and-handoff-criteria" href="#verification-and-handoff-criteria">Verification and handoff criteria</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="hf-residual-vm-recovery-implementation-plan">HF Residual VM Recovery Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking. This is a manual recovery runbook, not permission to implement a recovery feature or change the strict lifecycle.</p>
+</blockquote>
+<p><strong>Goal:</strong> After explicit execution approval and fresh continuity checks, gracefully stop only the residual <code>kil-v3-lab</code> VM, preserving its disks and all evidence.</p>
+<p><strong>Architecture:</strong> Establish a separate, narrowly scoped manual-stop authority from the retained creation footprint plus fresh unchanged filesystem observations, complete inventory and an empty lab-container roster. Do not pretend the failed strict creation binding succeeded. Perform at most one graceful stop, then observe and report; uncertainty stops the workflow without force, deletion, restoration or replay.</p>
+<p><strong>Tech Stack:</strong> Existing Colima v0.10.3, Lima 2.2.0, accepted Docker client, existing no-follow profile/inventory observers and bounded process capture; local private evidence and Markdown readers.</p>
+<hr />
+<h2 id="status-and-authority">Status and authority</h2>
+<p>Prepared at the user's request on 2026-09-16. <strong>PROPOSED; NOT EXECUTED.</strong>
+The user requested saving the transcript and preparing this plan, not stopping
+or deleting the VM. A subsequent explicit approval is required for the one
+manual stop. Sandbox approval for that instruction is also required.</p>
+<p>This manual-stop exception does not change the approved exploratory acceptance
+contract, repair or retroactively establish ownership binding, admit another
+setup attempt, or authorize any HF request. Approval covers no deletion.</p>
+<h2 id="exact-targets-and-files">Exact targets and files</h2>
+<p>Repository:
+<code>/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL</code>.</p>
+<p>Retained failed run, here called <strong>receipt</strong>:
+<code>/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/.tools/hf-exploratory-private/hf-exploratory-4bf272a01cfdb5c96ab08a70def03ecbd7a29ef375bbe957ae0be6b991409bfe</code>.</p>
+<p>Manual recovery evidence, separate from that immutable receipt:
+<code>/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/.tools/hf-recovery-private/2026-09-16</code>.</p>
+<p>Only permitted native mutation after approval:</p>
+<pre><code class="language-text">/Users/mistorm/.local/bin/colima stop --profile kil-v3-lab
+</code></pre>
+<p>Profile: <code>/Users/mistorm/.colima/kil-v3-lab</code>.
+Lima instance: <code>/Users/mistorm/.colima/_lima/colima-kil-v3-lab</code>.
+Data-disk directory: <code>/Users/mistorm/.colima/_lima/_disks/colima-kil-v3-lab</code>.
+Lab Docker endpoint: <code>unix:///Users/mistorm/.colima/kil-v3-lab/docker.sock</code>.</p>
+<p><strong>Files created/updated during execution:</strong> Separate private recovery observations,
+stop-intent/result, outcome and checksums; append-only specialist lineage and
+its generated reader. Never overwrite transcript exports or failed receipts.
+No implementation, test, deployment, accepted/publication artifact, global
+Docker configuration or kubeconfig is edited.</p>
+<p><strong>Existing units used, not modified:</strong>
+<code>src/kil/v3b2_profile_state.py</code> (<code>ProfilePaths</code>, <code>capture</code>, <code>validate_capture</code>),
+<code>src/kil/v3b2_colima_inventory.py</code> (<code>capture_roster</code>, <code>decode_inventory</code>,
+<code>require_complete</code>), <code>src/kil/hf_exploratory_inputs.py</code> (<code>read_regular</code>),
+<code>src/kil/hf_exploratory_io.py</code> (<code>capture_process</code>, <code>PrivateStore</code>) and
+<code>tools/hf_exploratory_kind.py</code> (<code>LabLock</code>, without calling its launcher).</p>
+<h2 id="confirmed-failure-and-last-observed-environment">Confirmed failure and last observed environment</h2>
+<p>Reviewed launch source: <code>a7c18c55b899158f9e5f6bb1c445b1569eb19da0</code>.
+Last complete post-failure inventory: residual profile Running, aarch64,
+Docker runtime, 4 CPUs, 8 GiB RAM and 60 GiB data disk. Retained raw capture:
+20 GiB root disk and VZ configuration. These are observations, not a successful
+creation binding. Fresh state must be re-established before any stop.</p>
+<p>The profile configuration passes the saved parser. The instance configuration
+adds <code>network.dnsHosts</code> / <code>host.docker.internal: host.lima.internal</code>; the
+closed parser cannot parse this nested mapping and rejects creation binding.
+The successful Colima start includes an internal restart, but the launcher
+issued just one start instruction. It stopped with zero request intents and
+attempts, before Kind, Calico, Envoy/KIL workloads or driver attachment.</p>
+<p>Separately, shared <code>_networks</code> directory inode changed from 596062288 to
+612747935 on device 16777232, mode 16877 unchanged. Other captured foreign child
+identities, foreign inventory rows and global Docker context still matched.
+The cause of the directory replacement is not established. This plan does not
+relabel that change as acceptable strict preservation or restore shared state.</p>
+<p>Foreign profiles last observed: <code>default</code> Stopped (4 CPU/4 GiB/20 GiB) and
+<code>attackswarm</code> Stopped (4 CPU/6 GiB/30 GiB), both aarch64/containerd. Global Docker
+context <code>default</code>; no inherited/default kubeconfig. Do not use these historical
+observations as fresh stop authority.</p>
+<h2 id="task-1-verify-preserved-evidence-and-acquire-exclusive-local-execution">Task 1: Verify preserved evidence and acquire exclusive local execution</h2>
+<ul>
+<li>[ ] Obtain explicit approval for this plan's one graceful stop, with no deletion or retry.</li>
+<li>[ ] From the receipt directory run <code>shasum -a 256 -c SHA256SUMS</code>. Require all 29 listed files to verify; retain this output separately.</li>
+<li>[ ] Verify the transcript export's five-file <code>SHA256SUMS</code> separately. The transcript is the current task's recorded visible messages and tool activity through the user's latest request, not other tasks or hidden reasoning.</li>
+<li>[ ] Confirm <code>report.json</code> is inconclusive, with null profile binding, <code>manual_recovery: true</code>, zero request intents/attempts and empty joined results. Otherwise stop: the proposed recovery premise no longer matches.</li>
+<li>[ ] Hold the existing <code>LabLock</code> continuously across preflight, intent, stop and post-observation. Do not call <code>main()</code> or <code>ExploratoryLifecycle.execute()</code>. If busy or ancestry/permissions fail, stop without operating on the profile. The lock does not exclude outside actors; request no concurrent Colima/Lima/Docker operations from the user.</li>
+</ul>
+<h2 id="task-2-establish-a-fresh-narrowly-scoped-manual-stop-candidate">Task 2: Establish a fresh, narrowly scoped manual-stop candidate</h2>
+<ul>
+<li>[ ] Authenticate the Docker executable against the retained accepted SHA-256 <code>a078469d8b77683b81e1604ee35af488ef143a8a0230897f05f0839b2f42d1dd</code>. Observe Colima version again; require the exact v0.10.3/commit <code>00f6c297e92a82c04a4ab507db0a61435650d7e8</code> output. No tool replacement/download is authorized.</li>
+<li>[ ] Run Colima <code>list --json</code> bracketed by <code>capture_roster</code>; require <code>require_complete</code> and equality of the bracketing roster. Require exactly the three expected profiles: only <code>kil-v3-lab</code> Running with its captured resources, and both foreign rows unchanged and Stopped. If the lab is already Stopped with otherwise matching rows, issue no stop, skip the running-container query and Task 3, and proceed to read-only Task 4 reporting an already-stopped condition. Any additional profile, missing row, changed foreign status/resource or transport/schema failure stops this plan.</li>
+<li>[ ] Read <code>profile-created.json</code> using <code>read_regular</code> with a 1 MiB maximum; validate its capture schema. Collect two equal fresh <code>capture(ProfilePaths.bind(receipt))</code> observations. Compare the retained/fresh records for <code>profile</code>, <code>instance</code>, <code>disk</code>, <code>profile_config</code>, <code>instance_config</code>, <code>lima_config</code>, <code>data_disk</code>, <code>root_disk</code> and <code>lock</code> byte-for-byte. Require <code>protected</code> and <code>startup</code> absent in both. A changed inode, directory entry list, saved configuration, disk size/format/probe or lock target refuses this plan. Do not normalize the generated DNS entry or call a weakened <code>creation_binding</code>.</li>
+<li>[ ] Capture the present complete foreign roster, Docker context and kubeconfig fingerprints as a <strong>manual-recovery pre-stop baseline</strong>. Record the known <code>_networks</code> mismatch against the original separately; do not overwrite <code>foreign-original.json</code> or claim the new baseline repairs it. Require other original captured identities and global state still match. Unknown new differences stop this plan.</li>
+<li>[ ] Query only the explicit lab endpoint for containers, using the accepted Docker client and the receipt's private Docker configuration. Require a successful, empty result from this exact command; any container or uncertain result refuses the stop because the VM may have acquired another workload:</li>
+</ul>
+<pre><code class="language-text">/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.tools/bin/docker --host unix:///Users/mistorm/.colima/kil-v3-lab/docker.sock ps --all --quiet --no-trunc
+</code></pre>
+<p>Use an explicit sanitized child environment: HOME from passwd; accepted tool
+PATH; <code>DOCKER_CONFIG</code> set to the receipt's <code>docker-config</code>; no inherited
+DOCKER_CONTEXT, DOCKER_HOST, TLS, certificate, KUBECONFIG or Colima/Lima override.
+Use existing <code>capture_process</code> for every native instruction: 10-second read
+timeouts, 8 MiB aggregate stdout/stderr bound, and the repository as cwd. Retain
+complete bounded results. Timeout, overflow, nonzero status or malformed output
+is refusal, not permission to retry or substitute a direct socket/process action.</p>
+<h2 id="task-3-record-intent-and-issue-at-most-one-graceful-stop">Task 3: Record intent and issue at most one graceful stop</h2>
+<ul>
+<li>[ ] Warn before dispatch: the stop frees VM memory/CPU but preserves the 60 GiB data disk, 20 GiB root disk and profile. It may also change Lima-managed shared networking; exact post-state will be reported, not promised unchanged.</li>
+<li>[ ] In a fresh exclusive <code>PrivateStore</code> under the separate recovery directory, retain the pre-stop observations and an immutable <code>manual_stop_intent.json</code>. Record exact target paths/record hashes, user approval, Colima version, empty container observation, command argv, 300-second timeout and <code>max_instructions: 1</code>. Fsync before native dispatch. An existing/pending/completed intent refuses a second dispatch; it is not a resume mechanism.</li>
+<li>[ ] Immediately recheck the held lock, complete roster, all candidate footprint records and empty container roster against Task 2. Any replacement or change stops before the instruction. This is not atomic exclusion of outside actors; unexpected concurrent activity is a blocker.</li>
+<li>[ ] Invoke exactly the displayed Colima graceful-stop command once through <code>capture_process</code>, with 300-second timeout and 8 MiB aggregate output maximum. Keep the same sanitized environment and private Docker configuration. Retain the raw result separately from the old receipt. No <code>--force</code>, process kill, <code>limactl stop</code>, delete, shared-network edit or fallback is permitted.</li>
+<li>[ ] If the command fails, times out, overflows or returns ambiguously, mark recovery inconclusive. Read-only post-observation is allowed, but no second stop is authorized. The bounded wrapper can terminate its own newly launched command process group on timeout; that is not permission to kill discovered host-agent/VM processes.</li>
+</ul>
+<h2 id="task-4-observe-post-state-preserve-disks-and-hand-off">Task 4: Observe post-state, preserve disks and hand off</h2>
+<ul>
+<li>[ ] Run one bounded complete post-stop inventory with stable roster bracketing. Success requires <code>kil-v3-lab</code> Stopped and both foreign rows matching their fresh pre-stop baseline. If already Stopped before Task 3, issue no stop and report an observed already-stopped condition instead of claiming this workflow stopped it.</li>
+<li>[ ] Capture profile/disk state read-only. Require original profile, instance, config, root/data-disk identities and sizes retained. Report the expected stopped disk-lock release; do not synthesize a creation binding or use these observations as deletion authority.</li>
+<li>[ ] Compare foreign Lima roster, global Docker context and kubeconfig fingerprints with the separate pre-stop baseline and original baseline. Report every difference, especially <code>_networks</code>; even a stopped VM does not establish full strict foreign-preservation acceptance. Do not restore/recreate directories or switch contexts.</li>
+<li>[ ] Retain an outcome distinguishing <code>graceful_stop_confirmed</code> from inconclusive observations, command uncertainty and foreign-state differences. Checksum the new recovery evidence. Keep both failed receipts and transcript exports unchanged; append specialist lineage and regenerate/check its reader.</li>
+<li>[ ] End at this stopping place. VM startup, profile/data deletion, parser work and another request-free rehearsal or HF action require separate scope/approval. A fresh exploratory launcher will still refuse the preserved existing profile.</li>
+</ul>
+<h2 id="stop-conditions-and-explicit-exclusions">Stop conditions and explicit exclusions</h2>
+<p>Never identify a cleanup target merely by name. Changed footprint, nonempty lab,
+busy local lock, concurrent native operation, new foreign/global difference,
+unreadable/partial inventory or command uncertainty means report and stop.
+No recursive deletion, force shutdown, disk deletion, orphan/disk fallback,
+Lima/shared-network restoration, strict-verifier bypass, guest-image audit,
+parser change or HF request is part of this plan. Deletion is materially
+different and would require a new exact-target recovery design and authorization.</p>
+<p>The DNS parser mismatch and shared-network inode behavior must be independently
+understood and reviewed before proposing future lab setup. Merely accepting the
+DNS entry would not repair the second gate. No such implementation is specified
+or authorized here.</p>
+<h2 id="verification-and-handoff-criteria">Verification and handoff criteria</h2>
+<p>Plan preparation: prior lineage preserved as an exact prefix; only this plan,
+its generated reader and appended lineage/reader are tracked changes; transcript
+is ignored/private and checksummed; no VM mutation during this preparation.
+Execution: all Task 1–2 preconditions plus durable once-only intent before the
+single instruction; fresh complete post-state before claiming graceful-stop
+success. No mocked/unit success can substitute for those observations.</p>
+<p>Accepted local-Envoy evidence remains unchanged. Platform-image provenance is
+unverified; full Kind/Calico acceptance remains not established. This recovery
+does not measure KIL behavior or historical HF incident prevention.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

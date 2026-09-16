@@ -19420,3 +19420,88 @@ state, modify the parser, retry setup, or send a workload request without that
 new scoped authorization and the applicable reviewed recovery gates.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-368 — 2026-09-16 — Transcript preserved and graceful-stop-only residual VM recovery proposed
+
+**Input:** User requested saving the full transcript to a file, then preparing
+a narrowly scoped recovery plan for the residual VM. During preparation the
+user also asked whether Ollama was running.
+
+**Interpretation:** Export the current task's available recorded conversation
+and tool activity without summarization, preserving existing recorded output
+truncation. Prepare a plan only: no new authorization to stop/delete the VM,
+repair code, restore shared state, retry setup or send HF requests is inferred.
+The Ollama question authorizes read-only host-process observation, not stopping
+or changing that process.
+
+**Decision status:** Transcript export SAVED and verified. Recovery plan
+PROPOSED, NOT EXECUTED. Recommended next scope is one graceful Colima stop
+after explicit user approval, preserved-receipt verification and fresh exact
+manual-stop candidate continuity; no deletion. This is a distinct manual-stop
+authority proposal, not a retroactive successful creation binding or a relaxed
+exploratory/strict acceptance contract.
+
+**Rationale:** The local saved session matches current task ID
+01a0a6a8-b128-7403-a5ad-62349de4bb70 and this worktree. The private export covers
+the available history from 2026-09-15T20:01:10.540Z through the user's request
+at 2026-09-16T21:14:34.752Z. It preserves 3231 ordered records: 24 user messages,
+380 visible assistant messages and 2827 recorded tool calls/results. Hidden
+reasoning, system/developer instructions, compaction summaries and internal
+agent communications are excluded; other tasks and later preparation/status
+messages are outside this snapshot. JSONL is the structured export; Markdown
+is its readable derivative. Both preserve text instead of reconstructing
+unavailable/truncated material. No original session or native receipt is edited.
+
+The plan targets only the residual kil-v3-lab VM and preserves profile, root/
+data disks and receipts. It requires complete stable roster observations,
+unchanged retained concrete footprint/configuration/disk/lock records, empty
+lab container inventory, unchanged foreign profiles/global state, the existing
+held local lock, bounded observations and durable at-most-one stop intent.
+Changed identities, concurrent activity or uncertainty refuse execution.
+If already Stopped, it issues no stop. One future graceful stop is followed
+by fresh complete observations; no force, process-discovery fallback, deletion,
+shared-network restoration, parser change, setup retry or workload request is
+included. The known original shared `_networks` inode mismatch remains an
+explicit failed strict preservation gate, not repaired by recording a new
+manual-recovery baseline. Native stop may affect Lima-managed networking;
+post-state differences must be reported rather than concealed or restored.
+
+Systematic-debugging and writing-plans instructions shaped the preserved
+root-cause boundary and the bite-sized approval/preflight/once-only stop/
+post-observation runbook. No implementation feature or code change is proposed
+in this recovery unit. Parser/native-network remediation and any future
+exploratory rehearsal require a separate scope and review.
+
+The first sandboxed host-process check was denied; the same read-only check
+outside the sandbox observed `/Users/mistorm/.local/bin/ollama`, PID 982,
+PPID 1, elapsed 21:45:35. This agent did not start or use Ollama for the HF
+test and did not stop or modify it. A host process observation does not establish
+model loading, inference traffic or VM/container state.
+
+**Affected artifacts:** New plan
+`docs/superpowers/plans/2026-09-16-hf-residual-vm-recovery.md` and generated
+sibling reader; this appended lineage Markdown and its regenerated reader.
+Ignored, private export directory:
+`.tools/hf-recovery-private/2026-09-16/`, containing `transcript.md`,
+`transcript.jsonl`, README, deterministic filter/render definitions and
+`SHA256SUMS`. Its five listed files verify successfully; directory mode is 700
+and the exported files are mode 600. Transcript files are not staged/published.
+The full 41caf86 lineage Markdown remains an exact prefix. No implementation,
+deployment, native resource, accepted evidence, strict flag or deferral is
+changed during preparation.
+
+**Unresolved questions:** The VM's current state must be freshly established
+at execution; earlier Running observations are not present stop authority.
+Original creation binding remains rejected, shared-network replacement cause
+unestablished and strict foreign preservation unsatisfied. Zero HF requests
+and KIL decisions were exercised in the failed lab attempt. The accepted local-
+Envoy result remains unchanged; platform-image provenance remains unverified
+and full Kind/Calico acceptance not established.
+
+**Next gate:** Self-review scope and refusal conditions, verify transcript
+source-to-export equality/checksums, exact lineage prefix, plan/lineage reader
+generation and clean diff; save only documentation. Hand off the plan and
+private transcript links. Ask whether the user authorizes the proposed one
+graceful-stop-only recovery. Do not execute it in this preparation turn.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
