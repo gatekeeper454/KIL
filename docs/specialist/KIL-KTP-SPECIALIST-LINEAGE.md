@@ -14238,3 +14238,75 @@ gates.
 `make validate`, and proceed only if the broader static gate is green.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-289 — 2026-09-15 — V4 Task 3 final quality re-review approved
+
+**Input:** Re-review the finalized V4 Task 3 range from base
+`9769a06d6484f3259d9948d70015f57a84055106` through head
+`ff16da4` after the bounded-capture correction and observed-lifecycle harness
+correction. Independently inspect implementation, tests, and lineage against
+the approved Task 3 plan, with particular attention to exact capture routing,
+in-flight stdout/stderr bounds, timeout raw-byte semantics, process-group and
+escaped-descendant cleanup, selector deadlines, retained-only recovery, and
+whether the harness correction masks a production defect. Execute no live
+infrastructure command, modify no production code or tests, and commit only
+this final lineage entry and its regenerated HTML reader.
+
+**Interpretation:** Final approval requires the four forward source commands
+to enter a bounded process path before output materialization, retain separate
+finite stdout and stderr prefixes, preserve reserved timeout/truncation status
+and exact raw bytes, stop waiting on inherited pipes at the absolute deadline,
+and leave source recovery command-free. The legacy timeout-proof test may mock
+the newly selected node-inspect transport only if the generic image-store
+timeout and proof/terminal machinery remain real and the exact bounded-call
+count prevents accidental overmocking.
+
+**Decision status:** Approved. The finalized Task 3 range has no Critical,
+Important, or Minor quality or security finding. The T-286 unbounded-capture
+finding is resolved, the T-288 harness correction is test-only and does not
+weaken production behavior, and Task 3 is ready for the separately controlled
+integration gate. This approval does not authorize Task 4+, a live run,
+publication, or a push.
+
+**Rationale:** `SubprocessCommandRunner` selects the bounded path from the exact
+validated node-inspect and two literal manifest-read argv forms. The path
+rejects stdin, launches the child in a new session, drains stdout and stderr
+through a selector into independent one-MiB buffers, reads at most a bounded
+slice beyond remaining capacity to detect overflow, kills the process group on
+timeout or truncation, closes registered pipes even when a descendant escapes
+the group, and uses 50-millisecond selector slices under the original absolute
+deadline. Reserved `-1000` and `-1001` outcomes preserve raw byte prefixes and
+remain unsuccessful to the source proof. Normal terminal collection and
+recovery still expose only the deterministic command-free checkpoint request;
+no live recapture branch was added. The corrected observed-lifecycle test
+mocks exactly the two bounded node-inspect calls through the established fake
+runner while the generic `node_images` `TimeoutExpired`, observation registry,
+decision, terminal writer, and retained raw proof remain exercised.
+
+**Verification:** Independent focused verification passed eleven bounded
+process, ordering, recovery, and observed-lifecycle tests in 59.744 seconds.
+They covered successful stdout overflow, separate stderr overflow, exact raw
+non-UTF-8 timeout prefixes, an exited pipe leader, an escaped continuously
+readable descendant, bounded selector slices, forward ordering, persisted-only
+terminal recovery, missing/corrupt checkpoint teardown-only recovery, and the
+corrected image-load timeout proof. The supplied full root validation also
+reported 1,552 tests passed with 16 explicit V4 skips in 753.494 seconds, all
+76 readers verified, and a clean diff check. No live Colima, Docker, Kind,
+kubectl, Kubernetes, request, publication, or profile command was executed in
+this re-review.
+
+**Affected artifacts:** This re-review changes only
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md` and its regenerated
+`docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm` reader. Production and test
+implementation remains in the reviewed commits through `ff16da4`.
+
+**Unresolved questions:** None within V4 Task 3. Remote CI, branch integration,
+Task 4+ component and platform proofs, and any live dedicated-profile
+experiment remain separate gates.
+
+**Next gate:** Regenerate and verify the lineage reader, commit this docs-only
+approval record, then proceed through the separately authorized integration or
+remote-CI gate without altering the accepted bounded-capture and retained-only
+recovery boundaries.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
