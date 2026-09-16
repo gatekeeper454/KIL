@@ -294,6 +294,7 @@ Request mode body:
 ```python
 for track, namespace in TRACK_NAMESPACES:
     self.guard_cluster()
+    self.require_current_track(track)
     self.require_current_driver(track)
     if self.mode == 'rehearsal':
         self.observe(kubectl_attach_command(self.identity, namespace, b''))
@@ -306,7 +307,13 @@ for track, namespace in TRACK_NAMESPACES:
         self.capture_track(track, final=True)
 ```
 
-`require_current_driver` rebinds ready Pod and same_incarnation against readiness anchor. `require_complete_driver` bounded read polling requires same UID/CID and exact zero termination, never restarts. `freeze_track` drains the exact track Envoy once, checks native refusal/zero gauges and records frozen track in memory; later final freeze skips those already frozen rather than repeating a mutation. After each action capture_track validates full producer join BEFORE later instruction; ambiguity or missing ledger stops progression. Action terminal freshness uses fixture issued just before durable instruction; no resending expired fixture. Unexpected complete join is reported, not retried.
+`require_current_track` rebinds all four ready role Pods against their readiness anchors before any attach; replacement/restart of authz, Envoy or target refuses the instruction, not merely the later report. `require_current_driver` rebinds ready Pod and same_incarnation against readiness anchor. `require_complete_driver` bounded read polling requires same UID/CID and exact zero termination, never restarts. `freeze_track` drains the exact track Envoy once, checks native refusal/zero gauges and records frozen track in memory; later final freeze skips those already frozen rather than repeating a mutation. After each action capture_track validates full producer join BEFORE later instruction; ambiguity or missing ledger stops progression. Action terminal freshness uses fixture issued just before durable instruction; no resending expired fixture. Unexpected complete join is reported, not retried.
+
+For a permit, also join the actual Envoy upstream host/port to the recorded ready
+target EndpointSlice address and port, not merely any address in the Pod subnet.
+Retain ready Pod IPs and endpoint target UIDs with the application anchors; reject
+IP drift or wrong endpoint target. A denial must retain no upstream and a complete
+frozen empty target ledger. Keep actual adapter/engine reason arrays in synopsis.
 
 After all drivers complete/canceled, drain each exact Envoy with kubectl_envoy_quiesce_commands, require raw drain JSON exactly drain_requested true, native listener refusal true and the exact four ACTIVE_GAUGES with integer zero values. Bracket drain by same UID/CID and running state; readiness may turn false due to intended refusal. Read stats up to bounded10s/20read attempts, never repeat drain mutation. Then capture all four source kinds per track: exact authz/target ledger head max1048577 and driver/Envoy logs limit1048576. Reject length>=1MiB, nonzero/overflow/timeout, nonnewline, duplicate/unknown JSON record, or changed bytes/Pod resourceVersion over double-read bracket. Use frozen_source and join; driver completion UID/CID must equal readiness anchor. Store raw source files, source metadata and joined results BEFORE cleanup. No host consequential HTTP.
 
@@ -429,6 +436,14 @@ parent before any request capability. Add failing-first test-owned fd/fsync and
 parent-replacement tests; no durable-intent claim from unsynced ancestry.
 
 Report exact schema kil.hf-exploratory-report.v1, LABEL text, mode, run_id, source_commit, profile_sha256, input/tool commitments, command/source checksums, reached_gate, status complete/inconclusive, error text bounded4096, actual application incarnations and observed platform image references/IDs, request_intent_count (0 rehearsal; <=3 action), joined observed results, owned_teardown bool, manual_recovery bool, foreign/global-state-preservation observations, platform_image_provenance_verified false, full_kind_calico_acceptance false. Never mark static strict flags true. Generate private report.json, synopsis.md and SHA256SUMS over retained regular run files excluding lock and SHA256SUMS; checksum list itself is written exclusively. Private aggregate256MiB, singlefile8MiB, source1MiB. Explicit exclusions historicalHFprevention/fullincident, all8phases/exploits, NetworkPolicy enforcement/no-bypass, repeats/performance, strictV3b2/V4/V3C. No artifacts/generated/public writer.
+
+Exact environment synopsis includes the observed native Node.status.nodeInfo,
+Pod placement/IP and requested versus reported image identities, actual profile
+resources/no-host-mount capture and source/tool/version commitments. Distinguish
+Docker CLI version from an unobserved daemon version; do not invent the latter.
+Platform Node/config/image fields remain reported observations with provenance
+unverified. KIL action synopsis includes actual adapter/engine reasons, HTTP
+statuses, upstream/marker joins and the number of instructions actually attempted.
 
 - [ ] Run focused GREEN and original strict boundary guards. Independently spec-review then quality-review the entire native unit and source/private report interfaces; original implementer fixes findings through observed RED/GREEN. Commit exact new module/script/test/lineage/readers only after verification.
 

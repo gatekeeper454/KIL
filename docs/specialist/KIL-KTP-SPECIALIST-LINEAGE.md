@@ -17918,3 +17918,47 @@ this exact pure unit before proceeding to native lifecycle gates. No retry,
 replay, native action or broader acceptance is authorized by these helper tests.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-347 — 2026-09-16 — Native launch contracts refined; case review dispatched
+
+**Input:** Continue the approved narrower exploratory live HF test without
+resuming platform-image provenance or requiring routine continuation approvals.
+
+**Interpretation:** Input and IO units have independent approval; the pure case
+unit is implemented and now undergoing independent specification review. Native
+implementation remains the next unit, followed by its reviews and a request-free
+rehearsal before one fresh three-track action.
+
+**Decision status:** Confirmed planning refinements, not native execution or
+acceptance. The native plan now requires all four track Pod incarnations to match
+readiness anchors before an instruction, exact permit-upstream address/port to
+match the retained ready target EndpointSlice, and actual Node status/nodeInfo
+and Pod placement/image observations in the private synopsis. Docker CLI version
+is explicitly distinct from an unobserved daemon version. Accepted three-tool
+version checks through the reviewed runner returned zero and matched retained
+version outputs; those commands created no lab or request.
+
+**Rationale:** Replacement must refuse the instruction before dispatch rather
+than merely invalidate a later report. A subnet address is insufficient to join
+the actual target incarnation. Platform fields remain observations with
+provenance unverified, not a renewed audit. Chronology clarification: T-345 was
+inadvertently inserted before T-344 rather than at EOF; commit a4502c0 followed
+4b7e2b3. Earlier committed text is preserved without reordering or rewriting.
+T-346 and this entry are appended at actual EOF; future entries use the greatest
+existing number plus one and actual EOF regardless of earlier physical order.
+
+**Affected artifacts:** Native lifecycle plan Markdown and generated HTML;
+this appended lineage and reader. Independently reviewed case files are
+src/kil/hf_exploratory_case.py and tests/test_hf_exploratory_case.py. Strict code,
+completion flags and sixteen deferrals remain unchanged.
+
+**Unresolved questions:** Case and native independent reviews, complete reviewed
+change-set verification, native readiness, request-free rehearsal and joined
+live evidence remain unresolved. No VM start, image pull, cluster mutation or
+consequential POST has occurred in this exploratory preparation.
+
+**Next gate:** Finish case specification then quality review; implement and
+review the native unit. The launcher proceeds automatically through rehearsal
+then one fresh action only if all existing readiness and teardown gates pass.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
