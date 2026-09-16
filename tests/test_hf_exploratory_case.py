@@ -44,6 +44,25 @@ class PureCaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.case.frozen_source(identity, identity, payload, b'')
 
+    def test_records_rejects_cr_framing(self):
+        for payload in [b'{"x":1}\r{"x":2}\n', b'{}\r\n']:
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                self.case.records(payload)
+
+    def test_frozen_source_requires_complete_identity(self):
+        complete = {'uid': 'pod1', 'container_id': 'containerd://' + 'a' * 64, 'resource_version': '1'}
+        invalid = [{}]
+        for key in complete:
+            invalid.append({field: value for field, value in complete.items() if field != key})
+            for value in ['', None, 1]:
+                invalid.append({**complete, key: value})
+        for identity in invalid:
+            with self.subTest(identity=identity), self.assertRaises(ValueError):
+                self.case.frozen_source(identity, dict(identity), b'{}\n', b'{}\n')
+            for before, after in [(identity, complete), (complete, identity)]:
+                with self.assertRaises(ValueError):
+                    self.case.frozen_source(before, after, b'{}\n', b'{}\n')
+
     def test_binding(self):
         self.assertTrue(hasattr(self.case, 'bind_pod'))
         args = dict(track=TRACKS[0], role='driver', run_id='v3b2-' + 'a' * 64,

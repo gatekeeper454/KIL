@@ -18019,3 +18019,47 @@ result before quality/native gates. No request retry or native execution is
 authorized by this review result.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T-349 — 2026-09-16 — Pure case identity and LF framing corrections
+
+**Input:** Correct the independent T-348 specification findings after review
+commit a819394, using test-first regressions and preserving that committed
+lineage prefix. Limit changes to the pure case module, tests and lineage reader;
+perform no native commands, input factory or live operations.
+
+**Interpretation:** Exact unchanged dictionaries alone cannot establish a
+complete source identity. JSONL must retain the reviewed LF-only framing rather
+than normalize bare CR delimiters or CRLF into acceptable records.
+
+**Decision status:** Corrections implemented for independent re-review, not
+independently approved. RED ran eight focused tests with 15 failing subtests:
+13 missing, empty or nonstring identity cases, plus bare-CR and CRLF framing.
+After minimal corrections, fresh GREEN passed all eight tests with
+ResourceWarning promoted to errors, PYTHONDONTWRITEBYTECODE=1 and PYTHONPATH=src.
+
+**Rationale:** frozen_source now first validates both exact dictionaries for
+nonempty exact string uid, container_id and resource_version, then retains the
+existing full-map equality and complete-byte equality checks. It does not
+discard any other binding fields. records rejects every raw CR byte and splits
+only at LF; empty input remains valid, while empty records, missing terminal LF,
+duplicates and bounded-source violations retain their previous rejection.
+The original complete payload, not normalized or reserialized records, still
+supplies byte count and SHA-256. Self-review confirmed the corrections affect
+only these demonstrated boundaries; fixture construction, Pod binding, reason
+retention and tuple reporting are unchanged.
+
+**Affected artifacts:** src/kil/hf_exploratory_case.py,
+tests/test_hf_exploratory_case.py, this appended lineage entry and regenerated
+HTML reader. The complete a819394 Markdown lineage remains a byte-for-byte
+prefix. No strict code, model or native lifecycle file is changed.
+
+**Unresolved questions:** Independent corrected specification review and
+subsequent quality review remain pending. Native lifecycle, request-free
+rehearsal, live joined evidence, platform provenance and full Kind/Calico
+acceptance remain separate unresolved gates; pure tests establish none of them.
+
+**Next gate:** Independently re-review these corrections against T-348 before
+quality review or native implementation. No retry, replay or native execution
+is authorized by the corrected helper tests.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

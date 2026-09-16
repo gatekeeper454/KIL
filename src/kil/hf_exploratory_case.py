@@ -39,10 +39,10 @@ def instruction(track, run_digest, issued):
 
 
 def records(payload):
-    if type(payload) is not bytes or len(payload) >= SOURCE_LIMIT or (payload and not payload.endswith(b'\n')):
+    if type(payload) is not bytes or len(payload) >= SOURCE_LIMIT or b'\r' in payload or (payload and not payload.endswith(b'\n')):
         raise ValueError('source must be complete bounded JSONL bytes')
     result, seen = [], set()
-    for line in payload.splitlines():
+    for line in payload.split(b'\n')[:-1]:
         if not line:
             raise ValueError('empty source record')
         value = decode(line, maximum=SOURCE_LIMIT)
@@ -57,7 +57,11 @@ def records(payload):
 
 
 def frozen_source(before, after, payload, second):
-    if type(before) is not dict or type(after) is not dict or before != after or type(second) is not bytes or payload != second:
+    for identity in (before, after):
+        if type(identity) is not dict or any(type(identity.get(key)) is not str or not identity[key]
+                                            for key in ('uid', 'container_id', 'resource_version')):
+            raise ValueError('source identity is incomplete')
+    if before != after or type(second) is not bytes or payload != second:
         raise ValueError('source binding or bytes changed')
     parsed = records(payload)
     return {'identity': dict(before), 'byte_count': len(payload), 'sha256': sha256(payload).hexdigest(), 'records': parsed}
