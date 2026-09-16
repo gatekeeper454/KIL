@@ -19752,3 +19752,44 @@ review/approve the saved concrete design before test-first implementation
 planning and independent review. No automatic native continuation is scheduled.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T372 — 2026-09-16 — Isolated exploratory launcher design approved; test-first execution gate
+
+**Input:** User: “go design approval under the brainstorming skill, then
+test-first implementation.”
+
+**Interpretation:** Approve the saved recommended isolated-native-state design
+and execute its focused engineering repair with a written plan and TDD. This
+does not grant a new native start, stop, deletion, rehearsal or HF request.
+
+**Decision status:** CONFIRMED design approval recorded as a dated addendum,
+preserving the original proposed checkpoint. Implementation plan saved and
+self-reviewed. Engineering execution authorized; no repair yet claimed.
+
+**Rationale:** The material placement/command-authority decision was already
+presented in the concrete design. The current user go-ahead clears that gate.
+Writing-plans fixes interfaces and separates runtime authority, pure native
+configuration binding and composition/evidence lifetime. Subagent-driven
+development requires fresh bounded implementers and SPEC-before-QUALITY
+reviews; these are engineering reviews, not a renewed platform-image audit.
+Using-git-worktrees verified external linked detached isolation and no submodule;
+no new worktree, branch or dependencies were created. Fresh non-native baseline:
+132 exploratory tests passed in 17.461s with ResourceWarning fatal. All tests
+used temporary filesystem/command doubles; no native opt-in was enabled.
+
+**Affected artifacts:** Dated design approval addendum, new focused repair plan
+and this appended lineage, with generated readers. Planned exploratory source/
+test units only. Existing source, strict units/deferrals, accepted evidence,
+old native receipts, transcript export and stopped residual VM remain untouched.
+
+**Unresolved questions:** Actual compatibility of private native state awaits
+engineering verification and a separately permitted request-free rehearsal.
+Platform-image provenance remains explicitly unverified; full Kind/Calico
+acceptance is not established. Original missing context metadata remains an
+acknowledged exception, not reconstructed evidence.
+
+**Next gate:** Test-first implementation of each plan unit with independent
+SPEC/QUALITY gates, final composition review and fresh local verification.
+Record actual failures/corrections and checkpoint without any native execution.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

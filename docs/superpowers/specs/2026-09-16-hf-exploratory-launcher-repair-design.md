@@ -180,3 +180,13 @@ private setup/capture/teardown rehearsal still precedes the fresh three-track
 action under the approved exploratory experiment scope.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Design approval — 2026-09-16
+
+The user instructed: “go design approval under the brainstorming skill, then
+test-first implementation.” This approves the recommended isolated-runtime
+design above for engineering implementation. The original PROPOSED status and
+checkpoint remain historical records. Approval does not authorize any native
+start/stop/delete, rehearsal or HF request. Platform-image provenance remains
+unverified. Next gate: written implementation plan, test-first repair and
+independent spec/quality/composition review before separate native permission.
