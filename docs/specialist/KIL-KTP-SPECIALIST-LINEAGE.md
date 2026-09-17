@@ -23124,3 +23124,61 @@ spec; self-review and user written-spec approval precede writing-plans. A native
 stop still requires explicit execution approval and fresh scoped preconditions.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T422 — 2026-09-17, approved isolated stop-only architecture written for spec review
+
+**Input:** User answered "approved" to the compact stop-only recovery architecture
+and request to write its spec, explicitly distinguished from executing a stop.
+Fresh starting checkpoint7490dc552bd089f2d08cbaf372f86e749c6661d2 is clean/detached.
+
+**Interpretation:** CONFIRMED architecture approval and documentation authority.
+Continue brainstorming's written-spec/self-review/user-review gates; neither
+native execution nor another rehearsal/HF action is authorized by this answer.
+
+**Decision status:** CONFIRMED written/self-reviewed specification at
+docs/superpowers/specs/2026-09-17-hf-compact-residual-vm-recovery-design.md.
+Written-spec user approval remains PENDING. It defines isolated fresh manual
+stop-only authority for full254877dc digest/runtime and sealed receipt, not an
+adopted RuntimeAuthority or a resumed/repaired production lifecycle.
+
+**Rationale:** Pin exact full ID, UID501 and retained root identity; authenticate
+the46-entry3979B receipt manifest with SHA
+d128fd99fcc32391db27804da8be86c0e62b238343b71c7f44009785cba38ad0,
+exact registry/binding bytes, saved eight-resource binding, finite rosters,
+known767B SSH control, complete inventories, empty explicit private endpoint
+and original protected default/global baseline. Fresh all46 receipt checksums
+PASS during this document turn. Read-only Colima executable stat/hash establishes
+a local0755/UID501/single-link/15656320B pin
+980ad8bf61a4ca370243f4cb41401a61276dcd2c2502bee7b9b86f9250169f34;
+no Colima/version/list/stop or other native executable is dispatched now.
+
+The spec fixes the separate exclusive recovery evidence path, durable once-only
+intent, explicit private child namespaces, bounded graceful-stop grammar,
+already-stopped zero-dispatch branch, final fresh rechecks and no uncertainty
+retry. It separates immutable evidence/disk identity-capacity retention from
+mutable native controls and orderly guest disk writes. Self-review clarified
+Running-only SSH admission, Stopped finite control absences, exact PATH refusal
+semantics, finite log copies and separately reported command/status/preservation
+uncertainty. No placeholder, alternate target or implicit native/HF continuation.
+
+**Affected artifacts:** New spec/reader plus actual-EOF lineage/reader only.
+Existing sources/tests/strict contracts/accepted artifacts, old/new sealed
+receipts, registry/runtime/disks, protected defaults and external worktree state
+unchanged. No implementation plan/code, live inventory or recovery instruction,
+image audit/install/Ollama operation, branch move/merge/push or cleanup.
+
+**Unresolved questions:** Written user review remains required before
+writing-plans/test-first preparation. Any necessary adapter stays a dedicated
+one-shot recovery tool/test; production guards are untouched. Preparation does
+not authorize this stop: separate execution approval and fresh scoped proof are
+required. Current VM status remains unobserved; running is historical T419
+evidence. Recovery cannot establish successful rehearsal/HF readiness or repair
+SSH compatibility. Image provenance remains unverified/full Kind-Calico acceptance
+false/accepted local Envoy unchanged. Historical citation omissions remain visible.
+
+**Next gate:** Preserve the entire7490dc predecessor Markdown prefix1,362,642B,
+index the new spec, render/check93 readers, check canonical citations/diffs and
+commit ONLY spec/lineage Markdown-reader pairs. Ask user to review/approve this
+written spec before writing-plans. No stop/delete/retry/force/HF request now.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
