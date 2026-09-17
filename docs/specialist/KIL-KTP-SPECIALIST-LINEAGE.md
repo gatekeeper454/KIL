@@ -21784,3 +21784,82 @@ the existing conditional native permission. Any important finding requires
 test-first correction and re-review before readiness.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## 2026-09-16 — T402 independent QUALITY review of the approved Colima dependency PATH unit
+
+**Input:** Fresh independent Senior Code Quality Reviewer assignment for the
+approved single-unit repair, using the requesting-code-review template. The
+reviewed engineering range is
+752e61e1a964a6af677b3960c15da3c667f79663 through
+8ced033a35b81e0246f661bfc33e9349526bfa03. The clean docs-only baseline at review
+start is 5f3083ae152ca5e8672d3039077e0c1ee701d68f. Source and tests were frozen;
+the exclusive T402 writer grant permits only this lineage append, its sibling
+reader regeneration and their exact-path commit. The supplied complete task
+requirements and approved design were read; the implementation plan was not read.
+
+**Interpretation:** Review the finite implemented mutation-only PATH authority
+change, actual code and tests, not a repository-wide audit or reports standing in
+for inspection. Inspect neighboring read_regular, RuntimeAuthority and the strict
+adapter only to understand their integration. Judge bounded IO, identity retention,
+exception normalization, descriptor lifecycle, real behavior, edge cases and
+backward compatibility without demanding unrelated refactors, external exclusion
+or a zero-TOCTOU guarantee. Technical repair readiness is distinct from native
+compatibility, strict full acceptance and merge authorization.
+
+**Decision status:** Independent QUALITY PASS: no Critical, Important or Minor
+actionable findings in the finite reviewed unit. This reviewer freshly ran
+test_hf_exploratory_io: 64 tests PASS in 2.762 seconds, and
+test_hf_exploratory_runtime: 28 tests PASS in 0.180 seconds, both with
+PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and ResourceWarning fatal, using the
+designated virtual-environment Python. The reported combined 425-test root run
+and earlier RED evidence remain reported evidence, not additional runs by this
+reviewer. No full-suite all-green claim is made; the four known immutable
+historical citation omissions and sixteen intentional skips remain visible and
+unchanged. Final root review and the conditional rehearsal gate remain pending.
+
+**Rationale:** The new routing is clearly confined to exact-type mutating
+ExploratoryColimaCommand and does not widen the strict command grammar. Original
+sanitized-PATH Colima selection precedes priority, preserves canonical absolute
+argv dispatch and rechecks the retained executable identity. The dependency
+helper returns immutable directory/file identity and digest snapshots without
+environment mutation. Its exact docker/kind/kubectl roster is complete and bounded
+at the fourth entry; per-file full-byte authentication comes from fresh accepted
+manifest rows. Named/fd/canonical directory checks, eight-field file identities,
+later-file substitution checks, repeated roster checks and finally-block descriptor
+closure are coherent and auditable. Two complete snapshots span the existing
+manifest reauthentication; both toolsPath consistency comparisons cover scoped
+mutation. All new authentication IO precedes the preserved final real runtime
+guard and dispatch fingerprint, followed by exact manifest/metadata consistency
+checks before capture. Supported dependency failures normalize to ValueError.
+Real temporary authority, files, permissions, search and accepted-manifest guards
+are exercised; digest fixtures accept only exact inert payloads with the actual
+accepted digest/size arguments and altered bytes use the real verifier. The tests
+cover start/stop/delete, refusals, finite drift, descriptor cleanup, unchanged
+readonly/direct-family dispatch and unchanged parent/adapter environment.
+
+**Affected artifacts:** Only this actual-EOF lineage append and its regenerated
+HTML reader change in T402. The exact baseline Markdown prefix is 1,272,351 bytes.
+Frozen IO SHA-256 remains
+05d6024a725d6b3e68b0f9da74384b9c7f9c0af16d6447b5328ccbbf5c7f151f;
+frozen test SHA-256 remains
+5217cc62e024c6f4bee84ab8d7c99bdce143744c5e40110d00f6752e939a506b.
+No source/test edits, native/VM/HTTP/HF/Ollama/image audit, install, receipt/runtime
+changes, branch movement, push or worktree operation were performed. Native/CLI/
+strict/public interfaces, accepted inputs/local Envoy, artifacts and all deferrals
+remain unchanged. The requesting-code-review and verification-before-completion
+skills shaped the independent inspection and evidence-before-verdict workflow.
+
+**Unresolved questions:** This unit review cannot establish native Colima startup
+and teardown compatibility, full Kind/Calico acceptance or platform-image
+provenance. Root final review, a clean engineering readiness checkpoint and the
+existing conditional permission govern any one fresh request-free rehearsal.
+No automatic retry, failed-state adoption or action-mode permission is inferred.
+
+**Next gate:** Byte-compare the retained 5f3083 Markdown prefix exactly, generate
+and --check all 90 readers, and diff-check. Stage and commit exactly the lineage
+Markdown and HTML reader, verify clean status and unchanged source/test hashes,
+then explicitly release the T402 writer. Root conducts final review before
+evaluating the conditional one fresh request-free native rehearsal permission;
+any important subsequent finding requires test-first correction and re-review.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
