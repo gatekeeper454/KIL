@@ -23946,3 +23946,72 @@ Actual one-mode-change execution and any subsequent one-stop recovery each need
 their own explicit new approval after verified preparation. Do not run either now.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T433 — 2026-09-17, written parent-mode spec approved and fixture-first plan prepared
+
+**Input:** "approved" to written-spec review at clean checkpoint
+8b5714377cce4e3dffdf5ce6aaec926a5247099a, with prior subagent-driven preparation
+and independent-review preference retained.
+
+**Interpretation:** CONFIRMED written-spec approval authorizes writing-plans and
+fixture-only test-first preparation, not the actual pinned-parent fchmod, live
+preflight or a new VM stop. T430's ended/refused stop authority remains spent.
+
+**Decision status:** CONFIRMED approval appended to the spec without rewriting
+its historical pending checkpoint. Complete five-task implementation plan written
+and self-reviewed. Engineering RED/GREEN/reviews still pending; no actual target
+permission/VM changes or readiness claim at this documentation checkpoint.
+
+**Rationale/evidence:** Read current writing-plans, brainstorming, verification
+and worktree guidance plus actual spec/source helper/LabLock patterns. Exact
+clean8b57143 HEAD and detached linked-worktree state confirmed read-only; retain
+existing isolation, no branch/worktree creation/install/merge/push. Existing
+check_source is bounded and refuses warning/stderr/nonzero/dirty/changed HEAD.
+Use only its read-only source check; no lifecycle/native authority construction.
+
+The plan creates only dedicated tools/hf_recovery_parent_permissions.py and
+tests/test_hf_recovery_parent_permissions.py during future engineering. Separate
+read-only ancestry/existing-only flock/bounded direct-child proof tasks precede
+entry-consumed fchmod and complete-closure result/strict CLI tasks. Final
+adversarial tests and independent spec/quality plus root regressions precede
+any execution approval. No create-capable LabLock entry, lock/receipt writes,
+recursive child access, retry, rollback, path/mode override or recovery call.
+
+Inline spec-coverage/interface review fixed a metadata-closure gap in the
+PROPOSED code examples: re-stat every already-known direct child without
+enumerating/opening it after final source IO, pre-syscall and post-observation.
+Concrete adversarial tests cover late child metadata drift. Target directory
+mode/ctime change is explicitly expected; no other anchor/child rebaseline.
+Late teardown errors retain original syscall entry count/certainty/observed mode.
+Four outcomes, full stat9 including GID, finite children/names/errors/stdout,
+owned FD release and actual source/account/approval/pin reporting are defined.
+
+Fresh planning verification: concatenated proposed tool example358 lines and
+test example696 lines/39 test methods AST-compile OK without execution. No
+incomplete-instruction scan matches; whitespace/protected paths unchanged and
+complete8b57143 predecessor lineage prefix1,416,871B preserved before append.
+These checks do not establish fixture GREEN, a real chmod or VM recovery.
+Reader generation/check, exact doc scope and clean local commit follow.
+
+**Affected artifacts:** New plan/generated reader, appended spec approval/
+generated reader and this actual-EOF lineage/generated reader only. Engineering
+files not yet created at this checkpoint. Existing recovery plan/tool/tests,
+production/deploy/accepted artifacts, citation policy, private parent/lock/
+receipts/runtime state unchanged. No target/receipt/runtime reread or status
+query, HF/Ollama/rehearsal/image/SSH audit, restart/delete/force or native action.
+
+**Unresolved questions:** Actual future fixture tests and independent reviews.
+Parent0755 origin unestablished; live mode/VM status not refreshed by planning.
+Mode remediation cannot promise all later recovery preflight conditions pass.
+Accepted local Envoy unchanged/platform provenance unverified/full Kind-Calico
+acceptance false; four historical immutable citation omissions remain disclosed.
+
+**Next gate:** Stage only new plan Markdown before tracked-source reader
+generation; verify actual count, canonical citations, full predecessor prefix,
+exact doc scope and clean committed HEAD. Then carry forward the user's chosen
+subagent-driven fixture preparation without asking again for that workflow.
+Root alone may execute a later one-mode-change attempt only after engineering
+and NEW explicit execution approval. Subsequent native recovery independently
+needs another NEW one-stop approval; do neither during preparation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

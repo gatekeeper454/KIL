@@ -210,3 +210,13 @@ This document contains requirements, not unverified implementation or a claim
 that its future engineering/execution has passed. User review is required next.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Written-spec approval record — 2026-09-17
+
+The user answered "approved" to review of this written spec at clean checkpoint
+8b5714377cce4e3dffdf5ce6aaec926a5247099a. Written-spec approval is CONFIRMED;
+writing-plans and fixture-only test-first preparation may proceed. The historical
+pending status above records the document's earlier checkpoint, not the current
+gate. Actual fixed-target fchmod and a subsequent native recovery attempt each
+remain separately unapproved. Retain the user's subagent-driven preparation and
+independent-review preference; do not revive the spent T430 stop permission.
