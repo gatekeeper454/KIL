@@ -210,14 +210,14 @@ tests.test_v3b2_runtime_image_inventory
 - [x] Verify unchanged strict/Native/CLI/accepted artifacts, exact earlier lineage
   prefix, reader check, diff check and clean committed source. Record actual counts
   and prior broad-suite limitation, with no merge/PR/all-green assertion.
-- [ ] Use the already granted conditional permission only if all repair readiness
+- [x] Use the already granted conditional permission only if all repair readiness
   gates succeed. Invoke reviewed LabLock/verify_inputs/PrivateStore/BoundedRunner/
   ExploratoryLifecycle APIs once with mode='rehearsal', fresh nonce and exact clean
   reviewed HEAD. Never invoke the looping CLI main, which automatically continues
   into action. Source/input preflight and native command session run outside the
   sandbox because sandboxed macOS Git produces confstr stderr warnings; do not
   suppress warnings or bypass the fail-closed gate.
-- [ ] Capture, verify every retained receipt checksum, report foreign-state checks,
+- [x] Capture, verify every retained receipt checksum, report foreign-state checks,
   observed leftovers and zero request intents. Stop on inconclusive outcome;
   no retry/adoption/delete beyond exact guarded owned teardown. Preserve all
   failed-run bytes. Append final root lineage, render/check and clean checkpoint.
@@ -268,5 +268,61 @@ the reviewed core APIs only, never the CLI's action loop. Native compatibility
 and successful teardown remain untested at this engineering checkpoint; an
 inconclusive outcome ends the attempt without retry/adoption/action continuation.
 Platform-image provenance and full Kind/Calico acceptance remain unverified.
+
+KTP citation: [canonical CITATION.cff](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Single authorized rehearsal outcome — 2026-09-16
+
+The checkboxes above mark performed steps, not successful native acceptance.
+Root used the conditional permission exactly once after clean engineering HEAD
+46c218bbf954b93fc110c6e4b0d48898d775ce85, real accepted-input authentication,
+the complete three-tool roster and original Colima eligibility passed. The
+reviewed core-API harness used constant mode='rehearsal' and fresh nonce, never
+CLI main. It closed lifecycle descriptors before the private store and lab lock.
+
+Run: v3b2-3e71b5b05810b71567e14ac06c5accf1faebee0126ed4659aceec17da567a3ae.
+Receipt: .tools/hf-exploratory-private/hf-exploratory-3e71b5b05810b71567e14ac06c5accf1faebee0126ed4659aceec17da567a3ae.
+Runtime: its hf-exploratory-runtime-3e71b5b05810b71567e14ac06c5accf1faebee0126ed4659aceec17da567a3ae sibling.
+
+Fourteen commands were attempted: thirteen read-only, then one private Colima
+start. At 18:59:22 PDT startup passed Docker dependency lookup and reached Lima
+creation, which refused the generated socket pathname: it is 247 characters,
+but Lima requires less than UNIX_PATH_MAX=104. The native refusal is retained
+in command-0014.stdout; Colima's start/fatal messages are in command-0014.stderr.
+The start returned 1 and the creation binding could not be established.
+
+Status is inconclusive_at_profile_start_attempted, error
+ValueError: profile_start_unbound. Zero request intents and zero request attempts;
+no Kind cluster, Calico/driver/KIL action or HF live request ran. Owned teardown,
+profile deletion and cluster removal are false. manual_recovery=true is the
+conservative unbound-state flag, not proof of a running VM. No stop/delete,
+failed-state adoption, second launch or action continuation occurred.
+
+Preserved partial state contains generated private profile/Kind controls,
+startup YAML, Lima _config and _disks directories, and a raw 60-GiB logical data
+disk. Read-only stat reports zero allocated 512-byte blocks for that sparse disk.
+The captured instance, root disk, lock and protected marker are absent. Private
+capture remains identical after the attempt. Finite runtime evidence covers
+bounded controls/observations and disk metadata/header, not a full disk checksum.
+All 40 retained receipt SHA-256 entries passed verification, including after
+postchecks; all 40 entries of the earlier ee8373d6 failure remain valid unchanged.
+
+Post-verification ran exactly three global read-only commands (Colima list,
+Docker context show, Colima list) through closed commands and authenticated runner,
+without writing the sealed receipt. Bracketed default roster/network commitments,
+global Docker context/configuration and inherited kubeconfig exactly matched the
+original snapshot. Two root projection mistakes (journal 'data' rather than
+'details', then nonexistent capture 'children') were corrected through pure
+reads only. The second mistake occurred after the global and private equality
+assertions passed; no extra global command or native attempt was run to correct it.
+Fresh pure configuration/private capture comparison also passed.
+
+This plan's engineering and one-attempt evidence work are performed, but the live
+rehearsal is NOT successful. The PATH repair remains verified; the new blocker
+requires a separately approved compact private-runtime placement/identity design
+and test-first implementation. No relocation, symlink workaround, recovery cleanup
+or further native attempt is authorized by this completed plan. Platform-image
+provenance and full Kind/Calico acceptance remain false/unverified; accepted local
+Envoy and existing strict evidence remain unchanged. Default environment is unchanged.
 
 KTP citation: [canonical CITATION.cff](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

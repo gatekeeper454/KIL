@@ -6,7 +6,7 @@
 <title>Scoped Colima dependency PATH Implementation Plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-16-hf-colima-dependency-path.md">
-<meta name="source-sha256" content="2169383baf0b0002f2decdae0f70dffd270bec022426c51a29e521dd0c3f0b98">
+<meta name="source-sha256" content="3c85c8231911ed20fb0079ad549ae4dea73a26327663e13f4eda431870d9aa61">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,14 +55,14 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-colima-dependency-path.md</code> (<code>2169383baf0b0002f2decdae0f70dffd270bec022426c51a29e521dd0c3f0b98</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-colima-dependency-path.md</code> (<code>3c85c8231911ed20fb0079ad549ae4dea73a26327663e13f4eda431870d9aa61</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Scoped Colima dependency PATH Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-colima-dependency-path.md</code> (<code>2169383baf0b0002f2decdae0f70dffd270bec022426c51a29e521dd0c3f0b98</code>); edit the Markdown source, not this reader.</p></div>
-<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#scoped-colima-dependency-path-implementation-plan">Scoped Colima dependency PATH Implementation Plan</a></li><li class="level-3"><a href="#task-1-one-bounded-runner-dependency-authority-unit">Task 1: One bounded runner dependency-authority unit</a></li><li class="level-3"><a href="#root-verification-and-conditional-fresh-rehearsal">Root verification and conditional fresh rehearsal</a></li><li class="level-2"><a href="#plan-self-review">Plan self-review</a></li><li class="level-2"><a href="#engineering-execution-checkpoint-2026-09-16">Engineering execution checkpoint — 2026-09-16</a></li></ol></nav></details><div class="reader-layout">
-<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="scoped-colima-dependency-path-implementation-plan" href="#scoped-colima-dependency-path-implementation-plan">Scoped Colima dependency PATH Implementation Plan</a></li><li class="level-3"><a data-section-id="task-1-one-bounded-runner-dependency-authority-unit" href="#task-1-one-bounded-runner-dependency-authority-unit">Task 1: One bounded runner dependency-authority unit</a></li><li class="level-3"><a data-section-id="root-verification-and-conditional-fresh-rehearsal" href="#root-verification-and-conditional-fresh-rehearsal">Root verification and conditional fresh rehearsal</a></li><li class="level-2"><a data-section-id="plan-self-review" href="#plan-self-review">Plan self-review</a></li><li class="level-2"><a data-section-id="engineering-execution-checkpoint-2026-09-16" href="#engineering-execution-checkpoint-2026-09-16">Engineering execution checkpoint — 2026-09-16</a></li></ol></nav>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-colima-dependency-path.md</code> (<code>3c85c8231911ed20fb0079ad549ae4dea73a26327663e13f4eda431870d9aa61</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#scoped-colima-dependency-path-implementation-plan">Scoped Colima dependency PATH Implementation Plan</a></li><li class="level-3"><a href="#task-1-one-bounded-runner-dependency-authority-unit">Task 1: One bounded runner dependency-authority unit</a></li><li class="level-3"><a href="#root-verification-and-conditional-fresh-rehearsal">Root verification and conditional fresh rehearsal</a></li><li class="level-2"><a href="#plan-self-review">Plan self-review</a></li><li class="level-2"><a href="#engineering-execution-checkpoint-2026-09-16">Engineering execution checkpoint — 2026-09-16</a></li><li class="level-2"><a href="#single-authorized-rehearsal-outcome-2026-09-16">Single authorized rehearsal outcome — 2026-09-16</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="scoped-colima-dependency-path-implementation-plan" href="#scoped-colima-dependency-path-implementation-plan">Scoped Colima dependency PATH Implementation Plan</a></li><li class="level-3"><a data-section-id="task-1-one-bounded-runner-dependency-authority-unit" href="#task-1-one-bounded-runner-dependency-authority-unit">Task 1: One bounded runner dependency-authority unit</a></li><li class="level-3"><a data-section-id="root-verification-and-conditional-fresh-rehearsal" href="#root-verification-and-conditional-fresh-rehearsal">Root verification and conditional fresh rehearsal</a></li><li class="level-2"><a data-section-id="plan-self-review" href="#plan-self-review">Plan self-review</a></li><li class="level-2"><a data-section-id="engineering-execution-checkpoint-2026-09-16" href="#engineering-execution-checkpoint-2026-09-16">Engineering execution checkpoint — 2026-09-16</a></li><li class="level-2"><a data-section-id="single-authorized-rehearsal-outcome-2026-09-16" href="#single-authorized-rehearsal-outcome-2026-09-16">Single authorized rehearsal outcome — 2026-09-16</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
 <h1 id="scoped-colima-dependency-path-implementation-plan">Scoped Colima dependency PATH Implementation Plan</h1>
 <blockquote>
@@ -263,14 +263,14 @@ tests.test_v3b2_runtime_image_inventory
 <li>[x] Verify unchanged strict/Native/CLI/accepted artifacts, exact earlier lineage
 prefix, reader check, diff check and clean committed source. Record actual counts
 and prior broad-suite limitation, with no merge/PR/all-green assertion.</li>
-<li>[ ] Use the already granted conditional permission only if all repair readiness
+<li>[x] Use the already granted conditional permission only if all repair readiness
 gates succeed. Invoke reviewed LabLock/verify_inputs/PrivateStore/BoundedRunner/
 ExploratoryLifecycle APIs once with mode='rehearsal', fresh nonce and exact clean
 reviewed HEAD. Never invoke the looping CLI main, which automatically continues
 into action. Source/input preflight and native command session run outside the
 sandbox because sandboxed macOS Git produces confstr stderr warnings; do not
 suppress warnings or bypass the fail-closed gate.</li>
-<li>[ ] Capture, verify every retained receipt checksum, report foreign-state checks,
+<li>[x] Capture, verify every retained receipt checksum, report foreign-state checks,
 observed leftovers and zero request intents. Stop on inconclusive outcome;
 no retry/adoption/delete beyond exact guarded owned teardown. Preserve all
 failed-run bytes. Append final root lineage, render/check and clean checkpoint.</li>
@@ -313,6 +313,53 @@ the reviewed core APIs only, never the CLI's action loop. Native compatibility
 and successful teardown remain untested at this engineering checkpoint; an
 inconclusive outcome ends the attempt without retry/adoption/action continuation.
 Platform-image provenance and full Kind/Calico acceptance remain unverified.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical CITATION.cff</a>.</p>
+<h2 id="single-authorized-rehearsal-outcome-2026-09-16">Single authorized rehearsal outcome — 2026-09-16</h2>
+<p>The checkboxes above mark performed steps, not successful native acceptance.
+Root used the conditional permission exactly once after clean engineering HEAD
+46c218bbf954b93fc110c6e4b0d48898d775ce85, real accepted-input authentication,
+the complete three-tool roster and original Colima eligibility passed. The
+reviewed core-API harness used constant mode='rehearsal' and fresh nonce, never
+CLI main. It closed lifecycle descriptors before the private store and lab lock.</p>
+<p>Run: v3b2-3e71b5b05810b71567e14ac06c5accf1faebee0126ed4659aceec17da567a3ae.
+Receipt: .tools/hf-exploratory-private/hf-exploratory-3e71b5b05810b71567e14ac06c5accf1faebee0126ed4659aceec17da567a3ae.
+Runtime: its hf-exploratory-runtime-3e71b5b05810b71567e14ac06c5accf1faebee0126ed4659aceec17da567a3ae sibling.</p>
+<p>Fourteen commands were attempted: thirteen read-only, then one private Colima
+start. At 18:59:22 PDT startup passed Docker dependency lookup and reached Lima
+creation, which refused the generated socket pathname: it is 247 characters,
+but Lima requires less than UNIX_PATH_MAX=104. The native refusal is retained
+in command-0014.stdout; Colima's start/fatal messages are in command-0014.stderr.
+The start returned 1 and the creation binding could not be established.</p>
+<p>Status is inconclusive_at_profile_start_attempted, error
+ValueError: profile_start_unbound. Zero request intents and zero request attempts;
+no Kind cluster, Calico/driver/KIL action or HF live request ran. Owned teardown,
+profile deletion and cluster removal are false. manual_recovery=true is the
+conservative unbound-state flag, not proof of a running VM. No stop/delete,
+failed-state adoption, second launch or action continuation occurred.</p>
+<p>Preserved partial state contains generated private profile/Kind controls,
+startup YAML, Lima _config and _disks directories, and a raw 60-GiB logical data
+disk. Read-only stat reports zero allocated 512-byte blocks for that sparse disk.
+The captured instance, root disk, lock and protected marker are absent. Private
+capture remains identical after the attempt. Finite runtime evidence covers
+bounded controls/observations and disk metadata/header, not a full disk checksum.
+All 40 retained receipt SHA-256 entries passed verification, including after
+postchecks; all 40 entries of the earlier ee8373d6 failure remain valid unchanged.</p>
+<p>Post-verification ran exactly three global read-only commands (Colima list,
+Docker context show, Colima list) through closed commands and authenticated runner,
+without writing the sealed receipt. Bracketed default roster/network commitments,
+global Docker context/configuration and inherited kubeconfig exactly matched the
+original snapshot. Two root projection mistakes (journal 'data' rather than
+'details', then nonexistent capture 'children') were corrected through pure
+reads only. The second mistake occurred after the global and private equality
+assertions passed; no extra global command or native attempt was run to correct it.
+Fresh pure configuration/private capture comparison also passed.</p>
+<p>This plan's engineering and one-attempt evidence work are performed, but the live
+rehearsal is NOT successful. The PATH repair remains verified; the new blocker
+requires a separately approved compact private-runtime placement/identity design
+and test-first implementation. No relocation, symlink workaround, recovery cleanup
+or further native attempt is authorized by this completed plan. Platform-image
+provenance and full Kind/Calico acceptance remain false/unverified; accepted local
+Envoy and existing strict evidence remain unchanged. Default environment is unchanged.</p>
 <p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical CITATION.cff</a>.</p>
 </article></main>
 </div></div>

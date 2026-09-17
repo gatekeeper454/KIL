@@ -22018,3 +22018,81 @@ automatic native attempt on inconclusive result. Verify all retained checksums,
 protected foreign-state observations and leftovers, then record the actual outcome.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T405 — 2026-09-16 — One authorized private rehearsal; native Unix-path refusal
+
+**Input:** All approved PATH repair test/review gates passed and T404 clean
+engineering checkpoint 46c218bbf954b93fc110c6e4b0d48898d775ce85 was saved. The
+user's existing conditional permission covered ONE fresh request-free rehearsal.
+
+**Interpretation:** Root alone performs that single attempt through reviewed
+LabLock/verify_inputs/PrivateStore/BoundedRunner/ExploratoryLifecycle APIs with
+constant mode='rehearsal', fresh nonce and exact clean HEAD, never looping CLI
+main. Preserve all failed state and stop on inconclusive result; no action/HF
+requests, second launch, adoption or unbound teardown. Use systematic debugging
+only for bounded recorded refusal and protected-state verification.
+
+**Decision status:** Actual single run
+v3b2-3e71b5b05810b71567e14ac06c5accf1faebee0126ed4659aceec17da567a3ae is
+CONFIRMED INCONCLUSIVE at profile_start_attempted, with
+ValueError: profile_start_unbound. Source/input preflight passed outside sandbox,
+including complete accepted Docker/Kind/kubectl roster and original absolute
+Colima eligibility, without filtering Git warnings or bypassing any gate.
+Fourteen commands: thirteen read-only and one private Colima start; start returned
+1 at 18:59:22 PDT. Startup advanced past the prior Docker lookup refusal into
+Lima creation, which rejected its generated socket path: 247 characters where
+less than UNIX_PATH_MAX=104 is required. This is a native path-placement blocker,
+not an image-identity/provenance audit or another missing-Docker finding.
+
+**Rationale:** The approved authenticated PATH repair worked to advance native
+setup, but the long canonical sibling runtime plus full run digest exceeds the
+native socket-path budget. Creation binding remains unavailable, so guarded
+cleanup correctly refuses native stop/delete. Report: request_intent_count=0,
+request_attempt_count=0, owned_teardown=false, profile_delete_completed=false,
+cluster_removed=false, manual_recovery=true. No Kind/Calico/driver/KIL action or
+HF request ran. The manual flag describes conservative unbound state and is not
+proof of an active VM. No retry or fallback was attempted.
+
+Retained controls show private profile YAML and Kind config; startup YAML, Lima
+_config/_disks and raw 60-GiB logical data disk remain in the partial runtime.
+Read-only stat reports zero allocated 512-byte blocks for the sparse disk.
+Instance/root disk/lock/protected marker are absent in the unchanged pure capture.
+Disk evidence is metadata and bounded header, not full 60-GiB byte authentication.
+All 40 new receipt SHA-256 entries pass after post-verification; all 40 old
+ee8373d6 receipt entries still pass unchanged. No runtime or receipt bytes erased.
+
+Exactly three post global read-only commands (Colima list, Docker context show,
+Colima list) produced a bracketed snapshot identical to the original default
+roster/network and global Docker context/configuration/kubeconfig commitments.
+Sealed receipts were not extended. Root initially used the wrong journal key
+'data' instead of 'details', corrected through pure projection. A later print
+referenced nonexistent capture 'children' after global/private equality assertions
+already passed; pure capture_roster/configuration projection corrected it without
+any further global/native command. Fresh pure configuration/private capture
+comparison passed. These helper errors did not trigger another launch or change
+the recorded native refusal.
+
+**Affected artifacts:** New ignored private receipt and sibling runtime under
+.tools/hf-exploratory-private with digest 3e71b5b0; all preserved bytes remain.
+Update only plan performed-step checkboxes/append actual native outcome and its
+reader; append this actual-EOF lineage entry/reader. IO source/tests remain frozen
+at 8ced033; Native/CLI, strict contracts, accepted local Envoy/inputs, old evidence,
+default environment, deferrals and citation policy are unchanged. No Ollama,
+installation, platform-image audit, branch integration/push, new worktree or
+recoverability-changing operation occurred. No deletion or owned-teardown claim.
+
+**Unresolved questions:** A compact fresh private-runtime placement/identity design
+is now needed to meet native pathname limits without weakening canonical/no-follow
+authority or full run/receipt binding. This is a PROPOSAL, not a confirmed design.
+No relocation/symlink workaround/recovery cleanup/additional native attempt is
+authorized by the completed PATH plan. Platform-image provenance and full
+Kind/Calico acceptance remain false/unverified; broader historical citation failure
+and sixteen skips stay visible. Successful live rehearsal is still pending.
+
+**Next gate:** Render/check all 90 readers, preserve exact 46c218b Markdown prefix,
+diff-check, verify unchanged frozen source and commit ONLY plan/lineage pairs.
+Leave a clean stopping point and request user direction for the newly required
+compact private-runtime design, followed by separately approved test-first work
+and any new rehearsal permission. Do not start a second native attempt now.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
