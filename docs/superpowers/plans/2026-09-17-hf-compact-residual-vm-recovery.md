@@ -1544,3 +1544,59 @@ checks follow. Platform-image provenance remains unverified, accepted local Envo
 unchanged and full Kind/Calico acceptance false.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Native attempt after parent-mode remediation — 2026-09-17
+
+User `go next action` approved the explicit one-stop-only recovery request in
+the resumed task. Root verified clean exact reviewed source
+`601d0a4ffa7c76d152fadb4273f4685134fec0b0`, unchanged accepted source/test
+SHA256, runtime root ID4 `(16777232,615011851,16832,501)` and parent
+device16777232/inode612764151/UID501/0700. Read-only scoped process checks
+outside the sandbox found expected retained usernet/hostagent/SSH mux processes
+and no competing harness/native command client; this is not atomic exclusion.
+
+Root invoked accepted main ONCE through the scoped outside-sandbox route:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning tools/hf_compact_residual_recovery.py --reviewed-source 601d0a4ffa7c76d152fadb4273f4685134fec0b0 --execution-approval 'go next action' --execute-approved-stop
+```
+
+Exit0 final canonical stdout, after all owned closure, was:
+
+```json
+{"command_certainty":"returned","exceptions":[],"execution_approval":"go next action","hf_request_attempts":0,"hf_request_intents":0,"observed_status":"Stopped","outcome":"graceful_stop_confirmed","preservation":true,"receipt_files":{"calico-v3.32.0.yaml":"ac5ab7451dda57cfbf47d584ee901b896b1a9ff388d95b6f01b59f1e1130fdfa","command-0001.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0001.stdout":"0fea0b326a8a284148a921dde74016e43abe91f01513534d863385bd233774e9","command-0002.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0002.stdout":"e2ef589e79a4895fc7e013be517f33db42288f02ed46b0b977ec0f0f9f3a533d","command-0003.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0003.stdout":"ea5450008df410c2d5bf0088a002a4c5fa051309d135eea8d5183f1062021fa6","command-0004.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0004.stdout":"1e2b405deba8d7c74cd2004a8cbefd7ee17b208a6b03bfc4ebf59ddfc2f20299","command-0005.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0005.stdout":"33d0ca7d3e65732868d1d1f8551c98327bebf89817b7a4c6cbfc1e97f76d0397","command-0006.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0006.stdout":"49bdde8a639752f770e92df6f9bc8be1e02ecc49833766a079924eabed45f4f6","command-0007.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0007.stdout":"01666ec060466c14b9fa06c613fbac449163f2a2017558fe16526209ab78c6b0","command-0008.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0008.stdout":"49bdde8a639752f770e92df6f9bc8be1e02ecc49833766a079924eabed45f4f6","command-0009.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0009.stdout":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0010.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0010.stdout":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0011.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0011.stdout":"49bdde8a639752f770e92df6f9bc8be1e02ecc49833766a079924eabed45f4f6","command-0012.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0012.stdout":"01666ec060466c14b9fa06c613fbac449163f2a2017558fe16526209ab78c6b0","command-0013.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0013.stdout":"49bdde8a639752f770e92df6f9bc8be1e02ecc49833766a079924eabed45f4f6","command-0014.stderr":"9e81aee14912a99c4f6e3990467565748ae83c81ad26033ae0155650692d1116","command-0014.stdout":"4341aca1e44c9aafbac9611ac77c71cfb3f85bdd8bc0931dc5e109f93f5f3206","command-0015.stderr":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","command-0015.stdout":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","foreign-original.json":"e0aa2eec691e3435b1da7de7a66270adb2f0870394e9ac6ff89ee24317cac5fe","journal.jsonl":"eabfb9050d3e14b80fd64ec2aa258a566a8337578e265f121dd5b6f6fe877b57","kind-config.yaml":"a51237e03fa3aed1a3f0ceeb20c8a1cb9d671feff1844d639ac4b190de042831","profile-created.json":"a714b0db4e1df11354dde6574687b7dd07aff75fbd069f3f49a4f57fc31bc656","rendered-objects.json":"acab562f6b198ee9f5b4456f528a384c8766612792946082cb1bb2990677d878","report.json":"91d247f1f1918dc7ad4e07a7f632a51bf66503a4b27c0a662e101bf91fa32ef1","runtime-binding.json":"96d279ebfe319dc9eecac3ab23872da293acc778d5cd58e326ae3176fa3c3b01","runtime-docker-context-meta.json":"96b08bf8f5452a21595b7075fc1587bb4a0bbd9d583679798b9ffacd1b11b02a","runtime-instance-colima.yaml":"37dff309a27985cf3a007517133c66a436fb578a5d14fd6df0c9ababeb7503de","runtime-kind-config.yaml":"a51237e03fa3aed1a3f0ceeb20c8a1cb9d671feff1844d639ac4b190de042831","runtime-leftovers.json":"81500e9755987709d835ed30cd8dcf9ecafbf25100e44563a34433e7f8c2a92f","runtime-lima.yaml":"083da903480f484f07694a2e2bbee7cd919a100fcb3dbf6cc8e2c38d0feb9f41","runtime-observations.json":"08c5bb964d95b8c6d5a3829346bcc1aa4dfbf3f3faea7fa48e6847e625b6ba25","runtime-profile-colima.yaml":"5b4a547ad13cda67870cdb821fbb140940562626c28ef6fb1228191675dc79e9","synopsis.md":"ed0c0a4707cce70958566dee555d688246725c783f50b890f749b4b8c649f90b"},"receipt_manifest_pin":["d128fd99fcc32391db27804da8be86c0e62b238343b71c7f44009785cba38ad0",3979],"receipt_path":"/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/.tools/hf-exploratory-private/hf-exploratory-254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d","recovery_path":"/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/.tools/hf-recovery-private/2026-09-17/manual-stop-254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d","returncode":0,"reviewed_source":"601d0a4ffa7c76d152fadb4273f4685134fec0b0","run_digest":"254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d","run_id":"v3b2-254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d","runtime_binding":{"receipt_path":"/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/.tools/hf-exploratory-private/hf-exploratory-254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d","registry_path":"/Users/mistorm/.kil-hf","run_digest":"254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d","run_id":"v3b2-254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d","runtime_identity":{"device":16777232,"inode":615011851,"mode":16832,"uid":501},"runtime_path":"/Users/mistorm/.kil-hf/r254877dc1b1462c4","schema":"kil.hf-exploratory-runtime-binding.v1","uid":501},"runtime_root_identity":[16777232,615011851,16832,501],"schema":"kil.hf-compact-residual-recovery-outcome.v1","seal_sha256":"6dabeb09274916dc550b4c432ee6df06d2e05b715d8ae0dadb9801c4fa585dc7","seal_verified":true,"source_commit":"7d5c58372040ecf5b7c1fdd9c9d7ea3ddcd06205","stop_dispatches":1}
+```
+
+CONFIRMED final `graceful_stop_confirmed`: stop_dispatches1, native returncode0,
+command_certainty returned, observed_status Stopped, preservation true,
+seal_verified true, exceptions empty, HF intents0/attempts0. Completion observed
+before22:23:27 UTC. Permission is spent; no repeat dispatch is authorized.
+
+Independent read-only bounded verification used accepted retained-file and
+footprint observers without constructing _Native/RuntimeAuthority or issuing
+native commands. Original fixed manifest pin and all46 retained checksums pass;
+new seal `6dabeb09274916dc550b4c432ee6df06d2e05b715d8ae0dadb9801c4fa585dc7`
+and all70 new checksums pass, roster exact. Sealed pre/post observations show
+private Running→Stopped; new private footprint matches a fresh accepted local
+Stopped-footprint observation, with profile/disks/config retained. Captured
+foreign state unchanged. Sealed outcome.json remains explicitly provisional
+`final_closure_pending=True`; it matches the actual returned final record apart
+from the later seal fields and provisional marker. Success is based on the
+returned result after all closure, not promotion of that provisional file.
+Verification exit0/0.421s with fatal ResourceWarning and bytecode disabled.
+
+Protected tracked tools/src/tests/deploy/artifacts diff against execution source
+is empty and status clean before outcome documentation. T441/T442 documentation
+checkpoint did not change engineering; no accepted regressions were repeated,
+dependency installed or provenance audit begun. No retry, force, delete, restart,
+discovered-process kill, repair, reseal, rollback, alternate receipt, HF/Ollama,
+new rehearsal or compatibility operation followed the result.
+
+Task6's single approved attempt is complete at this result. Recovery is
+housekeeping, not the exploratory HF test. Production SSH-control compatibility,
+request-free rehearsal and HF action remain separate gates; no earlier approval
+is revived. Accepted local Envoy evidence unchanged; platform-image provenance
+unverified/full Kind-Calico acceptance false. Four historical immutable citation
+omissions remain untouched/unexempted; no full-discovery-green claim.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

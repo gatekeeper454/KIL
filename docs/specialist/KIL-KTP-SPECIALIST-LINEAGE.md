@@ -24661,3 +24661,64 @@ final result after all teardown, append actual outcome, and stop there with no
 retry or implicit HF continuation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T443 — 2026-09-17, one approved residual-VM graceful stop confirmed
+
+**Input:** User `go next action`, the new single stop-only approval recorded in
+T442, following the handoff's pending gate and T441 resumption.
+
+**Interpretation:** Dispatch unchanged accepted recovery main once for the fixed
+private residual VM, preserve receipts/resources/foreign state, record the final
+returned outcome after all closure, and stop. No HF continuation is authorized.
+
+**Decision status:** CONFIRMED `graceful_stop_confirmed`, exit0, stop_dispatches1,
+native returncode0, command_certainty `returned`, observed_status `Stopped`,
+preservation true, seal_verified true, exceptions empty, HF intents0/attempts0.
+Completion observed before22:23:27 UTC. This single permission is now spent.
+
+**Rationale/evidence:** Root's fresh clean execution source was
+`601d0a4ffa7c76d152fadb4273f4685134fec0b0`; source/test SHA256 matched handoff,
+runtime ID4 matched `(16777232,615011851,16832,501)`, and existing recovery parent
+device16777232/inode612764151/UID501 was0700. Scoped read-only process checks
+outside sandbox found retained host agents/SSH mux, no competing harness/native
+client; no atomic exclusion claim. Actual argv and verbatim final stdout are
+appended to the accepted recovery plan. Main ran once outside sandbox with
+actual approval `go next action`, bytecode disabled and fatal ResourceWarning.
+No alternate entry or native authority construction bypassed the gate.
+
+Independent bounded read-only verification exit0/0.421s authenticated original
+fixed manifest/all46 checksums, new seal/all70 checksums and exact new roster.
+New seal SHA256:
+`6dabeb09274916dc550b4c432ee6df06d2e05b715d8ae0dadb9801c4fa585dc7`.
+Captured private pre/post status Running→Stopped; accepted fresh local footprint
+matches captured post footprint with profile/disks/config retained. Captured
+foreign state unchanged. Verifier native dispatches0; no guest/disk-content or
+platform provenance audit. Original receipt was not rewritten.
+
+Sealed outcome.json explicitly remains `final_closure_pending=True` and matches
+the final returned record apart from the later seal fields/provisional marker.
+Acceptance uses actual final returned result after owned teardown, not that
+provisional file. Protected tools/src/tests/deploy/artifacts diff against fresh
+execution source empty and working tree clean before factual outcome append.
+No new regression run or full-discovery success claim; four immutable historical
+citation omissions remain untouched/unexempted.
+
+**Affected artifacts:** Fixed private VM stopped through one graceful dispatch;
+exclusive new fixed2026-09-17/manual-stop evidence created/sealed. Disks/profile/
+config retained; accepted native transient-control changes may occur. Appended
+plan actual result and this lineage, regenerated readers and scoped local
+documentation checkpoint. Engineering/production/deploy/accepted artifacts and
+historical private receipts unchanged.
+
+**Unresolved questions:** Recovery does not resolve earlier production
+SSH-control compatibility refusal or establish HF readiness. Accepted local
+Envoy evidence unchanged; platform-image provenance unverified and full
+Kind-Calico acceptance false. No HF/Ollama/new rehearsal/compatibility execution
+occurred; earlier rehearsal/action approvals remain spent.
+
+**Next gate:** STOP at this final returned recovery result. Compatibility,
+request-free rehearsal and live HF action remain separately gated. No retry,
+force, delete, restart, discovered-process kill, repair/rebaseline/reseal,
+rollback, alternate receipt or automatic HF continuation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
