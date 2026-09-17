@@ -24502,3 +24502,74 @@ Spent T430 stop permission is not revived. No retry/rollback/force/delete/restar
 broader platform audit, original rehearsal revival or implicit HF continuation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T440 — 2026-09-17, compact residual-VM recovery handoff for a user-created task
+
+**Input:** User "Go ahead and prepare the handoff, give me a meaningful name and
+I will break out a new chat" after asking about transcript/context management.
+
+**Interpretation:** Authorize one condensed durable handoff and proposed new
+task title, not creation/renaming/forking of a task, a transcript re-export,
+new native recovery approval, live preflight or HF action. Preserve accepted
+engineering and explicit approval boundaries without loading whole historical
+archives into the future task's initial context.
+
+**Decision status:** CONFIRMED handoff prepared as "KIL HF Test — Residual VM
+Recovery". User will create the next task. One stop-only recovery attempt remains
+NEW separately UNAPPROVED; T430 stop and T439 mode permissions remain spent.
+Actual VM status stays UNOBSERVED; this documentation does not refresh it.
+
+**Rationale/evidence:** Fresh capture verified clean27b882984437be17a16709dd1dcbb44b2bb56452,
+unchanged recovery/helper source/test SHA256 and empty protected engineering/
+production/deploy/artifact diff against88e37c5. Read rootAGENTS, latest T439,
+accepted recovery tool constants, Task6 and final engineering/T430 records.
+No actual target/lock/receipt/runtime/guest/disk or native observations made.
+Using-superpowers/verification-before-completion guidance applied to factual
+artifact checks, not another design/engineering/provenance audit.
+
+The handoff records exact managed detached worktree/Python/env, confirmed one
+0755→0700 call and limited direct-child-metadata/own-no-receipt-writes outcome,
+historical zero-stop preflight refusal, current unknown VM state, foreign global
+same-name exclusion, fixed private runtime/digest/root pin and accepted recovery
+bytes. Completed214/674 recovery and43/468 permission engineering/review results
+are explicitly historical records, not new test runs or live readiness claims.
+Fresh source/identity checks and accepted preflight still required after approval.
+No rerun of the spent permission helper as a700 no-op, no stale historicalHEAD
+for future execution: this handoff's local commit advances HEAD and the future
+task must resolve its actual current clean source before dispatch.
+
+Next gate is explicitly NEW one fixed stop-only attempt including live preflight
+and exclusive private evidence creation; root-only/no retry/force/delete/restart/
+repair/rebaseline/reseal/alternate suffix or implicit HF continuation. Provisional
+sealed final_closure_pending observations are not final returned acceptance.
+Earlier SSH compatibility refusal is not repaired by mode or VM recovery.
+User's design/test-first/subagent/independent-review preference retained for any
+genuinely new engineering, not reopening completed work.
+
+Existing tracked architecture transcript header identifies older task
+01a03607-4f4c-71e3-be8d-5b70a01c3aac, exported2026-09-15T02:28:26.302Z,
+1298 visible user/assistant messages. It is NOT a complete current HF transcript.
+Handoff transparently distinguishes this archive from condensed resume state;
+neither older export nor original task is overwritten or falsely re-exported.
+Evidence routes point to relevant small sections/T430/T438/T439 on demand.
+
+**Affected artifacts:** New
+docs/specialist/KIL-HF-RESIDUAL-VM-RECOVERY-HANDOFF-2026-09-17.md and reader;
+this actual-EOF lineage append and reader. No implementation/source/test/spec/
+plan/accepted artifact/private evidence/transcript changes. Complete27b8829
+predecessor lineage1,454,422B is preserved; exact source/reference/citation,
+tracked-reader regeneration/check and scoped clean local checkpoint follow.
+
+**Unresolved questions:** NEW stop-only approval and actual future preflight/
+VM result pending. Current VM state/0755 origin unestablished, HF readiness not
+implied. Accepted local Envoy unchanged/platform provenance unverified/full
+Kind-Calico acceptance false. Four immutable historical citation omissions
+remain untouched/unexempted; no full-discovery claim.
+
+**Next gate:** Finish verified handoff/readers/append-only-prefix/exact-doc
+checkpoint, give user title/file and concise starter prompt. User creates the
+new task against the exact worktree; it reads handoff first and resumes at
+pending NEW stop-only approval, not implementation or platform-image audit.
+No task creation, native/HF operation or execution authority inferred here.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

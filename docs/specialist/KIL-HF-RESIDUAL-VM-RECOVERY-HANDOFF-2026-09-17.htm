@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KIL HF Test — Residual VM Recovery</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/specialist/KIL-HF-RESIDUAL-VM-RECOVERY-HANDOFF-2026-09-17.md">
+<meta name="source-sha256" content="b0efd0f2db41f31c0c281126328f19b8585262cad2a0af8e9029e4c4a3cc5655">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/specialist/KIL-HF-RESIDUAL-VM-RECOVERY-HANDOFF-2026-09-17.md</code> (<code>b0efd0f2db41f31c0c281126328f19b8585262cad2a0af8e9029e4c4a3cc5655</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">KIL HF Test — Residual VM Recovery</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/specialist/KIL-HF-RESIDUAL-VM-RECOVERY-HANDOFF-2026-09-17.md</code> (<code>b0efd0f2db41f31c0c281126328f19b8585262cad2a0af8e9029e4c4a3cc5655</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#kil-hf-test-residual-vm-recovery">KIL HF Test — Residual VM Recovery</a></li><li class="level-2"><a href="#exact-workspace">Exact workspace</a></li><li class="level-2"><a href="#confirmed-state-and-remaining-uncertainty">Confirmed state and remaining uncertainty</a></li><li class="level-2"><a href="#fixed-recovery-identity-and-accepted-engineering">Fixed recovery identity and accepted engineering</a></li><li class="level-2"><a href="#next-action-approval-first">Next action — approval first</a></li><li class="level-2"><a href="#evidence-routing-keep-initial-context-small">Evidence routing; keep initial context small</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="kil-hf-test-residual-vm-recovery" href="#kil-hf-test-residual-vm-recovery">KIL HF Test — Residual VM Recovery</a></li><li class="level-2"><a data-section-id="exact-workspace" href="#exact-workspace">Exact workspace</a></li><li class="level-2"><a data-section-id="confirmed-state-and-remaining-uncertainty" href="#confirmed-state-and-remaining-uncertainty">Confirmed state and remaining uncertainty</a></li><li class="level-2"><a data-section-id="fixed-recovery-identity-and-accepted-engineering" href="#fixed-recovery-identity-and-accepted-engineering">Fixed recovery identity and accepted engineering</a></li><li class="level-2"><a data-section-id="next-action-approval-first" href="#next-action-approval-first">Next action — approval first</a></li><li class="level-2"><a data-section-id="evidence-routing-keep-initial-context-small" href="#evidence-routing-keep-initial-context-small">Evidence routing; keep initial context small</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="kil-hf-test-residual-vm-recovery">KIL HF Test — Residual VM Recovery</h1>
+<p>Date: 2026-09-17. Condensed handoff, not a complete transcript export.</p>
+<p>Read this file first. Resume at the <strong>pending stop-only approval gate</strong>, not
+design, implementation or a platform-image audit. Preparing this handoff does
+not approve a stop, create a new task or authorize HF traffic.</p>
+<h2 id="exact-workspace">Exact workspace</h2>
+<p>Working directory:
+<code>/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL</code></p>
+<p>Existing externally managed, detached linked worktree; preserve it. Do not
+silently switch to the saved project's main checkout, create another worktree,
+install dependencies, merge, push or clean up.</p>
+<p>Python:
+<code>/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python</code></p>
+<p>Use <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src</code> and <code>-W error::ResourceWarning</code>.
+Snapshot before this documentation handoff: clean commit
+<code>27b882984437be17a16709dd1dcbb44b2bb56452</code>.
+The handoff commit advances HEAD: freshly verify current exact HEAD and clean
+status for any later approved execution. Do not pass historical27b8829/88e37c5
+as a new execution source binding.</p>
+<h2 id="confirmed-state-and-remaining-uncertainty">Confirmed state and remaining uncertainty</h2>
+<ul>
+<li>Goal: the previously selected narrower exploratory live HF incident test,
+explicitly leaving platform-image provenance unverified. Accepted local-Envoy
+evidence remains unchanged; full Kind/Calico acceptance is false. Recovery is
+a prerequisite/housekeeping step, not the HF test itself.</li>
+<li>T430: one separately approved stop-only attempt refused preflight with
+<code>recovery_directory_not_private</code>, exit1, stop_dispatches0. Existing recovery
+parent was0755; no native acquisition, stop intent or final recovery receipt
+was created. That stop permission ended despite zero dispatches.</li>
+<li>T439: user &quot;Do next&quot; approved ONE pinned-parent mode attempt. At clean
+<code>88e37c5f1da777cc4da307fd948157a1c9c84a05</code>, the dedicated helper ran once;
+exit0/<code>mode_change_confirmed</code>, fchmod_attempts1, certainty returned,0755→0700.
+Target dev16777232/inode612764151, UID501/GID20, identity/linkcount/size/mtime,
+ancestors, existing lock and one direct child's metadata passed preservation;
+all owned teardown passed, errors empty. Completion observed by20:45:42 UTC.
+The tool wrote no receipt bytes or new private evidence. This is NOT a
+descendant-content attestation or atomic snapshot. Mode permission is spent;
+do not rerun the helper merely to observe an already0700 directory.</li>
+<li>Current VM status is <strong>UNOBSERVED</strong>, not refreshed by mode remediation or this
+handoff. Historical T419 private VM Running is stale. The same-name global/
+default Stopped profile is foreign and NEVER the private stop target. No VM
+stop, HF request, Ollama, new rehearsal or image/SSH audit followed T439.</li>
+<li>Fixing the mode blocker does not guarantee all recovery preconditions pass
+or resolve the earlier production SSH-control compatibility refusal.</li>
+</ul>
+<h2 id="fixed-recovery-identity-and-accepted-engineering">Fixed recovery identity and accepted engineering</h2>
+<p>Accepted entry: <code>tools/hf_compact_residual_recovery.py</code> (guarded main only).
+Private profile: <code>kil-v3-lab</code>, under
+<code>/Users/mistorm/.kil-hf/r254877dc1b1462c4</code>.
+Run digest:
+<code>254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d</code>.
+Runtime root ID4: <code>(16777232,615011851,16832,501)</code>.
+The tool fixes the retained receipt and new2026-09-17/manual-stop evidence path;
+do not repin, substitute another namespace/date or choose another suffix.</p>
+<p>Freshly matched source/test SHA256 at handoff capture:</p>
+<ul>
+<li>Recovery tool: <code>2b58ab2392543611f64044f5d2624f07edfa03ed4c988e1bff2c03d137ccf864</code>.</li>
+<li>Recovery tests: <code>a4ee14ce13dd569bc1a1202ffab3be450fed8bbae954be96b98600caeccaf64f</code>.</li>
+</ul>
+<p>Recorded completed verification: recovery214 tests, ordered independent reviews
+and final674-test/312.194s scoped regression; permission helper43 tests, complete
+SPEC/QUALITY/fresh final review,468-test/306.343s combined regression, then fresh
+post-mode43/0.460s. Engineering bytes remain unchanged. Do not restart those
+engineering tasks or a broad provenance audit. Fresh source/identity checks and
+the accepted live preflight still apply. No full-discovery-green claim: four
+known immutable historical citation omissions remain untouched/unexempted.</p>
+<h2 id="next-action-approval-first">Next action — approval first</h2>
+<p>Ask NEW explicit approval for ONE accepted stop-only recovery attempt of this
+fixed private residual VM, including its live preflight and exclusive evidence
+creation. CPU/RAM may be released; disks/profile/config remain; native controls
+may change. The handoff request is NOT that approval.</p>
+<p>After approval, follow Task6 in the recovery plan and the actual unchanged tool.
+Only root dispatches once. Display actual argv using fresh verified clean40-hex
+HEAD and actual new approval; main requires <code>--reviewed-source</code>,
+<code>--execution-approval</code> and <code>--execute-approved-stop</code>. Use scoped outside-sandbox
+approval where needed. Do not invoke the exploratory launcher or construct
+_Native/RuntimeAuthority to bypass the gate.</p>
+<p>Any refusal, timeout, overflow, lost result or partial evidence ends permission:
+no retry, force, deletion, restart, discovered-process kill, alternate receipt,
+repair/rebaseline/reseal or rollback. Preserve actual dispatch count/certainty
+through all teardown. If already stopped, accepted preflight determines the
+no-stop outcome; do not force a dispatch. Record the final returned result after
+all closure; a sealed observation with <code>final_closure_pending=True</code> is provisional.
+Stop at that result. HF compatibility, request-free rehearsal and live action
+remain separate gates; original rehearsal/spent approvals do not revive.</p>
+<h2 id="evidence-routing-keep-initial-context-small">Evidence routing; keep initial context small</h2>
+<p>Paths below are relative to the exact workspace. Read only relevant sections
+on demand, not the entire large lineage/transcript at startup:</p>
+<ul>
+<li><code>docs/superpowers/plans/2026-09-17-hf-compact-residual-vm-recovery.md</code>:
+final engineering record, Task6 and T430 native-attempt record.</li>
+<li><code>docs/superpowers/specs/2026-09-17-hf-compact-residual-vm-recovery-design.md</code>:
+approved fixed stop-only requirements.</li>
+<li><code>docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md</code>:
+final preparation and actual mode-only record with verbatim canonical stdout.</li>
+<li><code>docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md</code>: T430, T438, T439; append-only
+specialist history. Follow root <code>AGENTS.md</code>; append dated substantive entries.</li>
+<li><code>docs/transcripts/KIL-architecture-full-transcript-2026-09-14.md</code>:
+older architecture-task export, exported2026-09-15,1298 visible messages;
+NOT a complete export of this current HF task. Keep the original HF task as
+historical conversation archive. This handoff does not update either export.</li>
+</ul>
+<p>User preference: any genuinely new engineering uses approved design/spec,
+test-first implementation, subagent-driven preparation and independent reviews.
+Live operations stay root-only. This preference does not require repeating
+accepted preparation. Do not modify protected recovery/production/deploy/
+artifacts or historical private evidence just to resume.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>
