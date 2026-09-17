@@ -17,6 +17,13 @@ class EvidenceTests(unittest.TestCase):
         self.assertIsNotNone(importlib.util.find_spec('kil.hf_exploratory_evidence'),
                              'immutable runtime snapshot component is missing')
         self.evidence = importlib.import_module('kil.hf_exploratory_evidence')
+        from kil import hf_exploratory_runtime as runtime_module
+        compact = tempfile.TemporaryDirectory(prefix='k', dir='/private/tmp')
+        self.addCleanup(compact.cleanup)
+        self.registry = Path(compact.name).resolve() / 'k'
+        selector = patch.object(runtime_module, '_registry_parent', return_value=self.registry, create=True)
+        selector.start()
+        self.addCleanup(selector.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         parent = Path(self.temp.name).resolve() / '.tools' / 'hf-exploratory-private'
@@ -69,7 +76,7 @@ class EvidenceTests(unittest.TestCase):
                 self.assertIsNone(row[key])
         self.assertFalse(self.authority.kind_config.exists())
         self.assertEqual(set(path.name for path in self.store.path.iterdir()),
-                         {'lock', 'journal.jsonl', 'runtime-observations.json'})
+                         {'lock', 'journal.jsonl', 'runtime-binding.json', 'runtime-observations.json'})
 
     def test_snapshots_are_one_shot_and_preserve_existing_bytes(self):
         self.populate()
@@ -143,7 +150,8 @@ class EvidenceTests(unittest.TestCase):
         with patch.object(self.evidence, '_read', side_effect=read):
             with self.assertRaises(ValueError):
                 self.evidence.snapshot_runtime(self.store, self.authority)
-        self.assertEqual(set(path.name for path in self.store.path.iterdir()), {'lock', 'journal.jsonl'})
+        self.assertEqual(set(path.name for path in self.store.path.iterdir()),
+                         {'lock', 'journal.jsonl', 'runtime-binding.json'})
 
     def test_persistence_failure_propagates_and_keeps_partial(self):
         self.populate()

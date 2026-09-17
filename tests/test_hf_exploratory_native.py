@@ -26,6 +26,15 @@ COLIMA_VERSION_OUTPUT = b'colima version v0.10.3\ngit commit: 00f6c297e92a82c04a
 
 
 class RuntimeCompositionTests(unittest.TestCase):
+    def setUp(self):
+        from kil import hf_exploratory_runtime as runtime_module
+        compact = tempfile.TemporaryDirectory(prefix='k', dir='/private/tmp')
+        self.addCleanup(compact.cleanup)
+        self.registry = Path(compact.name).resolve() / 'k'
+        selector = patch.object(runtime_module, '_registry_parent', return_value=self.registry, create=True)
+        selector.start()
+        self.addCleanup(selector.stop)
+
     def test_constructor_derives_runtime_separate_from_receipt_and_default_home(self):
         from kil import hf_exploratory_native as native
         from tests.test_v3b2_driver_pod_configuration import PROFILE, WORKLOAD
@@ -40,7 +49,7 @@ class RuntimeCompositionTests(unittest.TestCase):
                     life = native.ExploratoryLifecycle(root, inputs, store, Mock(), COMMIT, 'rehearsal')
                 try:
                     self.assertNotEqual(life.paths.colima, home / '.colima', 'native controls still use default home')
-                    self.assertEqual(life.runtime.path, parent / ('hf-exploratory-runtime-' + '1' * 64))
+                    self.assertEqual(life.runtime.path, self.registry / ('r' + '1' * 16))
                     self.assertEqual(life.identity.kubeconfig, str(life.runtime.kubeconfig))
                     self.assertFalse((store.path / 'runtime-tmp').exists())
                 finally:
@@ -69,6 +78,13 @@ class NativeTests(unittest.TestCase):
         self.assertIsNotNone(importlib.util.find_spec('kil.hf_exploratory_native'),
                              'native exploratory module is missing')
         self.native = importlib.import_module('kil.hf_exploratory_native')
+        from kil import hf_exploratory_runtime as runtime_module
+        compact = tempfile.TemporaryDirectory(prefix='k', dir='/private/tmp')
+        self.addCleanup(compact.cleanup)
+        self.registry = Path(compact.name).resolve() / 'k'
+        selector = patch.object(runtime_module, '_registry_parent', return_value=self.registry, create=True)
+        selector.start()
+        self.addCleanup(selector.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()

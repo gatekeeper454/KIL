@@ -22277,3 +22277,164 @@ may perform the one conditional rehearsal only after independent reviews and
 fresh committed engineering evidence. Later live action needs separate approval.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T409 — 2026-09-16, compact-runtime engineering initial real-filesystem RED
+
+**Input:** Approved compact-runtime contract and exclusive bounded implementer
+writer grant at clean 84e8e4f; engineering only, no native rehearsal or actual
+home registry allocation. Required test-first authority and consumer changes.
+
+**Interpretation:** Preserve full receipt identity and closed live authority while
+moving fresh whole-runtime state to the private compact selector. Narrow fixtures
+patch only that selector to a fresh absent registry beneath owned /private/tmp;
+UID, modes, bytes, no-follow descriptors and guard behavior remain real.
+
+**Decision status:** CONFIRMED initial RED: designated ResourceWarning-fatal run
+of three new behaviors ran 3 tests in 0.033s. Compact locator assertion failed
+because production still selected the long receipt sibling; unmarked registry
+refusal failed because production ignored that registry. Pure compact paths
+raised the intended production ProfileStateError from the legacy-only predicate,
+not an import/setup failure. Production has not yet been changed in this phase.
+
+**Rationale:** These failures establish the requested contract gaps before
+implementation. Five existing runtime-producing fixture families now narrowly
+isolate the private selector; offline legacy profile fixtures remain available.
+
+**Affected artifacts:** Existing runtime/profile/IO/evidence/Native tests and this
+append-only lineage entry/reader. Strict and IO/evidence/Native/CLI production,
+accepted artifacts and old receipts/runtimes are unchanged. No actual .kil-hf,
+native/process acquisition, HF/HTTP, image audit, installation or cleanup.
+
+**Unresolved questions:** Engineering correctness and native compatibility are
+not yet established. Accepted local Envoy remains unchanged; platform-image
+provenance is unverified and full Kind-Calico acceptance remains false.
+
+**Next gate:** Implement private compact derivation, durable marker/full binding,
+retained two-chain guards and pure compact compatibility; observe focused GREEN,
+then finite adversarial RED/GREEN and required regressions before independent
+SPEC/QUALITY review. Root alone owns any later conditional rehearsal.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T410 — 2026-09-16, compact authority GREEN and finite adversarial corrections
+
+**Input:** T409 observed contract RED and the approved engineering-only runtime
+contract. Root confirms authenticated accepted inputs and preserved failed
+receipts; actual home .kil-hf remains absent. No root writes during writer grant.
+
+**Interpretation:** Implement only RuntimeAuthority/ProfilePaths production,
+using a real short selector fixture for existing live consumers. Preserve finite
+command/environment semantics and strict capture/binding schemas unchanged.
+
+**Decision status:** CONFIRMED targeted initial GREEN: 3 tests in 0.030s. Initial
+five-module consumer run then ran 241 tests in 47.926s with 3 failures/2 errors.
+Trace-led systematic debugging identified intentional old locator/receipt roster
+assertions and construction OSError expectations, not downstream production
+changes; update them explicitly for compact roots, durable runtime-binding.json
+and required creation ValueError normalization. Control FileExistsError remains.
+
+Additional genuine observed RED: receipt-name replacement during retained walk
+could allocate registry before eventual refusal; duplicated authentication FD
+could pass. Two tests ran in 0.035s, both failed. Named/retained checks during walk,
+preallocation ancestry/store/lock rechecks and independently retained descriptor
+ownership corrected them. Expanded suite found descriptor-order substitution
+still accepted; exact reconstructed acquisition order now refuses. A separate
+test-only projection leaf-length miscount was corrected by measuring filesystem
+bytes; no production weakening. Runtime suite then passed 48 tests in 0.432s.
+Five consumer modules passed 243 tests in 46.775s. Expanded runtime/IO passed
+117 tests in 3.434s. All use designated interpreter and ResourceWarning fatal.
+
+**Rationale:** Compact roots keep known socket bytes under exclusive cap104 while
+full digest/run ID remain durable receipt authority. Marker/bootstrap/reuse,
+prefix collisions, canonical home/UID, ancestry/layout substitution, bounded
+byte/type/identity/link/mode authentication and partial-state FD cleanup are real
+filesystem regressions. Both files and every directory/store/lock are rechecked
+after both bounded reads. Marker/binding drift gives zero mocked process captures.
+Unsafe existing markers include FIFO/symlink/hardlink/nonregular/partial/malformed
+states and refuse without repair/allocation. Pure compact paths dynamically use
+the private selector; legacy offline parsing grants no live authority.
+
+**Affected artifacts:** Only authorized runtime/profile source, five existing
+test modules, and append-only lineage/reader. IO/evidence/Native/CLI production,
+strict modules, accepted artifacts, old receipt/runtime/disk bytes and citation
+policy unchanged. No actual .kil-hf, native/VM/HF/HTTP/Ollama, image audit,
+dependency install, cleanup/adoption, global environment or branch operations.
+
+**Unresolved questions:** Latest expanded required15-module verification and
+self-review are in progress. Native compatibility/readiness is not established
+by these tests; platform-image provenance remains unverified and full Kind-Calico
+acceptance false, with accepted local Envoy intact. No zero-TOCTOU, transaction,
+arbitrary same-UID host exclusion or OS-attestation claim is made.
+
+**Next gate:** Finish latest required15 regressions, review source/test growth and
+completeness, verify all 92 generated readers and entire predecessor lineage byte
+prefix, protected-path diff and exact commit scope. Release committed clean HEAD
+for independent SPEC then QUALITY reviews; no implementer native rehearsal.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T411 — 2026-09-16, compact engineering final-source verification checkpoint
+
+**Input:** Approved bounded engineering contract, T409/T410 RED/GREEN evidence,
+root instruction to freeze final source, finish exact verification and release a
+clean committed checkpoint for independent SPEC/QUALITY reviews.
+
+**Interpretation:** Complete engineering only; no new actual-home registry/native
+preparation permission is exercised by the implementer. Full receipt identity,
+private closed authority and generic existing consumers remain the contract.
+
+**Decision status:** CONFIRMED final-source focused five-module verification:
+268 tests in 53.789s, OK. CONFIRMED final-source required15-module verification:
+455 tests in 104.252s, OK. Both used bytecode off, PYTHONPATH=src, designated
+outside-worktree virtualenv interpreter and -W error::ResourceWarning. Prior
+453-test run in 94.518s passed but preceded final integer-shape corrections and
+is not presented as final-source evidence.
+
+Self-review found an additional genuine finite guard gap: equal-valued float
+_root_fd/_lock_fd handles passed comparison. New test ran 1 test in 0.024s with
+two assertion failures before exact-integer critical-handle checks; targeted
+GREEN ran 2 tests in 0.040s. A separate lock-identity exact-integer regression
+demonstrated sensitivity with that narrowly added check temporarily absent:
+1 failure in 0.021s, then check restored before final runs. This deliberate local
+mutation is distinguished from original contract gaps and the genuine handle
+gap. No open-ended arbitrary in-process monkeypatch audit is claimed.
+
+**Rationale:** Review confirms private noarg passwd-home selector, exclusive
+byte-cap103/104 behavior, UID agreement, canonical marked registry-only reuse,
+exclusive prefix collision refusal, full canonical durable binding, complete
+retained independent walks and bounded readonly nonblocking marker/binding
+authentication with final two-file and all-directory/store/lock rechecks.
+Controls use the explicit verified short root; existing grammar, getters and
+four derived environment keys stay unchanged. Real fixtures retain no-follow,
+mode/link/content/identity and FD failure semantics; binding automatically joins
+receipt checksums. No public test override, new module or broader traversal.
+
+Readability/YAGNI concern for independent review: runtime source grows 247 to
+463 lines (+216), driven by bounded authentication/bootstrap/full binding and
+two reconstructed descriptor chains; profile grows five net lines. Runtime tests
+grow 492 to 969 lines (+477) for finite real-filesystem cases. No known important
+defect remains from implementer self-review; security-sensitive composition still
+requires independent SPEC then QUALITY review, not test-count inference.
+
+**Affected artifacts:** Exactly runtime/profile source, five existing authorized
+test files and this lineage/reader pair. Protected downstream production/strict
+and accepted artifacts are byte-identical to 84e8e4f. Entire predecessor lineage
+prefix (1,305,598 bytes) preserved. Actual /Users/mistorm/.kil-hf remains absent
+and not a symlink. No native/VM/HF/HTTP/Ollama/image audit, install, old receipt/
+runtime/disk modification, adoption/deletion, global PATH/default changes, branch
+move, push, merge, new worktree or cleanup.
+
+**Unresolved questions:** Native compatibility and HF preparation readiness are
+still unverified. Platform-image provenance remains unverified/full Kind-Calico
+acceptance false; accepted local Envoy result unchanged. Historical broader
+discovery citation failure for four immutable Markdown omissions and sixteen
+intentional skips is not fixed or represented as all-green discovery.
+
+**Next gate:** Regenerate/check all 92 indexed readers, recheck full predecessor
+lineage prefix and exact diff/staging scope, commit this nine-path engineering
+checkpoint and confirm clean exact HEAD. Release exclusive writer grant for
+independent SPEC/QUALITY/final review and root fresh verification. Only root may
+later execute the one conditional request-free rehearsal after all gates; live
+HF action remains separately unapproved.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

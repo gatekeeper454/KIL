@@ -27,6 +27,13 @@ class IOTests(unittest.TestCase):
     def setUp(self):
         self.assertIsNotNone(importlib.util.find_spec('kil.hf_exploratory_io'))
         self.io = importlib.import_module('kil.hf_exploratory_io')
+        from kil import hf_exploratory_runtime as runtime_module
+        compact = tempfile.TemporaryDirectory(prefix='k', dir='/private/tmp')
+        self.addCleanup(compact.cleanup)
+        self.registry = Path(compact.name).resolve() / 'k'
+        selector = patch.object(runtime_module, '_registry_parent', return_value=self.registry, create=True)
+        selector.start()
+        self.addCleanup(selector.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
 
@@ -98,6 +105,34 @@ class IOTests(unittest.TestCase):
     def scoped_mutation(self, authority, argv=COLIMA_START_ARGV):
         from kil.hf_exploratory_runtime import ExploratoryColimaCommand
         return ExploratoryColimaCommand(Command(argv, 1, mutating=True), authority)
+
+    def test_marker_and_binding_drift_refuse_before_process_capture(self):
+        from kil.hf_exploratory_runtime import ExploratoryColimaCommand
+        for target in ('marker', 'binding'):
+            with self.subTest(target=target):
+                # One fresh run per authority; reuse only the authenticated registry.
+                from kil.hf_exploratory_runtime import RuntimeAuthority
+                digest = ('a' if target == 'marker' else 'b') * 64
+                parent = Path(self.temp.name).resolve() / '.tools' / 'hf-exploratory-private'
+                parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+                store = self.io.PrivateStore(parent / ('hf-exploratory-' + digest))
+                self.addCleanup(store.close)
+                authority = RuntimeAuthority.create(store, digest)
+                self.addCleanup(authority.close)
+                adapter = ExploratoryColimaCommand(Command(('colima', 'version'), 1), authority)
+                inputs, colima, verify = self.dependency_fixture()
+                path = self.registry / 'registry.json' if target == 'marker' else store.path / 'runtime-binding.json'
+                document = json.loads(path.read_bytes())
+                document['uid'] += 1
+                original = path.read_bytes()
+                path.write_bytes(canonical_record(document))
+                with patch.dict(os.environ, {'PATH': str(colima.parent)}), \
+                        patch.object(self.io, 'verify_bytes', side_effect=verify), \
+                        patch.object(self.io, 'capture_process') as capture:
+                    with self.assertRaises(ValueError):
+                        self.io.BoundedRunner(Path.cwd(), inputs).run(adapter)
+                    capture.assert_not_called()
+                path.write_bytes(original)
 
     def assert_dependency_rejected(self, fixture, command, verify=None):
         inputs, colima, fixture_verify = fixture

@@ -26,6 +26,13 @@ class ExploratoryProfileTests(unittest.TestCase):
         self.assertIsNotNone(importlib.util.find_spec('kil.hf_exploratory_profile'),
                              'exploratory native configuration binding is missing')
         self.module = importlib.import_module('kil.hf_exploratory_profile')
+        from kil import hf_exploratory_runtime as runtime_module
+        self.compact = tempfile.TemporaryDirectory(prefix='k', dir='/private/tmp')
+        self.addCleanup(self.compact.cleanup)
+        self.registry = Path(self.compact.name).resolve() / 'k'
+        selector = patch.object(runtime_module, '_registry_parent', return_value=self.registry, create=True)
+        selector.start()
+        self.addCleanup(selector.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
@@ -115,6 +122,13 @@ class ExploratoryProfileTests(unittest.TestCase):
                               (self.root, self.runtime / '..' / self.runtime.name)):
             with self.subTest(home=home, runtime=runtime), self.assertRaises(ValueError):
                 self.module.ProfilePaths(home, runtime)
+
+    def test_pure_compact_paths_roundtrip_and_reject_foreign_parent(self):
+        runtime = self.registry / ('r' + 'a' * 16)
+        paths = self.module.ProfilePaths(strict.passwd_home(), runtime)
+        self.assertEqual(self.module._paths(paths.document()), paths)
+        with self.assertRaises(ValueError):
+            self.module.ProfilePaths(strict.passwd_home(), self.root / runtime.name)
 
     def test_generated_instance_alias_and_strict_profile_remain_distinct(self):
         result = self.module.parse_saved_instance(self.instance)

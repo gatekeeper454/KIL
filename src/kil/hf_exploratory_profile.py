@@ -11,6 +11,7 @@ import re
 import stat
 
 from kil.hf_exploratory_runtime import RuntimeAuthority
+from kil import hf_exploratory_runtime as runtime_module
 from kil.v3b2_profile_state import (
     MAX_CONFIG, NAME, SIZE, ProfileStateError, _record_identity, _zero_store,
     capture, parse_saved, passwd_home as actual_passwd_home, validate_binding,
@@ -29,8 +30,12 @@ class ProfilePaths:
                     or '..' in path.parts or path == Path('/')
                     or path.anchor != '/'):
                 raise ProfileStateError('exploratory profile authority is invalid')
-        if (re.fullmatch(r'hf-exploratory-runtime-[0-9a-f]{64}', self.runtime.name) is None
-                or self.runtime.parent.parts[-2:] != ('.tools', 'hf-exploratory-private')):
+        compact = (re.fullmatch(r'r[0-9a-f]{16}', self.runtime.name) is not None
+                   and self.runtime.parent == runtime_module._registry_parent())
+        # Legacy saved evidence remains pure parsing, never live creation/adoption.
+        legacy = (re.fullmatch(r'hf-exploratory-runtime-[0-9a-f]{64}', self.runtime.name) is not None
+                  and self.runtime.parent.parts[-2:] == ('.tools', 'hf-exploratory-private'))
+        if not compact and not legacy:
             raise ProfileStateError('exploratory runtime namespace is invalid')
 
     @classmethod
