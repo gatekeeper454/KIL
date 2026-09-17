@@ -24311,3 +24311,109 @@ Any subsequent one-stop native recovery needs its own NEW separate approval;
 T430 spent permission is not revived, no implicit continuation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T438 — 2026-09-17, fixed-parent fixture engineering accepted; live approval next
+
+**Input:** Latest user "approved" accepted written mode-only spec; continue all
+five fixture-first preparation tasks under the requested subagent-driven workflow
+with independent reviews. Task4 clean checkpoint342ab2069199eaa3dba0f8ca90c63adb08b99ea2
+preceded fresh Task5 and complete review/root regressions.
+
+**Interpretation:** Finish narrowly scoped existing-behavior adversarial tests,
+independent whole review and proportionate source/docs/checkpoint verification.
+Written-spec approval does not authorize actual parent fchmod, VM stop, HF test
+or an expanded platform/SSH/image audit. Root owns all docs/lineage/git; workers
+own only new engineering files and reviewers are read-only.
+
+**Decision status:** CONFIRMED complete five-task fixture engineering acceptance,
+SPEC/QUALITY/fresh whole-final reviews and root scoped regressions. Completion
+reader/exact-stage/clean-HEAD checks follow this factual append before the final
+handoff. Actual one fixed0755→0700 permission attempt and any subsequent one-stop
+native recovery each remain NEW separately UNAPPROVED actions. No live permission
+consumed, T430 spent approval not revived.
+
+**Rationale/evidence:** Fresh permission_task5_impl appended exactly13 adversarial
+methods without changing the Task4 helper. Root reviewed actual tests during
+construction and caught inappropriate present-target stat helper use for missing/
+file/symlink cases, pre/post event labeling, a prohibition of legitimate postcall
+proof IO, and an absolute-only symlink-open assertion that missed relative
+basenames. Worker corrected TEST expectations/coverage only; no production change
+to satisfy erroneous tests. No genuine implementation failure/manufactured RED.
+New tests cover existing approved behavior; engineering additions/fixes in
+Tasks1–4 already received genuine RED before minimum implementation.
+
+AdversarialGREEN13/0.522s, whole43/0.439s; root read actual complete added tests,
+ran43/0.452s OK. Coverage includes missing/file/symlink target refusal/no creation
+or adoption; missing lock parent/no creation; symlink/hardlink/mode/size lock
+refusals; lock substitution after last content read; initial roster instability/
+enumeration exception; post-source target substitution retains1 returned700
+inconclusive; teardown-only release errors retain1 and all recorded FDs closed;
+syscall raised before change retains1 uncertain0755 without retry; known-child
+drift at final pre/post source IO refuses0/1; equal direct symlink metadata allowed
+without any child/payload/seal/outside open; UTF8 name130B refusal/exact1MiB lock
+positive; actual-account helper mismatch refusals; real-event last-source then
+metadata-only closure before syscall and after post observations. Earlier test
+bodies unchanged except the required SimpleNamespace import.
+
+Independent complete SPEC43/0.598s PASS after fully reading approved specification
+and mapping fixed pins/account, retained nofollow named/held proofs, existing-only
+flock/stat9/bytes, bounded equal direct rosters, final-source metadata-only closure,
+entry-before-call accounting, post identity/no rebaseline, all-owned teardown,
+strict CLI/non-action/negative authority and bounded honest reporting to code/tests.
+Independent complete QUALITY43/0.578s PASS; maximum escaped error/approval probe
+431,728B below1MiB with canonical round-trip equality. No Critical/Important/Minor
+findings. Reviewers made no file changes or actual private/native observations.
+
+Fresh permission_whole_final read complete approved spec/tool/tests and existing
+read-only source dependency; independent43/0.829s PASS, exact hashes matched.
+Three additional owned-temp probes passed: final account failure, lock-unlock
+failure with descriptor release, and successful complete256-child observations.
+No Critical/Important/Minor findings; only fixture conformance, no live authority.
+
+Root prescribed five-module command completed468 tests/306.343s, exit0/OK:
+tests.test_hf_recovery_parent_permissions, tests.test_hf_exploratory_io,
+tests.test_v3b2_profile_state, tests.test_hf_compact_residual_recovery,
+tests.test_hf_exploratory_native. Bytecode disabled, ResourceWarning fatal.
+Final root post-review permission-only43/0.426s OK. Actual helperSHA256
+8ba9dd1d4cb277878d4f778c36232e2d96863643187a13b6ae29962c7cfb2489;
+testSHA25652b059d0182330d564a71a274f97fd1f72bb07b62c7faf9429601d87cc2fd25d.
+Accepted recovery helperSHA2562b58ab2392543611f64044f5d2624f07edfa03ed4c988e1bff2c03d137ccf864
+and testsSHA256a4ee14ce13dd569bc1a1202ffab3be450fed8bbae954be96b98600caeccaf64f
+still equal baseline; production/deploy/artifacts/accepted launcher/citation
+policy protected diff against8b57143 empty. This468 scope is not full discovery
+green; the four immutable historical citation omissions remain untouched/unexempted.
+
+All predecessor complete lineage prefixes verified without rewriting:
+8b57143/1,416,871B,817c47f/1,421,308B,c502617/1,425,826B,
+c47bcc9/1,431,086B,8f91b5a/1,435,193B,342ab20/1,440,492B.
+Approved-spec prior body13,337B is retained before the appended acceptance record.
+Finishing-a-development-branch guidance used read-only git-dir/common-dir/
+symbolic-ref/base inspection: existing detached managed linked worktree preserved
+as already approved, no branch/worktree creation/merge/push/cleanup. Completion
+regenerates/checks readers and exact changed paths before scoped local commit;
+actual final clean status/commit is verified outside this precommit record.
+
+**Affected artifacts:** Added Task5 tests; complete plan check/result record,
+appended spec engineering acceptance, appended lineage and their readers. Helper
+unchanged since Task4. No accepted recovery/production/deploy/artifact/citation
+selector modifications, historical private receipt repair, new evidence directory/
+seal/date/suffix/export overwrite. Real fchmod/fsync/enumeration/flock in tests
+operate only owned temporary fixtures, not pinned actual private evidence.
+
+**Unresolved questions:** Actual fixed parent mode/lock/receipt/runtime/VM status
+unobserved during preparation;0755 origin remains unestablished. Engineering
+does not establish live permission success, recovered VM or HF readiness. No
+native acquisition/stop/delete/restart/guest/disk/HF/Ollama/rehearsal/image/SSH
+audit occurred. Accepted local Envoy remains unchanged, platform-image provenance
+unverified/full Kind-Calico acceptance false; no broader audit required here.
+
+**Next gate:** After current readers/exact-scope/clean local checkpoint pass,
+ask explicit NEW approval for ONE fixed pinned-parent0755→0700 attempt, using
+actual reviewed clean HEAD/actual new approval. Record actual command/result
+after the procedure; refusal/uncertainty/postcheck failure ends its permission,
+no retry/rollback/adoption/repair/rebaseline/recovery call. Even confirmed mode
+change does not stop VM or authorize HF. A later accepted one-stop recovery needs
+its own NEW separate approval. Original request-free rehearsal and spent T430
+stop approval remain spent; no implicit continuation or future approval invented.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

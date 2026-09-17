@@ -6,6 +6,7 @@ from pathlib import Path
 import stat
 import subprocess
 import tempfile
+from types import SimpleNamespace
 import unittest
 from contextlib import ExitStack, redirect_stdout, redirect_stderr
 from unittest.mock import patch
@@ -489,3 +490,296 @@ class CLITests(unittest.TestCase):
                 self.assertLessEqual(len(expected), tool.MAXIMUM)
                 self.assertEqual(status, 0 if outcome == 'mode_change_confirmed' else 1)
                 self.assertEqual(json.loads(stdout.getvalue())['fchmod_attempts'], attempts)
+
+
+class AdversarialTests(Fixture):
+    def test_missing_file_and_symlink_targets_are_not_created_followed_or_adopted(self):
+        original = self.tools / 'retained-original'
+        self.target.rename(original)
+        try:
+            for kind in ('missing', 'file', 'symlink'):
+                with self.subTest(kind=kind):
+                    if kind == 'file':
+                        self.target.write_bytes(b'not a directory')
+                    elif kind == 'symlink':
+                        self.target.symlink_to(original, target_is_directory=True)
+                    result = self.run_fixture()
+                    self.assertEqual(result['outcome'], 'preflight_refused')
+                    self.assertEqual(result['fchmod_attempts'], 0)
+                    self.assertFalse(result['preservation'])
+                    if kind == 'missing':
+                        self.assertFalse(self.target.exists())
+                    elif kind == 'file':
+                        self.assertTrue(self.target.is_file())
+                        self.target.unlink()
+                    else:
+                        self.assertTrue(self.target.is_symlink())
+                        self.target.unlink()
+        finally:
+            if not self.target.exists() and not self.target.is_symlink():
+                original.rename(self.target)
+
+    def test_missing_lock_parent_is_not_created(self):
+        self.lock.unlink()
+        self.lock_parent.rmdir()
+        result = self.run_fixture()
+        self.assert_refused(result)
+        self.assertEqual(result['fchmod_attempts'], 0)
+        self.assertFalse(self.lock_parent.exists())
+
+    def test_lock_symlink_hardlink_wrong_mode_and_oversize_refuse(self):
+        payload = b'cooperating fixture lock\n'
+        other = self.lock_parent / 'other'
+        for kind in ('symlink', 'hardlink', 'mode', 'size'):
+            with self.subTest(kind=kind):
+                if self.lock.is_symlink() or self.lock.exists():
+                    self.lock.unlink()
+                if other.is_symlink() or other.exists():
+                    other.unlink()
+                self.lock.write_bytes(payload)
+                self.lock.chmod(0o600)
+                if kind == 'symlink':
+                    self.lock.rename(other)
+                    self.lock.symlink_to(other)
+                elif kind == 'hardlink':
+                    os.link(self.lock, other)
+                elif kind == 'mode':
+                    self.lock.chmod(0o644)
+                else:
+                    self.lock.write_bytes(b'x' * (self.tool.MAXIMUM + 1))
+                result = self.run_fixture()
+                self.assert_refused(result)
+                self.assertEqual(result['fchmod_attempts'], 0)
+                if self.lock.is_symlink() or self.lock.exists():
+                    self.lock.unlink()
+                if other.is_symlink() or other.exists():
+                    other.unlink()
+                self.lock.write_bytes(payload)
+                self.lock.chmod(0o600)
+
+    def test_final_metadata_after_last_content_read_does_not_adopt_replaced_lock(self):
+        original_read = self.tool._Proof._read_lock
+        reads = []
+        old_lock = self.lock_parent / 'old-lock'
+
+        def read(proof, *args, **kwargs):
+            payload = original_read(proof, *args, **kwargs)
+            if not kwargs.get('after'):
+                reads.append(len(reads) + 1)
+                if len(reads) == 2:
+                    self.lock.rename(old_lock)
+                    self.lock.write_bytes(b'cooperating fixture lock\n')
+                    self.lock.chmod(0o600)
+            return payload
+
+        with patch.object(self.tool._Proof, '_read_lock', new=read):
+            result = self.run_fixture()
+        self.assertEqual(reads, [1, 2])
+        self.assert_refused(result)
+        self.assertEqual(result['fchmod_attempts'], 0)
+        self.assertTrue(old_lock.exists())
+        self.assertTrue(self.lock.exists())
+
+    def test_initial_roster_instability_and_enumeration_fault_refuse(self):
+        original_children = self.tool._Proof._children
+        calls = []
+        new_child = self.target / 'new-child'
+
+        def unstable(proof, *args, **kwargs):
+            result = original_children(proof, *args, **kwargs)
+            calls.append(result)
+            if len(calls) == 1:
+                new_child.mkdir(mode=0o700)
+            return result
+
+        with patch.object(self.tool._Proof, '_children', new=unstable):
+            result = self.run_fixture()
+        self.assertEqual(len(calls), 2)
+        self.assert_refused(result)
+        self.assertEqual(result['fchmod_attempts'], 0)
+        new_child.rmdir()
+
+        with patch.object(self.tool.os, 'scandir', side_effect=OSError('enumeration failed')):
+            result = self.run_fixture()
+        self.assert_refused(result)
+        self.assertEqual(result['fchmod_attempts'], 0)
+
+    def test_final_post_source_io_target_replacement_is_inconclusive(self):
+        calls = []
+        changed = self.tools / 'changed-after-post'
+
+        def source(_):
+            calls.append(None)
+            if len(calls) == 4:
+                self.target.rename(changed)
+                self.target.mkdir(mode=0o700)
+
+        result = self.run_fixture(source=source)
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(result['outcome'], 'postverification_inconclusive')
+        self.assertEqual(result['fchmod_attempts'], 1)
+        self.assertEqual(result['syscall_certainty'], 'returned')
+        self.assertEqual(result['observed_post_mode'], '0700')
+        self.assertEqual(stat.S_IMODE(changed.stat().st_mode), 0o700)
+        self.assertEqual(stat.S_IMODE(self.target.stat().st_mode), 0o700)
+        self.assertFalse(result['preservation'])
+
+    def test_teardown_only_failure_after_success_is_inconclusive_and_releases_all_fds(self):
+        original_close = self.tool._close_fd
+        released = []
+
+        def late_close(fd):
+            original_close(fd)
+            released.append(fd)
+            raise ValueError('late release proof error')
+
+        with patch.object(self.tool, '_close_fd', side_effect=late_close):
+            result = self.run_fixture()
+        self.assertEqual(result['outcome'], 'postverification_inconclusive')
+        self.assertEqual(result['fchmod_attempts'], 1)
+        self.assertEqual(result['syscall_certainty'], 'returned')
+        self.assertEqual(result['observed_post_mode'], '0700')
+        self.assertFalse(result['preservation'])
+        self.assertFalse(result['preservation_checks']['teardown'])
+        self.assertTrue(any(row['message'] == 'late release proof error' for row in result['errors']))
+        self.assertTrue(released)
+        for fd in released:
+            with self.assertRaises(OSError):
+                os.fstat(fd)
+
+    def test_fchmod_failure_before_change_is_uncertain_without_retry(self):
+        with patch.object(self.tool.os, 'fchmod', side_effect=OSError('syscall refused')) as fchmod:
+            result = self.run_fixture()
+        self.assertEqual(fchmod.call_count, 1)
+        self.assertEqual(result['outcome'], 'mutation_uncertain')
+        self.assertEqual(result['fchmod_attempts'], 1)
+        self.assertEqual(result['syscall_certainty'], 'uncertain')
+        self.assertEqual(result['observed_post_mode'], '0755')
+        self.assertFalse(result['preservation'])
+        self.unchanged_receipts()
+
+    def test_known_child_metadata_drift_at_pre_and_post_source_checks(self):
+        for fail_at in (3, 4):
+            with self.subTest(fail_at=fail_at):
+                self.target.chmod(0o755)
+                self.receipt.chmod(0o700)
+                calls = []
+
+                def source(_):
+                    calls.append(None)
+                    if len(calls) == fail_at:
+                        self.receipt.chmod(0o755)
+
+                result = self.run_fixture(source=source)
+                self.assertEqual(len(calls), fail_at)
+                if fail_at == 3:
+                    self.assertEqual(result['outcome'], 'preflight_refused')
+                    self.assertEqual(result['fchmod_attempts'], 0)
+                else:
+                    self.assertEqual(result['outcome'], 'postverification_inconclusive')
+                    self.assertEqual(result['fchmod_attempts'], 1)
+                    self.assertEqual(result['syscall_certainty'], 'returned')
+                    self.assertEqual(result['observed_post_mode'], '0700')
+                self.assertFalse(result['preservation'])
+
+    def test_equal_roster_direct_child_symlink_is_allowed_without_following_or_reading(self):
+        outside = self.root / 'outside-payload'
+        outside_payload = b'not a receipt and must not be read'
+        outside.write_bytes(outside_payload)
+        pointer = self.target / 'pointer'
+        pointer.symlink_to(outside)
+        original_open = self.tool.os.open
+        opened = []
+
+        def record_open(path, flags, *args, **kwargs):
+            opened.append((path, flags))
+            return original_open(path, flags, *args, **kwargs)
+
+        with patch.object(self.tool.os, 'open', side_effect=record_open):
+            result = self.run_fixture()
+        self.assertEqual(result['outcome'], 'mode_change_confirmed')
+        self.assertTrue(opened)
+        forbidden = os.O_CREAT | os.O_TRUNC | os.O_WRONLY | os.O_RDWR
+        for path, flags in opened:
+            path_text = os.fsdecode(path)
+            self.assertEqual(flags & forbidden, 0)
+            self.assertNotEqual(Path(path_text), pointer)
+            self.assertNotEqual(Path(path_text), outside)
+            self.assertNotEqual(Path(path_text).name, 'pointer')
+            self.assertNotIn(Path(path_text).name, {'retained', 'outcome.json', 'SHA256SUMS'})
+        self.assertEqual(outside.read_bytes(), outside_payload)
+        self.unchanged_receipts()
+
+    def test_utf8_name_byte_bound_refuses_and_exact_maximum_lock_passes(self):
+        long_name = self.target / ('é' * 65)
+        long_name.mkdir(mode=0o700)
+        result = self.run_fixture()
+        self.assert_refused(result)
+        self.assertEqual(result['fchmod_attempts'], 0)
+        long_name.rmdir()
+
+        self.lock.write_bytes(b'x' * self.tool.MAXIMUM)
+        self.lock.chmod(0o600)
+        result = self.run_fixture()
+        self.assertEqual(result['outcome'], 'mode_change_confirmed')
+        self.assertEqual(result['fchmod_attempts'], 1)
+        self.assertEqual(self.lock.stat().st_size, self.tool.MAXIMUM)
+        self.unchanged_receipts()
+
+    def test_account_helper_rejects_uid_euid_and_home_mismatches(self):
+        cases = (
+            {'getuid': self.tool.UID + 1},
+            {'geteuid': self.tool.UID + 1},
+            {'pw': SimpleNamespace(pw_dir='/private/tmp/not-home')},
+        )
+        for changes in cases:
+            with self.subTest(changes=changes):
+                with patch.object(self.tool.os, 'getuid', return_value=changes.get('getuid', self.tool.UID)), \
+                     patch.object(self.tool.os, 'geteuid', return_value=changes.get('geteuid', self.tool.UID)), \
+                     patch.object(self.tool.pwd, 'getpwuid', return_value=changes.get('pw', SimpleNamespace(pw_dir=str(self.tool.HOME)))):
+                    with self.assertRaises(ValueError):
+                        self.tool._account()
+
+    def test_final_closure_event_order_has_no_content_or_enumeration_after_last_source_io(self):
+        events = []
+        source_calls = []
+        original_metadata = self.tool._Proof.metadata
+        original_pread = self.tool.os.pread
+        original_scandir = self.tool.os.scandir
+        original_fchmod = self.tool.os.fchmod
+
+        def metadata(proof, *args, **kwargs):
+            result = original_metadata(proof, *args, **kwargs)
+            events.append('metadata_after' if kwargs.get('after') else 'metadata_before')
+            return result
+
+        def pread(*args, **kwargs):
+            events.append('content')
+            return original_pread(*args, **kwargs)
+
+        def scandir(*args, **kwargs):
+            events.append('enumeration')
+            return original_scandir(*args, **kwargs)
+
+        def source(_):
+            source_calls.append(None)
+            events.append('source')
+
+        def fchmod(fd, mode):
+            self.assertEqual(len(source_calls), 3)
+            self.assertEqual(events[-1], 'metadata_before')
+            third_source = [index for index, event in enumerate(events) if event == 'source'][2]
+            between = events[third_source + 1:]
+            self.assertNotIn('content', between)
+            self.assertNotIn('enumeration', between)
+            events.append('syscall')
+            return original_fchmod(fd, mode)
+
+        with patch.object(self.tool._Proof, 'metadata', new=metadata), \
+             patch.object(self.tool.os, 'pread', side_effect=pread), \
+             patch.object(self.tool.os, 'scandir', side_effect=scandir), \
+             patch.object(self.tool.os, 'fchmod', side_effect=fchmod):
+            result = self.run_fixture(source=source)
+        self.assertEqual(result['outcome'], 'mode_change_confirmed')
+        self.assertEqual(len(source_calls), 4)
+        self.assertEqual(events[-2:], ['source', 'metadata_after'])

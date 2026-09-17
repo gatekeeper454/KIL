@@ -6,7 +6,7 @@
 <title>Fixed HF recovery parent permission preparation implementation plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md">
-<meta name="source-sha256" content="d57894b3ce0011accee1edfc15a5add9d816aebe78db0adeb6f73f06e645febe">
+<meta name="source-sha256" content="2429d1d58d359f8946b346623696e52ce87fbdb64ae49d61fc4a2d46f42154b1">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md</code> (<code>d57894b3ce0011accee1edfc15a5add9d816aebe78db0adeb6f73f06e645febe</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md</code> (<code>2429d1d58d359f8946b346623696e52ce87fbdb64ae49d61fc4a2d46f42154b1</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Fixed HF recovery parent permission preparation implementation plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md</code> (<code>d57894b3ce0011accee1edfc15a5add9d816aebe78db0adeb6f73f06e645febe</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md</code> (<code>2429d1d58d359f8946b346623696e52ce87fbdb64ae49d61fc4a2d46f42154b1</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#fixed-hf-recovery-parent-permission-preparation-implementation-plan">Fixed HF recovery parent permission preparation implementation plan</a></li><li class="level-2"><a href="#approval-worktree-and-file-map">Approval, worktree and file map</a></li><li class="level-2"><a href="#common-commands-and-baseline">Common commands and baseline</a></li><li class="level-2"><a href="#task-1-retained-read-only-ancestry-and-exact-pins">Task 1: Retained read-only ancestry and exact pins</a></li><li class="level-2"><a href="#task-2-existing-lock-and-bounded-direct-child-commitment">Task 2: Existing lock and bounded direct-child commitment</a></li><li class="level-2"><a href="#task-3-entry-consumed-syscall-slot-and-bounded-honest-errors">Task 3: Entry-consumed syscall slot and bounded honest errors</a></li><li class="level-2"><a href="#task-4-complete-closure-truthful-outcomes-and-strict-non-action-cli">Task 4: Complete closure, truthful outcomes and strict non-action CLI</a></li><li class="level-2"><a href="#task-5-adversarial-coverage-independent-whole-review-and-root-verification">Task 5: Adversarial coverage, independent whole review and root verification</a></li><li class="level-2"><a href="#spec-coverage-and-plan-self-review">Spec coverage and plan self-review</a></li><li class="level-2"><a href="#execution-handoff-and-live-gates-do-not-execute-now">Execution handoff and live gates — do not execute now</a></li><li class="level-2"><a href="#engineering-execution-record-2026-09-17">Engineering execution record — 2026-09-17</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="fixed-hf-recovery-parent-permission-preparation-implementation-plan" href="#fixed-hf-recovery-parent-permission-preparation-implementation-plan">Fixed HF recovery parent permission preparation implementation plan</a></li><li class="level-2"><a data-section-id="approval-worktree-and-file-map" href="#approval-worktree-and-file-map">Approval, worktree and file map</a></li><li class="level-2"><a data-section-id="common-commands-and-baseline" href="#common-commands-and-baseline">Common commands and baseline</a></li><li class="level-2"><a data-section-id="task-1-retained-read-only-ancestry-and-exact-pins" href="#task-1-retained-read-only-ancestry-and-exact-pins">Task 1: Retained read-only ancestry and exact pins</a></li><li class="level-2"><a data-section-id="task-2-existing-lock-and-bounded-direct-child-commitment" href="#task-2-existing-lock-and-bounded-direct-child-commitment">Task 2: Existing lock and bounded direct-child commitment</a></li><li class="level-2"><a data-section-id="task-3-entry-consumed-syscall-slot-and-bounded-honest-errors" href="#task-3-entry-consumed-syscall-slot-and-bounded-honest-errors">Task 3: Entry-consumed syscall slot and bounded honest errors</a></li><li class="level-2"><a data-section-id="task-4-complete-closure-truthful-outcomes-and-strict-non-action-cli" href="#task-4-complete-closure-truthful-outcomes-and-strict-non-action-cli">Task 4: Complete closure, truthful outcomes and strict non-action CLI</a></li><li class="level-2"><a data-section-id="task-5-adversarial-coverage-independent-whole-review-and-root-verification" href="#task-5-adversarial-coverage-independent-whole-review-and-root-verification">Task 5: Adversarial coverage, independent whole review and root verification</a></li><li class="level-2"><a data-section-id="spec-coverage-and-plan-self-review" href="#spec-coverage-and-plan-self-review">Spec coverage and plan self-review</a></li><li class="level-2"><a data-section-id="execution-handoff-and-live-gates-do-not-execute-now" href="#execution-handoff-and-live-gates-do-not-execute-now">Execution handoff and live gates — do not execute now</a></li><li class="level-2"><a data-section-id="engineering-execution-record-2026-09-17" href="#engineering-execution-record-2026-09-17">Engineering execution record — 2026-09-17</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -1119,7 +1119,7 @@ implementation is exercised without adding another mutation/recovery feature.
 If one fails, preserve RED and implement the minimum scoped regression fix before
 repeating GREEN. Read all approved spec requirements and final actual tool.</p>
 <ul>
-<li>[ ] Append the missing-state/type/bounds/late-IO and teardown regressions.</li>
+<li>[x] Append the missing-state/type/bounds/late-IO and teardown regressions.</li>
 </ul>
 <p>&lt;!-- permission-tests --&gt;</p>
 <pre><code class="language-python">class AdversarialTests(Fixture):
@@ -1342,12 +1342,12 @@ repeating GREEN. Read all approved spec requirements and final actual tool.</p>
         self.assertEqual(events[-2:], ['source', 'metadata_after'])
 </code></pre>
 <ul>
-<li>[ ] Run the whole new module (require actual OK, record count/duration):</li>
+<li>[x] Run the whole new module (require actual OK, record count/duration):</li>
 </ul>
 <pre><code class="language-sh">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_recovery_parent_permissions
 </code></pre>
 <ul>
-<li>[ ] Freeze actual tool/test bytes and independently review the complete scope:
+<li>[x] Freeze actual tool/test bytes and independently review the complete scope:
 spec reviewer maps each requirement below to actual code/tests; quality reviewer
 examines full FD lifecycle, late failures, once history, guards, bounds and
 negative authority. Root independently runs the new module plus baseline:</li>
@@ -1355,18 +1355,18 @@ negative authority. Root independently runs the new module plus baseline:</li>
 <pre><code class="language-sh">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_recovery_parent_permissions tests.test_hf_exploratory_io tests.test_v3b2_profile_state tests.test_hf_compact_residual_recovery tests.test_hf_exploratory_native
 </code></pre>
 <ul>
-<li>[ ] Check exact protected source scope against8b57143 (must produce no paths):</li>
+<li>[x] Check exact protected source scope against8b57143 (must produce no paths):</li>
 </ul>
 <pre><code class="language-sh">git diff --name-only 8b5714377cce4e3dffdf5ce6aaec926a5247099a -- src deploy artifacts tools/hf_compact_residual_recovery.py tests/test_hf_compact_residual_recovery.py tools/hf_exploratory_kind.py .gitattributes
 </code></pre>
 <ul>
-<li>[ ] Verify the full8b57143 lineage prefix is preserved, then each subsequent
+<li>[x] Verify the full8b57143 lineage prefix is preserved, then each subsequent
 task's complete predecessor prefix. The planning predecessor is1,416,871B:</li>
 </ul>
 <pre><code class="language-sh">git show 8b5714377cce4e3dffdf5ce6aaec926a5247099a:docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md | cmp -n 1416871 - docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md
 </code></pre>
 <ul>
-<li>[ ] Regenerate/check tracked readers; a newly created Markdown source must be
+<li>[x] Regenerate/check tracked readers; a newly created Markdown source must be
 staged by exact path first, because discovery is tracked-source-only:</li>
 </ul>
 <pre><code class="language-sh">PYTHONDONTWRITEBYTECODE=1 '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' tools/render_markdown.py
@@ -1378,7 +1378,7 @@ git diff --cached --check
 <code>https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff</code> citation. Do not
 change renderer/citation selectors or audit/repair old receipts.</p>
 <ul>
-<li>[ ] Finish exact-path scoped local commit and verify clean HEAD/status:</li>
+<li>[x] Finish exact-path scoped local commit and verify clean HEAD/status:</li>
 </ul>
 <pre><code class="language-sh">git add -- tools/hf_recovery_parent_permissions.py tests/test_hf_recovery_parent_permissions.py docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.htm docs/superpowers/specs/2026-09-17-hf-recovery-parent-permissions-design.md docs/superpowers/specs/2026-09-17-hf-recovery-parent-permissions-design.htm docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm
 git commit -m 'test: verify fixed permission preparation and approval boundaries'
@@ -1548,6 +1548,51 @@ Complete8f91b5a predecessor lineage prefix1,435,193B and protected scope verifie
 Readers/scoped checkpoint precede Task5 adversarial tests and whole verification.
 Actual target/lock/receipt/runtime/VM status unobserved, no live permission or
 native recovery approval consumed. Task5 engineering remains pending.</p>
+<p>Task5 subsequently completed by fresh permission_task5_impl: exactly13 added
+adversarial methods, no tool/production changes. During test construction root
+identified test-only mistakes: missing/file/symlink-target cases cannot invoke
+the helper that stats a present0755 target; the event wrapper must label pre/post
+metadata after its real call; legitimate post-change lock/roster IO must not be
+forbidden merely because it follows the syscall; relative basename pointer opens
+must be rejected as well as absolute paths. Worker corrected these expectations,
+not implementation, before final verification. No genuine code failure or
+manufactured RED; this task adds coverage of already implemented behavior.
+AdversarialGREEN13/0.522s; whole43/0.439s, root read actual added tests and ran
+43/0.452s OK. Earlier test bodies unchanged apart from the SimpleNamespace import.</p>
+<p>Complete independent SPEC43/0.598s PASS after reading the entire approved spec and
+mapping requirements to actual code/tests. Complete QUALITY43/0.578s PASS;
+worst escaped maximum-length error/approval output431,728B&lt;1MiB, canonical
+round-trip equality. Fresh permission_whole_final read entire spec/tool/tests:
+43/0.829s PASS plus3 owned-temp probes (final account refusal, unlock failure
+with descriptor release, complete256-child success). No Critical/Important/Minor
+findings in any final review; no reviewer writes or actual private/native access.</p>
+<p>Root prescribed combined command completed468 tests/306.343s, exit0/OK,
+ResourceWarning fatal: permission helper, exploratory IO, profile state, accepted
+compact residual recovery and exploratory native fixture modules. Final root
+post-review permission-only43/0.426s OK. Actual toolSHA256 remains
+8ba9dd1d4cb277878d4f778c36232e2d96863643187a13b6ae29962c7cfb2489;
+testSHA25652b059d0182330d564a71a274f97fd1f72bb07b62c7faf9429601d87cc2fd25d.
+Accepted recovery tool/tests hashes remain exactly the baseline values above;
+protected production/deploy/artifacts/launcher/citation policy diff empty.
+All complete predecessor lineage prefixes preserved:8b57143/1,416,871B,
+817c47f/1,421,308B,c502617/1,425,826B,c47bcc9/1,431,086B,
+8f91b5a/1,435,193B and342ab20/1,440,492B. No historical rewrite or evidence repair.</p>
+<p>Fixture engineering acceptance is CONFIRMED. Final documentation/reader checks
+and scoped clean checkpoint are performed as part of this completion commit;
+do not infer full discovery green from the468-test scope. Finishing preserves
+the existing detached externally managed worktree and local commits, as already
+approved: no branch creation, relocation, merge, push or cleanup. The four known
+immutable historical citation omissions remain untouched/unexempted.</p>
+<p>Current next gate: ask explicit NEW approval for ONE pinned fixed-parent0755→0700
+mode-change attempt using the actual verified clean HEAD and actual new approval
+text. Actual target/lock/receipt/runtime/VM status remains unobserved during this
+preparation, no real mode change or native acquisition/stop/HF request performed.
+Failure/refusal/uncertainty ends that permission without retry/rollback/recovery.
+Even confirmed mode-only result does not stop the VM or establish HF readiness;
+any subsequent native one-stop needs its own NEW separate approval. No revival
+of spent T430 permission or original rehearsal. Accepted local Envoy unchanged,
+platform-image provenance unverified/full Kind-Calico acceptance false. A broad
+provenance/SSH audit is neither required nor authorized by this preparation.</p>
 </article></main>
 </div></div>
 <script>(() => {

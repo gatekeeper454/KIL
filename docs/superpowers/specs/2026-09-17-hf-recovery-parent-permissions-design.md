@@ -220,3 +220,27 @@ pending status above records the document's earlier checkpoint, not the current
 gate. Actual fixed-target fchmod and a subsequent native recovery attempt each
 remain separately unapproved. Retain the user's subagent-driven preparation and
 independent-review preference; do not revive the spent T430 stop permission.
+
+## Fixture engineering acceptance record — 2026-09-17
+
+All five preparation tasks subsequently completed with fresh implementers and
+independent SPEC then QUALITY reviews. Actual helper/tests received final whole
+SPEC43/0.598s, QUALITY43/0.578s and fresh independent final43/0.829s PASS, no
+Critical/Important/Minor findings. Root prescribed combined fixture regressions
+passed468/306.343s, exit0/OK, with bytecode disabled and ResourceWarning fatal;
+final root permission module43/0.426s OK. Accepted recovery/production/deploy/
+artifacts unchanged; complete predecessor lineage retained. The scoped local
+completion checkpoint includes required generated readers and clean-state checks,
+not a full discovery pass or historical citation repair/exemption.
+
+Engineering acceptance is CONFIRMED, not actual permission execution. Actual
+fixed directory/lock/receipt/runtime/VM status was not inspected or changed during
+preparation; fixtures are not live evidence. Next ask NEW explicit approval for
+one pinned0755→0700 attempt only. Refusal/uncertainty/postcheck failure ends that
+permission, no retry/rollback/adoption/recovery. Any subsequent VM stop still
+requires its own NEW separate approval; spent T430 permission remains spent.
+No HF/Ollama/rehearsal/image/SSH operation, no implicit continuation. Accepted
+local Envoy unchanged; platform provenance unverified/full Kind-Calico acceptance
+false. Actual mode-change and native one-stop gates remain UNAPPROVED.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

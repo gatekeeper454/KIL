@@ -1088,7 +1088,7 @@ implementation is exercised without adding another mutation/recovery feature.
 If one fails, preserve RED and implement the minimum scoped regression fix before
 repeating GREEN. Read all approved spec requirements and final actual tool.
 
-- [ ] Append the missing-state/type/bounds/late-IO and teardown regressions.
+- [x] Append the missing-state/type/bounds/late-IO and teardown regressions.
 
 <!-- permission-tests -->
 ```python
@@ -1312,13 +1312,13 @@ class AdversarialTests(Fixture):
         self.assertEqual(events[-2:], ['source', 'metadata_after'])
 ```
 
-- [ ] Run the whole new module (require actual OK, record count/duration):
+- [x] Run the whole new module (require actual OK, record count/duration):
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_recovery_parent_permissions
 ```
 
-- [ ] Freeze actual tool/test bytes and independently review the complete scope:
+- [x] Freeze actual tool/test bytes and independently review the complete scope:
   spec reviewer maps each requirement below to actual code/tests; quality reviewer
   examines full FD lifecycle, late failures, once history, guards, bounds and
   negative authority. Root independently runs the new module plus baseline:
@@ -1327,20 +1327,20 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/K
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_recovery_parent_permissions tests.test_hf_exploratory_io tests.test_v3b2_profile_state tests.test_hf_compact_residual_recovery tests.test_hf_exploratory_native
 ```
 
-- [ ] Check exact protected source scope against8b57143 (must produce no paths):
+- [x] Check exact protected source scope against8b57143 (must produce no paths):
 
 ```sh
 git diff --name-only 8b5714377cce4e3dffdf5ce6aaec926a5247099a -- src deploy artifacts tools/hf_compact_residual_recovery.py tests/test_hf_compact_residual_recovery.py tools/hf_exploratory_kind.py .gitattributes
 ```
 
-- [ ] Verify the full8b57143 lineage prefix is preserved, then each subsequent
+- [x] Verify the full8b57143 lineage prefix is preserved, then each subsequent
   task's complete predecessor prefix. The planning predecessor is1,416,871B:
 
 ```sh
 git show 8b5714377cce4e3dffdf5ce6aaec926a5247099a:docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md | cmp -n 1416871 - docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md
 ```
 
-- [ ] Regenerate/check tracked readers; a newly created Markdown source must be
+- [x] Regenerate/check tracked readers; a newly created Markdown source must be
   staged by exact path first, because discovery is tracked-source-only:
 
 ```sh
@@ -1354,7 +1354,7 @@ Record actual reader count; verify new/changed docs contain the canonical
 `https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff` citation. Do not
 change renderer/citation selectors or audit/repair old receipts.
 
-- [ ] Finish exact-path scoped local commit and verify clean HEAD/status:
+- [x] Finish exact-path scoped local commit and verify clean HEAD/status:
 
 ```sh
 git add -- tools/hf_recovery_parent_permissions.py tests/test_hf_recovery_parent_permissions.py docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.htm docs/superpowers/specs/2026-09-17-hf-recovery-parent-permissions-design.md docs/superpowers/specs/2026-09-17-hf-recovery-parent-permissions-design.htm docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm
@@ -1547,3 +1547,53 @@ Complete8f91b5a predecessor lineage prefix1,435,193B and protected scope verifie
 Readers/scoped checkpoint precede Task5 adversarial tests and whole verification.
 Actual target/lock/receipt/runtime/VM status unobserved, no live permission or
 native recovery approval consumed. Task5 engineering remains pending.
+
+Task5 subsequently completed by fresh permission_task5_impl: exactly13 added
+adversarial methods, no tool/production changes. During test construction root
+identified test-only mistakes: missing/file/symlink-target cases cannot invoke
+the helper that stats a present0755 target; the event wrapper must label pre/post
+metadata after its real call; legitimate post-change lock/roster IO must not be
+forbidden merely because it follows the syscall; relative basename pointer opens
+must be rejected as well as absolute paths. Worker corrected these expectations,
+not implementation, before final verification. No genuine code failure or
+manufactured RED; this task adds coverage of already implemented behavior.
+AdversarialGREEN13/0.522s; whole43/0.439s, root read actual added tests and ran
+43/0.452s OK. Earlier test bodies unchanged apart from the SimpleNamespace import.
+
+Complete independent SPEC43/0.598s PASS after reading the entire approved spec and
+mapping requirements to actual code/tests. Complete QUALITY43/0.578s PASS;
+worst escaped maximum-length error/approval output431,728B<1MiB, canonical
+round-trip equality. Fresh permission_whole_final read entire spec/tool/tests:
+43/0.829s PASS plus3 owned-temp probes (final account refusal, unlock failure
+with descriptor release, complete256-child success). No Critical/Important/Minor
+findings in any final review; no reviewer writes or actual private/native access.
+
+Root prescribed combined command completed468 tests/306.343s, exit0/OK,
+ResourceWarning fatal: permission helper, exploratory IO, profile state, accepted
+compact residual recovery and exploratory native fixture modules. Final root
+post-review permission-only43/0.426s OK. Actual toolSHA256 remains
+8ba9dd1d4cb277878d4f778c36232e2d96863643187a13b6ae29962c7cfb2489;
+testSHA25652b059d0182330d564a71a274f97fd1f72bb07b62c7faf9429601d87cc2fd25d.
+Accepted recovery tool/tests hashes remain exactly the baseline values above;
+protected production/deploy/artifacts/launcher/citation policy diff empty.
+All complete predecessor lineage prefixes preserved:8b57143/1,416,871B,
+817c47f/1,421,308B,c502617/1,425,826B,c47bcc9/1,431,086B,
+8f91b5a/1,435,193B and342ab20/1,440,492B. No historical rewrite or evidence repair.
+
+Fixture engineering acceptance is CONFIRMED. Final documentation/reader checks
+and scoped clean checkpoint are performed as part of this completion commit;
+do not infer full discovery green from the468-test scope. Finishing preserves
+the existing detached externally managed worktree and local commits, as already
+approved: no branch creation, relocation, merge, push or cleanup. The four known
+immutable historical citation omissions remain untouched/unexempted.
+
+Current next gate: ask explicit NEW approval for ONE pinned fixed-parent0755→0700
+mode-change attempt using the actual verified clean HEAD and actual new approval
+text. Actual target/lock/receipt/runtime/VM status remains unobserved during this
+preparation, no real mode change or native acquisition/stop/HF request performed.
+Failure/refusal/uncertainty ends that permission without retry/rollback/recovery.
+Even confirmed mode-only result does not stop the VM or establish HF readiness;
+any subsequent native one-stop needs its own NEW separate approval. No revival
+of spent T430 permission or original rehearsal. Accepted local Envoy unchanged,
+platform-image provenance unverified/full Kind-Calico acceptance false. A broad
+provenance/SSH audit is neither required nor authorized by this preparation.
