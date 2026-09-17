@@ -21957,3 +21957,64 @@ another automatic attempt or action-mode continuation. Any important later
 engineering finding requires test-first correction and independent re-review.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T404 — 2026-09-16 — Scoped PATH repair root engineering readiness checkpoint
+
+**Input:** The user approved the exact written Colima dependency PATH design
+(T399) and previously conditionally approved one fresh rehearsal if the repair
+works (T398). The implementer and three independent reviewers released their
+exclusive writers after exact-path checkpoints.
+
+**Interpretation:** Complete the approved finite engineering plan and confirm its
+test/review/unchanged-source gates before root alone evaluates ONE fresh private
+request-free rehearsal. This is not a platform-image provenance audit, action-mode
+authorization, adoption of failed state, branch integration or a generic PATH fix.
+
+**Decision status:** Engineering repair CONFIRMED at 8ced033, with independent
+SPEC 5f3083a, QUALITY 405c11d and final whole-change review 1ce4310 all PASS and
+no actionable findings. Root fresh designated-interpreter regression: all exact
+15 modules, 425 tests PASS in 88.760s, bytecode off and ResourceWarning fatal.
+Frozen IO SHA-256 05d6024a725d6b3e68b0f9da74384b9c7f9c0af16d6447b5328ccbbf5c7f151f
+and test SHA-256 5217cc62e024c6f4bee84ab8d7c99bdce143744c5e40110d00f6752e939a506b
+remain identical to that verified run. Final review independently passed 92 tests
+in 4.279s. Native compatibility/successful teardown remain UNTESTED at this gate.
+
+**Rationale:** Only exact scoped mutating Colima receives the copied, bounded,
+complete three-tool authenticated PATH and absolute original Colima selection.
+Repeated full-byte/identity/roster checks precede unchanged final runtime/command
+guards and exact manifest/metadata consistency. Parent environment, other command
+families, strict authority and durable latches are unchanged. Root's read-only
+executable eligibility check confirmed /Users/mistorm/.local/bin/colima is canonical
+regular owner-executable without any native launch. There is no zero-TOCTOU claim.
+
+Root also freshly checked citation policy: 4 tests in 0.054s, the same sole failure
+for exactly four preserved historical ignored Markdown omissions. Earlier broad
+discovery ran 1,849 tests with that sole failure and 16 intentional skips; it was
+not re-run for this repair. No new omission, receipt rewrite or policy exemption
+change is hidden. The finishing skill therefore does not authorize merge/PR;
+retain the externally managed detached workspace while proceeding only within
+the explicitly approved narrower engineering/rehearsal gate.
+
+**Affected artifacts:** Mark performed engineering steps and append actual results
+to docs/superpowers/plans/2026-09-16-hf-colima-dependency-path.md and its reader;
+append this actual-EOF lineage entry/reader. Source/tests stay frozen at 8ced033.
+Native/CLI, strict contracts, accepted inputs/local Envoy, all sixteen deferrals,
+gitattributes, old receipts and failed runtime remain unchanged. Root verified the
+exact original 1,140,588-byte lineage prefix and production scope; reviews verified
+all 90 readers and their complete predecessor prefixes. No native/VM/HF/HTTP/Ollama/
+image audit, install, cleanup, branch move, merge, push or new worktree occurred.
+
+**Unresolved questions:** Native setup may expose another compatibility refusal;
+unit/review results are not evidence of live success. Full Kind/Calico acceptance
+and platform-image provenance remain unverified. The conditionally authorized
+single rehearsal must have zero request intents and cannot imply action permission.
+
+**Next gate:** Render/check all 90 readers, compare the exact 1ce4310 Markdown
+prefix, diff-check and commit ONLY the plan/lineage Markdown/reader pairs. Confirm
+clean exact HEAD and unchanged frozen source, then use reviewed core APIs with
+mode='rehearsal', fresh nonce and one new derived private runtime. Never invoke
+the looping CLI main. Fail closed on source/input drift; stop without further
+automatic native attempt on inconclusive result. Verify all retained checksums,
+protected foreign-state observations and leftovers, then record the actual outcome.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

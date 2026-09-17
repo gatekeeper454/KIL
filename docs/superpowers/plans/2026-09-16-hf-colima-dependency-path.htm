@@ -6,7 +6,7 @@
 <title>Scoped Colima dependency PATH Implementation Plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-16-hf-colima-dependency-path.md">
-<meta name="source-sha256" content="3705e905827ad750137cc3fad070e1e85080fe99b6fd0f2e60624104a5246a5c">
+<meta name="source-sha256" content="2169383baf0b0002f2decdae0f70dffd270bec022426c51a29e521dd0c3f0b98">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,14 +55,14 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-colima-dependency-path.md</code> (<code>3705e905827ad750137cc3fad070e1e85080fe99b6fd0f2e60624104a5246a5c</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-colima-dependency-path.md</code> (<code>2169383baf0b0002f2decdae0f70dffd270bec022426c51a29e521dd0c3f0b98</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Scoped Colima dependency PATH Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-colima-dependency-path.md</code> (<code>3705e905827ad750137cc3fad070e1e85080fe99b6fd0f2e60624104a5246a5c</code>); edit the Markdown source, not this reader.</p></div>
-<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#scoped-colima-dependency-path-implementation-plan">Scoped Colima dependency PATH Implementation Plan</a></li><li class="level-3"><a href="#task-1-one-bounded-runner-dependency-authority-unit">Task 1: One bounded runner dependency-authority unit</a></li><li class="level-3"><a href="#root-verification-and-conditional-fresh-rehearsal">Root verification and conditional fresh rehearsal</a></li><li class="level-2"><a href="#plan-self-review">Plan self-review</a></li></ol></nav></details><div class="reader-layout">
-<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="scoped-colima-dependency-path-implementation-plan" href="#scoped-colima-dependency-path-implementation-plan">Scoped Colima dependency PATH Implementation Plan</a></li><li class="level-3"><a data-section-id="task-1-one-bounded-runner-dependency-authority-unit" href="#task-1-one-bounded-runner-dependency-authority-unit">Task 1: One bounded runner dependency-authority unit</a></li><li class="level-3"><a data-section-id="root-verification-and-conditional-fresh-rehearsal" href="#root-verification-and-conditional-fresh-rehearsal">Root verification and conditional fresh rehearsal</a></li><li class="level-2"><a data-section-id="plan-self-review" href="#plan-self-review">Plan self-review</a></li></ol></nav>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-colima-dependency-path.md</code> (<code>2169383baf0b0002f2decdae0f70dffd270bec022426c51a29e521dd0c3f0b98</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#scoped-colima-dependency-path-implementation-plan">Scoped Colima dependency PATH Implementation Plan</a></li><li class="level-3"><a href="#task-1-one-bounded-runner-dependency-authority-unit">Task 1: One bounded runner dependency-authority unit</a></li><li class="level-3"><a href="#root-verification-and-conditional-fresh-rehearsal">Root verification and conditional fresh rehearsal</a></li><li class="level-2"><a href="#plan-self-review">Plan self-review</a></li><li class="level-2"><a href="#engineering-execution-checkpoint-2026-09-16">Engineering execution checkpoint — 2026-09-16</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="scoped-colima-dependency-path-implementation-plan" href="#scoped-colima-dependency-path-implementation-plan">Scoped Colima dependency PATH Implementation Plan</a></li><li class="level-3"><a data-section-id="task-1-one-bounded-runner-dependency-authority-unit" href="#task-1-one-bounded-runner-dependency-authority-unit">Task 1: One bounded runner dependency-authority unit</a></li><li class="level-3"><a data-section-id="root-verification-and-conditional-fresh-rehearsal" href="#root-verification-and-conditional-fresh-rehearsal">Root verification and conditional fresh rehearsal</a></li><li class="level-2"><a data-section-id="plan-self-review" href="#plan-self-review">Plan self-review</a></li><li class="level-2"><a data-section-id="engineering-execution-checkpoint-2026-09-16" href="#engineering-execution-checkpoint-2026-09-16">Engineering execution checkpoint — 2026-09-16</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
 <h1 id="scoped-colima-dependency-path-implementation-plan">Scoped Colima dependency PATH Implementation Plan</h1>
 <blockquote>
@@ -95,7 +95,7 @@ No new production module or public interface. Add imports shutil/stat and privat
 helpers in the same IO unit; the reference implementation below may be simplified
 only while preserving the approved behavior and every rejection.</p>
 <ul>
-<li>[ ] Write real temporary fixtures and the missing behavior assertion first:</li>
+<li>[x] Write real temporary fixtures and the missing behavior assertion first:</li>
 </ul>
 <pre><code class="language-python">def test_private_start_uses_verified_dependency_path_and_original_colima(self):
     from kil.hf_exploratory_runtime import ExploratoryColimaCommand
@@ -141,16 +141,16 @@ authentication, file bytes/permissions, executable search, directory roster,
 RuntimeAuthority and metadata shape/type checks stay real. Refactor the test-only
 fixture for subsequent cases without adding any test-only production API.</p>
 <ul>
-<li>[ ] Run this exact test -v; expected behavioral assertion FAIL (original
+<li>[x] Run this exact test -v; expected behavioral assertion FAIL (original
 capture argv is bare colima and no authenticated PATH prefix), not an import
 or fixture error. Record RED before any production edit.</li>
-<li>[ ] Add failing start/stop/delete assertions and negative tests for missing/
+<li>[x] Add failing start/stop/delete assertions and negative tests for missing/
 substituted Docker/Kind/kubectl, symlink/relative/noncanonical/separator tools
 paths, extra entries and nonexecutable files. Each requires ValueError and
 capture.assert_not_called(). Existing rejection cases are regressions; do not
 weaken guards to manufacture RED. Add missing/nonregular/nonexecutable Colima
 and original PATH tail/environment preservation cases.</li>
-<li>[ ] Implement private identity/roster/snapshot helpers, closing every fd on
+<li>[x] Implement private identity/roster/snapshot helpers, closing every fd on
 all outcomes, with this complete reference algorithm:</li>
 </ul>
 <pre><code class="language-python">def _dependency_identity(row):
@@ -216,7 +216,7 @@ def _colima_dependency_executable(path):
     return executable, _dependency_identity(row)
 </code></pre>
 <ul>
-<li>[ ] In run(), define the finite route only after exact type/grammar validation:</li>
+<li>[x] In run(), define the finite route only after exact type/grammar validation:</li>
 </ul>
 <pre><code class="language-python">scoped_mutation = type(command) is ExploratoryColimaCommand and command.mutating
 </code></pre>
@@ -227,28 +227,28 @@ environment's PATH to str(tools)+(os.pathsep+original_path if original_path else
 Do not mutate command.env or os.environ. Normalize OSError/Attribute/Key/Type/
 Value dependency failures into ValueError before capture.</p>
 <ul>
-<li>[ ] Extend existing tools-path comparisons to this route. After second manifest
+<li>[x] Extend existing tools-path comparisons to this route. After second manifest
 authentication, re-run the full dependency snapshot and require exact equality;
 recheck original Colima canonical spelling and recorded identity. Keep these
 checks before the existing final adapter validation/fingerprint guard and final
 no-IO manifest/metadata exact consistency block. Preserve existing direct-tool
 executable reauthentication and no further authentication IO before capture.</li>
-<li>[ ] Write failing drift regressions: directory identity replacement, executable
+<li>[x] Write failing drift regressions: directory identity replacement, executable
 bytes or executable permission drift, tools-path replacement during manifest/
 dependency verification, and unexpected entries. Spy wrappers call real guards
 and real manifest verification, mutate only the intended temporary fixture,
 and require zero capture. GREEN each correction before adding the next behavior.</li>
-<li>[ ] Confirm scoped readonly/global Colima and direct tool families retain
+<li>[x] Confirm scoped readonly/global Colima and direct tool families retain
 their original PATH/environment/dispatch. Run focused IO/runtime tests and the
 combined 15 modules below. Self-review scoped diff, append actual-EOF lineage
 with exact prior prefix, render/check readers and diff-check. Commit exact
 source/test + lineage pair only. Release exclusive writer.</li>
-<li>[ ] Independent SPEC then QUALITY review. Correct important findings test-first
+<li>[x] Independent SPEC then QUALITY review. Correct important findings test-first
 and re-review. Final independent whole-change review before root native gate.</li>
 </ul>
 <h3 id="root-verification-and-conditional-fresh-rehearsal">Root verification and conditional fresh rehearsal</h3>
 <ul>
-<li>[ ] Fresh designated-interpreter run of these exact modules:</li>
+<li>[x] Fresh designated-interpreter run of these exact modules:</li>
 </ul>
 <pre><code class="language-text">tests.test_hf_exploratory_runtime tests.test_hf_exploratory_profile
 tests.test_hf_exploratory_evidence tests.test_hf_exploratory_case
@@ -260,7 +260,7 @@ tests.test_v3b2_runtime_inventory_ownership tests.test_v3b2_bootstrap_inventory
 tests.test_v3b2_runtime_image_inventory
 </code></pre>
 <ul>
-<li>[ ] Verify unchanged strict/Native/CLI/accepted artifacts, exact earlier lineage
+<li>[x] Verify unchanged strict/Native/CLI/accepted artifacts, exact earlier lineage
 prefix, reader check, diff check and clean committed source. Record actual counts
 and prior broad-suite limitation, with no merge/PR/all-green assertion.</li>
 <li>[ ] Use the already granted conditional permission only if all repair readiness
@@ -281,6 +281,38 @@ selection, freshness check and unchanged consumer maps to Task 1. Root gates
 cover conditional single native attempt, unchanged strict artifacts and honest
 evidence/reporting. Names match existing APIs; no unrelated refactor or omitted
 authority boundary is planned. No native worker or image audit is authorized.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical CITATION.cff</a>.</p>
+<h2 id="engineering-execution-checkpoint-2026-09-16">Engineering execution checkpoint — 2026-09-16</h2>
+<p>The approved unit is committed at
+8ced033a35b81e0246f661bfc33e9349526bfa03. Fifteen new test methods use real
+temporary filesystem/authority fixtures and bounded negative subcases. Initial
+wiring RED preceded production edits; self-review also exposed and corrected raw
+Colima doubled-separator spelling with an intended pre-fix assertion failure.</p>
+<p>Implementer GREEN: 92 focused tests in 2.837s and 425 required regression tests
+in 87.972s. Root independently ran the exact 15 modules: 425 PASS in 88.760s,
+with bytecode off and ResourceWarning fatal against the unchanged frozen files.
+Independent SPEC passed (64 IO/28 runtime tests; old-code wiring failure also
+reproduced), then QUALITY passed (64 IO/28 runtime), then final whole-change
+review passed (92 focused tests in 4.279s). No actionable findings remained.
+Review checkpoints: 5f3083a, 405c11d and 1ce4310 respectively.</p>
+<p>Only the IO module/tests changed in production/test scope. Native/CLI, strict
+grammar, accepted inputs/local-Envoy evidence and historical failed runtime are
+unchanged. The exact original 1,140,588-byte lineage prefix remains identical;
+each review preserved its complete predecessor prefix and verified 90 readers.
+Read-only original Colima eligibility passed without starting a native process.</p>
+<p>The root's fresh citation-only check ran four tests in 0.054s with the same one
+failure for exactly four immutable historical omissions, no new omission. Earlier
+full discovery (before this repair) ran 1,849 tests with that sole failure and 16
+intentional skips. This is not a fresh full-discovery or all-green assertion.
+Neither receipts nor exemptions were altered; merge/PR remains outside this handoff
+and the externally managed detached workspace is retained.</p>
+<p>Root now renders/checks readers and checkpoints this plan/lineage with exact
+frozen source hashes and a clean HEAD. After that source/input gate, the already
+conditional permission covers ONE fresh request-free private rehearsal through
+the reviewed core APIs only, never the CLI's action loop. Native compatibility
+and successful teardown remain untested at this engineering checkpoint; an
+inconclusive outcome ends the attempt without retry/adoption/action continuation.
+Platform-image provenance and full Kind/Calico acceptance remain unverified.</p>
 <p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical CITATION.cff</a>.</p>
 </article></main>
 </div></div>

@@ -36,7 +36,7 @@ No new production module or public interface. Add imports shutil/stat and privat
 helpers in the same IO unit; the reference implementation below may be simplified
 only while preserving the approved behavior and every rejection.
 
-- [ ] Write real temporary fixtures and the missing behavior assertion first:
+- [x] Write real temporary fixtures and the missing behavior assertion first:
 
 ```python
 def test_private_start_uses_verified_dependency_path_and_original_colima(self):
@@ -84,16 +84,16 @@ authentication, file bytes/permissions, executable search, directory roster,
 RuntimeAuthority and metadata shape/type checks stay real. Refactor the test-only
 fixture for subsequent cases without adding any test-only production API.
 
-- [ ] Run this exact test -v; expected behavioral assertion FAIL (original
+- [x] Run this exact test -v; expected behavioral assertion FAIL (original
   capture argv is bare colima and no authenticated PATH prefix), not an import
   or fixture error. Record RED before any production edit.
-- [ ] Add failing start/stop/delete assertions and negative tests for missing/
+- [x] Add failing start/stop/delete assertions and negative tests for missing/
   substituted Docker/Kind/kubectl, symlink/relative/noncanonical/separator tools
   paths, extra entries and nonexecutable files. Each requires ValueError and
   capture.assert_not_called(). Existing rejection cases are regressions; do not
   weaken guards to manufacture RED. Add missing/nonregular/nonexecutable Colima
   and original PATH tail/environment preservation cases.
-- [ ] Implement private identity/roster/snapshot helpers, closing every fd on
+- [x] Implement private identity/roster/snapshot helpers, closing every fd on
   all outcomes, with this complete reference algorithm:
 
 ```python
@@ -160,7 +160,7 @@ def _colima_dependency_executable(path):
     return executable, _dependency_identity(row)
 ```
 
-- [ ] In run(), define the finite route only after exact type/grammar validation:
+- [x] In run(), define the finite route only after exact type/grammar validation:
 
 ```python
 scoped_mutation = type(command) is ExploratoryColimaCommand and command.mutating
@@ -173,28 +173,28 @@ environment's PATH to str(tools)+(os.pathsep+original_path if original_path else
 Do not mutate command.env or os.environ. Normalize OSError/Attribute/Key/Type/
 Value dependency failures into ValueError before capture.
 
-- [ ] Extend existing tools-path comparisons to this route. After second manifest
+- [x] Extend existing tools-path comparisons to this route. After second manifest
   authentication, re-run the full dependency snapshot and require exact equality;
   recheck original Colima canonical spelling and recorded identity. Keep these
   checks before the existing final adapter validation/fingerprint guard and final
   no-IO manifest/metadata exact consistency block. Preserve existing direct-tool
   executable reauthentication and no further authentication IO before capture.
-- [ ] Write failing drift regressions: directory identity replacement, executable
+- [x] Write failing drift regressions: directory identity replacement, executable
   bytes or executable permission drift, tools-path replacement during manifest/
   dependency verification, and unexpected entries. Spy wrappers call real guards
   and real manifest verification, mutate only the intended temporary fixture,
   and require zero capture. GREEN each correction before adding the next behavior.
-- [ ] Confirm scoped readonly/global Colima and direct tool families retain
+- [x] Confirm scoped readonly/global Colima and direct tool families retain
   their original PATH/environment/dispatch. Run focused IO/runtime tests and the
   combined 15 modules below. Self-review scoped diff, append actual-EOF lineage
   with exact prior prefix, render/check readers and diff-check. Commit exact
   source/test + lineage pair only. Release exclusive writer.
-- [ ] Independent SPEC then QUALITY review. Correct important findings test-first
+- [x] Independent SPEC then QUALITY review. Correct important findings test-first
   and re-review. Final independent whole-change review before root native gate.
 
 ### Root verification and conditional fresh rehearsal
 
-- [ ] Fresh designated-interpreter run of these exact modules:
+- [x] Fresh designated-interpreter run of these exact modules:
 
 ```text
 tests.test_hf_exploratory_runtime tests.test_hf_exploratory_profile
@@ -207,7 +207,7 @@ tests.test_v3b2_runtime_inventory_ownership tests.test_v3b2_bootstrap_inventory
 tests.test_v3b2_runtime_image_inventory
 ```
 
-- [ ] Verify unchanged strict/Native/CLI/accepted artifacts, exact earlier lineage
+- [x] Verify unchanged strict/Native/CLI/accepted artifacts, exact earlier lineage
   prefix, reader check, diff check and clean committed source. Record actual counts
   and prior broad-suite limitation, with no merge/PR/all-green assertion.
 - [ ] Use the already granted conditional permission only if all repair readiness
@@ -229,5 +229,44 @@ selection, freshness check and unchanged consumer maps to Task 1. Root gates
 cover conditional single native attempt, unchanged strict artifacts and honest
 evidence/reporting. Names match existing APIs; no unrelated refactor or omitted
 authority boundary is planned. No native worker or image audit is authorized.
+
+KTP citation: [canonical CITATION.cff](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Engineering execution checkpoint — 2026-09-16
+
+The approved unit is committed at
+8ced033a35b81e0246f661bfc33e9349526bfa03. Fifteen new test methods use real
+temporary filesystem/authority fixtures and bounded negative subcases. Initial
+wiring RED preceded production edits; self-review also exposed and corrected raw
+Colima doubled-separator spelling with an intended pre-fix assertion failure.
+
+Implementer GREEN: 92 focused tests in 2.837s and 425 required regression tests
+in 87.972s. Root independently ran the exact 15 modules: 425 PASS in 88.760s,
+with bytecode off and ResourceWarning fatal against the unchanged frozen files.
+Independent SPEC passed (64 IO/28 runtime tests; old-code wiring failure also
+reproduced), then QUALITY passed (64 IO/28 runtime), then final whole-change
+review passed (92 focused tests in 4.279s). No actionable findings remained.
+Review checkpoints: 5f3083a, 405c11d and 1ce4310 respectively.
+
+Only the IO module/tests changed in production/test scope. Native/CLI, strict
+grammar, accepted inputs/local-Envoy evidence and historical failed runtime are
+unchanged. The exact original 1,140,588-byte lineage prefix remains identical;
+each review preserved its complete predecessor prefix and verified 90 readers.
+Read-only original Colima eligibility passed without starting a native process.
+
+The root's fresh citation-only check ran four tests in 0.054s with the same one
+failure for exactly four immutable historical omissions, no new omission. Earlier
+full discovery (before this repair) ran 1,849 tests with that sole failure and 16
+intentional skips. This is not a fresh full-discovery or all-green assertion.
+Neither receipts nor exemptions were altered; merge/PR remains outside this handoff
+and the externally managed detached workspace is retained.
+
+Root now renders/checks readers and checkpoints this plan/lineage with exact
+frozen source hashes and a clean HEAD. After that source/input gate, the already
+conditional permission covers ONE fresh request-free private rehearsal through
+the reviewed core APIs only, never the CLI's action loop. Native compatibility
+and successful teardown remain untested at this engineering checkpoint; an
+inconclusive outcome ends the attempt without retry/adoption/action continuation.
+Platform-image provenance and full Kind/Calico acceptance remain unverified.
 
 KTP citation: [canonical CITATION.cff](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
