@@ -21863,3 +21863,97 @@ evaluating the conditional one fresh request-free native rehearsal permission;
 any important subsequent finding requires test-first correction and re-review.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## 2026-09-16 — T403 fresh final whole-change review of the Colima dependency PATH unit
+
+**Input:** Fresh independent final Senior Code Reviewer assignment for the
+completed, approved Task 1 mutation-only Colima dependency PATH repair. The
+reviewed source range is 752e61e1a964a6af677b3960c15da3c667f79663 through
+8ced033a35b81e0246f661bfc33e9349526bfa03; the clean docs-only baseline at this
+review's start is 405c11d47143ce43eb38b1c98f86804214ccc754. The complete approved
+contract and written design were supplied. Earlier SPEC/QUALITY results were
+context, not a substitute for reading actual code and tests. The exclusive T403
+writer grant permits only this append, its sibling reader regeneration and their
+exact-path commit. Source and tests remain frozen; the implementation plan was
+not read for instructions.
+
+**Interpretation:** Independently review the bounded two-source-file repair and
+its integration before the root's clean engineering readiness checkpoint and
+conditionally authorized one fresh request-free private rehearsal. Inspect the
+actual diff, full runner/helper and new tests, neighboring read_regular and
+verify_bytes, RuntimeAuthority/adapter guards, finite strict Colima grammar and
+Native observe/version integration. Do not repeat the accepted-result or
+platform-image audit, exercise native services, demand unrelated refactors or
+claim protection against arbitrary hostile in-process races. The finite
+identity/authentication/guard order is the approved boundary, not a transaction,
+external exclusion or zero-TOCTOU guarantee.
+
+**Decision status:** Independent final whole-change review PASS: no actionable
+Critical, Important or Minor findings in this finite repair. This reviewer
+freshly ran tests.test_hf_exploratory_io and tests.test_hf_exploratory_runtime
+together: 92 tests PASS in 4.279 seconds with PYTHONDONTWRITEBYTECODE=1,
+PYTHONPATH=src and ResourceWarning fatal, using the designated virtual-environment
+Python. Earlier 425-test required-module success and RED evidence remain reported
+evidence, not additional runs by this reviewer. Technical repair readiness is
+confirmed by this review; root readiness and the conditional rehearsal remain
+pending. This is not merge authorization, native compatibility or full Kind/
+Calico acceptance. No full-suite all-green claim is made; the known four immutable
+historical citation omissions and sixteen intentional skips remain unchanged.
+
+**Rationale:** Exact-type mutating ExploratoryColimaCommand alone receives the
+copied dependency PATH; its finite start/stop/delete grammar is unchanged. Colima
+is resolved from the original sanitized PATH before priority is granted, checked
+for canonical absolute nonsymlink regular owner-executable identity, dispatched
+internally by that absolute path and rechecked after manifest reauthentication.
+The original PATH tail remains byte-for-byte intact; absent/empty PATH gains no
+new empty search entry. Parent environment, command argv/env, actual passwd HOME
+and the four derived namespace bindings are preserved. Fresh accepted rows come
+from the real checksum-authenticated manifest. Complete bounded snapshots require
+exact docker/kind/kubectl roster, canonical separator-free tools path, single-link
+regular owner-executable files, full accepted SHA/size authentication and retained
+eight-field directory/file identities. Named/fd/canonical guards, repeated roster
+checks and final named-file checks detect the specified finite substitution and
+drift cases; all opened descriptors have finally-block ownership. Two complete
+snapshots span the existing second manifest authentication. Both toolsPath
+comparisons cover scoped mutation, all new authentication IO precedes the final
+real runtime/dispatch guards, and the preserved last no-authentication-IO exact
+manifest/metadata key/row/type consistency checks still precede capture. Supported
+dependency failures normalize to ValueError with no process capture. Readonly
+Colima and direct Docker/Kind/kubectl dispatch retain existing behavior and
+authentication semantics. Native authorization, durable intent and one-shot
+commitment ordering remain untouched. Tests use real temporary RuntimeAuthority,
+filesystem, executable permissions, PATH search and manifest/metadata guards;
+only capture and narrowly identified exact inert executable digest fixtures are
+isolated. Altered payloads fall through to the real verifier. The tests exercise
+the approved mutations, refusals, finite drift, final guard substitutions,
+descriptor cleanup and unchanged consumers/environment.
+
+**Affected artifacts:** Only this actual-EOF lineage append and its regenerated
+HTML reader change in T403. The retained 405c11d baseline Markdown prefix is
+1,277,701 bytes. Frozen IO SHA-256 remains
+05d6024a725d6b3e68b0f9da74384b9c7f9c0af16d6447b5328ccbbf5c7f151f;
+frozen test SHA-256 remains
+5217cc62e024c6f4bee84ab8d7c99bdce143744c5e40110d00f6752e939a506b.
+No source/test edits, native/VM/HTTP/HF/Ollama/image audit, installation, old
+receipt/runtime changes, branch movement, push or worktree operation were
+performed. Native/CLI/strict/public interfaces, accepted inputs/local Envoy,
+artifacts and all deferrals remain unchanged. The requesting-code-review and
+verification-before-completion skills shaped the independent inspection,
+fresh-test evidence and verdict workflow.
+
+**Unresolved questions:** This review cannot establish native Colima startup/
+teardown compatibility, strict full Kind/Calico acceptance or platform-image
+provenance. Root must still verify a clean engineering readiness checkpoint
+before evaluating the existing conditional one-rehearsal permission. No failed
+state adoption, action-mode request or additional automatic attempt is implied.
+
+**Next gate:** Byte-compare the exact retained 405c11d Markdown prefix, render and
+--check all 90 readers, diff-check and verify unchanged frozen source/test hashes.
+Stage and commit exactly this lineage Markdown and HTML reader, verify clean
+status and explicitly release the T403 writer. Root then records its engineering
+readiness checkpoint before any conditionally approved one fresh request-free
+private rehearsal; if that rehearsal fails or is inconclusive, stop without
+another automatic attempt or action-mode continuation. Any important later
+engineering finding requires test-first correction and independent re-review.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
