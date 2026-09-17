@@ -21718,3 +21718,69 @@ attempt, second automatic rehearsal or action-mode continuation is authorized by
 this delegated implementation checkpoint.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T401 — 2026-09-16 — Independent SPEC review of frozen Colima PATH repair
+
+**Input:** Root dispatched a fresh independent SPEC reviewer for the approved
+single-task scoped Colima dependency PATH repair, with complete Task 1 requirements,
+base 752e61e1a964a6af677b3960c15da3c667f79663 and frozen engineering HEAD
+8ced033a35b81e0246f661bfc33e9349526bfa03. The reviewer received an exclusive
+lineage/reader/checkpoint writer grant after assessment, not source/test authority.
+
+**Interpretation:** Inspect actual changed IO source/tests against each supplied
+requirement, using the written approved design and unchanged runtime/input readers
+as context. Implementer/root test reports are not substitutes for independent
+inspection. This is a finite repair review, not a repository security scan,
+hostile-in-process freshness expansion or transaction/zero-TOCTOU guarantee.
+
+**Decision status:** SPEC COMPLIANT CONFIRMED for the frozen repair after source
+and test inspection; no concrete missing, extra or misunderstood work found.
+Independent designated-Python verification passed 64 IO tests in 2.894s and 28
+runtime tests in 0.157s, with bytecode off and ResourceWarning fatal. The start
+wiring test run against the base IO module in memory reproduced one intended
+bare-Colima-argv assertion failure, zero errors, in 0.027s; an initial diagnostic
+harness missing a module spec produced one setup error and is not RED evidence.
+The reported combined 425-test runs remain reported root/implementer evidence,
+not an additional combined run by this reviewer. QUALITY/final review remain
+PENDING; native compatibility and successful teardown are not established.
+
+**Rationale:** Exact-type mutating dispatch alone gains a copied authenticated
+dependency PATH. Original sanitized-PATH Colima is resolved first, raw canonical
+spelling/regular owner-executable identity retained, dispatched absolutely and
+rechecked. The existing IO helper unit authenticates the bounded exact three-child
+roster, single-link executable files and all full bytes against fresh actual
+authenticated-manifest rows; directory/file identities retain all required fields
+and full digests. Initial/final complete snapshots, named/canonical directory guards,
+per-read identities, later-file drift checks and guaranteed descriptor closure
+match the finite contract. Both toolsPath consistency checks include scoped
+mutation; two existing manifest authentications, final real runtime/command guards,
+dispatch fingerprint and exact manifest/metadata checks follow all new auth IO.
+Failure normalization precedes capture. Tests retain real authority, filesystem,
+permissions, executable search, accepted manifest/metadata and guards, isolating
+only capture, exact inert executable digest fixtures and permitted absent/empty
+PATH finder outcomes. Start/stop/delete, refusal/drift/cleanup, immutable ambient
+environment and unchanged readonly/direct-family behavior are covered.
+
+**Affected artifacts:** Only this actual-EOF lineage append and its regenerated
+sibling reader change in the review checkpoint. Frozen source SHA-256 remains
+05d6024a725d6b3e68b0f9da74384b9c7f9c0af16d6447b5328ccbbf5c7f151f;
+frozen test SHA-256 remains
+5217cc62e024c6f4bee84ab8d7c99bdce143744c5e40110d00f6752e939a506b.
+Native/CLI/strict contracts, accepted inputs/local Envoy, deferrals, existing
+receipts/runtime, design/plan and actual tools remain untouched. No native/VM/
+HTTP/HF/Ollama/image audit, install, runtime cleanup, branch/push/worktree operation
+or broader historical-citation policy change was performed.
+
+**Unresolved questions:** Independent QUALITY and final review, clean readiness
+and later root-only conditional one fresh request-free rehearsal remain required.
+Unit success does not establish native compatibility, strict full acceptance or
+platform-image provenance. No further automatic attempt or action mode is implied.
+
+**Next gate:** Byte-compare the exact retained 8ced033 Markdown prefix (1,267,905
+bytes), render/check all 90 readers and diff-check; stage exactly this lineage
+Markdown/reader, commit the review record and release the exclusive writer. Root
+then dispatches independent QUALITY followed by final review before evaluating
+the existing conditional native permission. Any important finding requires
+test-first correction and re-review before readiness.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
