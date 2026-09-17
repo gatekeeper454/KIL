@@ -23717,3 +23717,91 @@ uncertainty ends that permission; no retry/suffix/force/delete/restart/rehearsal
 HF or provenance continuation is inferred.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T430 — 2026-09-17, approved single recovery attempt refused before native action
+
+**Input:** "yes - approved" in response to "Approve one fixed stop-only recovery
+attempt, including live preflight and exclusive evidence creation?"
+
+**Interpretation:** CONFIRMED one fixed-target execution approval, separate from
+engineering. Root alone may invoke the accepted main once at clean reviewed HEAD
+with the actual approval text. No authority to repair/chmod existing private
+parents, relax guards, restart, delete, force, retry, use another receipt suffix,
+operate Ollama, audit images, rehearse or issue HF requests.
+
+**Decision status:** CONFIRMED attempt ENDED with preflight_refused/Stop0/exit1.
+Recovery NOT achieved. Current VM status remains UNOBSERVED; the permission is
+consumed by this refusal even though no stop intent/handoff occurred. Any metadata
+remediation and new attempt are PROPOSED, not approved or performed.
+
+**Rationale/evidence:** Fully read current approved specification and plan,
+including historical versus accepted engineering checkpoints. Existing linked
+managed worktree remains detached; no branch/worktree/install/integration change.
+Clean reviewed HEADf05e25c5d2ac7eefa987fcc43c62da7b63b74c76 and tool/test SHA256
+2b58ab2392543611f64044f5d2624f07edfa03ed4c988e1bff2c03d137ccf864/
+a4ee14ce13dd569bc1a1202ffab3be450fed8bbae954be96b98600caeccaf64f match accepted
+preparation. Fresh focused six teardown regressions6/6.293s OK, bytecode disabled
+and ResourceWarning fatal. The prior674/312.194s engineering result is retained
+historical evidence, not rerun or claimed as fresh native verification.
+
+Scoped pgrep checks for competing harnesses/native client commands failed inside
+the sandbox with "sysmon request failed with error: sysmond service not found";
+both exit3. Systematic debugging tested the environment boundary only: same
+read-only PID-only checks outside returned exit1/empty, meaning no matches, not
+process-list failure. Running host-agent commands were not mutation-client
+matches. This does not establish arbitrary external exclusion/atomicity.
+
+Root warned CPU/RAM may be released while disks remain/native controls may change,
+then invoked only tools/hf_compact_residual_recovery.py main ONCE through the
+approved outside-sandbox route. Required --reviewed-source used the exact HEAD
+above; --execution-approval was verbatim 'yes - approved'; --execute-approved-stop
+was supplied. No runtime/home/tool/receipt overrides or launcher main. Actual
+bounded CLI output and exit1:
+
+```json
+{"error":"recovery_directory_not_private","error_type":"ValueError","outcome":"preflight_refused","preservation":false,"seal_verified":false,"stop_dispatches":0}
+```
+
+Read-only fixed-path stat and actual _new_store ordering localize the blocker:
+.tools is UID501/0700/device16777232/inode612669178, but existing
+.tools/hf-recovery-private is UID501/0755/device16777232/inode612764151.
+The exact private-parent guard requires0700; FileExistsError does not repair the
+directory. Refusal occurs before date/final directory creation, PrivateStore,
+_Native constructor, manual-stop intent or any Colima/Lima/Docker acquisition.
+Date2026-09-17 and fixed manual-stop-254877dc… directories are absent; no new
+recovery seal exists. No alternative evidence directory was invented. This
+record preserves the startup CLI result without pretending it is a new receipt.
+
+Registry/runtime/.colima/_lima/docker-config/runtime-tmp stats are UID501/0700;
+runtime-root device16777232/inode615011851/mode16832/UID501 still matches the
+saved tuple. That metadata does not prove Running/Stopped or all resources'
+preservation. Independently authenticated old SHA256SUMS pin
+d128fd99fcc32391db27804da8be86c0e62b238343b71c7f44009785cba38ad0,
+3979B/UID501/0600/single-link; all46 listed checksums OK after the refusal.
+No original bytes/manifests were regenerated. Origin of the parent's0755 mode
+is not established or attributed to any actor by this diagnosis.
+
+**Affected artifacts:** Factual append-only plan/reader and actual-EOF
+lineage/reader only. Fixed recovery tool/tests and protected production/deploy/
+accepted artifacts/contracts/citation policy remain unchanged. LabLock and
+authenticated retained proof were entered; no new recovery receipt/reservation,
+native VM command/stop, current status acquisition, HF intent/attempt, cleanup,
+guest/disk traversal/hash, SSH compatibility change, chmod/repair, retry/force/
+delete/restart/rehearsal/Ollama/provenance audit. Actual permission is not silently
+reused because stop count is zero.
+
+**Unresolved questions:** Whether to approve a narrow remediation plan for only
+the existing evidence-parent permissions, preserving earlier receipt contents.
+Current VM status/recovery remain unverified; HF readiness still requires native
+compatibility and fresh separately approved request-free rehearsal. Accepted
+local Envoy unchanged, image provenance unverified/full Kind-Calico acceptance
+false. Four historical immutable citation omissions remain disclosed.
+
+**Next gate:** Preserve completef05e25c predecessor lineage prefix1,402,333B;
+regenerate/check94 readers/canonical new citations/protected paths/exact four-file
+documentation diff, commit locally and verify clean exact HEAD. Executing-plans
+checkpoint stops at this preflight refusal. Request direction for narrow
+parent-permission remediation planning; no remediation or new native attempt
+without distinct approval. Do not expand into image audit or live HF testing.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

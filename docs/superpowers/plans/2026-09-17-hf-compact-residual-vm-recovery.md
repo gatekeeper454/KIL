@@ -1501,3 +1501,46 @@ creation. Recovery readiness is not HF readiness; no restart, force, deletion,
 retry, alternate receipt suffix or inferred live continuation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Native attempt record — 2026-09-17
+
+The user answered "yes - approved" to the separate single fixed stop-only
+attempt, including live preflight and exclusive evidence creation. This confirms
+that execution gate only; the earlier unapproved status remains historical.
+Root verified clean reviewed HEADf05e25c5d2ac7eefa987fcc43c62da7b63b74c76 and
+the accepted source/test hashes. Fresh focused baseline6/6.293s OK,
+ResourceWarning fatal. Scoped process-list checks were unavailable inside the
+sandbox; the same read-only checks outside succeeded with no matching competing
+harness/native client commands. Expected running host agents were not treated
+as competing mutation clients; no exclusion/atomic-snapshot guarantee is claimed.
+
+Root invoked the fixed main ONCE, outside the sandbox, with that exact40-hex
+HEAD, --execution-approval 'yes - approved' and --execute-approved-stop.
+Exit1 returned exactly:
+
+```json
+{"error":"recovery_directory_not_private","error_type":"ValueError","outcome":"preflight_refused","preservation":false,"seal_verified":false,"stop_dispatches":0}
+```
+
+Read-only diagnosis confirmed .tools is UID501/0700 but existing
+.tools/hf-recovery-private is UID501/0755 (device16777232/inode612764151).
+_new_store requires each fixed private parent0700 and refused that existing
+directory before creating the date/final evidence directory, constructing
+_Native, creating manual-stop intent or acquiring any Colima/Lima/Docker command.
+The six fixed runtime homes remain UID501/0700; root identity matches the saved
+four-field tuple, but this is not current VM status or full preservation proof.
+The date/final recovery directories remain absent. Independently pinned old
+SHA256SUMS matches3979B/UID501/0600/single-link and all46 checksums pass.
+
+CONFIRMED attempt ENDED: preflight refused, zero stop/HF dispatches, no new seal,
+no native status observation and no recovery achieved. Do not chmod/repair,
+relax guards, retry or choose another suffix. The absence of a stop intent does
+not restore execution permission. Proposed next gate is a separately approved
+narrow parent-permission remediation plan preserving existing receipt contents,
+then engineering verification as needed and NEW explicit single-attempt approval.
+HF compatibility/rehearsal/action gates remain separate. Append-only lineage
+T430 records actual evidence; final reader/prefix/scoped documentation commit
+checks follow. Platform-image provenance remains unverified, accepted local Envoy
+unchanged and full Kind/Calico acceptance false.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
