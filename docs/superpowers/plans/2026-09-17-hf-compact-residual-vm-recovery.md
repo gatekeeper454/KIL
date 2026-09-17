@@ -1315,3 +1315,19 @@ two-stage review, or inline executing-plans with batch checkpoints. Neither
 method selection authorizes Task6.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Engineering execution record — 2026-09-17
+
+The user selected subagent-driven preparation with independent reviews.
+CONFIRMED fixture-only Tasks1–5; Task6 remains separately unapproved. Keep the
+historical method-choice text above as the planning checkpoint, not current status.
+The seven-module scoped baseline passed325 tests in221.476s with bytecode disabled
+and ResourceWarning fatal. No installation or workspace/branch change.
+
+Task1 is VERIFIED: initial missing-tool RED4 explicit assertion failures;
+closed-proof RED1/5 followed by GREEN; final root FileProofTests9/0.068s OK.
+Independent spec review PASS; quality review PASS after adding its minor real
+retained-descriptor substitution regression, independently9/0.092s OK. The tool
+has only internal fixed-target file/ancestry proof; no process/CLI/orchestration.
+No live runtime observation or recovery receipt reservation. Next is Task2 under
+the same preparation approval; subsequent engineering tasks are not yet complete.

@@ -23241,3 +23241,53 @@ two preparation execution methods and wait for that choice. No actual test-first
 implementation, live preflight, stop or new rehearsal under this planning turn.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T424 — 2026-09-17, subagent-driven preparation selected and retained-file Task1 verified
+
+**Input:** User selected "subagent-driven preparation with independent reviews"
+at the clean1953b6ee44d915b6346d812a9079e5670962c879 documentation checkpoint.
+
+**Interpretation:** CONFIRMED execute approved fixture-only engineering Tasks1–5
+continuously with fresh implementers and independent spec-then-quality reviews.
+Task6 live preflight, real evidence reservation and native stop remain UNAPPROVED.
+
+**Decision status:** CONFIRMED Task1 implemented and verified in the one fixed-
+target tool/test. Root owns shared-index commits and append-only records; each
+agent supplied dated lineage facts without concurrent documentation/git writes.
+Existing externally managed detached linked worktree was reverified read-only;
+no new workspace/branch/install. Scoped baseline325 tests/221.476s OK.
+
+**Rationale/evidence:** Implementer observed initial RED4/4 explicit missing-tool
+assertions, GREEN4, then closed-proof RED1/5 followed by GREEN5. Final nine real
+filesystem tests include exact bounded bytes, mode/UID/link/name/ancestor drift,
+loop refusal, retained no-follow descriptors, closed-state no-open refusal,
+authentication-IO substitution, final cross-file checks and real dup2 retained-
+descriptor replacement. Root independently9 tests/0.068s OK; bytecode off and
+ResourceWarning fatal throughout. Independent spec reviewer PASS (8/0.105s);
+quality reviewer no Critical/Important findings, minor permanent descriptor-
+replacement coverage requested/addressed, final9/0.092s OK. Supplementary quality
+fixtures also verified rejected-acquisition cleanup, pins, nonregular inputs and
+same-length mutation. These are engineering fixtures, not native evidence.
+
+**Affected artifacts:** tools/hf_compact_residual_recovery.py and
+tests/test_hf_compact_residual_recovery.py; appended factual plan/reader and this
+actual-EOF lineage/reader. Internal _Files binds directory identity4 and file
+identity8/hash with retained-FD reads and final checks; import has no native or
+fixed-live-path IO and no executable entry. Production sources, previous tests /
+tools, strict contracts, accepted artifacts, citation policy and historical
+receipts/runtime/disks remain unchanged. No Colima/Lima/Docker live acquisition,
+stop/delete/retry/force, HF request, Ollama operation or image audit.
+
+**Unresolved questions:** Tasks2–5 not yet verified; preparation is not ready for
+native execution or HF. Current VM status remains unobserved; historical Running
+is not refreshed by fixtures. Mutable exclusions are internal only; later fixed
+post-stop SSH exception must not relax production guards. Four known historical
+immutable citation omissions remain visible, not repaired/exempted.
+
+**Next gate:** Preserve entire1953b6e predecessor lineage prefix1,370,285B, render /
+check94 readers, verify exact protected paths/diffs and commit only tool/test plus
+plan/lineage Markdown-reader pairs. Then execute Task2 with a fresh implementer
+and independent ordered reviews under existing engineering approval. No native
+preflight, real recovery reservation, stop, restart or new rehearsal.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
