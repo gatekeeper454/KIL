@@ -105,7 +105,7 @@ live guarded authority and actual passwd home. Existing two-field documents,
 capture/binding schemas, seven-file snapshots and five directory rosters unchanged.
 No production consumer changes or new IO after final runner consistency block.
 
-- [ ] **Step 1: Add real short fixture selection and first failing behavior assertions.**
+- [x] **Step 1: Add real short fixture selection and first failing behavior assertions.**
 
 Use this fixture setup in the existing runtime tests and equivalent existing
 setUp methods for every consumer that creates RuntimeAuthority. Cleanup registration
@@ -165,7 +165,7 @@ def test_marker_drift_refuses_before_adapter(self):
             Command(('colima', 'version'), 1), authority)
 ```
 
-- [ ] **Step 2: Run and observe RED before editing production.**
+- [x] **Step 2: Run and observe RED before editing production.**
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_exploratory_runtime.RuntimeTests.test_compact_locator_has_full_receipt_identity_and_durable_binding tests.test_hf_exploratory_runtime.RuntimeTests.test_existing_unmarked_registry_is_not_repaired
@@ -175,7 +175,7 @@ Expected actual assertion failures: old sibling path differs from short locator;
 existing unmarked fixture is silently ignored by old implementation instead of
 refused. Import/setup/typo errors are not accepted RED. Record exact observations.
 
-- [ ] **Step 3: Implement private derivation and retained file authentication.**
+- [x] **Step 3: Implement private derivation and retained file authentication.**
 
 The following complete helper code defines the private selector, byte budget and
 bounded retained authentication. Integrate these with the existing authority in
@@ -229,7 +229,7 @@ def _file_auth(parent, name, fd, identity, expected):
     _file_check(parent, name, fd, identity, expected)
 ```
 
-- [ ] **Step 4: Implement complete two-chain creation and guard integration.**
+- [x] **Step 4: Implement complete two-chain creation and guard integration.**
 
 Use the complete integration below as the planned authority implementation. Keep
 the existing property getters and exact ExploratoryColimaCommand adapter unchanged.
@@ -493,7 +493,7 @@ class RuntimeAuthority:
                 os.close(fd)
 ```
 
-- [ ] **Step 5: Add failing pure compact-path compatibility assertion, then implement that predicate.**
+- [x] **Step 5: Add failing pure compact-path compatibility assertion, then implement that predicate.**
 
 Existing profile test with private selector patched to self.registry:
 
@@ -520,7 +520,7 @@ if not (compact or legacy):
     raise ProfileStateError('exploratory runtime namespace is invalid')
 ```
 
-- [ ] **Step 6: Extend real regression coverage in small observed RED/GREEN cycles.**
+- [x] **Step 6: Extend real regression coverage in small observed RED/GREEN cycles.**
 
 Concrete collision/safe-registry-reuse tests in RuntimeTests:
 
@@ -562,7 +562,7 @@ Use the existing guard-drift/control/adaptor tests as the concrete table pattern
 not production-only test hooks. Every new fix must be preceded by its failing
 assertion. Do not bypass guard/authentication or allocate the real home registry.
 
-- [ ] **Step 7: Verify focused and all 15 required modules, self-review, log and commit exact paths.**
+- [x] **Step 7: Verify focused and all 15 required modules, self-review, log and commit exact paths.**
 
 Run the full command above, then renderer/check and git diff --check. Compare the
 entire predecessor lineage byte prefix before staging. Record actual RED/GREEN
@@ -574,10 +574,10 @@ clean status, tests, self-review and concerns. Do not touch plan/spec or native 
 
 ## Review and root engineering gates
 
-- [ ] Fresh SPEC reviewer independently inspects code against the complete approved contract, with no production edits and a separate append-only review log.
-- [ ] Only after SPEC PASS, fresh QUALITY reviewer checks bounded FD lifecycle, maintainability, real tests and consumer integration. Important findings return to implementer for observed RED/GREEN correction and re-review.
-- [ ] Fresh final reviewer checks the composed whole change and unchanged protected paths.
-- [ ] Root runs fresh 15-module regression, reader check, predecessor-prefix proof, protected source hashes and strict diff check. Checkpoint all engineering and plan/log documents, then require exact clean HEAD before native preparation.
+- [x] Fresh SPEC reviewer independently inspects code against the complete approved contract, with no production edits and a separate append-only review log.
+- [x] Only after SPEC PASS, fresh QUALITY reviewer checks bounded FD lifecycle, maintainability, real tests and consumer integration. Important findings return to implementer for observed RED/GREEN correction and re-review.
+- [x] Fresh final reviewer checks the composed whole change and unchanged protected paths.
+- [x] Root runs fresh 15-module regression, reader check, predecessor-prefix proof, protected source hashes and strict diff check. Checkpoint all engineering and plan/log documents, then require exact clean HEAD before native preparation.
 
 ## One conditional root-only request-free rehearsal
 
@@ -597,5 +597,31 @@ uses; complete proposed integration retains existing unchanged property/control/
 adapter code. No unresolved implementation placeholders or dynamic fallbacks.
 Same-session subagent-driven execution is selected for the already requested
 test-first workflow; no additional design approval is required by this plan.
+
+## Engineering outcome, 2026-09-16
+
+Task 1 is complete at source checkpoint 2b2d891e9c21ba88935817a539f8f0057ec8e473.
+Initial engineering d2b7509 passed 455 required tests. Independent SPEC found
+Python 3.12's real self-symlink Path.resolve RuntimeError was not normalized;
+five actual filesystem cases observed RED before the minimal three-hunk/four-net-
+line correction. Latest worker required suite: 460 tests in 93.919s, OK with
+ResourceWarning fatal. Root independently ran the corrected required suite:
+460 tests in 96.309s, OK. Seven final source/test SHA commitments match that run.
+
+SPEC re-review PASS T415/579fc7b: 145 focused tests, 3.793s. QUALITY PASS
+T416/02d7b2c: 145 tests, 3.801s and 12 evidence tests, 1.148s. Final composed
+PASS T417/58043dc: 157 tests, 4.883s. All use ResourceWarning fatal. Authorized
+whole engineering diff is two source, five existing tests and lineage pair only;
+protected IO/evidence/Native/CLI/strict/accepted paths unchanged. All 92 readers
+verified; original and complete predecessor lineage bytes preserved. Actual
+production location preflight is UID501/Lima98B/Docker71B; registry remains absent.
+
+Fresh broader citation-only check: four tests in 0.081s, one failure for exactly
+the same four immutable ignored historical omissions, no new omission. This is
+not all-green broad discovery or integration approval. Keep the detached externally
+managed worktree and all old runtime/receipt bytes. The one conditional rehearsal
+is still unconsumed at this engineering checkpoint; exact clean-source/input
+checks and actual native result remain the next gate. Unit/review PASS is not
+native readiness or live HF permission.
 
 KTP citation: [canonical CITATION.cff](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

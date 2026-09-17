@@ -22855,3 +22855,66 @@ and attempts plus verified owned teardown is required for HF-test readiness;
 this final review and unit tests alone are not readiness or action approval.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T418 — 2026-09-16, root fresh compact-runtime engineering and single rehearsal gate
+
+**Input:** Written spec approval includes exactly one conditional request-free
+rehearsal after engineering checks. Implementer and independent SPEC, QUALITY and
+final composed reviewers explicitly RELEASED their serialized writer grants;
+latest clean review checkpoint is 58043dcba83a2fa09e76d35ec1f3792159a8ba30.
+
+**Interpretation:** The selected compact-runtime change is engineering-ready,
+not native-tested or HF-action-ready. Root now owns append/render/checkpoint and
+the still-unconsumed one rehearsal-only permission, with no CLI action fallthrough,
+retry, adoption, failed-state erasure or unbound stop/delete.
+
+**Decision status:** CONFIRMED Task 1 engineering complete at final source
+2b2d891e9c21ba88935817a539f8f0057ec8e473. Independent SPEC re-review PASS
+T415 (145 tests/3.793s), QUALITY PASS T416 (145/3.801s plus12/1.148s), final
+composed PASS T417 (157/4.883s), no remaining concrete findings. One Important
+SPEC gap was resolved test-first: five actual Python3.12 self-symlink-home/receipt
+RuntimeError cases before the minimal known-error normalization, not a guard
+bypass. Worker latest required15 PASS460/93.919s; root freshly PASS460/96.309s,
+ResourceWarning fatal. Pre-correction455 results are not latest-source evidence.
+
+**Rationale:** Root confirmed seven final source/test SHA commitments match the
+fresh460 run, protected five IO/evidence/Native/CLI/gitattributes SHA commitments
+unchanged, source/tests identical since2b2 and composed diff only the authorized
+nine engineering paths. Read-only genuine production selector: real/effective
+UID501, canonical actual home, Lima98 bytes/Docker71 bytes below104, registry
+absent/nonsymlink. Earlier accepted input API authentication succeeded with exact
+docker/kind/kubectl roster and48,647,168-byte archive; actual clean-source/input
+rechecks before native allocation remain required, not waived. Both recent failed
+receipts'40 SHA entries verified unchanged, no old sparse disk scan/deletion.
+All92 readers freshly verified before this append; entire original89a641a and
+subsequent predecessor lineage prefixes proved exact. One root diagnostic omitted
+PYTHONPATH and produced ModuleNotFoundError; corrected diagnostic invocation only,
+then successful read-only checks, no implementation/native inference from it.
+
+**Affected artifacts:** Mark actual engineering/review plan steps and append
+explicit outcome without rewriting earlier pending/native history; regenerate
+plan reader and this actual-EOF lineage/reader. No new source/test changes. Keep
+existing detached externally managed workspace, old receipts/runtimes/disk, strict
+contracts, accepted local Envoy and all image/acceptance deferrals. No installation,
+image audit, Ollama operation, native launch, HF request, global/default mutation,
+relocation, cleanup, branch move, merge or push at this engineering checkpoint.
+
+**Unresolved questions:** Native compatibility, complete rehearsal and verified
+owned teardown remain unverified. Fresh citation-only suite4/0.081s has exactly
+the known one failure for the same four immutable historical ignored Markdown
+omissions, none new; broader discovery's16 intentional skips remain disclosed.
+No citation policy/exemption/receipt edits or full-green/integration claim. Platform
+image provenance unverified, full Kind-Calico acceptance false, Envoy unaffected.
+
+**Next gate:** Preserve exact58043dc Markdown prefix1,344,153B through this append,
+render/check92 readers, strict diff/protected source proofs, commit ONLY plan and
+lineage Markdown/reader pairs, confirm exact clean HEAD. Then unchanged outside-
+sandbox check_source and verify_inputs; root ONE fresh constant-mode='rehearsal'
+through LabLock/PrivateStore/BoundedRunner/ExploratoryLifecycle with fresh nonce.
+Do not edit tracked files while it runs. Actual inconclusive/unknown/unbound state
+ends permission without second launch/adoption/unbound stop/delete. Preserve and
+verify checksums/default foreign state/bounded leftovers and log actual outcome.
+Successful readiness still requires complete retained rehearsal plus owned
+teardown; live three-track HF action needs separate explicit approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

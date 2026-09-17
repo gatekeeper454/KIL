@@ -6,7 +6,7 @@
 <title>Compact private HF runtime implementation plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-16-hf-compact-runtime.md">
-<meta name="source-sha256" content="463ec6cb5c8fd8bc5731f2a29b47bae3f61ecefc8f4f049583bb31ba41a83bac">
+<meta name="source-sha256" content="cf329acd038488281c2dad5d7fccce66192f03b9048793f15300163ca02bef93">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,14 +55,14 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-compact-runtime.md</code> (<code>463ec6cb5c8fd8bc5731f2a29b47bae3f61ecefc8f4f049583bb31ba41a83bac</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-compact-runtime.md</code> (<code>cf329acd038488281c2dad5d7fccce66192f03b9048793f15300163ca02bef93</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Compact private HF runtime implementation plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-compact-runtime.md</code> (<code>463ec6cb5c8fd8bc5731f2a29b47bae3f61ecefc8f4f049583bb31ba41a83bac</code>); edit the Markdown source, not this reader.</p></div>
-<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#compact-private-hf-runtime-implementation-plan">Compact private HF runtime implementation plan</a></li><li class="level-2"><a href="#scope-and-commands">Scope and commands</a></li><li class="level-2"><a href="#task-1-compact-authority-pure-paths-and-real-short-fixtures">Task 1: Compact authority, pure paths and real short fixtures</a></li><li class="level-3"><a href="#contract-to-implement">Contract to implement</a></li><li class="level-2"><a href="#review-and-root-engineering-gates">Review and root engineering gates</a></li><li class="level-2"><a href="#one-conditional-root-only-request-free-rehearsal">One conditional root-only request-free rehearsal</a></li><li class="level-2"><a href="#plan-self-review-and-execution-selection">Plan self-review and execution selection</a></li></ol></nav></details><div class="reader-layout">
-<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="compact-private-hf-runtime-implementation-plan" href="#compact-private-hf-runtime-implementation-plan">Compact private HF runtime implementation plan</a></li><li class="level-2"><a data-section-id="scope-and-commands" href="#scope-and-commands">Scope and commands</a></li><li class="level-2"><a data-section-id="task-1-compact-authority-pure-paths-and-real-short-fixtures" href="#task-1-compact-authority-pure-paths-and-real-short-fixtures">Task 1: Compact authority, pure paths and real short fixtures</a></li><li class="level-3"><a data-section-id="contract-to-implement" href="#contract-to-implement">Contract to implement</a></li><li class="level-2"><a data-section-id="review-and-root-engineering-gates" href="#review-and-root-engineering-gates">Review and root engineering gates</a></li><li class="level-2"><a data-section-id="one-conditional-root-only-request-free-rehearsal" href="#one-conditional-root-only-request-free-rehearsal">One conditional root-only request-free rehearsal</a></li><li class="level-2"><a data-section-id="plan-self-review-and-execution-selection" href="#plan-self-review-and-execution-selection">Plan self-review and execution selection</a></li></ol></nav>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-compact-runtime.md</code> (<code>cf329acd038488281c2dad5d7fccce66192f03b9048793f15300163ca02bef93</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#compact-private-hf-runtime-implementation-plan">Compact private HF runtime implementation plan</a></li><li class="level-2"><a href="#scope-and-commands">Scope and commands</a></li><li class="level-2"><a href="#task-1-compact-authority-pure-paths-and-real-short-fixtures">Task 1: Compact authority, pure paths and real short fixtures</a></li><li class="level-3"><a href="#contract-to-implement">Contract to implement</a></li><li class="level-2"><a href="#review-and-root-engineering-gates">Review and root engineering gates</a></li><li class="level-2"><a href="#one-conditional-root-only-request-free-rehearsal">One conditional root-only request-free rehearsal</a></li><li class="level-2"><a href="#plan-self-review-and-execution-selection">Plan self-review and execution selection</a></li><li class="level-2"><a href="#engineering-outcome-2026-09-16">Engineering outcome, 2026-09-16</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="compact-private-hf-runtime-implementation-plan" href="#compact-private-hf-runtime-implementation-plan">Compact private HF runtime implementation plan</a></li><li class="level-2"><a data-section-id="scope-and-commands" href="#scope-and-commands">Scope and commands</a></li><li class="level-2"><a data-section-id="task-1-compact-authority-pure-paths-and-real-short-fixtures" href="#task-1-compact-authority-pure-paths-and-real-short-fixtures">Task 1: Compact authority, pure paths and real short fixtures</a></li><li class="level-3"><a data-section-id="contract-to-implement" href="#contract-to-implement">Contract to implement</a></li><li class="level-2"><a data-section-id="review-and-root-engineering-gates" href="#review-and-root-engineering-gates">Review and root engineering gates</a></li><li class="level-2"><a data-section-id="one-conditional-root-only-request-free-rehearsal" href="#one-conditional-root-only-request-free-rehearsal">One conditional root-only request-free rehearsal</a></li><li class="level-2"><a data-section-id="plan-self-review-and-execution-selection" href="#plan-self-review-and-execution-selection">Plan self-review and execution selection</a></li><li class="level-2"><a data-section-id="engineering-outcome-2026-09-16" href="#engineering-outcome-2026-09-16">Engineering outcome, 2026-09-16</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
 <h1 id="compact-private-hf-runtime-implementation-plan">Compact private HF runtime implementation plan</h1>
 <blockquote>
@@ -150,7 +150,7 @@ live guarded authority and actual passwd home. Existing two-field documents,
 capture/binding schemas, seven-file snapshots and five directory rosters unchanged.
 No production consumer changes or new IO after final runner consistency block.</p>
 <ul>
-<li>[ ] <strong>Step 1: Add real short fixture selection and first failing behavior assertions.</strong></li>
+<li>[x] <strong>Step 1: Add real short fixture selection and first failing behavior assertions.</strong></li>
 </ul>
 <p>Use this fixture setup in the existing runtime tests and equivalent existing
 setUp methods for every consumer that creates RuntimeAuthority. Cleanup registration
@@ -202,7 +202,7 @@ def test_marker_drift_refuses_before_adapter(self):
             Command(('colima', 'version'), 1), authority)
 </code></pre>
 <ul>
-<li>[ ] <strong>Step 2: Run and observe RED before editing production.</strong></li>
+<li>[x] <strong>Step 2: Run and observe RED before editing production.</strong></li>
 </ul>
 <pre><code class="language-sh">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_exploratory_runtime.RuntimeTests.test_compact_locator_has_full_receipt_identity_and_durable_binding tests.test_hf_exploratory_runtime.RuntimeTests.test_existing_unmarked_registry_is_not_repaired
 </code></pre>
@@ -210,7 +210,7 @@ def test_marker_drift_refuses_before_adapter(self):
 existing unmarked fixture is silently ignored by old implementation instead of
 refused. Import/setup/typo errors are not accepted RED. Record exact observations.</p>
 <ul>
-<li>[ ] <strong>Step 3: Implement private derivation and retained file authentication.</strong></li>
+<li>[x] <strong>Step 3: Implement private derivation and retained file authentication.</strong></li>
 </ul>
 <p>The following complete helper code defines the private selector, byte budget and
 bounded retained authentication. Integrate these with the existing authority in
@@ -262,7 +262,7 @@ def _file_auth(parent, name, fd, identity, expected):
     _file_check(parent, name, fd, identity, expected)
 </code></pre>
 <ul>
-<li>[ ] <strong>Step 4: Implement complete two-chain creation and guard integration.</strong></li>
+<li>[x] <strong>Step 4: Implement complete two-chain creation and guard integration.</strong></li>
 </ul>
 <p>Use the complete integration below as the planned authority implementation. Keep
 the existing property getters and exact ExploratoryColimaCommand adapter unchanged.
@@ -524,7 +524,7 @@ class RuntimeAuthority:
                 os.close(fd)
 </code></pre>
 <ul>
-<li>[ ] <strong>Step 5: Add failing pure compact-path compatibility assertion, then implement that predicate.</strong></li>
+<li>[x] <strong>Step 5: Add failing pure compact-path compatibility assertion, then implement that predicate.</strong></li>
 </ul>
 <p>Existing profile test with private selector patched to self.registry:</p>
 <pre><code class="language-python">def test_compact_paths_round_trip_without_live_authority(self):
@@ -546,7 +546,7 @@ if not (compact or legacy):
     raise ProfileStateError('exploratory runtime namespace is invalid')
 </code></pre>
 <ul>
-<li>[ ] <strong>Step 6: Extend real regression coverage in small observed RED/GREEN cycles.</strong></li>
+<li>[x] <strong>Step 6: Extend real regression coverage in small observed RED/GREEN cycles.</strong></li>
 </ul>
 <p>Concrete collision/safe-registry-reuse tests in RuntimeTests:</p>
 <pre><code class="language-python">def test_safe_registry_reuse_does_not_adopt_previous_run(self):
@@ -585,7 +585,7 @@ Use the existing guard-drift/control/adaptor tests as the concrete table pattern
 not production-only test hooks. Every new fix must be preceded by its failing
 assertion. Do not bypass guard/authentication or allocate the real home registry.</p>
 <ul>
-<li>[ ] <strong>Step 7: Verify focused and all 15 required modules, self-review, log and commit exact paths.</strong></li>
+<li>[x] <strong>Step 7: Verify focused and all 15 required modules, self-review, log and commit exact paths.</strong></li>
 </ul>
 <p>Run the full command above, then renderer/check and git diff --check. Compare the
 entire predecessor lineage byte prefix before staging. Record actual RED/GREEN
@@ -596,10 +596,10 @@ source/test paths and lineage Markdown/reader; commit and report exact HEAD,
 clean status, tests, self-review and concerns. Do not touch plan/spec or native state.</p>
 <h2 id="review-and-root-engineering-gates">Review and root engineering gates</h2>
 <ul>
-<li>[ ] Fresh SPEC reviewer independently inspects code against the complete approved contract, with no production edits and a separate append-only review log.</li>
-<li>[ ] Only after SPEC PASS, fresh QUALITY reviewer checks bounded FD lifecycle, maintainability, real tests and consumer integration. Important findings return to implementer for observed RED/GREEN correction and re-review.</li>
-<li>[ ] Fresh final reviewer checks the composed whole change and unchanged protected paths.</li>
-<li>[ ] Root runs fresh 15-module regression, reader check, predecessor-prefix proof, protected source hashes and strict diff check. Checkpoint all engineering and plan/log documents, then require exact clean HEAD before native preparation.</li>
+<li>[x] Fresh SPEC reviewer independently inspects code against the complete approved contract, with no production edits and a separate append-only review log.</li>
+<li>[x] Only after SPEC PASS, fresh QUALITY reviewer checks bounded FD lifecycle, maintainability, real tests and consumer integration. Important findings return to implementer for observed RED/GREEN correction and re-review.</li>
+<li>[x] Fresh final reviewer checks the composed whole change and unchanged protected paths.</li>
+<li>[x] Root runs fresh 15-module regression, reader check, predecessor-prefix proof, protected source hashes and strict diff check. Checkpoint all engineering and plan/log documents, then require exact clean HEAD before native preparation.</li>
 </ul>
 <h2 id="one-conditional-root-only-request-free-rehearsal">One conditional root-only request-free rehearsal</h2>
 <ul>
@@ -618,6 +618,28 @@ uses; complete proposed integration retains existing unchanged property/control/
 adapter code. No unresolved implementation placeholders or dynamic fallbacks.
 Same-session subagent-driven execution is selected for the already requested
 test-first workflow; no additional design approval is required by this plan.</p>
+<h2 id="engineering-outcome-2026-09-16">Engineering outcome, 2026-09-16</h2>
+<p>Task 1 is complete at source checkpoint 2b2d891e9c21ba88935817a539f8f0057ec8e473.
+Initial engineering d2b7509 passed 455 required tests. Independent SPEC found
+Python 3.12's real self-symlink Path.resolve RuntimeError was not normalized;
+five actual filesystem cases observed RED before the minimal three-hunk/four-net-
+line correction. Latest worker required suite: 460 tests in 93.919s, OK with
+ResourceWarning fatal. Root independently ran the corrected required suite:
+460 tests in 96.309s, OK. Seven final source/test SHA commitments match that run.</p>
+<p>SPEC re-review PASS T415/579fc7b: 145 focused tests, 3.793s. QUALITY PASS
+T416/02d7b2c: 145 tests, 3.801s and 12 evidence tests, 1.148s. Final composed
+PASS T417/58043dc: 157 tests, 4.883s. All use ResourceWarning fatal. Authorized
+whole engineering diff is two source, five existing tests and lineage pair only;
+protected IO/evidence/Native/CLI/strict/accepted paths unchanged. All 92 readers
+verified; original and complete predecessor lineage bytes preserved. Actual
+production location preflight is UID501/Lima98B/Docker71B; registry remains absent.</p>
+<p>Fresh broader citation-only check: four tests in 0.081s, one failure for exactly
+the same four immutable ignored historical omissions, no new omission. This is
+not all-green broad discovery or integration approval. Keep the detached externally
+managed worktree and all old runtime/receipt bytes. The one conditional rehearsal
+is still unconsumed at this engineering checkpoint; exact clean-source/input
+checks and actual native result remain the next gate. Unit/review PASS is not
+native readiness or live HF permission.</p>
 <p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical CITATION.cff</a>.</p>
 </article></main>
 </div></div>
