@@ -24166,3 +24166,67 @@ No new preparation approval needed. Root-only actual mode-change and separate
 native one-stop attempt each still require NEW explicit execution approval.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T436 — 2026-09-17, fixture-only entry-consumed permission syscall Task3 accepted
+
+**Input:** Approved fixture preparation; fresh permission_task3_impl Task3
+report, independent SPEC/QUALITY actual-code reviews by permission_task1_spec/
+quality and root verification after clean Task2c47bcc9 checkpoint.
+
+**Interpretation:** Complete dedicated preparation's syscall/error primitives
+with genuine tests on owned temporary directories only, not actual evidence
+permissions/lock/receipts/runtime/native state. Root keeps sole docs/lineage/git
+writer ownership and separate live approval gates.
+
+**Decision status:** CONFIRMED Task3 implemented/test-first verified and SPEC/
+QUALITY accepted; Tasks4–5 still pending. No actual permission attempt consumed,
+no native recovery or HF readiness claim.
+
+**Rationale/evidence:** Implementer reported RED3 missing_Attempt/_Errors0.022s
+before addition, focusedGREEN3/0.024s and whole17/0.208s. Root inspected actual
+two-file diff and ran17/0.237s OK, fatal ResourceWarning. Private _Attempt consumes
+one entry before the sole fixed os.fchmod(fd,0700), marks returned only after
+normal result, keeps slot lost after exception even if fixture mode actually
+changed700, and refuses reentry without another syscall/rollback. Observed mode
+does not establish certainty or complete postverification.
+
+_Errors retains at most16 records, UTF8 type128B/message4096B; excess records or
+truncation flag overflow rather than discard failure into success. UTF8 boundary
+handling/surrogate backslash rendering and failed exception string conversion
+are bounded. Existing canonical JSON rejects NaN. No result/CLI/source/account
+or actual dispatch orchestration introduced; previous ancestry/private pins/
+existing-only lock/child commitments/strict post-baseline guard remain intact.
+
+Independent SPEC17/0.330s plus3 boundary/canonical probes0.005s PASS. Independent
+QUALITY17/0.245s PASS with real failed syscall/refused retry, multibyte truncation,
+surrogate serialization, failed conversion and exact16-record boundary probes.
+No Critical/Important/Minor findings. Final root17/0.397s exit0 OK with ResourceWarning
+fatal. Tests use real owned target FD/mode change and narrowly lost-result fault,
+not mocked successful filesystem proof; payload/seal/child-mode scope preserved.
+
+Final toolSHA2564066b3694062c1fef8ba9427e56e47f6037e760a1b9f1da571e9227546dc4a4b;
+testsSHA256c807d84b718522a3c3c884ec83d18a62812b0980aa3b02c1cc84d63984b0fc32.
+Protected source diff empty; completec47bcc9 predecessor lineage prefix1,431,086B
+preserved before this append. Reader/scope/clean checkpoint verification follows.
+
+**Affected artifacts:** New permission tool/tests, Task3 plan checks/results/
+reader and this actual-EOF lineage/reader only. Approved spec/accepted recovery/
+production/deploy/artifacts untouched by our work. Actual private target/lock/
+receipt/runtime not inspected or modified. No actual permission/VM-status/native
+operation, HF/Ollama/rehearsal/image/SSH audit, new private evidence, retry,
+rollback/force/delete/restart. Syscalls recorded above address temporary fixtures.
+
+**Unresolved questions:** Task4 complete source/account/lock/metadata/once/post/
+all-teardown outcome and CLI integration, Task5 adversarial review/root regressions.
+Live mode/VM status still unrefreshed,0755 origin unestablished; future preflight/HF
+readiness not promised. Local Envoy unchanged/platform provenance unverified/full
+Kind-Calico acceptance false; four immutable citation omissions remain untouched.
+
+**Next gate:** Preserve fullc47bcc9 prefix1,431,086B, verify96 readers/canonical
+citation/exact protected scope and clean scoped local commit. Fresh Task4 worker
+implements complete strict non-action import/arg rejection and truthful outcome
+integration test-first; SPEC then QUALITY/root verification. Live mode-change
+and subsequent native one-stop each remain NEW separately approved root-only
+actions after complete verified preparation, never implicit continuation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

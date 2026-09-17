@@ -229,3 +229,50 @@ class ProofTests(Fixture):
             self.unchanged_receipts()
         finally:
             proof.close()
+
+class AttemptTests(Fixture):
+    def test_one_real_fchmod_then_reentry_refuses_without_rollback(self):
+        fd = os.open(self.target, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        self.addCleanup(os.close, fd)
+        original = os.fchmod
+        calls = []
+        def change(descriptor, mode):
+            calls.append((descriptor, mode))
+            return original(descriptor, mode)
+        attempt = self.tool._Attempt()
+        with patch.object(self.tool.os, 'fchmod', side_effect=change):
+            attempt.enter(fd)
+            with self.assertRaises(ValueError): attempt.enter(fd)
+        self.assertEqual(calls, [(fd, 0o700)])
+        self.assertEqual(attempt.attempts, 1)
+        self.assertTrue(attempt.returned)
+        self.assertEqual(stat.S_IMODE(self.target.stat().st_mode), 0o700)
+        self.unchanged_receipts()
+
+    def test_raised_result_after_real_change_stays_consumed_uncertain(self):
+        fd = os.open(self.target, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        self.addCleanup(os.close, fd)
+        original = os.fchmod
+        def lost(descriptor, mode):
+            original(descriptor, mode)
+            raise OSError('lost syscall result')
+        attempt = self.tool._Attempt()
+        with patch.object(self.tool.os, 'fchmod', side_effect=lost) as change:
+            with self.assertRaises(OSError): attempt.enter(fd)
+            with self.assertRaises(ValueError): attempt.enter(fd)
+        self.assertEqual(change.call_count, 1)
+        self.assertEqual(attempt.attempts, 1)
+        self.assertFalse(attempt.returned)
+        self.assertEqual(stat.S_IMODE(self.target.stat().st_mode), 0o700)
+
+    def test_error_count_and_utf8_bounds_never_discard_failure_into_success(self):
+        errors = self.tool._Errors()
+        for index in range(17): errors.add(OSError('failure ' + str(index)))
+        self.assertEqual(len(errors.rows), 16)
+        self.assertTrue(errors.overflow)
+        long = self.tool._Errors()
+        long.add(ValueError('é' * 4097))
+        self.assertTrue(long.overflow)
+        self.assertLessEqual(len(long.rows[0]['message'].encode('utf-8')), 4096)
+        long.add(ValueError('\udcff'))
+        self.assertTrue(long.rows)

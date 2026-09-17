@@ -25,6 +25,39 @@ def _full(row):
     return (row.st_dev, row.st_ino, row.st_mode, row.st_uid, row.st_gid, row.st_nlink, row.st_size, row.st_mtime_ns, row.st_ctime_ns)
 def _close_fd(fd):
     os.close(fd)
+
+class _Attempt:
+    def __init__(self):
+        self.attempts = 0
+        self.returned = False
+    def enter(self, fd):
+        if self.attempts:
+            raise ValueError('permission_slot_already_consumed')
+        self.attempts = 1
+        os.fchmod(fd, 0o700)
+        self.returned = True
+
+class _Errors:
+    def __init__(self):
+        self.rows = []
+        self.overflow = False
+    def add(self, error):
+        if len(self.rows) >= 16:
+            self.overflow = True
+            return
+        def bound(value, maximum):
+            data = value.encode('utf-8', errors='backslashreplace')
+            if len(data) > maximum:
+                self.overflow = True
+            return data[:maximum].decode('utf-8', errors='ignore')
+        try:
+            message = str(error)
+        except BaseException:
+            message = 'exception message conversion failed'
+            self.overflow = True
+        self.rows.append({'type': bound(type(error).__name__, 128),
+                          'message': bound(message, 4096)})
+
 class _Directories:
     def __init__(self):
         self.records = {}

@@ -619,7 +619,7 @@ class _Proof:
 
 **Files:** Append only the new tool/tests. No actual target syscall.
 
-- [ ] Append this real-fixture slot/error test block first.
+- [x] Append this real-fixture slot/error test block first.
 
 <!-- permission-tests -->
 ```python
@@ -675,13 +675,13 @@ class AttemptTests(Fixture):
         self.assertTrue(long.rows)
 ```
 
-- [ ] Run RED, expected missing `_Attempt`/`_Errors`, nonzero:
+- [x] Run RED, expected missing `_Attempt`/`_Errors`, nonzero:
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_recovery_parent_permissions.AttemptTests
 ```
 
-- [ ] Append this complete single-entry implementation.
+- [x] Append this complete single-entry implementation.
 
 <!-- permission-tool -->
 ```python
@@ -721,7 +721,7 @@ class _Errors:
                           'message': bound(message, 4096)})
 ```
 
-- [ ] Repeat Task3 command and whole module; require actual OK and one syscall
+- [x] Repeat Task3 command and whole module; require actual OK and one syscall
   only on fixtures. Spec/quality review, record results, exact-path commit:
   `feat: consume permission syscall slot before entry`.
 
@@ -1510,3 +1510,17 @@ pending; no actual private-target/VM observation or permission attempt consumed.
 Final Task2 root whole14/0.196s OK and actual tool/test hashes match the reviewed
 values above; Task2 engineering acceptance confirmed. Scoped checkpoint/readers
 precede fresh Task3. Live permission and recovery remain separately unapproved.
+
+Task3 fresh permission_task3_impl completed intended missing_Attempt/_Errors
+RED3/0.022s before code, focusedGREEN3/0.024s and whole17/0.208s. Root read actual
+diff and ran17/0.237s OK. Independent SPEC17/0.330s plus3 error-boundary probes/
+0.005s PASS; QUALITY17/0.245s plus realfailedsyscall/refusedretry, UTF8/surrogate/
+failedexceptionconversion/exact16-boundary probes PASS. No review findings.
+Actual toolSHA2564066b3694062c1fef8ba9427e56e47f6037e760a1b9f1da571e9227546dc4a4b;
+testsSHA256c807d84b718522a3c3c884ec83d18a62812b0980aa3b02c1cc84d63984b0fc32.
+Slot consumed before fixed700 fchmod, known returned versus uncertain result
+remain distinct from observed mode; no reentry/rollback. Error bounds retain
+failure/overflow rather than claiming clean. Prior proof guards untouched.
+Final root whole17/0.397s OK, ResourceWarning fatal. Only owned temporary fixtures
+received syscalls; actual target/VM unobserved. Readers/scoped checkpoint precede
+Task4 orchestration; no actual permission/recovery authority granted.
