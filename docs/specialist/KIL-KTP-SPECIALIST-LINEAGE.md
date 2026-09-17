@@ -23439,3 +23439,88 @@ genuine REDs and ordered independent reviews under existing engineering approval
 No actual VM preflight/evidence reservation/stop until separate execution approval.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T427 — 2026-09-17, bounded Task4a evidence primitives independently verified
+
+**Input:** Continue subagent-driven preparation with independent reviews from
+Task3 checkpoint34bb9656d8041ecf4a92ca13f67a6960cd3c43f2.
+
+**Interpretation:** CONFIRMED fixture-only engineering within approved Tasks1–5.
+The fresh Task4 implementer requested a bounded evidence-primitives checkpoint
+because transaction integration requires additional fresh context. Root accepted
+this execution split, not a new design/authority expansion; no Task5 advancement.
+The implementer explicitly handed off DONE_WITH_CONCERNS with the remaining
+Task4b work enumerated. Root owns exact commits and append-only shared records.
+
+**Decision status:** CONFIRMED Task4a complete after ordered independent spec
+then fresh quality review and fresh root verification. Task4 as a whole remains
+INCOMPLETE: stop grammar, intent composition, recover/CLI and composed lifecycle
+tests are pending Task4b. Task5 remains pending; Task6 native execution UNAPPROVED.
+
+**Rationale/evidence:** _Once consumes its slot before exclusive durable intent
+write, including file/directory fsync, check failure and uncertain dispatch;
+no retry restores it. _new_store creates only missing owned0700 private parents,
+anchors retained ancestry and exclusively creates the fixed new PrivateStore;
+preexisting state/alternate target/unsafe parent refuse without repair or suffix.
+Empty UID0600 single-link lock held FD and named full eight-field metadata are
+bound; real constructor/binding failures close owned descriptors. _seal validates
+safe bounded names, final256-file roster, UID0600 regular single-link evidence,
+8MiB per file and256MiB aggregate including manifest; covers lock/journal and
+all new evidence, closes proofs after late content/roster/manifest-fsync IO,
+never repairs/reseals. Accepted-manifest repeated-guard descriptor counts4 vs1
+demonstrated a genuine leak RED; reusing the retained record preserves current
+FD bytes/pin and final named/FD metadata authentication.
+
+Missing-feature REDs: Once3 failures, store4, seal5 tests/13 failing subcases;
+each preceded its GREEN implementation. Boundary/cleanup additions are honestly
+coverage-only, not retroactively claimed REDs. Independent spec review reproduced
+P2 aggregate undercount: pre-read stat size could differ from a later authenticated
+new version, permitting actual268,438,008B beyond268,435,456B. Implementer genuine
+growth RED repeated1/3.010s accepted268,438,104B (fixture names/manifest lengths
+differ); same-size content-change RED1/0.029s also preceded the minimum fix.
+Full observed-to-retained fid8 continuity plus len(authenticated payload) counts
+now refuse observed changes and close actual-byte budgets; focused GREEN2/0.082s.
+Spec's original delegated-real-IO growth probe independently refuses before
+SHA256SUMS creation/0.091s. No passing filesystem-guard stubs or live HF finding.
+
+Final implementer154/39.366s OK; spec re-review PASS154/34.123s; fresh independent
+quality PASS154/39.123s, no Critical/Important findings, plus four independent
+temporary-file probes/0.064s: late roster/lock replacement during manifest fsync
+refuses and retained proof FDs close on success/refusal. Root fresh local+IO+
+native+Colima-inventory+journal regression427/218.144s OK, bytecode disabled and
+ResourceWarning fatal. Candidate hashes unchanged before/after the run. Earlier
+root425/214.386s and related pre-fix runs are superseded, not final acceptance.
+
+Quality Minor: module prose still says only retain/re-authenticate; update with
+Task4b CLI, whose absence is currently intentional. Nonblocking observation:
+identical-byte manifest replacement during initial fsync is accepted through
+fresh digest/length and retained current full identity; approved Task4a does not
+separately pin the original manifest-writer inode. Disclosed, not treated as an
+authorization to alter production PrivateStore or weaken any original commitment.
+The separately explicit durable manual-intent contract remains a Task4b gate.
+
+**Affected artifacts:** Only tools/hf_compact_residual_recovery.py and
+tests/test_hf_compact_residual_recovery.py executable changes; factual append to
+plan/reader and actual-EOF lineage/reader. Production sources, earlier tools/tests,
+strict contracts, accepted artifacts, citation policy and original receipts/
+runtime/disks remain unchanged. All new component fixture I/O uses real temporary
+owned paths. Actual Colima/Lima/Docker native activity ZERO; generic existing IO
+tests may spawn owned child Python processes. No actual recovery reservation,
+runtime/receipt opening, live preflight/stop/delete/force/retry, HF request,
+Ollama operation, image audit, production SSH fix or new rehearsal.
+
+**Unresolved questions:** Remaining Task4b transaction and Task5 final acceptance
+are unverified. Current VM remains unobserved; historical Running is not refreshed
+by fixture tests. Accepted local Envoy unchanged; image provenance unverified/full
+Kind-Calico acceptance false. Four immutable historical citation omissions remain
+disclosed, neither repaired nor exempted.
+
+**Next gate:** Preserve entire34bb965 predecessor lineage prefix1,383,427B;
+render/check94 readers and protected/exact scoped paths, commit only tool/test
+plus plan/lineage Markdown-reader pairs. Fresh-context Task4b implementer carries
+held LabLock, original46, runtime/native/store and final metadata proofs through
+all evidence/seal reads/writes/fsyncs before success/preservation return; genuine
+REDs and ordered independent reviews required. No actual live preflight/evidence
+reservation/stop until separate execution approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

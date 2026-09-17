@@ -983,6 +983,30 @@ class Task3NativeGrammarTests(unittest.TestCase):
         self.assertEqual(os.fstat(retained[0][1]).st_ino, self.lima.stat().st_ino)
         self.assertEqual(retained[0][3], hashlib.sha256(self.lima.read_bytes()).hexdigest())
 
+    def test_repeated_guards_reuse_one_retained_manifest_descriptor(self):
+        native = self.native()
+        def records():
+            return [row for row in native.receipt.files if row[0] == self.manifest]
+        self.assertEqual(len(records()), 1)
+        descriptor = records()[0][1]
+        for _ in range(3): native.guard()
+        self.assertEqual(len(records()), 1)
+        self.assertEqual(records()[0][1], descriptor)
+
+    def test_reused_manifest_refuses_mutation_during_later_real_lima_read(self):
+        native = self.native()
+        real_read, changed = self.tool.read_regular, False
+        def read_then_mutate(path, maximum):
+            nonlocal changed
+            payload = real_read(path, maximum)
+            if path == self.lima and not changed:
+                changed = True
+                self.manifest.write_bytes(b'changed manifest\n')
+            return payload
+        with patch.object(self.tool, 'read_regular', side_effect=read_then_mutate):
+            with self.assertRaises(ValueError): native.guard()
+        self.assertTrue(changed)
+
     def test_guard_rejects_new_higher_priority_locator_during_last_lima_read(self):
         earlier = self.root / 'earlier-bin'; earlier.mkdir(mode=0o700)
         native = self.native(original_path=str(earlier) + os.pathsep + str(self.lima_dir))
@@ -1740,6 +1764,382 @@ class Task3IntegratedPreflightTests(unittest.TestCase, RetainedFixture):
             changed = True
         with patch.object(self.tool.os, 'getuid', side_effect=lambda: uid + 1 if changed else uid):
             self.last_auth_mutation(native, change)
+
+
+class Task4OnceTests(unittest.TestCase):
+    def setUp(self):
+        self.tool = load_tool()
+        self.temporary = tempfile.TemporaryDirectory(prefix='kil-task4-once-', dir='/private/tmp')
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        self.store = self.tool.PrivateStore(self.root / 'recovery')
+        self.addCleanup(self.store.close)
+
+    def test_once_persists_exact_intent_before_check_and_only_dispatch(self):
+        self.assertTrue(hasattr(self.tool, '_Once'), 'durable one-stop gate is missing')
+        once = self.tool._Once(self.store)
+        payload, events = canonical({'max_native_mutations': 1}), []
+        def check():
+            self.assertTrue(once.used)
+            self.assertEqual((self.store.path / 'manual-stop-intent.json').read_bytes(), payload)
+            events.append('check')
+        def dispatch():
+            events.append('dispatch')
+            return 'returned'
+        self.assertEqual(once.send(payload, check, dispatch), 'returned')
+        with self.assertRaises(ValueError): once.send(payload, check, dispatch)
+        self.assertEqual(events, ['check', 'dispatch'])
+
+    def test_once_fsync_failure_consumes_slot_before_check_or_dispatch(self):
+        self.assertTrue(hasattr(self.tool, '_Once'), 'durable one-stop gate is missing')
+        once = self.tool._Once(self.store)
+        events, failure = [], OSError('fixture fsync failure')
+        with patch.object(self.tool.os, 'fsync', side_effect=failure):
+            with self.assertRaises(OSError) as raised:
+                once.send(b'{}\n', lambda: events.append('check'), lambda: events.append('dispatch'))
+        self.assertIs(raised.exception, failure)
+        self.assertTrue(once.used)
+        with self.assertRaises(ValueError): once.send(b'{}\n', lambda: None, lambda: None)
+        self.assertEqual(events, [])
+
+    def test_once_check_failure_and_dispatch_uncertainty_never_retry(self):
+        self.assertTrue(hasattr(self.tool, '_Once'), 'durable one-stop gate is missing')
+        for stage in ('check', 'dispatch'):
+            with self.subTest(stage=stage):
+                store = self.tool.PrivateStore(self.root / stage)
+                self.addCleanup(store.close)
+                once, events = self.tool._Once(store), []
+                failure = OSError('fixture ' + stage)
+                def check():
+                    events.append('check')
+                    if stage == 'check': raise failure
+                def dispatch():
+                    events.append('dispatch')
+                    raise failure
+                with self.assertRaises(OSError) as raised: once.send(b'{}\n', check, dispatch)
+                self.assertIs(raised.exception, failure)
+                with self.assertRaises(ValueError): once.send(b'{}\n', check, dispatch)
+                self.assertEqual(events, ['check'] if stage == 'check' else ['check', 'dispatch'])
+
+    def test_once_preexisting_intent_is_never_adopted_or_overwritten(self):
+        self.store.write('manual-stop-intent.json', b'pending old intent\n')
+        once, events = self.tool._Once(self.store), []
+        with self.assertRaises(FileExistsError):
+            once.send(b'new intent\n', lambda: events.append('check'), lambda: events.append('dispatch'))
+        self.assertTrue(once.used)
+        with self.assertRaises(ValueError): once.send(b'new intent\n', lambda: None, lambda: None)
+        self.assertEqual(events, [])
+        self.assertEqual((self.store.path / 'manual-stop-intent.json').read_bytes(), b'pending old intent\n')
+
+    def test_once_directory_fsync_failure_is_not_durable_authority(self):
+        once, events = self.tool._Once(self.store), []
+        real_fsync, calls = os.fsync, []
+        failure = OSError('fixture directory fsync failure')
+        def sync(fd):
+            calls.append(fd)
+            if fd == self.store._directory: raise failure
+            return real_fsync(fd)
+        with patch.object(self.tool.os, 'fsync', side_effect=sync):
+            with self.assertRaises(OSError) as raised:
+                once.send(b'{}\n', lambda: events.append('check'), lambda: events.append('dispatch'))
+        self.assertIs(raised.exception, failure)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(once.used)
+        self.assertEqual(events, [])
+
+
+class Task4StoreTests(unittest.TestCase):
+    def setUp(self):
+        self.tool = load_tool()
+        self.temporary = tempfile.TemporaryDirectory(prefix='kil-task4-store-', dir='/private/tmp')
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        self.recovery = self.root / '.tools/hf-recovery-private/2026-09-17' / ('manual-stop-' + self.tool.DIGEST)
+        selector = patch.multiple(self.tool, REPOSITORY=self.root, RECOVERY=self.recovery, UID=os.geteuid())
+        selector.start(); self.addCleanup(selector.stop)
+        self.proof = self.tool._Files(); self.addCleanup(self.proof.close)
+
+    def new_store(self):
+        self.assertTrue(hasattr(self.tool, '_new_store'), 'anchored exclusive recovery store is missing')
+        store = self.tool._new_store(self.proof)
+        self.addCleanup(store.close)
+        return store
+
+    def test_new_store_creates_only_fixed_private_parents_and_exclusive_receipt(self):
+        store = self.new_store()
+        for path in (self.root / '.tools', self.recovery.parent.parent, self.recovery.parent, self.recovery):
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o700)
+            self.assertEqual(path.stat().st_uid, os.geteuid())
+            self.assertIn(path, self.proof.directories)
+        self.assertEqual(store.path, self.recovery)
+        lock = [record for record in self.proof.files if record[0] == self.recovery / 'lock']
+        self.assertEqual(len(lock), 1)
+        self.assertEqual(lock[0][2], self.tool._fid(os.fstat(store._lock)))
+        self.assertEqual(lock[0][2][5], 0)
+        with self.assertRaises((ValueError, FileExistsError)): self.new_store()
+        self.assertEqual([p.name for p in self.recovery.parent.iterdir()], [self.recovery.name])
+
+    def test_new_store_refuses_unsafe_existing_parent_without_repair(self):
+        parent = self.root / '.tools'; parent.mkdir(mode=0o755)
+        with self.assertRaises(ValueError): self.new_store()
+        self.assertEqual(stat.S_IMODE(parent.stat().st_mode), 0o755)
+        self.assertFalse(self.recovery.parent.parent.exists())
+
+    def test_new_store_refuses_symlink_parent_without_following(self):
+        target = self.root / 'target'; target.mkdir(mode=0o700)
+        (self.root / '.tools').symlink_to(target, target_is_directory=True)
+        with self.assertRaises(ValueError): self.new_store()
+        self.assertEqual(list(target.iterdir()), [])
+
+    def test_new_store_refuses_parent_reanchored_during_real_constructor(self):
+        self.assertTrue(hasattr(self.tool, '_new_store'), 'anchored exclusive recovery store is missing')
+        real_fsync, changed = os.fsync, False
+        def sync_then_replace(fd):
+            nonlocal changed
+            result = real_fsync(fd)
+            if not changed and self.recovery.exists():
+                changed = True
+                self.recovery.parent.rename(self.recovery.parent.with_name('old-date'))
+                self.recovery.parent.mkdir(mode=0o700)
+            return result
+        with patch.object(self.tool.os, 'fsync', side_effect=sync_then_replace):
+            with self.assertRaises((OSError, ValueError)): self.new_store()
+        self.assertTrue(changed)
+        self.assertFalse(self.recovery.exists())
+
+    def test_new_store_closes_constructor_descriptors_after_real_fsync_failure(self):
+        opened, real_open, real_fsync = [], os.open, os.fsync
+        def tracked_open(*args, **kwargs):
+            fd = real_open(*args, **kwargs)
+            opened.append(fd)
+            return fd
+        def sync(fd):
+            if self.recovery.exists(): raise OSError('fixture constructor fsync failure')
+            return real_fsync(fd)
+        with patch.object(self.tool.os, 'open', side_effect=tracked_open), \
+             patch.object(self.tool.os, 'fsync', side_effect=sync):
+            with self.assertRaises(OSError): self.new_store()
+        self.proof.close()
+        for fd in set(opened):
+            with self.assertRaises(OSError): os.fstat(fd)
+
+    def test_new_store_closes_store_and_owned_proof_descriptors_after_binding_failure(self):
+        opened, real_open, real_read = [], os.open, self.tool.read_regular
+        changed = False
+        def tracked_open(*args, **kwargs):
+            fd = real_open(*args, **kwargs)
+            opened.append(fd)
+            return fd
+        def read_then_change(path, maximum):
+            nonlocal changed
+            payload = real_read(path, maximum)
+            if path == self.recovery / 'lock' and not changed:
+                changed = True
+                path.write_bytes(b'not empty\n')
+            return payload
+        with patch.object(self.tool.os, 'open', side_effect=tracked_open), \
+             patch.object(self.tool, 'read_regular', side_effect=read_then_change):
+            with self.assertRaises(ValueError): self.new_store()
+        self.assertTrue(changed)
+        self.proof.close()
+        for fd in set(opened):
+            with self.assertRaises(OSError): os.fstat(fd)
+
+    def test_new_store_refuses_wrong_expected_owner_before_creating_private_ancestry(self):
+        parent = self.root / '.tools'; parent.mkdir(mode=0o700)
+        with patch.object(self.tool, 'UID', os.geteuid() + 1):
+            with self.assertRaises(ValueError): self.new_store()
+        self.assertEqual(list(parent.iterdir()), [])
+
+    def test_new_store_refuses_changed_fixed_target_without_creating_ancestry(self):
+        with patch.object(self.tool, 'RECOVERY', self.recovery.with_name('alternate')):
+            with self.assertRaises(ValueError): self.new_store()
+        self.assertFalse((self.root / '.tools').exists())
+
+
+class Task4SealTests(unittest.TestCase):
+    def setUp(self):
+        self.tool = load_tool()
+        self.temporary = tempfile.TemporaryDirectory(prefix='kil-task4-seal-', dir='/private/tmp')
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        selector = patch.object(self.tool, 'UID', os.geteuid())
+        selector.start(); self.addCleanup(selector.stop)
+        self.store = self.tool.PrivateStore(self.root / 'recovery')
+        self.addCleanup(self.store.close)
+
+    def seal(self):
+        self.assertTrue(hasattr(self.tool, '_seal'), 'new-receipt-only sealing is missing')
+        return self.tool._seal(self.store)
+
+    def test_seal_hashes_every_actual_evidence_file_including_lock_and_journal(self):
+        self.store.write('outcome.json', canonical({'status': 'preflight_refused'}))
+        self.store.record('observation', {'value': 1})
+        before = {path.name: path.read_bytes() for path in self.store.path.iterdir()}
+        self.seal()
+        expected = b''.join(hashlib.sha256(payload).hexdigest().encode() + b'  ' + name.encode() + b'\n'
+                            for name, payload in sorted(before.items()))
+        self.assertEqual((self.store.path / 'SHA256SUMS').read_bytes(), expected)
+        self.assertEqual({p.name: p.read_bytes() for p in self.store.path.iterdir() if p.name != 'SHA256SUMS'}, before)
+        with self.assertRaises(ValueError): self.seal()
+
+    def test_seal_refuses_bad_filename_and_metadata_without_repairs(self):
+        for name, kind in (('space name', 'regular'), ('unicode-é', 'regular'), ('.hidden', 'regular'),
+                           ('a' * 129, 'regular'), ('directory', 'directory'), ('symlink', 'symlink'),
+                           ('hardlink', 'hardlink'), ('wrongmode', 'mode'), ('oversized', 'size')):
+            with self.subTest(name=name):
+                path = self.store.path / name
+                if kind == 'directory': path.mkdir(mode=0o700)
+                elif kind == 'symlink': path.symlink_to(self.store.path / 'lock')
+                elif kind == 'hardlink': os.link(self.store.path / 'journal.jsonl', path)
+                else:
+                    path.write_bytes(b'x'); path.chmod(0o644 if kind == 'mode' else 0o600)
+                    if kind == 'size':
+                        with path.open('r+b') as stream: stream.truncate(self.tool.MAXIMUM + 1)
+                try:
+                    with self.assertRaises(ValueError): self.seal()
+                    self.assertFalse((self.store.path / 'SHA256SUMS').exists())
+                finally:
+                    if kind == 'directory': path.rmdir()
+                    else: path.unlink()
+
+    def test_seal_refuses_roster_above_256(self):
+        for index in range(255): self.store.write('file-%03d' % index, b'')
+        self.assertEqual(len(list(self.store.path.iterdir())), 257)
+        with self.assertRaises(ValueError): self.seal()
+        self.assertFalse((self.store.path / 'SHA256SUMS').exists())
+
+    def test_seal_refuses_earlier_file_changed_during_later_authentication_io(self):
+        self.store.write('aaa', b'original\n'); self.store.write('zzz', b'later\n')
+        real_read, changed = self.tool.read_regular, False
+        def read_then_mutate(path, maximum):
+            nonlocal changed
+            value = real_read(path, maximum)
+            if path.name == 'zzz' and not changed:
+                changed = True
+                (self.store.path / 'aaa').write_bytes(b'changed!\n')
+            return value
+        with patch.object(self.tool, 'read_regular', side_effect=read_then_mutate):
+            with self.assertRaises(ValueError): self.seal()
+        self.assertTrue(changed)
+        self.assertFalse((self.store.path / 'SHA256SUMS').exists())
+
+    def test_seal_refuses_unknown_roster_added_during_later_authentication_io(self):
+        self.store.write('zzz', b'later\n')
+        real_read, changed = self.tool.read_regular, False
+        def read_then_mutate(path, maximum):
+            nonlocal changed
+            value = real_read(path, maximum)
+            if path.name == 'zzz' and not changed:
+                changed = True
+                (self.store.path / 'unknown').write_bytes(b'late\n')
+                (self.store.path / 'unknown').chmod(0o600)
+            return value
+        with patch.object(self.tool, 'read_regular', side_effect=read_then_mutate):
+            with self.assertRaises(ValueError): self.seal()
+        self.assertTrue(changed)
+        self.assertFalse((self.store.path / 'SHA256SUMS').exists())
+
+    def test_seal_accepts_final_256_names_with_exact_128_character_basename(self):
+        for index in range(252): self.store.write('file-%03d' % index, b'')
+        self.store.write('a' * 128, b'')
+        self.seal()
+        self.assertEqual(len(list(self.store.path.iterdir())), 256)
+
+    def test_seal_reserves_manifest_name_within_final_roster_bound(self):
+        for index in range(254): self.store.write('file-%03d' % index, b'')
+        with self.assertRaises(ValueError): self.seal()
+        self.assertFalse((self.store.path / 'SHA256SUMS').exists())
+
+    def test_seal_aggregate_limit_uses_actual_files_independently_of_store_counter(self):
+        for index in range(32):
+            path = self.store.path / ('sparse-%03d' % index)
+            with path.open('wb') as stream: stream.truncate(8 * 1024**2)
+            path.chmod(0o600)
+        self.assertLess(self.store.total, 1024)
+        with self.assertRaises(ValueError): self.seal()
+        self.assertFalse((self.store.path / 'SHA256SUMS').exists())
+
+    def test_seal_refuses_size_growth_between_roster_stat_and_retained_authentication(self):
+        for index in range(32):
+            path = self.store.path / ('sparse-%03d' % index)
+            size = self.tool.MAXIMUM - 8192 if index == 0 else self.tool.MAXIMUM
+            with path.open('wb') as stream: stream.truncate(size)
+            path.chmod(0o600)
+        real_stat, changed = os.stat, False
+        def stat_then_grow(path, *args, **kwargs):
+            nonlocal changed
+            row = real_stat(path, *args, **kwargs)
+            directory = kwargs.get('dir_fd')
+            if (path == 'sparse-000' and directory is not None and not changed
+                    and self.tool._id(os.fstat(directory)) == self.tool._id(os.fstat(self.store._directory))):
+                changed = True
+                with (self.store.path / path).open('r+b') as stream: stream.truncate(self.tool.MAXIMUM)
+            return row
+        with patch.object(self.tool.os, 'stat', side_effect=stat_then_grow):
+            try:
+                self.seal()
+            except ValueError:
+                pass
+            else:
+                actual = sum(path.stat().st_size for path in self.store.path.iterdir())
+                self.fail('seal accepted actual %d bytes above bound %d' % (actual, 256 * 1024**2))
+        self.assertTrue(changed)
+        self.assertFalse((self.store.path / 'SHA256SUMS').exists())
+
+    def test_seal_refuses_same_size_change_between_roster_stat_and_retained_authentication(self):
+        self.store.write('evidence', b'original\n')
+        real_stat, changed = os.stat, False
+        def stat_then_change(path, *args, **kwargs):
+            nonlocal changed
+            row = real_stat(path, *args, **kwargs)
+            if path == 'evidence' and kwargs.get('dir_fd') is not None and not changed:
+                changed = True
+                (self.store.path / 'evidence').write_bytes(b'changed!\n')
+            return row
+        with patch.object(self.tool.os, 'stat', side_effect=stat_then_change):
+            with self.assertRaises(ValueError): self.seal()
+        self.assertTrue(changed)
+        self.assertFalse((self.store.path / 'SHA256SUMS').exists())
+
+    def test_seal_store_total_limit_includes_exclusive_manifest_bytes(self):
+        self.store.total = 256 * 1024**2
+        with self.assertRaisesRegex(ValueError, 'private_store_byte_bound'): self.seal()
+        self.assertFalse((self.store.path / 'SHA256SUMS').exists())
+
+    def test_store_total_limit_applies_independently_to_journal_append(self):
+        self.store.total = 256 * 1024**2
+        before = self.store.journal.read_bytes()
+        with self.assertRaisesRegex(ValueError, 'private_store_byte_bound'):
+            self.store.record('not_persisted', {})
+        self.assertEqual(self.store.journal.read_bytes(), before)
+
+    def test_seal_refuses_wrong_expected_owner_and_replaced_lock_descriptor(self):
+        with patch.object(self.tool, 'UID', os.geteuid() + 1):
+            with self.assertRaises(ValueError): self.seal()
+        replacement = self.root / 'replacement'; replacement.touch(mode=0o600)
+        fd = os.open(replacement, os.O_RDWR | os.O_NOFOLLOW)
+        try: os.dup2(fd, self.store._lock)
+        finally: os.close(fd)
+        with self.assertRaises(ValueError): self.seal()
+        self.assertFalse((self.store.path / 'SHA256SUMS').exists())
+
+    def test_seal_refuses_late_evidence_mutation_during_manifest_fsync(self):
+        self.store.write('aaa', b'original\n')
+        real_fsync, changed = os.fsync, False
+        def sync_then_mutate(fd):
+            nonlocal changed
+            result = real_fsync(fd)
+            if not changed and (self.store.path / 'SHA256SUMS').exists():
+                changed = True
+                (self.store.path / 'aaa').write_bytes(b'changed!\n')
+            return result
+        with patch.object(self.tool.os, 'fsync', side_effect=sync_then_mutate):
+            with self.assertRaises(ValueError): self.seal()
+        self.assertTrue(changed)
+        manifest = (self.store.path / 'SHA256SUMS').read_bytes()
+        with self.assertRaises(ValueError): self.seal()
+        self.assertEqual((self.store.path / 'SHA256SUMS').read_bytes(), manifest)
 
 
 if __name__ == '__main__':

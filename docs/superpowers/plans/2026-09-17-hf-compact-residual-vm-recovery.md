@@ -1371,3 +1371,38 @@ No actual runtime/receipt access, recovery reservation or native stop. Next is
 Task4 under the same preparation approval; Tasks4–5 are not yet complete and
 Task6 remains separately unapproved. Accepted local Envoy is unchanged; platform
 image provenance stays unverified and full Kind/Calico acceptance false.
+
+Task4a is VERIFIED as a bounded evidence-primitives checkpoint, not completion
+of Task4. The implementer explicitly handed off DONE_WITH_CONCERNS because the
+remaining transaction requires fresh context; root retained the same approved
+scope and ordered independent reviews. _Once consumes the slot before durable
+exclusive intent persistence; _new_store anchors private ancestry and exclusively
+reserves the fixed evidence path with bound empty lock/cleanup; _seal covers all
+bounded new evidence, including lock/journal, without repairing or resealing.
+The retained accepted-manifest descriptor is now reused without weakening its
+current-byte, pin or full named/FD metadata authentication.
+
+Missing-feature and descriptor-leak REDs preceded their fixes. Spec review then
+reproduced an aggregate-budget gap: growth after the first size-stat was accepted
+by a later authenticated read while the total retained the old size. Genuine
+growth and same-size-change REDs preceded full eight-field stat-to-retained
+continuity and authenticated-byte accounting. Additional boundary/cleanup tests
+were coverage additions, not claimed missing-feature REDs. Final implementer
+154/39.366s OK; spec re-review PASS154/34.123s and independent original-growth
+refusal before manifest creation/0.091s; fresh quality PASS154/39.123s, no
+Critical/Important findings, plus four independent real-file probes/0.064s.
+Root fresh five-module regression427/218.144s OK, bytecode disabled and
+ResourceWarning fatal; unchanged candidate hashes confirmed after completion.
+Earlier425/214.386s is a superseded pre-fix observation, not final acceptance.
+
+Quality's module-description Minor is deferred to the final CLI implementation.
+Its nonblocking observation is disclosed: identical-byte manifest replacement
+during initial fsync is authenticated as the current digest/full identity; this
+contract does not separately pin the original manifest-writer inode. No original
+evidence commitment was relaxed. Next is fresh-context Task4b: exact stop grammar,
+durable authenticated commitments, honest handoff/uncertainty/postconditions,
+recover/CLI and composed fault tests, carrying proofs through final evidence and
+seal IO. Tasks4–5 remain incomplete. Task6 remains unapproved; actual native VM
+activity, recovery reservation and HF requests remain zero/current VM unobserved.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

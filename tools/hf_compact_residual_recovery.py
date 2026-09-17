@@ -50,6 +50,127 @@ COLIMA_VERSION = b'colima version v0.10.3\ngit commit: 00f6c297e92a82c04a4ab507d
 MAXIMUM = 8 * 1024**2
 
 
+class _Once:
+    """Consume one slot before durable intent; failure never restores authority."""
+    def __init__(self, store):
+        if type(store) is not PrivateStore:
+            raise ValueError('recovery_once_store_is_invalid')
+        self.store, self.used = store, False
+
+    def send(self, intent, check, dispatch):
+        if self.used:
+            raise ValueError('recovery_stop_slot_already_consumed')
+        self.used = True
+        self.store.write('manual-stop-intent.json', intent)
+        check()
+        return dispatch()
+
+
+def _new_store(receipt):
+    """Reserve only the fixed new receipt beneath retained private parents."""
+    if type(receipt) is not _Files:
+        raise ValueError('recovery_new_store_proof_is_invalid')
+    expected = REPOSITORY / '.tools/hf-recovery-private/2026-09-17' / ('manual-stop-' + DIGEST)
+    if RECOVERY != expected:
+        raise ValueError('recovery_new_store_path_is_not_fixed')
+    parent = receipt.directory(REPOSITORY)
+    current = REPOSITORY
+    for name in ('.tools', 'hf-recovery-private', '2026-09-17'):
+        current = current / name
+        receipt.metadata_guard()
+        try:
+            os.mkdir(name, mode=0o700, dir_fd=parent)
+        except FileExistsError:
+            pass
+        else:
+            os.fsync(parent)
+        parent = receipt.directory(current, private=True)
+    receipt.guard()
+    store = PrivateStore(RECOVERY)
+    try:
+        receipt.directory(RECOVERY, private=True)
+        receipt.read(RECOVERY / 'lock', 1, 0o600, UID)
+        lock = receipt.files[-1]
+        receipt.guard()
+        if (lock[2][5] != 0 or _fid(os.fstat(store._lock)) != lock[2]
+                or _id(os.fstat(store._directory)) != receipt.directories[RECOVERY][1]):
+            raise ValueError('recovery_new_store_binding_changed')
+        receipt.metadata_guard()
+        return store
+    except BaseException:
+        store.close()
+        raise
+
+
+def _seal(store):
+    """Seal only a new bounded evidence directory, never repair or reseal it."""
+    if type(store) is not PrivateStore:
+        raise ValueError('recovery_seal_store_is_invalid')
+    proof = _Files()
+    try:
+        store._bound(b'', 1)
+        directory = proof.directory(store.path, private=True)
+        directory_identity = _fid(os.fstat(directory))
+        lock_identity = _fid(os.fstat(store._lock))
+        if (not stat.S_ISREG(lock_identity[2]) or stat.S_IMODE(lock_identity[2]) != 0o600
+                or lock_identity[3] != UID or lock_identity[4:6] != (1, 0)
+                or _fid(os.stat('lock', dir_fd=directory, follow_symlinks=False)) != lock_identity
+                or _fid(os.fstat(store._directory)) != directory_identity):
+            raise ValueError('recovery_seal_store_binding_changed')
+
+        def roster():
+            names = []
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if len(names) >= 256 or re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', entry.name) is None:
+                        raise ValueError('recovery_seal_roster_is_invalid')
+                    names.append(entry.name)
+            return sorted(names)
+
+        names = roster()
+        if 'SHA256SUMS' in names:
+            raise ValueError('recovery_seal_already_exists')
+        total, lines = 0, []
+        for name in names:
+            row = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            if (not stat.S_ISREG(row.st_mode) or stat.S_IMODE(row.st_mode) != 0o600
+                    or row.st_uid != UID or row.st_nlink != 1 or row.st_size > MAXIMUM
+                    or total + row.st_size > 256 * 1024**2):
+                raise ValueError('recovery_seal_file_is_invalid')
+            payload = proof.read(store.path / name, MAXIMUM, 0o600, UID)
+            if proof.files[-1][2] != _fid(row):
+                raise ValueError('recovery_seal_file_changed_during_authentication')
+            total += len(payload)
+            if total > 256 * 1024**2:
+                raise ValueError('recovery_seal_total_bound')
+            lines.append(hashlib.sha256(payload).hexdigest().encode('ascii') + b'  ' + name.encode('ascii') + b'\n')
+        manifest = b''.join(lines)
+        if total + len(manifest) > 256 * 1024**2 or len(names) >= 256:
+            raise ValueError('recovery_seal_total_bound')
+        proof.guard()
+        if roster() != names:
+            raise ValueError('recovery_seal_roster_changed')
+        proof.metadata_guard()
+        if (_fid(os.fstat(directory)) != directory_identity
+                or _fid(os.fstat(store._directory)) != directory_identity
+                or _fid(os.fstat(store._lock)) != lock_identity):
+            raise ValueError('recovery_seal_store_binding_changed')
+        digest = store.write('SHA256SUMS', manifest)
+        sealed_directory_identity = _fid(os.fstat(directory))
+        proof.read(store.path / 'SHA256SUMS', MAXIMUM, 0o600, UID, (digest, len(manifest)))
+        proof.guard()
+        if roster() != sorted([*names, 'SHA256SUMS']):
+            raise ValueError('recovery_seal_roster_changed')
+        proof.metadata_guard()
+        if (_fid(os.fstat(directory)) != sealed_directory_identity
+                or _fid(os.fstat(store._directory)) != sealed_directory_identity
+                or _fid(os.fstat(store._lock)) != lock_identity):
+            raise ValueError('recovery_seal_store_binding_changed')
+        return digest
+    finally:
+        proof.close()
+
+
 def _receipt(proof):
     """Authenticate the complete, fixed retained receipt without repairing it."""
     if type(proof) is not _Files:
@@ -575,6 +696,7 @@ class _Native:
             raise ValueError('recovery_original_path_is_invalid')
         self.original_path_sha256 = hashlib.sha256(original.encode('utf-8')).hexdigest()
         manifest = receipt.read(ACCEPTED_MANIFEST, 1024 * 1024, 0o644, UID)
+        self._manifest_record = receipt.files[-1]
         verify_bytes(manifest, ACCEPTED_MANIFEST_SHA256, len(manifest))
         try:
             accepted = _json_exact(manifest, 1024 * 1024)['verified_tool_identities']
@@ -634,7 +756,7 @@ class _Native:
             raise ValueError('recovery_private_store_changed')
 
     def _manifest(self):
-        payload = self.receipt.read(ACCEPTED_MANIFEST, 1024 * 1024, 0o644, UID)
+        payload = self.receipt._retained_bytes(self._manifest_record)
         verify_bytes(payload, ACCEPTED_MANIFEST_SHA256, len(payload))
         if payload != self.accepted_manifest:
             raise ValueError('recovery_accepted_manifest_changed')
