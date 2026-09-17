@@ -23524,3 +23524,96 @@ REDs and ordered independent reviews required. No actual live preflight/evidence
 reservation/stop until separate execution approval.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T428 — 2026-09-17, fixed one-stop transaction Task4 independently verified
+
+**Input:** Continue approved subagent-driven preparation with independent reviews
+from bounded Task4a checkpoint04ead7f0bd0540503bfc56889d7122567fc86693.
+
+**Interpretation:** CONFIRMED fresh-context Task4b within existing fixture-only
+engineering approval, not permission to reserve actual recovery evidence or
+perform live preflight/stop. Root retained sole index/commit/shared-record ownership.
+
+**Decision status:** CONFIRMED Task4b and therefore Task4 complete after ordered
+independent spec then fresh quality review and root verification. Task5 final
+composed acceptance/full regression/whole review remain PENDING. Task6 UNAPPROVED.
+
+**Rationale/evidence:** Real check_source requires exact clean reviewed HEAD before
+any filesystem mutation. Real held LabLock has retained named/FD UID0600 regular
+single-link fullfid8/ancestry proofs through pre/intent/post/seal. Protected
+constructor failure after exclusive new store gets bounded outcome/seal when
+possible; before-store failure raises without alternate directory or repair.
+Every durable outcome retains source/run identity, approval, runtime binding/
+root identity and exact old manifest/46 digests; successful native authentication
+also saves bounded native-proof.json for zero-stop auditability.
+
+The sole mutating grammar is exact pinned Colima stop --profile kil-v3-lab in
+the private namespace,300s/stdinNone/8MiB/repository cwd. Original exclusive intent
+writer FD/fullfid8 stays held across fsync/check/dispatch; slot consumed before
+persistence and never restored. Intent commits actual approval/review/run/native
+source, original resources/paths/binding/old receipt, preflight/control/tool
+proofs, account/frozen PATH/locator, exact effective argv/environment/bounds and
+max_native_mutations=1. Final source/native/intent content authentication precedes
+metadata-only closure with transient controls alive; output/seal proofs also
+stay alive through final authentication and closure. No new general API or
+production PrivateStore change. Actual after_stop relaxation begins only around
+entered Stop transport, never intent or skip-rebinding. Known0/1 versus opaqueNone
+dispatch counts, returncode/certainty, observed status and preservation are separate.
+Nonzero/negative/lost/persistence-uncertain results stay command_uncertain even
+if later Stopped; no retry/force/found-process kill/delete. No-op has no stop intent.
+
+Genuine REDs preceded recover/CLI features, same-byte intent-writer substitution,
+locale drift during journal and last Git source capture, observed Stopped lost
+after later disk/foreign failure, CLI startup exceptions, and no-op/constructor
+outcomes lacking reviewed source (RED2/1.194s→GREEN2/1.049s). Additional branch
+coverage is not retroactively claimed RED. Independent spec then found P2:
+inherited KUBECONFIG absence checked only at _foreign entry, not final closure.
+Source-time real transport hook caused1 mocked stop before post refusal; actual
+seal fsync hooks caused both stop/no-op verified preservation. Child environments
+excluded this override: acceptance/preservation gap, not wrong-target execution.
+Genuine RED3/3.387s preceded the two-line metadata-only inherited-None check;
+GREEN3/2.602s. Independent original probes now show source drift preflight_refused/
+0/Running; seal stop postverification_inconclusive/1/Stopped/preservationFalse/
+sealFalse; seal no-op preflight_refused/0/Stopped/preservationFalse/sealFalse.
+
+Final implementer local206/83.551s plus related273/202.888s OK. Final independent
+spec PASS206/82.973s, import audit and original three probes; fresh quality
+PASS206/76.730s, no Critical/Important finding, plus seven independent real-temp
+probes/6.895s: success, ctor refusal, lost ack, seal-write failure and final auth
+changes to foreign/old receipt/controls; all tracked open descriptors released.
+Root fresh local+IO/native/Colima-inventory/journal479/268.318s OK, bytecode disabled
+and ResourceWarning fatal. Candidate hashes c4291019…98e7207/a6f493fe…a24870d
+unchanged; scope/diff checks pass. Intermediate228 with accidental inherited
+duplicates, pre-fix476/283.613s implementer and476/274.367s root are superseded,
+not final candidate acceptance. Duplicate tests removed before final verification.
+
+Reviewed semantic adaptation: new internal outcome labels outcome/returncode/
+observed_status/preservation affect no preexisting consumer or accepted protocol.
+Sealed outcome.json carries final_closure_pending=True: provisional observation
+alone cannot prove final acceptance. Only returned verification after seal and
+retained scopes close is authoritative; late failure returns honest refusal/
+inconclusive without rewriting/resealing. Both independent reviewers judged this
+coherent. Prior module-prose Minor is fixed with guarded non-abbreviated CLI.
+
+**Affected artifacts:** Only fixed tool/test plus factual plan/reader and this
+actual-EOF lineage/reader. Production sources, earlier tests/tools, accepted
+artifacts/protocols, citation policy and historical receipts/runtime/disks remain
+unchanged. All composition uses real temporary files/locks/stores/proofs and
+simulated transport; actual Colima/Lima/Docker activity ZERO. Existing generic
+IO tests may run owned child Python. No actual runtime/receipt opening/recovery
+reservation/live preflight/stop, HF request, Ollama operation, image audit,
+production SSH compatibility fix, force/retry/deletion or new rehearsal.
+
+**Unresolved questions:** Task5 final engineering acceptance remains unverified.
+Current VM status unobserved; fixtures do not refresh historical Running. Accepted
+local Envoy unchanged, platform image provenance unverified/full Kind-Calico
+acceptance false. Four historical immutable citation omissions remain disclosed.
+
+**Next gate:** Preserve complete04ead7f predecessor lineage prefix1,389,179B;
+render/check94 readers/protected paths/exact scoped diffs, commit only tool/test
+and plan/lineage Markdown-reader pairs. Fresh Task5 preparation specialist verifies
+remaining composed acceptance, then ordered independent reviews, full16-module
+regression and whole-implementation review/readonly old46 checksums. No native
+preflight/evidence reservation/stop without separate execution approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

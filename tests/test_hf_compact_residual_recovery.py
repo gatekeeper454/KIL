@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import hashlib
 import json
 import os
@@ -7,6 +8,7 @@ import stat
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack
 from unittest.mock import patch
 
 from kil.v3b2_proofs import canonical
@@ -1847,6 +1849,25 @@ class Task4OnceTests(unittest.TestCase):
         self.assertTrue(once.used)
         self.assertEqual(events, [])
 
+    def test_once_refuses_same_bytes_replaced_during_intent_fsync(self):
+        once, events = self.tool._Once(self.store), []
+        path = self.store.path / 'manual-stop-intent.json'
+        real_fsync, changed = os.fsync, False
+        def sync(fd):
+            nonlocal changed
+            real_fsync(fd)
+            if path.exists() and not changed and stat.S_ISREG(os.fstat(fd).st_mode):
+                changed = True
+                payload = path.read_bytes()
+                path.rename(self.root / 'displaced-intent')
+                path.write_bytes(payload); path.chmod(0o600)
+        with patch.object(self.tool.os, 'fsync', side_effect=sync):
+            with self.assertRaises(ValueError):
+                once.send(b'{}\n', lambda: events.append('check'), lambda: events.append('dispatch'))
+        self.assertTrue(changed)
+        self.assertTrue(once.used)
+        self.assertEqual(events, [])
+
 
 class Task4StoreTests(unittest.TestCase):
     def setUp(self):
@@ -2140,6 +2161,593 @@ class Task4SealTests(unittest.TestCase):
         manifest = (self.store.path / 'SHA256SUMS').read_bytes()
         with self.assertRaises(ValueError): self.seal()
         self.assertEqual((self.store.path / 'SHA256SUMS').read_bytes(), manifest)
+
+
+class Task4RecoveryTests(unittest.TestCase, RetainedFixture):
+    """Full real recovery composition; only native transport and selectors vary."""
+    include_native_logs = True
+    original_foreign = Task3IntegratedPreflightTests.original_foreign
+    selectors = Task3IntegratedPreflightTests.selectors
+    sealed_files = Task3IntegratedPreflightTests.sealed_files
+    assert_receipt_unchanged = Task3IntegratedPreflightTests.assert_receipt_unchanged
+    result = Task3IntegratedPreflightTests.result
+
+    def setUp(self):
+        Task3IntegratedPreflightTests.setUp(self)
+        self.repository = Path(self.temporary.name).resolve() / 'repository'
+        self.repository.mkdir(mode=0o700)
+        digest = self.receipt_path.name.removeprefix('hf-exploratory-')
+        self.recovery = self.repository / '.tools/hf-recovery-private/2026-09-17' / ('manual-stop-' + digest)
+        self.reviewed = 'b' * 40
+        self.approval = 'Fixture-only explicit one-stop approval.'
+        self.git_calls = []
+        self.git_dirty = False
+        self.stop_code = 0
+        self.stop_exception = None
+        self.stop_effect = self.stopped
+        self.before_capture = None
+
+    def stopped(self):
+        self.private_row['status'] = 'Stopped'
+        for parent, names in ((self.paths.profile, ('docker.sock', 'containerd.sock')),
+                              (self.paths.instance, ('ha.pid', 'ha.sock', 'ssh.sock', 'vz.pid')),
+                              (self.paths.disk, ('in_use_by',))):
+            for name in names: (parent / name).unlink(missing_ok=True)
+        (self.paths.colima / 'ssh_config').write_bytes(b'# stopped SSH configuration\n')
+        (self.paths.instance / 'ha.stdout.log').write_bytes(b'stopped log\n')
+
+    def git_capture(self, argv, environment, stdin, timeout, maximum, cwd):
+        self.git_calls.append((argv, environment, stdin, timeout, maximum, cwd))
+        self.assertEqual(cwd, self.repository)
+        self.assertEqual((stdin, timeout, maximum), (None, 10, 65536))
+        if argv == ('git', 'rev-parse', 'HEAD'): payload = self.reviewed.encode() + b'\n'
+        elif argv == ('git', 'status', '--porcelain'): payload = b' M dirty\n' if self.git_dirty else b''
+        else: raise AssertionError(argv)
+        return CommandResult(0, payload.decode(), '', payload, b'')
+
+    def capture(self, argv, environment, stdin, timeout, maximum, cwd):
+        self.dispatches.append((argv, environment, stdin, timeout, maximum, cwd))
+        self.last_environment = environment
+        if self.before_capture is not None: self.before_capture(argv)
+        if argv == (str(self.colima), 'stop', '--profile', 'kil-v3-lab'):
+            self.stop_effect()
+            if self.stop_exception is not None: raise self.stop_exception
+            return CommandResult(self.stop_code, 'stop output\n', '', b'stop output\n', b'')
+        return self.result(argv)
+
+    def scope(self):
+        from kil import hf_exploratory_native as native_module
+        stack = ExitStack()
+        self.addCleanup(stack.close)
+        for selector in self.selectors(): stack.enter_context(selector)
+        stack.enter_context(patch.multiple(self.tool, REPOSITORY=self.repository, RECOVERY=self.recovery))
+        stack.enter_context(patch.object(self.tool, 'capture_process', side_effect=self.capture))
+        stack.enter_context(patch.object(native_module, 'capture_process', side_effect=self.git_capture))
+        stack.enter_context(patch.object(native_module, 'passwd_home', return_value=self.home))
+        return stack
+
+    def recover(self):
+        self.assertTrue(hasattr(self.tool, 'recover'), 'Task 4 recover lifecycle is required')
+        return self.tool.recover(self.reviewed, self.approval)
+
+    def stops(self):
+        return [row for row in self.dispatches if row[0][1:2] == ('stop',)]
+
+    def assert_seal(self):
+        manifest = (self.recovery / 'SHA256SUMS').read_bytes()
+        names = []
+        for line in manifest.splitlines():
+            digest, name = line.decode().split('  ')
+            names.append(name)
+            self.assertEqual(hashlib.sha256((self.recovery / name).read_bytes()).hexdigest(), digest)
+        self.assertEqual(set(names), {p.name for p in self.recovery.iterdir()} - {'SHA256SUMS'})
+
+    def test_invalid_authority_is_rejected_before_filesystem_or_native(self):
+        self.assertTrue(hasattr(self.tool, 'recover'), 'Task 4 recover lifecycle is required')
+        for source, approval in (('B' * 40, self.approval), ('b' * 39, self.approval),
+                                 (self.reviewed, ''), (self.reviewed, ' \n'),
+                                 (self.reviewed, '\ud800'), (self.reviewed, 'é' * 2049),
+                                 (self.reviewed, None)):
+            with self.subTest(source=source, approval=repr(approval)), \
+                    patch.object(self.tool.os, 'lstat', side_effect=AssertionError('filesystem touched')), \
+                    patch.object(self.tool.os, 'open', side_effect=AssertionError('filesystem touched')):
+                with self.assertRaises(ValueError): self.tool.recover(source, approval)
+
+    def test_clean_source_gate_precedes_lablock_parents_and_new_evidence(self):
+        with self.scope():
+            self.git_dirty = True
+            with self.assertRaisesRegex(ValueError, 'reviewed_local_source_not_clean_head'): self.recover()
+        self.assertFalse((self.repository / '.tools').exists())
+        self.assertEqual(self.dispatches, [])
+
+    def test_full_running_recovery_preserves_old_evidence_and_seals_one_stop(self):
+        with self.scope(): outcome = self.recover()
+        self.assertEqual(outcome['outcome'], 'graceful_stop_confirmed')
+        self.assertEqual((outcome['stop_dispatches'], outcome['returncode'], outcome['command_certainty'],
+                          outcome['observed_status'], outcome['preservation']), (1, 0, 'returned', 'Stopped', True))
+        self.assertEqual((outcome['hf_request_intents'], outcome['hf_request_attempts']), (0, 0))
+        self.assertEqual(len(self.stops()), 1)
+        argv, env, stdin, timeout, maximum, cwd = self.stops()[0]
+        self.assertEqual(argv, (str(self.colima), 'stop', '--profile', 'kil-v3-lab'))
+        self.assertEqual((stdin, timeout, maximum, cwd), (None, 300, 8 * 1024**2, self.repository))
+        self.assertEqual(env['COLIMA_HOME'], str(self.paths.colima))
+        self.assertEqual(env['LIMA_HOME'], str(self.paths.lima))
+        intent = json.loads((self.recovery / 'manual-stop-intent.json').read_bytes())
+        self.assertEqual(intent['execution_approval'], self.approval)
+        self.assertEqual(intent['reviewed_source'], self.reviewed)
+        self.assertEqual(intent['max_native_mutations'], 1)
+        self.assertEqual(intent['runtime_binding'], json.loads(self.saved_files['runtime-binding.json']))
+        self.assertEqual(len(intent['receipt_files']), 46)
+        self.assertEqual(intent['original_path'], str(self.bin))
+        self.assertEqual(json.loads((self.recovery / 'post-observations.json').read_bytes())['controls']['ha.pid']['present'], False)
+        self.assertEqual((self.recovery / 'post-colima-ssh.config').read_bytes(), b'# stopped SSH configuration\n')
+        self.assert_receipt_unchanged()
+        self.assert_seal()
+
+    def test_already_stopped_has_no_manual_intent_and_no_stop(self):
+        self.private_row['status'] = 'Stopped'
+        (self.paths.disk / 'in_use_by').unlink()
+        with self.scope(): outcome = self.recover()
+        self.assertEqual(outcome['outcome'], 'already_stopped_observed')
+        self.assertEqual((outcome['stop_dispatches'], outcome['preservation']), (0, True))
+        self.assertEqual(self.stops(), [])
+        saved = json.loads((self.recovery / 'outcome.json').read_bytes())
+        self.assertEqual(saved['reviewed_source'], self.reviewed)
+        self.assertEqual(saved['run_id'], 'v3b2-' + 'a' * 64)
+        self.assertEqual(saved['run_digest'], 'a' * 64)
+        self.assertEqual(saved['receipt_path'], str(self.receipt_path))
+        self.assertEqual(len(saved['receipt_files']), 46)
+        tools = json.loads((self.recovery / 'native-proof.json').read_bytes())
+        self.assertEqual(tools['original_path'], str(self.bin))
+        self.assertEqual(set(tools['accepted_tools']), {'docker', 'kind', 'kubectl'})
+        self.assertEqual(tools['lima']['resolved'], str(self.bin / 'limactl'))
+        self.assertFalse((self.recovery / 'manual-stop-intent.json').exists())
+        self.assertFalse(any('ps' in row[0] for row in self.dispatches))
+        self.assert_receipt_unchanged()
+        self.assert_seal()
+
+    def test_constructor_refusal_is_sealed_after_store_reservation(self):
+        self.colima.write_bytes(b'substituted executable\n')
+        with self.scope(): outcome = self.recover()
+        self.assertEqual(outcome['outcome'], 'preflight_refused')
+        self.assertEqual(outcome['stop_dispatches'], 0)
+        self.assertEqual(self.dispatches, [])
+        saved = json.loads((self.recovery / 'outcome.json').read_bytes())
+        self.assertEqual(saved['reviewed_source'], self.reviewed)
+        self.assertEqual(saved['run_id'], 'v3b2-' + 'a' * 64)
+        self.assertEqual(saved['runtime_binding'], json.loads(self.saved_files['runtime-binding.json']))
+        self.assertEqual(saved['receipt_manifest_pin'], [hashlib.sha256(self.saved_manifest).hexdigest(), len(self.saved_manifest)])
+        self.assertEqual(saved['execution_approval'], self.approval)
+        self.assertFalse((self.recovery / 'native-proof.json').exists())
+        self.assert_seal()
+
+    def test_cli_requires_exact_closed_flags_before_any_filesystem(self):
+        self.assertTrue(hasattr(self.tool, 'main'), 'closed recovery CLI is required')
+        good = ['--reviewed-source', self.reviewed, '--execution-approval', self.approval,
+                '--execute-approved-stop']
+        for arguments in ([], good[:-1], ['--reviewed', self.reviewed, *good[2:]],
+                          [*good, '--force'], [*good, '--home', str(self.home)],
+                          [*good, '--runtime', str(self.runtime)], [*good, '--retry']):
+            with self.subTest(arguments=arguments), \
+                    patch.object(sys, 'stderr', io.StringIO()), \
+                    patch.object(self.tool.os, 'open', side_effect=AssertionError('filesystem touched')):
+                with self.assertRaises(SystemExit) as caught: self.tool.main(arguments)
+                self.assertEqual(caught.exception.code, 2)
+
+    def test_locale_change_during_final_stop_journal_authentication_refuses(self):
+        real_read = self.tool.read_regular
+        changed = False
+        def read(path, maximum):
+            nonlocal changed
+            value = real_read(path, maximum)
+            journal = self.recovery / 'journal.jsonl'
+            if (path == self.bin / 'limactl' and journal.exists() and not changed
+                    and b'"timeout_s":300' in journal.read_bytes()):
+                changed = True
+                os.environ['LANG'] = 'changed-fixture-locale'
+            return value
+        with self.scope(), patch.object(self.tool, 'read_regular', side_effect=read): outcome = self.recover()
+        self.assertTrue(changed)
+        self.assertEqual(outcome['outcome'], 'preflight_refused')
+        self.assertEqual(self.stops(), [])
+
+    def final_stop_mutation(self, mutate):
+        real_read, changed = self.tool.read_regular, False
+        def read(path, maximum):
+            nonlocal changed
+            value = real_read(path, maximum)
+            journal = self.recovery / 'journal.jsonl'
+            if (path == self.bin / 'limactl' and journal.exists() and not changed
+                    and b'"timeout_s":300' in journal.read_bytes()):
+                changed = True
+                mutate()
+            return value
+        with self.scope(), patch.object(self.tool, 'read_regular', side_effect=read): outcome = self.recover()
+        self.assertTrue(changed)
+        self.assertEqual(outcome['outcome'], 'preflight_refused', outcome)
+        self.assertEqual((outcome['stop_dispatches'], self.stops()), (0, []))
+        return outcome
+
+    def test_final_source_drift_refuses_before_stop(self):
+        self.final_stop_mutation(lambda: setattr(self, 'git_dirty', True))
+
+    def test_final_old_receipt_drift_refuses_before_stop(self):
+        self.final_stop_mutation(lambda: (self.receipt_path / 'report.json').write_bytes(b'changed\n'))
+
+    def test_final_control_drift_refuses_before_stop(self):
+        self.final_stop_mutation(lambda: (self.paths.instance / 'ha.pid').write_bytes(b'changed\n'))
+
+    def test_final_absent_control_appearance_refuses_before_stop(self):
+        self.final_stop_mutation(lambda: (self.paths.instance / 'ssh.config').write_bytes(b'changed\n'))
+
+    def test_final_accepted_executable_drift_refuses_before_stop(self):
+        self.final_stop_mutation(lambda: (self.tools / 'docker').write_bytes(b'changed\n'))
+
+    def test_final_accepted_directory_addition_refuses_before_stop(self):
+        self.final_stop_mutation(lambda: (self.tools / 'foreign').write_bytes(b'changed\n'))
+
+    def test_final_account_drift_refuses_before_stop(self):
+        self.final_stop_mutation(lambda: setattr(self, 'observed_home', self.bin))
+
+    def test_final_lablock_same_byte_inode_replacement_refuses_before_stop(self):
+        def mutate():
+            path = self.repository / '.tools/hf-exploratory-private/profile.lock'
+            path.rename(self.home / 'old-lab-lock')
+            path.write_bytes(b''); path.chmod(0o600)
+        self.final_stop_mutation(mutate)
+
+    def test_final_store_lock_replacement_refuses_before_stop(self):
+        def mutate():
+            path = self.recovery / 'lock'
+            path.rename(self.home / 'old-store-lock')
+            path.write_bytes(b''); path.chmod(0o600)
+        self.final_stop_mutation(mutate)
+
+    def test_final_manual_intent_same_byte_replacement_refuses_before_stop(self):
+        def mutate():
+            path = self.recovery / 'manual-stop-intent.json'
+            payload = path.read_bytes()
+            path.rename(self.home / 'old-manual-intent')
+            path.write_bytes(payload); path.chmod(0o600)
+        self.final_stop_mutation(mutate)
+
+    def test_final_foreign_state_drift_refuses_before_stop(self):
+        self.final_stop_mutation(lambda: (self.home / '.docker/config.json').write_bytes(b'{"drift":true}\n'))
+
+    def test_final_new_higher_priority_lima_refuses_before_stop(self):
+        priority = self.home / 'priority'; priority.mkdir(mode=0o700)
+        with self.scope():
+            os.environ['PATH'] = str(priority) + os.pathsep + str(self.bin)
+            real_read, changed = self.tool.read_regular, False
+            def read(path, maximum):
+                nonlocal changed
+                value = real_read(path, maximum)
+                journal = self.recovery / 'journal.jsonl'
+                if path == self.bin / 'limactl' and journal.exists() and not changed and b'"timeout_s":300' in journal.read_bytes():
+                    changed = True
+                    (priority / 'limactl').write_bytes(b'new executable\n'); (priority / 'limactl').chmod(0o755)
+                return value
+            with patch.object(self.tool, 'read_regular', side_effect=read): outcome = self.recover()
+        self.assertTrue(changed)
+        self.assertEqual((outcome['outcome'], self.stops()), ('preflight_refused', []))
+
+    def test_unknown_inventory_refuses_without_manual_intent(self):
+        self.private_payload = canonical([{**self.private_row, 'status': 'Unknown'}])
+        with self.scope(): outcome = self.recover()
+        self.assertEqual((outcome['outcome'], self.stops()), ('preflight_refused', []))
+        self.assertFalse((self.recovery / 'manual-stop-intent.json').exists())
+        self.assert_seal()
+
+    def test_partial_inventory_refuses_without_manual_intent(self):
+        self.private_payload = canonical([{'name': 'kil-v3-lab', 'status': 'Running'}])
+        with self.scope(): outcome = self.recover()
+        self.assertEqual((outcome['outcome'], self.stops()), ('preflight_refused', []))
+        self.assert_seal()
+
+    def test_nonempty_private_docker_refuses_without_manual_intent(self):
+        self.ps_payload = b'container-id\n'
+        with self.scope(): outcome = self.recover()
+        self.assertEqual((outcome['outcome'], self.stops()), ('preflight_refused', []))
+        self.assert_seal()
+
+    def test_preexisting_pending_recovery_is_never_resumed_or_suffixed(self):
+        self.recovery.mkdir(parents=True, mode=0o700)
+        for parent in (self.repository / '.tools', self.recovery.parent.parent, self.recovery.parent): parent.chmod(0o700)
+        pending = self.recovery / 'manual-stop-intent.json'
+        pending.write_bytes(b'pending original\n'); pending.chmod(0o600)
+        with self.scope(), self.assertRaises(FileExistsError): self.recover()
+        self.assertEqual(self.dispatches, [])
+        self.assertEqual(pending.read_bytes(), b'pending original\n')
+        self.assertEqual([p.name for p in self.recovery.parent.iterdir()], [self.recovery.name])
+
+    def test_second_recover_never_dispatches_or_changes_first_seal(self):
+        with self.scope():
+            first = self.recover()
+            old = {p.name: p.read_bytes() for p in self.recovery.iterdir()}
+            with self.assertRaises(FileExistsError): self.recover()
+        self.assertEqual(first['outcome'], 'graceful_stop_confirmed')
+        self.assertEqual(len(self.stops()), 1)
+        self.assertEqual({p.name: p.read_bytes() for p in self.recovery.iterdir()}, old)
+
+    def uncertain(self, code=None, error=None):
+        self.stop_code, self.stop_exception = code, error
+        with self.scope(): outcome = self.recover()
+        self.assertEqual(outcome['outcome'], 'command_uncertain', outcome)
+        self.assertEqual(outcome['command_certainty'], 'uncertain')
+        self.assertEqual(outcome['observed_status'], 'Stopped')
+        self.assertTrue(outcome['preservation'])
+        self.assertEqual(outcome['stop_dispatches'], 1 if code is not None and code >= 0 else None)
+        self.assertEqual(len(self.stops()), 1)
+        self.assert_seal()
+        self.assert_receipt_unchanged()
+        return outcome
+
+    def test_timeout_even_followed_by_stopped_is_uncertain(self): self.uncertain(-1000)
+    def test_overflow_even_followed_by_stopped_is_uncertain(self): self.uncertain(-1001)
+    def test_positive_nonzero_even_followed_by_stopped_is_uncertain(self): self.uncertain(2)
+    def test_lost_capture_even_followed_by_stopped_is_uncertain(self):
+        outcome = self.uncertain(error=OSError('opaque fixture handoff'))
+        self.assertTrue(any(row['message'] == 'opaque fixture handoff' for row in outcome['exceptions']))
+
+    def test_known_zero_with_post_resource_drift_keeps_observed_stopped_separate(self):
+        def stopped():
+            self.stopped()
+            with (self.paths.disk / 'datadisk').open('r+b') as stream: stream.truncate(59 * 1024**3)
+        self.stop_effect = stopped
+        with self.scope(): outcome = self.recover()
+        self.assertEqual(outcome['outcome'], 'postverification_inconclusive')
+        self.assertEqual(outcome['observed_status'], 'Stopped')
+        self.assertEqual((outcome['returncode'], outcome['stop_dispatches'], outcome['preservation']), (0, 1, False))
+        self.assert_seal()
+
+    def test_known_zero_with_post_foreign_drift_keeps_observed_stopped_separate(self):
+        def stopped():
+            self.stopped()
+            (self.home / '.docker/config.json').write_bytes(b'{"drift":true}\n')
+        self.stop_effect = stopped
+        with self.scope(): outcome = self.recover()
+        self.assertEqual(outcome['outcome'], 'postverification_inconclusive')
+        self.assertEqual(outcome['observed_status'], 'Stopped')
+        self.assertFalse(outcome['preservation'])
+        self.assert_seal()
+
+    def test_post_unknown_inventory_is_inconclusive_with_no_current_status(self):
+        def stopped():
+            self.stopped()
+            self.private_payload = canonical([{**self.private_row, 'status': 'Unknown'}])
+        self.stop_effect = stopped
+        with self.scope(): outcome = self.recover()
+        self.assertEqual((outcome['outcome'], outcome['observed_status'], outcome['preservation']),
+                         ('postverification_inconclusive', None, False))
+        self.assertEqual(len(self.stops()), 1)
+        self.assert_seal()
+
+    def test_stop_raw_output_persistence_failure_stays_uncertain_after_stopped(self):
+        real_write, failed = self.tool.PrivateStore.write, False
+        def write(store, name, payload):
+            nonlocal failed
+            value = real_write(store, name, payload)
+            if self.stops() and name.startswith('command-') and name.endswith('.stdout') and not failed:
+                failed = True
+                raise OSError('fixture lost raw-output persistence acknowledgement')
+            return value
+        with patch.object(self.tool.PrivateStore, 'write', write): outcome = self.uncertain(0)
+        self.assertTrue(failed)
+        self.assertEqual(outcome['returncode'], 0)
+
+    def test_stop_capture_error_survives_terminal_persistence_failure(self):
+        real_record, lost = self.tool.PrivateStore.record, OSError('fixture original lost capture')
+        def record(store, event, details):
+            result = real_record(store, event, details)
+            if self.stops() and event == 'command_terminal' and details.get('returncode') is None:
+                raise OSError('fixture terminal persistence failure')
+            return result
+        with patch.object(self.tool.PrivateStore, 'record', record): outcome = self.uncertain(error=lost)
+        self.assertTrue(any(row['message'] == str(lost) for row in outcome['exceptions']))
+
+    def test_stop_manual_intent_fsync_failure_never_hands_off(self):
+        real_fsync, failed = os.fsync, False
+        def sync(fd):
+            nonlocal failed
+            value = real_fsync(fd)
+            path = self.recovery / 'manual-stop-intent.json'
+            if path.exists() and not failed and self.tool._id(os.fstat(fd)) == self.tool._id(path.lstat()):
+                failed = True
+                raise OSError('fixture intent fsync failure')
+            return value
+        with self.scope(), patch.object(self.tool.os, 'fsync', side_effect=sync): outcome = self.recover()
+        self.assertTrue(failed)
+        self.assertEqual((outcome['outcome'], outcome['stop_dispatches'], self.stops()), ('preflight_refused', 0, []))
+        self.assert_seal()
+
+    def test_pending_intent_created_during_pre_evidence_is_not_adopted(self):
+        real_write, changed = self.tool.PrivateStore.write, False
+        def write(store, name, payload):
+            nonlocal changed
+            result = real_write(store, name, payload)
+            if store.path == self.recovery and name == 'pre-observations.json' and not changed:
+                changed = True
+                path = self.recovery / 'manual-stop-intent.json'
+                path.write_bytes(b'preexisting pending fixture intent\n'); path.chmod(0o600)
+            return result
+        with self.scope(), patch.object(self.tool.PrivateStore, 'write', write): outcome = self.recover()
+        self.assertTrue(changed)
+        self.assertEqual((outcome['outcome'], self.stops()), ('preflight_refused', []))
+        self.assertEqual((self.recovery / 'manual-stop-intent.json').read_bytes(), b'preexisting pending fixture intent\n')
+        self.assert_seal()
+
+    def test_last_seal_fsync_cannot_change_old_evidence_and_report_preservation(self):
+        real_fsync, changed = os.fsync, False
+        def sync(fd):
+            nonlocal changed
+            result = real_fsync(fd)
+            if (self.recovery / 'SHA256SUMS').exists() and not changed:
+                changed = True
+                (self.receipt_path / 'report.json').write_bytes(b'changed after seal\n')
+            return result
+        with self.scope(), patch.object(self.tool.os, 'fsync', side_effect=sync): outcome = self.recover()
+        self.assertTrue(changed)
+        self.assertEqual(outcome['outcome'], 'postverification_inconclusive')
+        self.assertEqual((outcome['preservation'], outcome['seal_verified']), (False, False))
+        self.assertTrue(json.loads((self.recovery / 'outcome.json').read_bytes())['final_closure_pending'])
+        self.assertEqual(len(self.stops()), 1)
+
+    def test_new_evidence_changed_during_last_authentication_cannot_claim_verified_seal(self):
+        real_read, changed = self.tool.read_regular, False
+        def read(path, maximum):
+            nonlocal changed
+            result = real_read(path, maximum)
+            if path == self.bin / 'limactl' and (self.recovery / 'SHA256SUMS').exists() and not changed:
+                changed = True
+                (self.recovery / 'pre-ha.pid').write_bytes(b'changed final evidence\n')
+            return result
+        with self.scope(), patch.object(self.tool, 'read_regular', side_effect=read): outcome = self.recover()
+        self.assertTrue(changed)
+        self.assertEqual((outcome['outcome'], outcome['preservation'], outcome['seal_verified']),
+                         ('postverification_inconclusive', False, False))
+
+    def test_guest_write_beyond_header_and_unrelated_registry_sibling_remain_allowed(self):
+        real_read, changed = self.tool.read_regular, False
+        def read(path, maximum):
+            nonlocal changed
+            result = real_read(path, maximum)
+            journal = self.recovery / 'journal.jsonl'
+            if path == self.bin / 'limactl' and journal.exists() and not changed and b'"timeout_s":300' in journal.read_bytes():
+                changed = True
+                with (self.paths.disk / 'datadisk').open('r+b') as stream:
+                    stream.seek(1024); stream.write(b'guest write')
+                (self.registry / 'unrelated-sibling').mkdir(mode=0o700)
+            return result
+        with self.scope(), patch.object(self.tool, 'read_regular', side_effect=read): outcome = self.recover()
+        self.assertTrue(changed)
+        self.assertEqual(outcome['outcome'], 'graceful_stop_confirmed', outcome)
+        self.assert_seal()
+
+    def test_cli_returns_failure_for_startup_refusal(self):
+        with self.scope(), patch.object(sys, 'stdout', io.StringIO()):
+            self.git_dirty = True
+            result = self.tool.main(['--reviewed-source', self.reviewed, '--execution-approval', self.approval,
+                                     '--execute-approved-stop'])
+        self.assertEqual(result, 1)
+        self.assertEqual(self.dispatches, [])
+
+    def test_final_source_capture_locale_drift_cannot_change_committed_environment(self):
+        real_git_capture, changed = self.git_capture, False
+        def git(*arguments):
+            nonlocal changed
+            result = real_git_capture(*arguments)
+            journal = self.recovery / 'journal.jsonl'
+            if journal.exists() and not changed and b'"timeout_s":300' in journal.read_bytes():
+                changed = True
+                os.environ['LC_ALL'] = 'late-source-fixture-locale'
+            return result
+        self.git_capture = git
+        with self.scope(): outcome = self.recover()
+        self.assertTrue(changed)
+        self.assertEqual((outcome['outcome'], self.stops()), ('preflight_refused', []))
+
+    def test_final_source_capture_inherited_kubeconfig_drift_refuses_before_stop(self):
+        real_git_capture, changed = self.git_capture, False
+        def git(*arguments):
+            nonlocal changed
+            result = real_git_capture(*arguments)
+            journal = self.recovery / 'journal.jsonl'
+            if journal.exists() and not changed and b'"timeout_s":300' in journal.read_bytes():
+                changed = True
+                os.environ['KUBECONFIG'] = str(self.home / 'late-inherited-kubeconfig')
+            return result
+        self.git_capture = git
+        with self.scope(): outcome = self.recover()
+        self.assertTrue(changed)
+        self.assertEqual((outcome['outcome'], outcome['stop_dispatches'], self.stops()),
+                         ('preflight_refused', 0, []))
+
+    def substitute_held_descriptor(self, target):
+        real_fsync, held = os.fsync, []
+        alternate = self.home / 'alternate-descriptor'
+        alternate.write_bytes(b''); alternate.chmod(0o600)
+        def sync(fd):
+            value = real_fsync(fd)
+            path = (self.repository / '.tools/hf-exploratory-private/profile.lock'
+                    if target == 'lab' else self.recovery)
+            if path.exists() and self.tool._id(os.fstat(fd)) == self.tool._id(path.lstat()):
+                held[:] = [fd]
+            return value
+        def mutate():
+            self.assertTrue(held)
+            fd = os.open(alternate, os.O_RDONLY | os.O_NOFOLLOW)
+            try: os.dup2(fd, held[0])
+            finally: os.close(fd)
+        with patch.object(self.tool.os, 'fsync', side_effect=sync):
+            self.final_stop_mutation(mutate)
+
+    def test_final_held_lablock_descriptor_substitution_refuses(self): self.substitute_held_descriptor('lab')
+    def test_final_held_store_descriptor_substitution_refuses(self): self.substitute_held_descriptor('store')
+
+    def final_seal_mutation(self, mutate, *, already=False):
+        if already: self.private_row['status'] = 'Stopped'
+        real_fsync, changed = os.fsync, False
+        def sync(fd):
+            nonlocal changed
+            result = real_fsync(fd)
+            if (self.recovery / 'SHA256SUMS').exists() and not changed:
+                changed = True
+                mutate()
+            return result
+        with self.scope(), patch.object(self.tool.os, 'fsync', side_effect=sync): outcome = self.recover()
+        self.assertTrue(changed)
+        self.assertEqual((outcome['outcome'], outcome['preservation'], outcome['seal_verified']),
+                         ('preflight_refused' if already else 'postverification_inconclusive', False, False))
+        self.assertEqual(len(self.stops()), 0 if already else 1)
+
+    def test_final_seal_fsync_control_change_refuses_success(self):
+        self.final_seal_mutation(lambda: (self.paths.instance / 'ha.stdout.log').write_bytes(b'late log\n'))
+
+    def test_final_seal_fsync_foreign_change_refuses_success(self):
+        self.final_seal_mutation(lambda: (self.home / '.docker/config.json').write_bytes(b'late foreign\n'))
+
+    def test_final_seal_fsync_disk_identity_change_refuses_success(self):
+        def mutate():
+            path = self.paths.disk / 'datadisk'
+            path.rename(self.home / 'original-datadisk')
+            with path.open('wb') as stream: stream.truncate(60 * 1024**3)
+            path.chmod(0o600)
+        self.final_seal_mutation(mutate)
+
+    def test_already_stopped_final_seal_fsync_control_change_refuses_success(self):
+        self.final_seal_mutation(lambda: (self.paths.instance / 'ha.stdout.log').write_bytes(b'late log\n'), already=True)
+
+    def test_final_seal_fsync_inherited_kubeconfig_change_refuses_success(self):
+        self.final_seal_mutation(lambda: os.environ.__setitem__('KUBECONFIG', str(self.home / 'late-kubeconfig')))
+
+    def test_already_stopped_final_seal_fsync_inherited_kubeconfig_change_refuses_success(self):
+        self.final_seal_mutation(lambda: os.environ.__setitem__('KUBECONFIG', ''), already=True)
+
+    def test_cli_success_uses_real_composed_recovery(self):
+        self.private_row['status'] = 'Stopped'
+        output = io.StringIO()
+        with self.scope(), patch.object(sys, 'stdout', output):
+            result = self.tool.main(['--reviewed-source', self.reviewed, '--execution-approval', self.approval,
+                                    '--execute-approved-stop'])
+        self.assertEqual(result, 0)
+        self.assertEqual(json.loads(output.getvalue())['outcome'], 'already_stopped_observed')
+
+
+class Task4StopGrammarTests(unittest.TestCase):
+    # Do not repeat inherited tests; the one new boundary uses the original
+    # real native fixture and no passing guard substitutes.
+    setUp = Task3NativeGrammarTests.setUp
+    native = Task3NativeGrammarTests.native
+    def test_native_stop_without_bound_intent_consumes_slot_but_never_hands_off(self):
+        native = self.native()
+        argv = (str(self.tool.COLIMA), 'stop', '--profile', 'kil-v3-lab')
+        with self.assertRaisesRegex(ValueError, 'manual_stop_authority_is_missing'):
+            native.acquire(argv, 'private', 300)
+        self.assertTrue(native.stop_used)
+        self.assertFalse(native.after_stop)
+        self.assertEqual(native.stop_dispatches, 0)
+        with self.assertRaisesRegex(ValueError, 'slot_already_consumed'):
+            native.acquire(argv, 'private', 300)
 
 
 if __name__ == '__main__':

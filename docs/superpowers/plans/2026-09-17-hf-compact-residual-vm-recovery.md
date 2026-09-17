@@ -1406,3 +1406,41 @@ seal IO. Tasks4–5 remain incomplete. Task6 remains unapproved; actual native V
 activity, recovery reservation and HF requests remain zero/current VM unobserved.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+Task4b and therefore Task4 are VERIFIED engineering checkpoints. Fresh-context
+implementation completes real clean-source-before-mutation gating, held LabLock,
+protected constructor refusal, exclusive original-writer intent and fixed private
+one-stop grammar, fresh no-op/stop/post observations, independent command/status/
+preservation outcomes, evidence sealing and required non-abbreviated CLI flags.
+No production SSH guard, launcher, accepted contract or native target was changed.
+All outcomes retain full review/run/runtime/old-receipt commitments, and successful
+native authentication produces bounded native-proof.json even for zero-stop paths.
+
+Genuine RED→GREEN fixes include absent recover/CLI, same-byte intent replacement
+during writer fsync, locale drift during both journal and final source auth,
+separately observed Stopped lost on later proof refusal, CLI startup exceptions,
+and missing reviewed-source identity in no-op/constructor-refusal evidence.
+Independent spec then reproduced missing final inherited-KUBECONFIG closure:
+source-time drift reached one mocked stop; seal-time drift returned verified
+preservation in both stop/no-op fixtures. Genuine RED3/3.387s preceded the minimal
+two-line metadata-only absence check; GREEN3/2.602s. Independent original probes
+now require zero stop at source time and refuse verified preservation/seal at
+seal time, without new content/roster reads. Final spec PASS206/82.973s; fresh
+quality PASS206/76.730s plus seven independent real-file probes/6.895s and import
+safety/descriptor cleanup. Final implementer local206/83.551s and related273/
+202.888s OK; root fresh five-module regression479/268.318s OK, bytecode disabled
+and ResourceWarning fatal. Candidate hashes preserved through root verification.
+Pre-fix476 runs and the duplicate-inherited228 intermediate run are superseded.
+
+The new fixed-adapter outcome schema uses outcome/returncode/observed_status/
+preservation labels; no preexisting consumer/protocol is altered. Reviewed
+semantic adaptation: sealed outcome.json explicitly final_closure_pending=True
+is a provisional observation, not final acceptance. Only the returned result
+after seal and all retained proof metadata closure can confirm verification;
+late closure failure returns refusal/inconclusive without overwrite/reseal.
+Spec and quality judged this coherent. The prior stale module-description Minor
+is fixed with the guarded CLI. Task5 final composed acceptance/full regression/
+whole-implementation review remain pending; Task6 stays separately unapproved.
+Actual VM activity/reservation/HF requests remain zero; current VM unobserved.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

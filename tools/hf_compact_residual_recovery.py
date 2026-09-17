@@ -1,9 +1,10 @@
-"""Fixed-target retained-file proof for the manual HF residual stop path.
+"""Separately approved, fixed-target manual stop of the compact HF residual VM.
 
-This module deliberately has no command entry point.  It only retains and
-re-authenticates fixed local files before a later, separately approved stage.
+One graceful stop at most; preserve retained evidence and resources. Never
+resume a rehearsal, retry, force, delete or issue an HF request.
 """
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
+import argparse
 import hashlib
 import json
 import os
@@ -30,6 +31,8 @@ from kil.v3b2_colima_inventory import capture_roster, decode_inventory, require_
 from kil.v3b2_accepted_images import ACCEPTED_MANIFEST_SHA256
 from kil.v3b2_controller import CommandResult
 from kil.v3b2_proofs import canonical
+from kil.hf_exploratory_native import check_source
+from tools.hf_exploratory_kind import LabLock
 
 
 DIGEST = '254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d'
@@ -61,9 +64,30 @@ class _Once:
         if self.used:
             raise ValueError('recovery_stop_slot_already_consumed')
         self.used = True
-        self.store.write('manual-stop-intent.json', intent)
-        check()
-        return dispatch()
+        self.store._bound(intent, 1024 * 1024)
+        self.store.total += len(intent)
+        fd = os.open('manual-stop-intent.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=self.store._directory)
+        try:
+            view = memoryview(intent)
+            while view:
+                written = os.write(fd, view)
+                if written <= 0: raise OSError('recovery_short_intent_write')
+                view = view[written:]
+            identity = _fid(os.fstat(fd))
+            def bound():
+                if (_fid(os.fstat(fd)) != identity or _fid(os.stat(
+                        'manual-stop-intent.json', dir_fd=self.store._directory,
+                        follow_symlinks=False)) != identity):
+                    raise ValueError('recovery_manual_intent_writer_changed')
+            os.fsync(fd)
+            self.store._sync_parent()
+            bound()
+            check()
+            bound()
+            return dispatch()
+        finally:
+            os.close(fd)
 
 
 def _new_store(receipt):
@@ -103,6 +127,12 @@ def _new_store(receipt):
 
 
 def _seal(store):
+    with _seal_scope(store) as (digest, _):
+        return digest
+
+
+@contextmanager
+def _seal_scope(store):
     """Seal only a new bounded evidence directory, never repair or reseal it."""
     if type(store) is not PrivateStore:
         raise ValueError('recovery_seal_store_is_invalid')
@@ -166,7 +196,13 @@ def _seal(store):
                 or _fid(os.fstat(store._directory)) != sealed_directory_identity
                 or _fid(os.fstat(store._lock)) != lock_identity):
             raise ValueError('recovery_seal_store_binding_changed')
-        return digest
+        def close_metadata():
+            proof.metadata_guard()
+            if (_fid(os.fstat(directory)) != sealed_directory_identity
+                    or _fid(os.fstat(store._directory)) != sealed_directory_identity
+                    or _fid(os.fstat(store._lock)) != lock_identity):
+                raise ValueError('recovery_seal_store_binding_changed')
+        yield digest, close_metadata
     finally:
         proof.close()
 
@@ -678,13 +714,21 @@ def _locator_snapshot(locator):
 
 
 class _Native:
-    """Read-only, fixture-testable native adapter; it has no lifecycle grammar."""
+    """Closed observations and one durable-intent-bound private Colima stop."""
     def __init__(self, receipt, runtime, paths, store):
         if (type(receipt) is not _Files or type(runtime) is not _Files
                 or type(paths) is not ProfilePaths or type(store) is not PrivateStore):
             raise ValueError('recovery_native_arguments_are_invalid')
         self.receipt, self.runtime, self.paths, self.store = receipt, runtime, paths, store
         self.after_stop = False
+        self.stop_used = False
+        self.stop_dispatches = 0
+        self.stop_returncode = None
+        self.stop_certainty = 'not_dispatched'
+        self.observed_status = None
+        self.stop_intent = None
+        self.stop_proof = None
+        self.stop_check = None
         self._account()
         original = os.environ.get('PATH')
         if type(original) is not str or not original:
@@ -856,12 +900,19 @@ class _Native:
         raise ValueError('recovery_native_argv_is_invalid')
 
     def acquire(self, argv, namespace, timeout=10):
-        if not self.allowed(argv, namespace):
+        stopping = argv == (str(COLIMA), 'stop', '--profile', 'kil-v3-lab') and type(argv) is tuple
+        if stopping:
+            if self.stop_used:
+                raise ValueError('recovery_stop_slot_already_consumed')
+            self.stop_used = True
+        if not (stopping and namespace == 'private') and not self.allowed(argv, namespace):
             raise ValueError('recovery_native_argv_is_not_allowed')
-        if type(timeout) is not int or timeout != 10:
+        if type(timeout) is not int or timeout != (300 if stopping else 10):
             raise ValueError('recovery_native_timeout_is_not_allowed')
         self.guard()
-        effective = self._dispatch(argv)
+        if stopping:
+            self._stop_authentication()
+        effective = argv if stopping else self._dispatch(argv)
         environment = self.environment_for(namespace)
         self.sequence += 1
         sequence = self.sequence
@@ -871,14 +922,36 @@ class _Native:
                            'cwd': str(REPOSITORY)})
         # record() fsyncs both the journal descriptor and private store directory.
         self.guard()
+        if stopping:
+            self._stop_authentication()
+            commitment = _json_exact(self.stop_intent, 1024 * 1024)
+            if environment != commitment['environment']:
+                raise ValueError('recovery_manual_stop_environment_changed')
+            check_source(REPOSITORY, commitment['reviewed_source'])
+            if environment != self.environment_for(namespace):
+                raise ValueError('recovery_manual_stop_environment_changed')
+            self.stop_check()
         result, out, err = None, None, None
         try:
-            result = capture_process(effective, environment, None, timeout, 8 * 1024**2, REPOSITORY)
+            if stopping:
+                self.stop_dispatches = None
+                self.stop_certainty = 'uncertain'
+                self.observed_status = None
+                try:
+                    result = capture_process(effective, environment, None, timeout, 8 * 1024**2, REPOSITORY)
+                finally:
+                    self.after_stop = True
+                self.stop_returncode = result.returncode
+                self.stop_dispatches = 1 if result.returncode >= 0 else None
+            else:
+                result = capture_process(effective, environment, None, timeout, 8 * 1024**2, REPOSITORY)
             out = self.store.write('command-%04d.stdout' % sequence, result.stdout_bytes)
             err = self.store.write('command-%04d.stderr' % sequence, result.stderr_bytes)
             self.store.record('command_terminal', {'sequence': sequence, 'returncode': result.returncode,
                               'stdout_sha256': out, 'stderr_sha256': err,
                               'certainty': 'returned' if result.returncode >= 0 else 'uncertain'})
+            if stopping:
+                self.stop_certainty = 'returned' if result.returncode == 0 else 'uncertain'
         except BaseException as error:
             try:
                 self.store.record('command_terminal', {'sequence': sequence,
@@ -889,6 +962,24 @@ class _Native:
                 pass  # A failed journal cannot promise durability or replace the first error.
             raise
         return result
+
+    def _stop_authentication(self):
+        if (type(self.stop_intent) is not bytes or type(self.stop_proof) is not _Files
+                or not callable(self.stop_check)):
+            raise ValueError('recovery_manual_stop_authority_is_missing')
+        record = self.stop_proof.files[-1]
+        if (record[0] != RECOVERY / 'manual-stop-intent.json'
+                or self.stop_proof._retained_bytes(record) != self.stop_intent):
+            raise ValueError('recovery_manual_stop_intent_changed')
+        self.stop_proof.guard()
+        commitment = _json_exact(self.stop_intent, 1024 * 1024)
+        if (commitment.get('argv') != [str(COLIMA), 'stop', '--profile', 'kil-v3-lab']
+                or commitment.get('environment') != self.environment_for('private')
+                or commitment.get('max_native_mutations') != 1
+                or commitment.get('timeout_s') != 300 or commitment.get('namespace') != 'private'
+                or commitment.get('stdin_sha256') is not None or commitment.get('maximum') != MAXIMUM
+                or commitment.get('cwd') != str(REPOSITORY)):
+            raise ValueError('recovery_manual_stop_commitment_changed')
 
     def observe(self, argv, namespace):
         result = self.acquire(argv, namespace)
@@ -917,6 +1008,12 @@ def _control_exact(observed, label, mode, *, required=True):
 
 
 def _preflight(native, paths, report, original, files, authenticate=True):
+    with _preflight_scope(native, paths, report, original, files, authenticate) as (observed, payloads, _):
+        return observed, payloads
+
+
+@contextmanager
+def _preflight_scope(native, paths, report, original, files, authenticate=True):
     """Read-only fixed-profile validation; it creates and stops nothing."""
     if type(authenticate) is not bool:
         raise ValueError('recovery_preflight_authentication_is_invalid')
@@ -938,6 +1035,7 @@ def _preflight(native, paths, report, original, files, authenticate=True):
             or private.get('disk') != 60 * 1024**3):
         raise ValueError('recovery_private_inventory_is_not_pinned')
     status = private['status']
+    native.observed_status = status
     footprint = _footprint(paths, report, original, status)
     footprint_metadata = _footprint_metadata(paths)
     foreign_original = _sealed_json(files, 'foreign-original.json')
@@ -957,7 +1055,7 @@ def _preflight(native, paths, report, original, files, authenticate=True):
         if payloads['kind.yaml'] != files.get('runtime-kind-config.yaml'):
             raise ValueError('recovery_kind_control_changed')
         _control_exact(controls, 'colima-ssh.config', 0o644, required=status == 'Running')
-        if controls['colima-ssh.config']['present']:
+        if controls['colima-ssh.config']['present'] and not native.after_stop:
             verify_bytes(payloads['colima-ssh.config'], *SSH_PIN)
         if authenticate:
             # These long-lived proof records are the exact immutable controls
@@ -989,8 +1087,14 @@ def _preflight(native, paths, report, original, files, authenticate=True):
         if _foreign_metadata(foreign_original['foreign_lima_roster']) != foreign_metadata:
             raise ValueError('recovery_foreign_state_changed_during_preflight')
         native.runtime.metadata_guard((RUNTIME / '.colima' / 'ssh_config',) if native.after_stop else ())
-        return ({'status': status, 'private_inventory': inventory, 'footprint': footprint,
-                 'foreign': foreign, 'controls': controls}, payloads)
+        def close_metadata():
+            if _footprint_metadata(paths) != footprint_metadata:
+                raise ValueError('recovery_footprint_changed_during_preflight')
+            _controls_metadata(paths, controls, control_proof)
+            if _foreign_metadata(foreign_original['foreign_lima_roster']) != foreign_metadata:
+                raise ValueError('recovery_foreign_state_changed_during_preflight')
+        yield ({'status': status, 'private_inventory': inventory, 'footprint': footprint,
+                'foreign': foreign, 'controls': controls}, payloads, close_metadata)
     finally:
         control_proof.close()
 
@@ -1004,6 +1108,199 @@ def _canonical(path):
     except (OSError, RuntimeError) as error:
         raise ValueError('recovery_path_is_not_absolute_canonical') from error
     return path
+
+
+def _authority(reviewed_source, execution_approval):
+    if type(reviewed_source) is not str or re.fullmatch(r'[0-9a-f]{40}', reviewed_source) is None:
+        raise ValueError('recovery_reviewed_source_is_invalid')
+    try:
+        valid = (type(execution_approval) is str and bool(execution_approval.strip())
+                 and len(execution_approval.encode('utf-8', 'strict')) <= 4096)
+    except UnicodeError:
+        valid = False
+    if not valid:
+        raise ValueError('recovery_execution_approval_is_invalid')
+
+
+def _proof_bytes(value):
+    payload = canonical(value)
+    if len(payload) > 1024 * 1024:
+        raise ValueError('recovery_proof_exceeds_bound')
+    return payload
+
+
+def _tool_commitments(native):
+    tool_records = {str(record[0]): {'identity': record[2], 'sha256': record[3]}
+                    for record in native.runtime.files
+                    if record[0] in {COLIMA, Path(native.lima['resolved']),
+                                     *(TOOLS / name for name in TOOL_VERSION_ARGUMENTS)}}
+    return {'original_path': native.original_path, 'original_path_sha256': native.original_path_sha256,
+            'accepted_manifest_pin': (ACCEPTED_MANIFEST_SHA256, len(native.accepted_manifest)),
+            'accepted_manifest_identity': native._manifest_record[2],
+            'accepted_tools': native.accepted, 'accepted_dependency_snapshot': native.dependencies,
+            'tool_proofs': tool_records, 'colima_pin': COLIMA_PIN, 'lima': native.lima}
+
+
+def _manual_intent(native, files, pre, reviewed_source, execution_approval):
+    return _proof_bytes({
+        'schema': 'kil.hf-compact-residual-manual-stop-intent.v1',
+        'execution_approval': execution_approval, 'reviewed_source': reviewed_source,
+        'source_commit': SOURCE, 'run_digest': DIGEST, 'run_id': 'v3b2-' + DIGEST,
+        'runtime_root_identity': ROOT_ID,
+        'runtime_binding': _sealed_json(files, 'runtime-binding.json'),
+        'paths': {**native.paths.document(), 'repository': str(REPOSITORY),
+                  'receipt': str(RECEIPT), 'recovery': str(RECOVERY)},
+        'receipt_manifest_pin': MANIFEST_PIN,
+        'receipt_files': {name: hashlib.sha256(payload).hexdigest() for name, payload in sorted(files.items())},
+        'preflight_sha256': hashlib.sha256(_proof_bytes(pre)).hexdigest(),
+        'controls': pre['controls'], 'argv': [str(COLIMA), 'stop', '--profile', 'kil-v3-lab'],
+        'environment': native.environment_for('private'), 'namespace': 'private',
+        'timeout_s': 300, 'stdin_sha256': None, 'maximum': MAXIMUM, 'cwd': str(REPOSITORY),
+        'account': {'uid': UID, 'effective_uid': UID, 'home': str(HOME)},
+        **_tool_commitments(native),
+        'max_native_mutations': 1,
+    })
+
+
+def _save_observation(store, prefix, observed, payloads):
+    store.write(prefix + '-observations.json', _proof_bytes(observed))
+    for label, payload in payloads.items():
+        if payload is not None:
+            store.write(prefix + '-' + label, payload)
+
+
+def recover(reviewed_source, execution_approval):
+    """One fixed approved graceful stop; no retries, discovery or cleanup."""
+    _authority(reviewed_source, execution_approval)
+    check_source(REPOSITORY, reviewed_source)
+    with ExitStack() as lifetime:
+        lab = lifetime.enter_context(LabLock(REPOSITORY))
+        receipt = _Files(); lifetime.callback(receipt.close)
+        receipt.read(lab.path / 'profile.lock', 1024 * 1024, 0o600, UID)
+        lab_record = receipt.files[-1]
+        if _fid(os.fstat(lab.lock)) != lab_record[2]:
+            raise ValueError('recovery_lab_lock_descriptor_changed')
+        runtime, files, paths, report, original = _retained(receipt)
+        lifetime.callback(runtime.close)
+        store = _new_store(receipt); lifetime.callback(store.close)
+        native = None
+        outcome = {'schema': 'kil.hf-compact-residual-recovery-outcome.v1',
+                   'reviewed_source': reviewed_source, 'execution_approval': execution_approval,
+                   'run_id': 'v3b2-' + DIGEST, 'run_digest': DIGEST, 'source_commit': SOURCE,
+                   'receipt_path': str(RECEIPT), 'recovery_path': str(RECOVERY),
+                   'runtime_root_identity': ROOT_ID,
+                   'runtime_binding': _sealed_json(files, 'runtime-binding.json'),
+                   'receipt_manifest_pin': MANIFEST_PIN,
+                   'receipt_files': {name: hashlib.sha256(payload).hexdigest() for name, payload in sorted(files.items())},
+                   'outcome': 'preflight_refused', 'stop_dispatches': 0, 'returncode': None,
+                   'command_certainty': 'not_dispatched', 'observed_status': None,
+                   'preservation': False, 'hf_request_intents': 0, 'hf_request_attempts': 0,
+                   'exceptions': []}
+
+        def status():
+            if native is not None:
+                outcome.update(stop_dispatches=native.stop_dispatches,
+                               returncode=native.stop_returncode,
+                               command_certainty=native.stop_certainty,
+                               observed_status=native.observed_status)
+
+        def exception(error):
+            outcome['exceptions'].append({'type': type(error).__name__[:128], 'message': str(error)[:4096]})
+
+        def close_metadata(observation_close):
+            # No directory listings or content reads after this boundary.
+            if os.environ.get('KUBECONFIG') is not None:
+                raise ValueError('recovery_inherited_kubeconfig_is_not_default')
+            native._account()
+            native._locator_metadata()
+            native._dependency_metadata()
+            native._check_store()
+            lab.guard()
+            if _fid(os.fstat(lab.lock)) != lab_record[2]:
+                raise ValueError('recovery_lab_lock_descriptor_changed')
+            observation_close()
+            receipt.metadata_guard()
+            runtime.metadata_guard((RUNTIME / '.colima/ssh_config',) if native.after_stop else ())
+            if native.stop_proof is not None: native.stop_proof.metadata_guard()
+
+        def authenticate(observation_close):
+            native.guard()
+            if native.stop_proof is not None: native._stop_authentication()
+            check_source(REPOSITORY, reviewed_source)
+            close_metadata(observation_close)
+
+        def finish(observation_close=None):
+            status()
+            if observation_close is not None: authenticate(observation_close)
+            # The sealed record is provisional until its seal and all retained
+            # scopes close below. A returned failure never promotes this record.
+            store.write('outcome.json', _proof_bytes({**outcome, 'final_closure_pending': True}))
+            with _seal_scope(store) as (digest, seal_close):
+                if observation_close is not None: authenticate(observation_close)
+                seal_close()
+                if observation_close is not None: close_metadata(observation_close)
+                outcome.update(seal_sha256=digest, seal_verified=True)
+            return outcome
+
+        try:
+            native = _Native(receipt, runtime, paths, store)
+            store.write('native-proof.json', _proof_bytes(_tool_commitments(native)))
+            pre, pre_payloads = _preflight(native, paths, report, original, files)
+            outcome['observed_status'] = pre['status']
+            _save_observation(store, 'pre', pre, pre_payloads)
+            if pre['status'] == 'Stopped':
+                with _preflight_scope(native, paths, report, original, files, False) as (again, payloads, close):
+                    if (again, payloads) != (pre, pre_payloads):
+                        raise ValueError('recovery_preflight_commitment_changed')
+                    outcome.update(outcome='already_stopped_observed', preservation=True)
+                    return finish(close)
+
+            native.stop_intent = _manual_intent(native, files, pre, reviewed_source, execution_approval)
+            with ExitStack() as handoff:
+                def recheck():
+                    native.stop_proof = _Files(); lifetime.callback(native.stop_proof.close)
+                    native.stop_proof.read(RECOVERY / 'manual-stop-intent.json', 1024 * 1024, 0o600, UID,
+                                          (hashlib.sha256(native.stop_intent).hexdigest(), len(native.stop_intent)))
+                    again, payloads, close = handoff.enter_context(
+                        _preflight_scope(native, paths, report, original, files, False))
+                    if (again, payloads) != (pre, pre_payloads):
+                        raise ValueError('recovery_preflight_commitment_changed')
+                    native.stop_check = lambda: close_metadata(close)
+                    authenticate(close)
+                try:
+                    _Once(store).send(native.stop_intent, recheck,
+                                      lambda: native.acquire((str(COLIMA), 'stop', '--profile', 'kil-v3-lab'),
+                                                             'private', 300))
+                except Exception as error:
+                    exception(error)
+                    if not native.after_stop: raise
+            status()
+            outcome['outcome'] = ('postverification_inconclusive' if native.stop_certainty == 'returned'
+                                  else 'command_uncertain')
+            with _preflight_scope(native, paths, report, original, files, False) as (post, payloads, close):
+                outcome['observed_status'] = post['status']
+                _save_observation(store, 'post', post, payloads)
+                if post['status'] != 'Stopped':
+                    raise ValueError('recovery_post_status_is_not_stopped')
+                outcome['preservation'] = True
+                if native.stop_certainty == 'returned': outcome['outcome'] = 'graceful_stop_confirmed'
+                return finish(close)
+        except Exception as error:
+            exception(error)
+            status()
+            outcome['preservation'] = False
+            outcome['outcome'] = ('preflight_refused' if native is None or not native.after_stop else
+                                  'command_uncertain' if native.stop_certainty != 'returned' else
+                                  'postverification_inconclusive')
+            if (RECOVERY / 'SHA256SUMS').exists():
+                outcome['seal_verified'] = False
+                return outcome
+            try:
+                return finish()
+            except Exception as sealing_error:
+                exception(sealing_error)
+                outcome['seal_verified'] = False
+                return outcome
 
 
 class _Files:
@@ -1158,3 +1455,22 @@ class _Files:
         if not self.closed:
             self.closed = True
             self._stack.close()
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
+    parser.add_argument('--reviewed-source', required=True)
+    parser.add_argument('--execution-approval', required=True)
+    parser.add_argument('--execute-approved-stop', action='store_true', required=True)
+    arguments = parser.parse_args(argv)
+    try:
+        outcome = recover(arguments.reviewed_source, arguments.execution_approval)
+    except Exception as error:
+        outcome = {'outcome': 'preflight_refused', 'stop_dispatches': 0, 'preservation': False,
+                   'seal_verified': False, 'error_type': type(error).__name__[:128], 'error': str(error)[:4096]}
+    print(canonical(outcome).decode('utf-8'), end='')
+    return 0 if outcome['outcome'] in {'already_stopped_observed', 'graceful_stop_confirmed'} else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
