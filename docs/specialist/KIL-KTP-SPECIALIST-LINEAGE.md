@@ -23805,3 +23805,69 @@ parent-permission remediation planning; no remediation or new native attempt
 without distinct approval. Do not expand into image audit or live HF testing.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T431 — 2026-09-17, narrow evidence-parent remediation design proposed
+
+**Input:** "go for it" in response to preparing a narrowly scoped
+permissions-remediation plan preserving existing receipts, with any new recovery
+attempt requiring fresh approval.
+
+**Interpretation:** CONFIRMED permission to plan only, not to chmod, implement
+a mutator or repeat the spent recovery attempt. Brainstorming precedes the written
+specification/implementation plan. No new native authority is inferred.
+
+**Decision status:** PROPOSED minimal one-directory, descriptor-anchored
+remediation design; design approval PENDING. No specification or implementation
+plan is represented as approved. No permissions or operational state changed.
+
+**Rationale/evidence:** Current clean checkpoint
+434abc930bc939a3358089c1fadf7e293b1bb1b3 preserves the accepted stop-only tool.
+Read current T430, actual _new_store and recent commits. Fresh fixed-parent stat
+confirms .tools UID501/0700/device16777232/inode612669178 and
+.tools/hf-recovery-private UID501/0755/device16777232/inode612764151, unchanged
+from the diagnosed blocker. No current VM/status query, descendant listing,
+receipt reread or platform-image audit was needed for this design.
+
+Two approaches: (1) recommended, separately authorize exactly one retained-FD
+mode change on the existing evidence parent0755→0700, preserving ownership,
+inode and contained receipts; (2) leave0755 unchanged and retain the recovery
+blocker/no resource-release claim. Replacing/moving the parent, choosing another
+receipt root or weakening the recovery guard are outside the proposal.
+
+Recommended design: authenticate exact reviewed source/current account, hold the
+existing cooperating LabLock and no-follow descriptor ancestry to the pinned
+parent; refuse substitution, symlink, wrong UID/mode, active cooperating run or
+unexpected state before mutation. Use fchmod on that already authenticated
+directory descriptor only, never recursive chmod or a path-based follow/adoption.
+Capture bounded direct child roster/metadata before/after without traversing or
+writing receipt contents. Require the same target device/inode/UID, mode0700,
+unchanged ancestor identities and observed children; mode/ctime change is expected,
+not a bytes/inode/ownership repair. Fixture tests first prove mode-only behavior,
+preserved small receipt payloads/seals/modes, replaced target/ancestor refusal,
+zero mutation on precheck failure and honest postcheck uncertainty.
+
+No automatic retry, rollback, restoration or recovery invocation. Any mutation
+or postcheck uncertainty is retained and ends the authorization. Direct child
+metadata is not a full descendant-content attestation or arbitrary external
+exclusion/atomicity claim; this procedure itself writes no receipt bytes.0700
+intentionally removes group/other traversal of this parent, without changing
+children's own modes. Native recovery still needs a NEW separate approval.
+
+**Affected artifacts:** This actual-EOF lineage and generated reader only,
+recording the proposed design. Existing plan/spec/tool/tests, production/deploy/
+accepted artifacts, private-parent metadata and all historical evidence unchanged.
+No implementation, chmod, new receipt/date directory, native command/stop, HF
+request, Ollama, restart/delete/force/retry/rehearsal or image audit.
+
+**Unresolved questions:** User approval of the minimal design. Existing parent's
+0755 origin remains unestablished. VM status/recovery/HF readiness unverified;
+accepted local Envoy unchanged, platform provenance unverified/full Kind-Calico
+acceptance false. Prior checksum/test evidence remains historical, not rerun.
+
+**Next gate:** Preserve complete434abc9 predecessor lineage prefix1,407,935B,
+regenerate/check94 readers/canonical citation/exact lineage-only local commit.
+Brainstorming requires design approval before the validated written spec; its
+written-spec review then precedes writing-plans and any test-first implementation.
+This pause does not ask again for permission to plan or grant live execution.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
