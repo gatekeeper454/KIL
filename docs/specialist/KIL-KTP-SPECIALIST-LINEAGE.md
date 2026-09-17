@@ -22599,3 +22599,66 @@ writer grant for original independent SPEC re-review before QUALITY. Root alone
 owns any later conditional rehearsal after every engineering/review/input gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T415 — 2026-09-16, independent resolution-loop SPEC re-review PASS
+
+**Input:** Original SPEC reviewer received frozen clean corrected HEAD
+2b2d891e9c21ba88935817a539f8f0057ec8e473 for independent re-review against its
+e011b64 finding checkpoint and the complete approved compact-runtime specification.
+Exclusive reviewer writer grant permits only this lineage Markdown/reader pair;
+root concurrently runs read-only required15 regressions on the frozen source.
+
+**Interpretation:** Re-read the complete approved specification and actual exact
+correction diff/tests. Evaluate the finite real symlink-loop failure boundary
+identified in T412 without reopening unrelated platform audits, reading the plan,
+altering source/tests or exercising native preparation authority.
+
+**Decision status:** CONFIRMED independent SPEC re-review PASS. Fresh designated
+interpreter runtime/profile/IO suite ran 145 tests in 3.793s, OK, using bytecode
+off, PYTHONPATH=src and -W error::ResourceWarning. All five newly added real-loop
+regressions are included: private production selector, home-loop create/liveguard
+and receipt-name-loop create/liveguard. The selector now converts Python 3.12
+Path.resolve RuntimeError to ValueError with the original cause, and create/guard
+existing known-failure lists normalize actual receipt-resolution loops as well.
+The previously confirmed Important finding is resolved; no important SPEC issue
+remains in this bounded re-review. T413/T414 historical RED/GREEN remains its
+recorded engineering evidence, not a reviewer claim of independently observing RED.
+
+**Rationale:** Three minimal runtime hunks add four net source lines, solely
+normalizing refusal. Tests use actual temporary self-symlinks rather than mocked
+resolve, retain the production selector for home cases and authenticate real
+registry/binding bytes. Home creation refuses before new descriptors/allocation
+with zero mocked captures; restored receipt/home fixtures allow live guarding,
+and retained handles remain idempotently closable. Marker/binding authentication,
+complete two-chain topology, descriptor checks, UID agreement, path byte caps,
+exclusive collision/bootstrap, control grammar/getters and exact final runner
+consistency are unchanged from the previously reviewed compliant portions.
+Every other src/kil path is byte-identical to the e011b64 checkpoint. No fallback,
+adoption route, relaxed file schema or new authentication IO was introduced.
+
+**Affected artifacts:** Reviewer appends only this lineage entry/reader. Exact
+correction diff contains runtime production, existing runtime tests and lineage
+pair; complete change from 84e8e4f still contains only the authorized nine paths.
+Frozen diff --check passed. Entire e011b64 lineage prefix of 1,320,294 bytes is
+preserved; current 2b2d891 lineage prefix measures 1,326,439 bytes. Read-only check
+confirms actual /Users/mistorm/.kil-hf absent and not symlink. No actual-home
+allocation, native/VM/HF/HTTP/Ollama/network, image audit, install, old receipt/
+runtime/disk mutation, adoption/deletion, global PATH/default mutation, branch
+move/merge/push or worktree operation occurred. Historical broader citation
+failure for four immutable omissions and sixteen intentional skips is unchanged.
+
+**Unresolved questions:** Fresh independent QUALITY, final composed review and
+root required15 verification remain gates. Native compatibility and HF preparation
+readiness are unverified. Platform-image provenance remains unverified, full
+Kind-Calico acceptance false and accepted local Envoy intact. The conditional
+single root-only request-free rehearsal remains unconsumed; live HF action is
+separately unapproved. No zero-TOCTOU or arbitrary same-UID exclusion is claimed.
+
+**Next gate:** Render/check all 92 readers, confirm the full current lineage byte
+prefix and exact lineage-only staging, commit and release the grant at clean
+exact HEAD. Root may then dispatch fresh QUALITY and final composed review after
+its frozen-source regressions, with no native attempt until every listed gate
+passes. Retained complete request-free rehearsal plus verified owned teardown,
+not this SPEC PASS or unit tests, is required before HF-test readiness.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
