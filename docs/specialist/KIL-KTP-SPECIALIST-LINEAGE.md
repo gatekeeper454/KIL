@@ -21516,3 +21516,100 @@ runtime/receipt; successful retained rehearsal and explicit action permission
 are still required before the fresh three-track live action.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T397 — 2026-09-16 — Approved PATH repair scope; concrete dependency-authority design
+
+**Input:** The user replied “approved” to the proposed narrow test-first PATH
+repair before a fresh rehearsal, following the single failed native attempt.
+
+**Interpretation:** Engineering repair scope is approved. This is not permission
+for a native retry, partial-state adoption/deletion, installation, platform-image
+audit or automatic action. Brainstorming requires written review of the concrete
+PATH/executable authority contract before implementation, despite the small fix.
+
+**Decision status:** Confirmed repair-scope approval; PROPOSED concrete design
+written for user review. No implementation/test edit or native command occurred.
+Recommended mutation-only authenticated dependency PATH; global PATH changes,
+installation and shim/copy approaches are rejected proposals, not native actions.
+
+**Rationale:** Existing explicit accepted Docker dispatch succeeds, but private
+Colima's transitive lookup inherits a PATH without that binary. PATH priority
+can shadow other executables, so the repair must freshly authenticate its exact
+three-tool directory, reject ambiguous/symlink/extra entries and preserve original
+Colima selection before prefixing. Restrict to exact scoped mutating Colima
+commands; leave readonly/global and direct tool dispatch unchanged. Retain final
+authority/command/manifest/metadata consistency after all authentication IO.
+No transactional exclusion or elimination of TOCTOU is proposed.
+
+Root inspected the current runner/tests, exact three filenames in the existing
+accepted tools directory and source checkpoint 9fb0e38. No unverified executable
+was launched; no environment dump or upstream code snippet was executed. The
+purpose, constraints and success criteria follow the user's approved narrow
+repair and prior failure evidence; no missing preference or visual question
+requires a separate exploratory branch.
+
+**Affected artifacts:** New
+docs/superpowers/specs/2026-09-16-hf-colima-dependency-path-design.md and reader;
+this actual-EOF lineage append and reader only. Earlier lineage remains an exact
+prefix. Source/tests, strict grammar/acceptance, accepted inputs/local Envoy,
+all sixteen deferrals, historical receipt/export bytes and partial runtime are
+unchanged. No native/VM/HF/Ollama/image audit, installation, retry, cleanup,
+branch movement, merge or push occurred. Platform-image provenance remains
+unverified and full Kind/Calico acceptance remains false.
+
+**Unresolved questions:** User written-spec review is required before planning
+and failing-first implementation. Later native compatibility gates are untested;
+the prior failed run cannot be resumed or silently retried. Known historical
+citation omissions remain outside this repair.
+
+**Next gate:** Generate/check indexed readers, verify exact prior lineage prefix
+and document-only diff, then commit the concrete design/lineage checkpoint.
+Request written-spec approval under brainstorming; only then create the detailed
+implementation plan and perform TDD with SPEC/QUALITY review. Any later fresh
+native rehearsal requires separate permission from a clean reviewed checkpoint.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T398 — 2026-09-16 — Conditional fresh rehearsal permission added during PATH design
+
+**Input:** During the approved repair's design preparation, the user added
+“rerun also approved if you get everything to work.”
+
+**Interpretation:** Add conditional permission for one fresh request-free PRIVATE
+rehearsal after verified engineering readiness. Do not resume/adopt the failed
+ee8373d6 run, retry under uncertainty, alter old evidence or proceed into action.
+This adds native permission beyond T397's initial engineering-only interpretation;
+the earlier entry remains intact as the preceding input/decision record.
+
+**Decision status:** Confirmed conditional rehearsal permission. Concrete written
+PATH authority design review, implementation plan, TDD and independent SPEC/QUALITY
+gates remain pending; no condition is claimed met and no native command occurred.
+No additional rehearsal permission is needed once all repair readiness gates
+succeed. Separate explicit three-track action permission remains required.
+
+**Rationale:** The additional message augments, rather than replaces, the narrow
+repair request. The proposed mutation-only authenticated PATH design can be
+reviewed and implemented without deleting or adopting current partial state.
+Tests/reviews, reader/prefix/diff checks and clean source establish the engineering
+condition before a fresh source-bound nonce is used for the single rehearsal.
+No full image provenance, all-green broader-suite or native compatibility claim
+is inferred. Known four historical citation omissions remain visible and untouched.
+
+**Affected artifacts:** Amend only the new proposed
+docs/superpowers/specs/2026-09-16-hf-colima-dependency-path-design.md and reader
+to record the added permission; append this T398 entry/reader. Source/tests,
+strict contracts/deferrals, accepted inputs/local Envoy, old receipt/export bytes
+and failed runtime remain unchanged. No native/VM/HF/Ollama/image audit, installation,
+deletion, rerun, branch movement, merge or push occurred.
+
+**Unresolved questions:** Written-spec approval under brainstorming still precedes
+planning and implementation. Repair and later native gates have not yet passed.
+Conditional permission is not a guarantee that a fresh rehearsal can succeed.
+
+**Next gate:** Complete the document-only checkpoint and obtain written PATH
+design review, then plan/implement test-first with independent reviews. If those
+readiness gates succeed, use the existing conditional permission for one fresh
+request-free private rehearsal. Stop on any uncertainty; no automatic second
+attempt or action-mode continuation is authorized.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

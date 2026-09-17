@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exploratory Colima dependency PATH repair</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/specs/2026-09-16-hf-colima-dependency-path-design.md">
+<meta name="source-sha256" content="05449493a073a5e864c41d712f68c01bc27443ab17c18764f47ca264b847ac0f">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-09-16-hf-colima-dependency-path-design.md</code> (<code>05449493a073a5e864c41d712f68c01bc27443ab17c18764f47ca264b847ac0f</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">Exploratory Colima dependency PATH repair</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-09-16-hf-colima-dependency-path-design.md</code> (<code>05449493a073a5e864c41d712f68c01bc27443ab17c18764f47ca264b847ac0f</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#exploratory-colima-dependency-path-repair">Exploratory Colima dependency PATH repair</a></li><li class="level-2"><a href="#input-cause-and-scope">Input, cause and scope</a></li><li class="level-2"><a href="#alternatives-and-recommendation">Alternatives and recommendation</a></li><li class="level-2"><a href="#exact-authority-boundary">Exact authority boundary</a></li><li class="level-2"><a href="#unchanged-consumers-and-failure-handling">Unchanged consumers and failure handling</a></li><li class="level-2"><a href="#test-first-implementation-and-verification">Test-first implementation and verification</a></li><li class="level-2"><a href="#spec-self-review-and-next-gate">Spec self-review and next gate</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="exploratory-colima-dependency-path-repair" href="#exploratory-colima-dependency-path-repair">Exploratory Colima dependency PATH repair</a></li><li class="level-2"><a data-section-id="input-cause-and-scope" href="#input-cause-and-scope">Input, cause and scope</a></li><li class="level-2"><a data-section-id="alternatives-and-recommendation" href="#alternatives-and-recommendation">Alternatives and recommendation</a></li><li class="level-2"><a data-section-id="exact-authority-boundary" href="#exact-authority-boundary">Exact authority boundary</a></li><li class="level-2"><a data-section-id="unchanged-consumers-and-failure-handling" href="#unchanged-consumers-and-failure-handling">Unchanged consumers and failure handling</a></li><li class="level-2"><a data-section-id="test-first-implementation-and-verification" href="#test-first-implementation-and-verification">Test-first implementation and verification</a></li><li class="level-2"><a data-section-id="spec-self-review-and-next-gate" href="#spec-self-review-and-next-gate">Spec self-review and next gate</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="exploratory-colima-dependency-path-repair">Exploratory Colima dependency PATH repair</h1>
+<p>Date: 2026-09-16.</p>
+<p>Status: <strong>Repair scope approved; concrete authority design proposed for written
+review. No implementation or new native attempt has started.</strong></p>
+<h2 id="input-cause-and-scope">Input, cause and scope</h2>
+<p>The user approved the narrow test-first PATH repair after rehearsal
+v3b2-ee8373d6150ffa19ed3ec8b0457b0a2b3791cbd3dc66ba658373e042dcf4c31f
+failed at private Colima startup. Its command-0014.stderr says Docker was not
+found. The accepted Docker executable verified and its explicit version dispatch
+succeeded; the inherited PATH does not locate it. Colima performs a separate
+transitive dependency lookup. No installation or platform-image audit is needed.</p>
+<p>Repair only the exploratory BoundedRunner's private Colima mutation dispatch.
+Preserve strict grammar, namespace authority, durable intent/latches, byte/time
+bounds, default-home protection, accepted inputs and all sixteen deferrals.
+The failed receipt and partial runtime remain untouched. No native retry,
+rehearsal or action-mode request was authorized by the initial engineering
+approval. During design preparation the user additionally instructed “rerun also
+approved if you get everything to work.” This conditionally authorizes one new,
+request-free private rehearsal after the repair's tests/reviews and clean-source
+gates succeed. It does not authorize resuming the failed run or any action-mode
+request. No further rehearsal permission is needed once those conditions are met.</p>
+<h2 id="alternatives-and-recommendation">Alternatives and recommendation</h2>
+<ol>
+<li><strong>Recommended: scoped, freshly authenticated dependency PATH.</strong> Prepend the
+existing accepted tools directory only when dispatching an exact private
+ExploratoryColimaCommand marked mutating. This covers the closed start/stop/
+delete grammar and native Docker context teardown, without a global change.</li>
+<li>Export the directory into the parent process or user PATH. Smaller operational
+workaround, but it does not bind transitive lookup to runner verification and
+affects unrelated commands. Rejected.</li>
+<li>Install another Docker or create a runtime shim/copy. Adds alternate executable
+identity or another mutable control-file contract. Unnecessary; rejected.</li>
+</ol>
+<h2 id="exact-authority-boundary">Exact authority boundary</h2>
+<p>Use only inputs.tools, already tied to the checksum-authenticated accepted
+manifest. No caller PATH/home/binary parameter, new environment key or new CLI
+option. The tools directory must be absolute, canonical, nonsymlink and contain
+no PATH separator; refuse ambiguous spelling. Its complete bounded direct-child
+roster must be exactly docker, kind and kubectl, all regular executable files.
+Freshly authenticate all three full files against the accepted rows before
+granting this directory PATH priority. Extra entries refuse rather than shadow
+Colima, Lima or system helpers. This is an executable-input check, not an image
+provenance audit or installation.</p>
+<p>Resolve the top-level Colima executable from the original sanitized PATH before
+prepending the tools directory; dispatch that existing executable by absolute
+path. Missing, nonregular, nonexecutable or noncanonical resolution refuses.
+The existing pinned Colima/Lima version checks remain unchanged. Preserve the
+original PATH tail byte-for-byte; when absent or empty, use the authenticated
+directory alone without introducing an empty current-directory search entry.
+Do not mutate os.environ or the command's derived four-variable env tuple.</p>
+<p>Recheck the dependency directory identity/roster, authenticated executable bytes
+and inputs.tools across existing authentication IO. Retain the final runtime/
+command guard and exact manifest/metadata-map consistency checks after all new
+authentication/guard IO, immediately before capture. Refuse known drift with
+zero process capture. No transaction, external exclusion or zero-TOCTOU guarantee
+is claimed; do not introduce a generic executable search/dispatch facility.</p>
+<h2 id="unchanged-consumers-and-failure-handling">Unchanged consumers and failure handling</h2>
+<p>Direct Docker/Kind/kubectl commands still use their existing absolute authenticated
+executable dispatch. Plain global Colima version/list and scoped read-only Colima
+commands keep their existing sanitized environment and behavior. HOME remains
+the actual passwd home; COLIMA_HOME/LIMA_HOME/DOCKER_CONFIG/TMPDIR remain exactly
+derived from the fresh private RuntimeAuthority. No grammar or foreign-state
+exception is introduced. Any authority or dependency failure propagates before
+process acquisition; no fallback, retry, adoption or partial-state cleanup.</p>
+<h2 id="test-first-implementation-and-verification">Test-first implementation and verification</h2>
+<p>The implementation unit is src/kil/hf_exploratory_io.py and its existing test
+module only, plus required design/plan/lineage readers. First demonstrate failure
+for private start/stop/delete dependency PATH wiring and original Colima selection.
+Use real temporary authority/filesystem fixtures; mock only the unavoidable
+process acquisition boundary and narrowly identified executable digest fixtures.
+Keep real accepted manifest authentication, metadata shape/type checks and guards.</p>
+<p>Cover unchanged readonly/global/other-family behavior; missing or substituted
+Docker and other accepted binaries; ambiguous or symlink tools paths; unexpected
+directory entries; dependency-directory/bytes/tools-path drift during IO; missing
+Colima; and preservation of sanitized inherited variables and PATH tail. Watch
+each new behavioral assertion fail for the intended reason before code changes.
+Re-run focused IO/runtime and the required 15-module exploratory/strict regression
+suite with ResourceWarning fatal and bytecode off. Independent SPEC then QUALITY
+review, reader/prefix/diff checks and a clean engineering checkpoint are required
+before using the conditional permission for one fresh native rehearsal. If an
+engineering gate fails or the rehearsal is inconclusive, stop without another
+automatic attempt or action-mode continuation.</p>
+<p>The prior full suite's four immutable historical citation omissions remain
+unchanged; neither old documents nor exemptions are edited to hide the failure.
+Full Kind/Calico acceptance remains false and platform-image provenance unverified.
+The accepted local-Envoy result is unaffected. The conditional rerun covers only
+the request-free rehearsal. Successful retained rehearsal and separate explicit
+action permission still gate any fresh three-track action.</p>
+<h2 id="spec-self-review-and-next-gate">Spec self-review and next gate</h2>
+<p>One runner unit, finite mutation-only routing, exact tool authority and explicit
+unchanged consumers are specified; no placeholder or unrelated refactor remains.
+This document records the approved repair scope without treating new authority
+details as silently confirmed decisions. User review of this written design is
+the brainstorming gate before the concrete implementation plan and TDD.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical CITATION.cff</a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>
