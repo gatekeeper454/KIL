@@ -24573,3 +24573,91 @@ pending NEW stop-only approval, not implementation or platform-image audit.
 No task creation, native/HF operation or execution authority inferred here.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T441 — 2026-09-17, residual-VM recovery resumed at the approval gate
+
+**Input:** User "KIL HF Test — Residual VM Recovery" instructed reading the
+2026-09-17 handoff first, using its exact existing worktree, resuming at the
+pending stop-only approval gate, and no repeated engineering, provenance audit,
+VM or HF execution before separate approval.
+
+**Interpretation:** Resume the accepted recovery preparation and request NEW
+explicit approval for one fixed private stop-only attempt. This request is not
+execution approval. Preserve the externally managed detached worktree.
+
+**Decision status:** CONFIRMED exact worktree selected:
+`/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL`.
+NEW stop-only approval remains PENDING; T430 and T439 permissions remain spent.
+No VM/HF controls, live preflight, permission-helper rerun or audit performed.
+
+**Rationale/evidence:** Handoff absent in main checkout; read-only worktree/file
+navigation located it in the exact managed worktree. Read that handoff, root
+AGENTS, Task6 and the final lineage tail. Read-only git checks returned clean
+status and HEAD `23b7d7f459a7ca90c5e9baaebf7d30003d192472` before this append.
+This is a resumption observation, not a future execution source binding; clean
+current HEAD/source/identity checks remain required after actual approval.
+Accepted engineering and historical verification are not repeated or newly
+claimed. Using-superpowers and verification-before-completion guidance applied
+only to workflow and documentation checks.
+
+**Affected artifacts:** This append-only lineage entry only. No recovery/tool/
+test/spec/plan/protected/private evidence changes or new execution receipts.
+
+**Unresolved questions:** New approval, no-concurrent-native-activity condition,
+actual live preflight and final recovery result remain pending. VM status remains
+UNOBSERVED. Local Envoy acceptance unchanged; platform-image provenance remains
+unverified and full Kind/Calico acceptance false. Recovery does not establish HF
+readiness or resolve the earlier production SSH-control compatibility refusal.
+
+**Next gate:** Ask explicit approval for ONE accepted stop-only recovery attempt
+of private `kil-v3-lab` under `/Users/mistorm/.kil-hf/r254877dc1b1462c4`, including
+live preflight and exclusive evidence creation. CPU/RAM may be released;
+disks/profile/config remain; native controls may change. Any refusal, timeout,
+overflow, lost/ambiguous result or partial evidence ends permission, with no
+retry/force/delete/restart/repair/rollback/alternate receipt. Stop at the final
+returned result; HF operations remain separately gated.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T442 — 2026-09-17, new single stop-only recovery approval
+
+**Input:** User "go next action" in direct response to the explicit request for
+one stop-only recovery attempt for private `kil-v3-lab` under
+`/Users/mistorm/.kil-hf/r254877dc1b1462c4`, including live preflight and exclusive
+evidence creation, with no concurrent native activity. The request disclosed
+CPU/RAM release, retained disks/profile/config, possible native-control changes,
+termination of permission on refusal or uncertainty, and separate HF gates.
+
+**Interpretation:** Approve that one next action, not a retry, repair, restart,
+force, deletion, permission-helper rerun, provenance audit or HF operation.
+The actual approval string to pass is `go next action`.
+
+**Decision status:** CONFIRMED NEW single recovery attempt approved. Root alone
+will invoke unchanged accepted main once after a clean documentation checkpoint,
+fresh source/identity checks and no-competing-native-activity check. Execution
+and its outcome are not yet performed or asserted by this entry.
+
+**Rationale/evidence:** Task6 and unchanged main/recover were read. Fresh source
+SHA256 `2b58ab2392543611f64044f5d2624f07edfa03ed4c988e1bff2c03d137ccf864` and test
+SHA256 `a4ee14ce13dd569bc1a1202ffab3be450fed8bbae954be96b98600caeccaf64f` match the
+handoff. Current tracked change before this entry was solely T441 lineage.
+Accepted engineering/regressions remain historical and are not repeated.
+Executing-plans guidance applies only to the existing root-only operational
+Task6; no development or subagent native dispatch is introduced.
+
+**Affected artifacts:** Append-only lineage and regenerated lineage reader,
+scoped local documentation checkpoint. No engineering/protected/private receipt
+changes are authorized by the checkpoint itself.
+
+**Unresolved questions:** Actual live preflight, VM state, final returned outcome,
+dispatch certainty and preservation remain pending. Runtime compatibility and HF
+readiness remain separate; platform provenance unverified/full Kind-Calico
+acceptance false/local Envoy acceptance unchanged.
+
+**Next gate:** Fresh exact clean40-hex source binding, actual argv display and
+scoped outside-sandbox single main invocation using this approval. Any refusal,
+timeout, overflow, lost result or partial evidence ends permission. Preserve the
+final result after all teardown, append actual outcome, and stop there with no
+retry or implicit HF continuation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
