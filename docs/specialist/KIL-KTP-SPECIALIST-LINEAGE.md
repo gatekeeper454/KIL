@@ -21435,3 +21435,84 @@ can gate a separate fresh fixed-three-track action. No historic replay or full
 Kind/Calico acceptance is inferred.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T396 — 2026-09-16 — Authorized private request-free rehearsal; dependency PATH refusal
+
+**Input:** After the reviewed engineering checkpoint b1e585b, the user instructed
+“Go to rehearsal.”
+
+**Interpretation:** Permission covers one fresh PRIVATE request-free setup,
+capture and guarded teardown rehearsal. It does not cover action-mode instructions,
+automatic continuation, default-home VM mutation, retry/adoption, old receipt
+changes or platform-image audit. The existing CLI loops into action after success,
+so root invoked its reviewed LabLock/input/store/runner/lifecycle APIs directly
+with constant mode='rehearsal' and no action loop. No source was modified.
+
+**Decision status:** Rehearsal attempted once and INCONCLUSIVE at private profile
+startup. No successful rehearsal, native teardown, live HF instruction or new
+acceptance result is claimed. The captured native error is dependency check failed
+for docker: docker not found. Root stopped without retry or deleting unbound state.
+
+**Rationale:** The reviewed-source preflight initially refused sandboxed Git's
+stderr warning: confstr failed to obtain DARWIN_USER_TEMP_DIR. Diagnostic bounded
+Git reads confirmed correct b1e585b HEAD and clean status, with only that warning.
+The unchanged fail-closed gate and accepted-input factory passed outside the
+sandbox; the 48,647,168-byte archive and exact three tool binaries verified.
+No gate was bypassed, stderr suppressed or source patched. Host free space was
+291GiB, and Colima/Lima resolved to the existing .local/bin tools.
+
+Fresh run v3b2-ee8373d6150ffa19ed3ec8b0457b0a2b3791cbd3dc66ba658373e042dcf4c31f
+used reviewed local source b1e585bf6e443b393adde5c78a036836f89f5c92.
+The lifecycle recorded fourteen commands: thirteen read-only checks and one
+900-second-bounded private Colima start, which returned 1 immediately at
+2026-09-16 18:27:39 PDT. Colima wrote its private saved profile but refused its
+Docker dependency before any observed private Lima instance/disks. Docker's
+verified executable is in the saved project's .tools/bin; the inherited PATH
+does not resolve docker. Explicit accepted executable dispatch and Colima's
+transitive PATH lookup are different authority paths. Installing another Docker
+binary or relaxing binding is not justified by this evidence.
+
+No Kind creation, Calico/workload setup, driver attach, request_intent or request
+attempt occurred. Runtime snapshot and leftovers were retained before reporting.
+The strict creation binding remained unset, so teardown correctly refused:
+owned_teardown=false, manual_recovery=true, profile_delete_completed=false,
+cluster_removed=false. The conservative manual-recovery flag is not evidence
+that a VM is running. Pure fresh capture verified an empty private Lima roster,
+no instance/data/root disks/lock/startup, and exact equality to profile-created.json.
+Only the saved profile, prepared Kind control and reserved private directories
+were observed; no partial-state deletion or adoption was attempted.
+
+Fresh post-failure observation used two additional read-only global commands
+(Colima list and Docker context show). Complete default-home roster/rows,
+default networks bytes/identity, global Docker context/directory/config commitment
+and default kubeconfig commitment matched foreign-original.json. The first
+diagnostic wrapper mistakenly compared the roster's list-valued children to an
+empty dict; its private-empty assertion failed despite children=[]. The corrected
+pure filesystem check passed without another native command. All forty retained
+receipt entries passed shasum verification; no receipt was modified afterward.
+
+**Affected artifacts:** New immutable receipt under
+.tools/hf-exploratory-private/hf-exploratory-ee8373d6150ffa19ed3ec8b0457b0a2b3791cbd3dc66ba658373e042dcf4c31f/
+and separate runtime sibling hf-exploratory-runtime-ee8373d6150ffa19ed3ec8b0457b0a2b3791cbd3dc66ba658373e042dcf4c31f/.
+Receipt includes command-0014.stderr, profile-created.json, finite runtime
+observations, partial leftovers, report/synopsis and SHA256SUMS. This dated
+actual-EOF lineage entry and generated reader are the only tracked edits.
+The exact b1e585b Markdown prefix remains preserved. No implementation, strict
+source/test, accepted/local-Envoy artifact, sixteen-deferral, old evidence/export,
+Ollama, platform-image audit, branch, merge or push change occurred. Platform-image
+provenance remains unverified and full Kind/Calico acceptance remains false.
+
+**Unresolved questions:** A narrowly reviewed transitive dependency PATH repair
+is needed before another native attempt; it must use existing authenticated
+accepted tool bytes, retain finite authority and receive failing-first coverage.
+Later native compatibility gates remain untested. This failed fresh run must not
+be resumed or silently treated as permission for another attempt or action.
+
+**Next gate:** Render/check the readers, preserve the exact earlier lineage
+prefix and checkpoint this factual failure record. Request approval for the
+narrow test-first PATH repair, then separately authorize a fresh request-free
+private rehearsal from clean reviewed source. Preserve the current partial
+runtime/receipt; successful retained rehearsal and explicit action permission
+are still required before the fresh three-track live action.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
