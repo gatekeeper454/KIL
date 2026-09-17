@@ -6,7 +6,9 @@ import os
 from pathlib import Path
 import re
 import selectors
+import shutil
 import signal
+import stat
 import subprocess
 import time
 
@@ -21,6 +23,81 @@ from kil.v3b2_proofs import canonical
 
 MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 MAX_PRIVATE_TOTAL_BYTES = 256 * 1024 * 1024
+
+
+def _dependency_identity(row):
+    return (row.st_dev, row.st_ino, row.st_mode, row.st_uid, row.st_nlink,
+            row.st_size, row.st_mtime_ns, row.st_ctime_ns)
+
+
+def _original_colima_identity(path):
+    if (not isinstance(path, Path) or not path.is_absolute() or '..' in path.parts
+            or path.is_symlink() or path.resolve(strict=True) != path):
+        raise ValueError('unsafe_original_colima_path')
+    row = path.lstat()
+    if not stat.S_ISREG(row.st_mode) or not row.st_mode & stat.S_IXUSR:
+        raise ValueError('original_colima_not_regular_owner_executable')
+    return _dependency_identity(row)
+
+
+def _dependency_snapshot(tools, accepted):
+    """Authenticate the complete finite directory before granting PATH priority."""
+    if (not isinstance(tools, Path) or not tools.is_absolute() or '..' in tools.parts
+            or os.pathsep in str(tools) or tools.is_symlink()
+            or tools.resolve(strict=True) != tools):
+        raise ValueError('unsafe_accepted_dependency_path')
+    directory = os.open(tools, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        identity = _dependency_identity(os.fstat(directory))
+
+        def guard_directory():
+            if (tools.resolve(strict=True) != tools
+                    or _dependency_identity(tools.lstat()) != identity
+                    or _dependency_identity(os.fstat(directory)) != identity):
+                raise ValueError('accepted_dependency_directory_changed')
+
+        def roster():
+            names = set()
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if len(names) == 3 or entry.name not in TOOL_VERSION_ARGUMENTS:
+                        raise ValueError('unaccepted_dependency_directory_roster')
+                    names.add(entry.name)
+            if names != set(TOOL_VERSION_ARGUMENTS):
+                raise ValueError('incomplete_dependency_directory_roster')
+
+        guard_directory()
+        roster()
+        files = []
+        for name in sorted(TOOL_VERSION_ARGUMENTS):
+            descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                                 dir_fd=directory)
+            try:
+                before = os.fstat(descriptor)
+                file_identity = _dependency_identity(before)
+                if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                        or not before.st_mode & stat.S_IXUSR):
+                    raise ValueError('dependency_not_single_link_regular_owner_executable')
+                row = accepted[name]
+                digest = verify_bytes(read_regular(tools / name, 128 * 1024 * 1024),
+                                      row['executable_sha256'], row['byte_size'])
+                if (_dependency_identity(os.fstat(descriptor)) != file_identity
+                        or _dependency_identity(os.stat(name, dir_fd=directory,
+                                                        follow_symlinks=False)) != file_identity):
+                    raise ValueError('accepted_dependency_file_changed')
+                files.append((name, file_identity, digest))
+            finally:
+                os.close(descriptor)
+        # A later file's verification must not leave an earlier file substituted.
+        for name, file_identity, _ in files:
+            if _dependency_identity(os.stat(name, dir_fd=directory,
+                                            follow_symlinks=False)) != file_identity:
+                raise ValueError('accepted_dependency_file_changed')
+        roster()
+        guard_directory()
+        return identity, tuple(files)
+    finally:
+        os.close(directory)
 
 
 def capture_process(argv, environment, stdin, timeout, maximum, cwd):
@@ -155,6 +232,23 @@ class BoundedRunner:
             environment['TMPDIR'] = str(Path(dict(command.env)['DOCKER_CONFIG']).parent / 'runtime-tmp')
         argv = command.argv
         name = Path(argv[0]).name
+        scoped_mutation = type(command) is ExploratoryColimaCommand and command.mutating
+        if scoped_mutation:
+            try:
+                tools = self.inputs.tools
+                original_path = environment.get('PATH')
+                found = shutil.which('colima', path=original_path if original_path is not None else os.defpath)
+                if found is None:
+                    raise ValueError('original_colima_unavailable')
+                original_colima = Path(found)
+                if str(original_colima) != found:
+                    raise ValueError('noncanonical_original_colima_spelling')
+                colima_identity = _original_colima_identity(original_colima)
+                dependencies = _dependency_snapshot(tools, accepted)
+                environment['PATH'] = str(tools) + (os.pathsep + original_path if original_path else '')
+                argv = (str(original_colima), *argv[1:])
+            except (OSError, AttributeError, KeyError, TypeError, ValueError) as error:
+                raise ValueError('unavailable_or_substituted_accepted_tool_authority') from error
         if name in TOOL_VERSION_ARGUMENTS:
             tools = self.inputs.tools
             executable = tools / name
@@ -171,8 +265,16 @@ class BoundedRunner:
             verify_bytes(current_manifest, ACCEPTED_MANIFEST_SHA256, len(current_manifest))
             if self.inputs.manifest_bytes != manifest:
                 raise ValueError('accepted_manifest_changed_during_verification')
-            if name in TOOL_VERSION_ARGUMENTS and self.inputs.tools != tools:
+            if (name in TOOL_VERSION_ARGUMENTS or scoped_mutation) and self.inputs.tools != tools:
                 raise ValueError('accepted_tools_path_changed_during_verification')
+            if scoped_mutation:
+                try:
+                    if _dependency_snapshot(tools, accepted) != dependencies:
+                        raise ValueError('accepted_dependencies_changed_during_verification')
+                    if _original_colima_identity(original_colima) != colima_identity:
+                        raise ValueError('original_colima_changed_during_verification')
+                except OSError as error:
+                    raise ValueError('accepted_dependency_unavailable_during_verification') from error
             if name in TOOL_VERSION_ARGUMENTS:
                 verify_bytes(read_regular(executable, 128 * 1024 * 1024),
                              row['executable_sha256'], row['byte_size'])
@@ -195,7 +297,7 @@ class BoundedRunner:
         try:
             if type(self.inputs.manifest_bytes) is not bytes or self.inputs.manifest_bytes != manifest:
                 raise ValueError('accepted_manifest_changed_during_verification')
-            if name in TOOL_VERSION_ARGUMENTS and self.inputs.tools != tools:
+            if (name in TOOL_VERSION_ARGUMENTS or scoped_mutation) and self.inputs.tools != tools:
                 raise ValueError('accepted_tools_path_changed_during_verification')
             current_metadata = self.inputs.tool_records
             if type(current_metadata) is not dict or set(current_metadata) != set(accepted):

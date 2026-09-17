@@ -4,6 +4,7 @@ import json
 from hashlib import sha256
 import os
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 import unittest
@@ -11,7 +12,7 @@ from unittest.mock import patch
 
 from kil.v3b1_driver_protocol import canonical_record
 from kil.v3b2_contracts import TRACKS
-from kil.v3b2_journal import Command
+from kil.v3b2_journal import Command, COLIMA_START_ARGV
 from kil.hf_exploratory_inputs import ACCEPTED_RUN, ACCEPTED_MANIFEST_SHA256, ExploratoryInputs, verify_bytes
 
 
@@ -50,6 +51,373 @@ class IOTests(unittest.TestCase):
         authority = RuntimeAuthority.create(store, 'a' * 64)
         self.addCleanup(authority.close)
         return authority
+
+    def test_scoped_start_uses_accepted_dependency_path_and_original_colima(self):
+        authority = self.runtime_authority()
+        inputs, colima, verify = self.dependency_fixture()
+        command = self.scoped_mutation(authority)
+        namespace = command.env
+        with patch.dict(os.environ, {'PATH': str(colima.parent)}), \
+                patch.object(self.io, 'verify_bytes', side_effect=verify), \
+                patch.object(self.io, 'capture_process') as capture:
+            self.io.BoundedRunner(Path.cwd(), inputs).run(command)
+            argv, env, _, _, _, _ = capture.call_args.args
+            self.assertEqual(argv, (str(colima), *COLIMA_START_ARGV[1:]))
+            self.assertEqual(env['PATH'], str(inputs.tools) + os.pathsep + str(colima.parent))
+            self.assertEqual({key: env[key] for key, _ in namespace}, dict(namespace))
+            self.assertEqual(command.env, namespace)
+            self.assertEqual(os.environ['PATH'], str(colima.parent))
+
+    def dependency_fixture(self):
+        root = Path(tempfile.mkdtemp(dir=self.temp.name)).resolve()
+        tools = root / '.tools' / 'bin'
+        original = root / 'original-bin'
+        tools.mkdir(parents=True)
+        original.mkdir()
+        payloads = {name: ('inert fixture: ' + name).encode() for name in ('docker', 'kind', 'kubectl')}
+        for name, payload in payloads.items():
+            (tools / name).write_bytes(payload)
+            (tools / name).chmod(0o755)
+        colima = original / 'colima'
+        colima.write_bytes(b'inert original colima fixture')
+        colima.chmod(0o755)
+        inputs = self.accepted_inputs(tools)
+        rows = json.loads(inputs.manifest_bytes)['verified_tool_identities']
+        real_verify = self.io.verify_bytes
+        def verify(data, digest, size):
+            if digest == ACCEPTED_MANIFEST_SHA256:
+                return real_verify(data, digest, size)
+            for name, row in rows.items():
+                if digest == row['executable_sha256']:
+                    self.assertEqual((digest, size), (row['executable_sha256'], row['byte_size']))
+                    if data == payloads[name]:
+                        return digest
+            return real_verify(data, digest, size)
+        return inputs, colima, verify
+
+    def scoped_mutation(self, authority, argv=COLIMA_START_ARGV):
+        from kil.hf_exploratory_runtime import ExploratoryColimaCommand
+        return ExploratoryColimaCommand(Command(argv, 1, mutating=True), authority)
+
+    def assert_dependency_rejected(self, fixture, command, verify=None):
+        inputs, colima, fixture_verify = fixture
+        with patch.dict(os.environ, {'PATH': str(colima.parent)}), \
+                patch.object(self.io, 'verify_bytes', side_effect=verify or fixture_verify), \
+                patch.object(self.io, 'capture_process') as capture:
+            with self.assertRaises(ValueError):
+                self.io.BoundedRunner(Path.cwd(), inputs).run(command)
+            capture.assert_not_called()
+
+    def test_scoped_start_stop_delete_prefix_only_authenticated_tools(self):
+        authority = self.runtime_authority()
+        inputs, colima, verify = self.dependency_fixture()
+        tail = str(colima.parent) + os.pathsep + '/inert path//tail' + os.pathsep
+        for argv in (COLIMA_START_ARGV, ('colima', 'stop', '--profile', 'kil-v3-lab'),
+                     ('colima', 'delete', '--profile', 'kil-v3-lab', '--force', '--data')):
+            command = self.scoped_mutation(authority, argv)
+            namespace = command.env
+            with self.subTest(argv=argv), patch.dict(os.environ, {'PATH': tail, 'HOME': '/untrusted',
+                    'EXTRA_AUTHORITY': 'no'}), patch.object(self.io, 'verify_bytes', side_effect=verify), \
+                    patch.object(self.io, 'capture_process') as capture:
+                parent = dict(os.environ)
+                self.io.BoundedRunner(Path.cwd(), inputs).run(command)
+                actual, env, _, _, _, _ = capture.call_args.args
+                self.assertEqual(actual, (str(colima), *argv[1:]))
+                self.assertEqual(env['PATH'], str(inputs.tools) + os.pathsep + tail)
+                self.assertEqual(env['HOME'], str(self.io.passwd_home()))
+                self.assertEqual(set(env) - {'PATH', 'LANG', 'LC_ALL', 'HOME'}, set(dict(namespace)))
+                self.assertEqual({key: env[key] for key, _ in namespace}, dict(namespace))
+                self.assertEqual(command.env, namespace)
+                self.assertEqual(command.argv, argv)
+                self.assertEqual(dict(os.environ), parent)
+
+    def test_scoped_mutation_refuses_each_missing_or_substituted_dependency(self):
+        authority = self.runtime_authority()
+        command = self.scoped_mutation(authority)
+        for name in ('docker', 'kind', 'kubectl'):
+            for state in ('missing', 'substituted', 'nonexecutable', 'symlink', 'directory', 'hardlink'):
+                with self.subTest(name=name, state=state):
+                    fixture = self.dependency_fixture()
+                    path = fixture[0].tools / name
+                    if state == 'missing':
+                        path.unlink()
+                    elif state == 'substituted':
+                        path.write_bytes(b'unaccepted executable bytes')
+                    elif state == 'nonexecutable':
+                        path.chmod(0o644)
+                    elif state == 'symlink':
+                        moved = path.parent.parent / name
+                        path.rename(moved)
+                        path.symlink_to(moved)
+                    elif state == 'directory':
+                        path.unlink()
+                        path.mkdir()
+                    else:
+                        os.link(path, path.parent.parent / name)
+                    self.assert_dependency_rejected(fixture, command)
+
+    def test_scoped_mutation_refuses_ambiguous_tools_path(self):
+        authority = self.runtime_authority()
+        command = self.scoped_mutation(authority)
+        for state in ('relative', 'noncanonical', 'symlink', 'separator', 'not-path'):
+            with self.subTest(state=state):
+                fixture = self.dependency_fixture()
+                tools = fixture[0].tools
+                if state == 'relative':
+                    replacement = Path('relative/tools')
+                elif state == 'noncanonical':
+                    replacement = tools / '..' / tools.name
+                elif state == 'symlink':
+                    replacement = tools.parent / 'linked-bin'
+                    replacement.symlink_to(tools, target_is_directory=True)
+                elif state == 'separator':
+                    replacement = tools.parent / ('bin' + os.pathsep + 'untrusted')
+                    tools.rename(replacement)
+                else:
+                    replacement = str(tools)
+                object.__setattr__(fixture[0], 'tools', replacement)
+                self.assert_dependency_rejected(fixture, command)
+
+    def test_scoped_mutation_refuses_extra_dependency_directory_entries(self):
+        authority = self.runtime_authority()
+        for name in ('colima', 'limactl', 'extra', '.hidden'):
+            with self.subTest(name=name):
+                fixture = self.dependency_fixture()
+                (fixture[0].tools / name).write_bytes(b'never granted search priority')
+                self.assert_dependency_rejected(fixture, self.scoped_mutation(authority))
+
+    def test_scoped_mutation_refuses_unusable_original_colima(self):
+        authority = self.runtime_authority()
+        for state in ('missing', 'directory', 'nonexecutable', 'symlink'):
+            with self.subTest(state=state):
+                fixture = self.dependency_fixture()
+                colima = fixture[1]
+                if state == 'missing':
+                    colima.unlink()
+                elif state == 'directory':
+                    colima.unlink()
+                    colima.mkdir(mode=0o755)
+                elif state == 'nonexecutable':
+                    colima.chmod(0o644)
+                else:
+                    moved = colima.with_name('original-colima')
+                    colima.rename(moved)
+                    colima.symlink_to(moved)
+                self.assert_dependency_rejected(fixture, self.scoped_mutation(authority))
+
+    def test_scoped_mutation_refuses_noncanonical_original_search_path(self):
+        authority = self.runtime_authority()
+        inputs, colima, verify = self.dependency_fixture()
+        for tail in (str(colima.parent / '..' / colima.parent.name),
+                     str(colima.parent) + '//',
+                     os.path.relpath(colima.parent, Path.cwd())):
+            with self.subTest(tail=tail), patch.dict(os.environ, {'PATH': tail}), \
+                    patch.object(self.io, 'verify_bytes', side_effect=verify), \
+                    patch.object(self.io, 'capture_process') as capture:
+                with self.assertRaises(ValueError):
+                    self.io.BoundedRunner(Path.cwd(), inputs).run(self.scoped_mutation(authority))
+                capture.assert_not_called()
+
+    def test_scoped_dependency_drift_during_manifest_reauthentication_refuses(self):
+        authority = self.runtime_authority()
+        for state in ('directory', 'bytes', 'permission', 'tools-path', 'extra', 'colima-identity', 'colima-mode'):
+            with self.subTest(state=state):
+                fixture = self.dependency_fixture()
+                inputs, colima, fixture_verify = fixture
+                manifests = 0
+                def verify(data, digest, size):
+                    nonlocal manifests
+                    result = fixture_verify(data, digest, size)
+                    if digest == ACCEPTED_MANIFEST_SHA256:
+                        manifests += 1
+                        if manifests == 2:
+                            if state == 'directory':
+                                moved = inputs.tools.with_name('old-bin')
+                                inputs.tools.rename(moved)
+                                inputs.tools.mkdir()
+                                for name in ('docker', 'kind', 'kubectl'):
+                                    (inputs.tools / name).write_bytes((moved / name).read_bytes())
+                                    (inputs.tools / name).chmod(0o755)
+                            elif state == 'bytes':
+                                (inputs.tools / 'kind').write_bytes(b'changed after authentication')
+                            elif state == 'permission':
+                                (inputs.tools / 'kubectl').chmod(0o744)
+                            elif state == 'tools-path':
+                                object.__setattr__(inputs, 'tools', inputs.tools.with_name('replacement'))
+                            elif state == 'extra':
+                                (inputs.tools / 'limactl').write_bytes(b'extra')
+                            elif state == 'colima-identity':
+                                payload = colima.read_bytes()
+                                colima.rename(colima.with_name('old-colima'))
+                                colima.write_bytes(payload)
+                                colima.chmod(0o755)
+                            else:
+                                colima.chmod(0o744)
+                    return result
+                self.assert_dependency_rejected(fixture, self.scoped_mutation(authority), verify)
+                self.assertEqual(manifests, 2)
+
+    def test_scoped_dependency_drift_during_full_byte_verification_refuses(self):
+        authority = self.runtime_authority()
+        for state in ('permission', 'tools-path', 'extra', 'manifest', 'metadata'):
+            with self.subTest(state=state):
+                fixture = self.dependency_fixture()
+                inputs, _, fixture_verify = fixture
+                executable_checks = 0
+                def verify(data, digest, size):
+                    nonlocal executable_checks
+                    result = fixture_verify(data, digest, size)
+                    if digest != ACCEPTED_MANIFEST_SHA256:
+                        executable_checks += 1
+                        if executable_checks == 6:
+                            if state == 'permission':
+                                (inputs.tools / 'kubectl').chmod(0o744)
+                            elif state == 'tools-path':
+                                object.__setattr__(inputs, 'tools', inputs.tools.with_name('replacement'))
+                            elif state == 'extra':
+                                (inputs.tools / 'colima').write_bytes(b'extra')
+                            elif state == 'manifest':
+                                object.__setattr__(inputs, 'manifest_bytes', b'{}\n')
+                            else:
+                                inputs.tool_records['kind']['byte_size'] += 1
+                    return result
+                self.assert_dependency_rejected(fixture, self.scoped_mutation(authority), verify)
+                self.assertEqual(executable_checks, 6)
+
+    def test_readonly_and_direct_family_dispatch_do_not_gain_dependency_path(self):
+        from kil.hf_exploratory_runtime import ExploratoryColimaCommand
+        authority = self.runtime_authority()
+        inputs, colima, verify = self.dependency_fixture()
+        commands = [Command(('colima', 'version'), 1), Command(('colima', 'list', '--json'), 1)]
+        commands += [ExploratoryColimaCommand(Command(argv, 1), authority) for argv in
+            (('colima', 'version'), ('colima', 'list', '--json'), ('colima', 'status', '--profile', 'kil-v3-lab'))]
+        commands += [Command((str(inputs.tools / name), *args), 1) for name, args in
+            (('docker', ('--version',)), ('kind', ('version',)), ('kubectl', ('version', '--client', '-o', 'json')))]
+        tail = str(colima.parent) + os.pathsep
+        for command in commands:
+            with self.subTest(argv=command.argv), patch.dict(os.environ, {'PATH': tail}), \
+                    patch.object(self.io, 'verify_bytes', side_effect=verify), \
+                    patch.object(self.io, 'capture_process') as capture:
+                self.io.BoundedRunner(Path.cwd(), inputs).run(command)
+                argv, env, _, _, _, _ = capture.call_args.args
+                self.assertEqual(argv, command.argv)
+                self.assertEqual(env['PATH'], tail)
+
+    def test_scoped_mutation_absent_or_empty_path_has_no_empty_search_entry(self):
+        authority = self.runtime_authority()
+        inputs, colima, verify = self.dependency_fixture()
+        for tail in (None, ''):
+            with self.subTest(tail=tail), patch.dict(os.environ, {}, clear=True), \
+                    patch.object(shutil, 'which', return_value=str(colima)) as finder, \
+                    patch.object(self.io, 'verify_bytes', side_effect=verify), \
+                    patch.object(self.io, 'capture_process') as capture:
+                if tail is not None:
+                    os.environ['PATH'] = tail
+                parent = dict(os.environ)
+                self.io.BoundedRunner(Path.cwd(), inputs).run(self.scoped_mutation(authority))
+                finder.assert_called_once_with('colima', path=os.defpath if tail is None else tail)
+                self.assertEqual(capture.call_args.args[0][0], str(colima))
+                self.assertEqual(capture.call_args.args[1]['PATH'], str(inputs.tools))
+                self.assertEqual(dict(os.environ), parent)
+
+    def test_dependency_authentication_closes_all_opened_descriptors(self):
+        authority = self.runtime_authority()
+        for state in ('accepted', 'missing', 'permission', 'extra'):
+            with self.subTest(state=state):
+                fixture = self.dependency_fixture()
+                inputs, colima, verify = fixture
+                if state == 'missing':
+                    (inputs.tools / 'kind').unlink()
+                elif state == 'permission':
+                    (inputs.tools / 'kind').chmod(0o644)
+                elif state == 'extra':
+                    (inputs.tools / 'colima').write_bytes(b'extra')
+                descriptors = []
+                real_open = os.open
+                def opened(*args, **kwargs):
+                    fd = real_open(*args, **kwargs)
+                    descriptors.append(fd)
+                    return fd
+                with patch.object(self.io.os, 'open', side_effect=opened):
+                    if state == 'accepted':
+                        with patch.dict(os.environ, {'PATH': str(colima.parent)}), \
+                                patch.object(self.io, 'verify_bytes', side_effect=verify), \
+                                patch.object(self.io, 'capture_process'):
+                            self.io.BoundedRunner(Path.cwd(), inputs).run(self.scoped_mutation(authority))
+                    else:
+                        self.assert_dependency_rejected(fixture, self.scoped_mutation(authority))
+                self.assertTrue(descriptors)
+                for fd in descriptors:
+                    with self.assertRaises(OSError):
+                        os.fstat(fd)
+
+    def test_scoped_mutation_command_substitution_during_final_dependency_authentication_refuses(self):
+        authority = self.runtime_authority()
+        fixture = self.dependency_fixture()
+        _, _, fixture_verify = fixture
+        command = self.scoped_mutation(authority)
+        checks = 0
+        def verify(data, digest, size):
+            nonlocal checks
+            result = fixture_verify(data, digest, size)
+            if digest != ACCEPTED_MANIFEST_SHA256:
+                checks += 1
+                if checks == 6:
+                    object.__setattr__(command.command, 'argv', ('colima', 'stop', '--profile', 'kil-v3-lab'))
+            return result
+        self.assert_dependency_rejected(fixture, command, verify)
+        self.assertEqual(checks, 6)
+
+    def test_scoped_dependency_drift_during_first_snapshot_refuses(self):
+        authority = self.runtime_authority()
+        for state in ('directory', 'permission', 'tools-path', 'extra'):
+            with self.subTest(state=state):
+                fixture = self.dependency_fixture()
+                inputs, _, fixture_verify = fixture
+                checks = 0
+                def verify(data, digest, size):
+                    nonlocal checks
+                    result = fixture_verify(data, digest, size)
+                    if digest != ACCEPTED_MANIFEST_SHA256:
+                        checks += 1
+                        if checks == 1:
+                            if state == 'directory':
+                                inputs.tools.rename(inputs.tools.with_name('old-bin'))
+                                inputs.tools.mkdir()
+                            elif state == 'permission':
+                                (inputs.tools / 'docker').chmod(0o744)
+                            elif state == 'tools-path':
+                                object.__setattr__(inputs, 'tools', inputs.tools.with_name('replacement'))
+                            else:
+                                (inputs.tools / 'limactl').write_bytes(b'extra')
+                    return result
+                self.assert_dependency_rejected(fixture, self.scoped_mutation(authority), verify)
+                self.assertGreater(checks, 0)
+
+    def test_scoped_mutation_rechecks_tools_path_after_last_real_runtime_guard(self):
+        from kil.hf_exploratory_runtime import RuntimeAuthority
+        authority = self.runtime_authority()
+        fixture = self.dependency_fixture()
+        inputs, _, fixture_verify = fixture
+        real_guard = RuntimeAuthority.guard
+        manifest_checks = 0
+        final_guards = 0
+        def verify(data, digest, size):
+            nonlocal manifest_checks
+            result = fixture_verify(data, digest, size)
+            if digest == ACCEPTED_MANIFEST_SHA256:
+                manifest_checks += 1
+            return result
+        def guard(actual):
+            nonlocal final_guards
+            real_guard(actual)
+            if manifest_checks == 2:
+                final_guards += 1
+                if final_guards == 2:
+                    object.__setattr__(inputs, 'tools', inputs.tools.with_name('replacement'))
+        with patch.object(RuntimeAuthority, 'guard', guard):
+            self.assert_dependency_rejected(fixture, self.scoped_mutation(authority), verify)
+        self.assertEqual((manifest_checks, final_guards), (2, 2))
 
     def test_runner_accepts_scoped_colima_and_derived_environment(self):
         from kil.hf_exploratory_runtime import ExploratoryColimaCommand

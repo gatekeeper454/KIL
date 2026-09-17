@@ -21655,3 +21655,66 @@ engineering readiness, execute one fresh request-free private rehearsal using th
 existing permission, with no action-loop fallthrough or further automatic attempt.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T400 — 2026-09-16 — Scoped Colima dependency PATH repair, test-first checkpoint
+
+**Input:** Implement the user-approved written scoped dependency PATH design in
+the existing clean detached linked worktree at 752e61e1a964a6af677b3960c15da3c667f79663.
+The root delegated only exploratory IO/tests, required append-only lineage/reader
+and this implementation checkpoint; root alone retains later native work.
+
+**Interpretation:** Only an exact mutating ExploratoryColimaCommand grants the
+accepted three-tool directory PATH priority. Resolve and retain absolute original
+Colima from the original sanitized PATH first; preserve its arguments, inherited
+PATH tail bytes, passwd HOME and exact four derived namespace bindings. Read-only
+Colima and direct Docker/Kind/kubectl retain their existing dispatch and environment.
+
+**Decision status:** Approved design implemented; engineering tests CONFIRMED at
+this checkpoint, independent SPEC/QUALITY/final review and native readiness remain
+PENDING. Initial standalone RED failed on bare Colima argv: 1 test, 0.070s. Expanded
+pre-production RED ran 59 IO tests in 2.635s with 49 intended assertion/subtest
+failures, not fixture errors. Absent/empty PATH, first-snapshot drift and last-guard
+tools substitution supplied 7 additional intended failures across 3 tests in
+0.107s before production edits. A later canonical-spelling RED caught doubled
+separators (1 failure across 3 tests, 0.106s); raw finder output is now checked
+before Path normalization. Final focused GREEN: 92 IO/runtime tests in 2.837s.
+Required combined 15-module GREEN: 425 tests in 87.972s. Both use designated
+Python, bytecode off and ResourceWarning fatal; the 15 new methods include finite
+filesystem, drift, unchanged-consumer and descriptor-cleanup subcases.
+
+**Rationale:** Directory FD identity/canonical checks and a bounded exact roster
+authenticate all Docker/Kind/kubectl full bytes against fresh rows from the real
+authenticated accepted manifest. Retain dev/inode/mode/uid/link-count/size/nanosecond
+mtime/ctime and digest in immutable snapshots; repeat the complete authentication
+after the second manifest check, compare snapshots and original Colima identity,
+then retain the existing final runtime/command guards and exact no-authentication-IO
+manifest/metadata checks. All opened descriptors close on success and refusal.
+Dependency failures normalize to ValueError before zero-capture refusal, while
+direct tool dispatch/verification behavior is preserved. Tests use real temporary
+authority/filesystem/search/metadata guards; only capture, narrow inert executable
+digest fixtures and controlled absent/empty-PATH finder outcomes are isolated.
+There is no transaction, external exclusion or zero-TOCTOU claim.
+
+**Affected artifacts:** src/kil/hf_exploratory_io.py and
+tests/test_hf_exploratory_io.py only for source/test changes; append this actual-EOF
+lineage entry and regenerate its sibling reader. Native/CLI, strict grammar,
+accepted inputs/local Envoy, design/plan, gitattributes, historical receipts,
+actual .tools and the failed runtime are unchanged. No Colima/Lima/Docker/Kind/
+kubectl/VM/HF/HTTP/Ollama/image audit, installation, runtime cleanup, branch move,
+merge, push or new worktree operation occurred. Known historical citation failure
+and sixteen broader-suite skips are outside this bounded gate and remain unchanged;
+no full-discovery or all-green broader-suite result is asserted.
+
+**Unresolved questions:** Independent reviews and clean-source checkpoint remain
+required before root may evaluate the conditional single fresh request-free
+rehearsal. Native compatibility and successful teardown are not established by
+unit results. Strict full acceptance and platform-image provenance remain unproven.
+
+**Next gate:** Render/check all 90 Markdown readers, byte-compare the exact retained
+752e61e Markdown prefix and diff-check; stage only the two IO source/test paths and
+this lineage Markdown/reader, commit the checkpoint and release the exclusive
+writer. Root then performs sequential SPEC, QUALITY and final review. No native
+attempt, second automatic rehearsal or action-mode continuation is authorized by
+this delegated implementation checkpoint.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
