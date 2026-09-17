@@ -22918,3 +22918,86 @@ Successful readiness still requires complete retained rehearsal plus owned
 teardown; live three-track HF action needs separate explicit approval.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T419 — 2026-09-16, single compact rehearsal advances VZ then fails closed on native SSH control
+
+**Input:** User-approved written compact-runtime spec grants one conditional
+request-free rehearsal after engineering gates. T418 and clean checkpoint
+7d5c58372040ecf5b7c1fdd9c9d7ea3ddcd06205 followed final source2b2, fresh
+root460 tests/96.309s and independent SPEC/QUALITY/final PASS. Unchanged outside-
+sandbox exact check_source, accepted-input authentication, tool roster and actual
+production path budget passed before any native allocation.
+
+**Interpretation:** Root consumed exactly the one new permission through reviewed
+core APIs, fresh full digest254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d,
+constant mode='rehearsal'. No CLI main/action continuation or live HF permission.
+The compact repair now demonstrably passes the prior native socket-path blocker;
+the subsequent roster refusal is a new bounded compatibility/ownership gate, not
+image provenance. It cannot be bypassed or silently expand frozen Native scope.
+
+**Decision status:** CONFIRMED actual attempt/inconclusive, harness exit1 after
+closed handles. Fresh registry and runtime /Users/mistorm/.kil-hf/r254877dc1b1462c4
+with durable full-ID binding; repository receipt
+.tools/hf-exploratory-private/hf-exploratory-254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d.
+Start command0014 began20:20:42 PDT, native VZ running20:20:48, SSH ControlMaster
+satisfied20:24:55, Colima done20:25:00, returncode0. Eight-resource profile
+creation binding succeeded; generated saved profile hash5b4a547ad13cda67870cdb821fbb140940562626c28ef6fb1228191675dc79e9
+and instance37dff309a27985cf3a007517133c66a436fb578a5d14fd6df0c9ababeb7503de
+match pinned native fixtures. Command0015 exact private Docker container inventory
+returned0/empty stdout. Fifteen native command intents/terminals, fourteen
+nonmutating and exactly one mutating start; no stop/delete/Kind-create/Calico/
+workload-Pod/instruction-phase dispatch. KIL and Envoy application Pods were not
+started by this run; KIL did NOTHING LIVE, no incident response/decision/result.
+HF request_intent_count=0 and request_attempt_count=0, joined_results empty.
+
+**Rationale:** Report status=inconclusive, reached_gate=inconclusive_at_private_endpoint_empty,
+error='ValueError: private_colima_profile_roster_unknown; cleanup: private_colima_profile_roster_unknown',
+manual_recovery=true, owned_teardown=false, profile_delete_completed=false,
+cluster_removed=false, filesystem_fully_removed=false. Native.private_inventory's
+closed Colima table permits _lima/_store/_templates/kil-v3-lab but the retained
+roster adds ssh_config, despite the existing start argument --ssh-config=false.
+One bounded diagnostic read observed regular UID501/0644/single-link/767 bytes,
+SHA0788dfecc6e2e6d6301a2eca6d9bebe153de450cac6d4657b053f2676a9564e9.
+Current pure eight-resource creation binding equals retained binding, but UNKNOWN
+ROSTER still blocks fresh inventory/teardown authority; no authority is adopted
+from that pure comparison. Native cleanup failed before any stop/delete intent.
+The private VM was left running; no attempt to erase, retry, adopt or recover it.
+Lima leftover direct roster _config/_disks/_networks/colima-kil-v3-lab is observed,
+not independently accepted as future deletion authority. No full disk scan/hash.
+
+**Affected artifacts:** Native core wrote its new immutable46-entry receipt,
+seven-file finite runtime observations, five-directory leftovers and actual
+report/synopsis. Root only appends this actual-EOF entry and factual plan outcome/
+readers after execution closed. Source/tests/protected Native/IO/evidence/CLI/
+strict/artifacts unchanged; failed older receipts/runtimes/sparse disk unchanged.
+Native stdout observed cached-image reuse/decompression at existing
+/Users/mistorm/Library/Caches/colima/caches/b0992ab88f5a3c0c436bbb3065c01466f20dc1dd0eb0a60299d410176f21a1c3;
+not an image provenance or entire-host-filesystem immutability assertion. Observed
+host Darwin/arm64, macOS26.6.2/kernel25.6.0; Colima0.10.3 git00f6c297e92a82c04a4ab507db0a61435650d7e8,
+Lima2.2.0, DockerCLI29.7.2 builda7dcaa6, Kind0.32.0 go1.26.3 darwin/arm64,
+kubectl1.36.3 darwin/arm64. Docker DAEMON version unobserved, placement/images empty.
+Requested config4CPUs/8GiB/data60GiB/root20GiB/VZ/nohostmounts/no application ports;
+native saved-form/capacity binding verifies pinned config, not invented runtime
+utilization. No Ollama/image audit/install/branch move/merge/push/worktree cleanup.
+
+**Unresolved questions:** HF readiness UNSATISFIED: no complete rehearsal/owned
+teardown. One permission exhausted; no second automatic launch. Need separately
+approved narrow residual-VM recovery design and bounded native SSH-control
+handling before a later newly approved rehearsal, not blanket allowlisting.
+Platform-image provenance unverified/full Kind-Calico acceptancefalse/accepted
+localEnvoy unaffected; no original exploit/fullHF/no-bypass/NetworkPolicy/performance/
+V3B2/V4/V3C claim. Known broader citation failure/four immutable omissions and16
+intentional skips remain, not rewritten or hidden.
+
+**Next gate:** Post-native root checks PASSED without sealed receipt writes:
+exactly three plain nonmutating global inventory commands (Colima list/Docker
+contextshow/Colimalist), bracketed by unchanged collectors/files, equal EXACT
+retained protected default/global baseline. All46 new checksum entries including
+runtime-binding.json and both40-entry failed predecessors PASS,126 total; source
+7d5 remained exactclean before this append. Preserve entire7d5 predecessor Markdown
+prefix, render/check92/readers, strict diff/source commitments and commit only
+plan/lineage Markdown-reader pairs. Report the residual live private VM and request
+user direction for narrow recovery design; no retry, stop/delete, artifact erasure,
+Native implementation expansion or live HF action under current approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

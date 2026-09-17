@@ -581,11 +581,11 @@ clean status, tests, self-review and concerns. Do not touch plan/spec or native 
 
 ## One conditional root-only request-free rehearsal
 
-- [ ] With all engineering gates PASS, root checks reviewed source and accepted inputs using unchanged APIs and outside-sandbox source gate. No filtered Git warnings, runtime gate bypass or new image audit.
-- [ ] Root uses LabLock, verify_inputs, PrivateStore, BoundedRunner and ExploratoryLifecycle with constant mode='rehearsal', fresh nonce and exact clean HEAD. Never call CLI main, whose successful rehearsal falls through into action.
-- [ ] Allocate only one fresh derived compact private runtime. Preserve every failed earlier receipt/runtime/disk. No retry, adoption or unbound stop/delete if inconclusive.
-- [ ] Verify actual report, zero HF intents AND attempts, all receipt checksums, bracketed protected default/global state and bounded runtime leftovers. Successful readiness requires complete retained rehearsal AND verified owned teardown; persistent registry/control leftovers are not filesystem_fully_removed.
-- [ ] Append actual outcome and remaining gate, render/check readers, checkpoint clean source and report result. Live HF three-track action requires separate explicit approval even if rehearsal completes. Platform provenance/full Kind-Calico acceptance remain unverified/false and accepted local Envoy unchanged.
+- [x] With all engineering gates PASS, root checks reviewed source and accepted inputs using unchanged APIs and outside-sandbox source gate. No filtered Git warnings, runtime gate bypass or new image audit.
+- [x] Root uses LabLock, verify_inputs, PrivateStore, BoundedRunner and ExploratoryLifecycle with constant mode='rehearsal', fresh nonce and exact clean HEAD. Never call CLI main, whose successful rehearsal falls through into action.
+- [x] Allocate only one fresh derived compact private runtime. Preserve every failed earlier receipt/runtime/disk. No retry, adoption or unbound stop/delete if inconclusive.
+- [x] Verify actual report, zero HF intents AND attempts, all receipt checksums, bracketed protected default/global state and bounded runtime leftovers. Successful readiness requires complete retained rehearsal AND verified owned teardown; persistent registry/control leftovers are not filesystem_fully_removed.
+- [x] Append actual outcome and remaining gate, render/check readers, checkpoint clean source and report result. Live HF three-track action requires separate explicit approval even if rehearsal completes. Platform provenance/full Kind-Calico acceptance remain unverified/false and accepted local Envoy unchanged.
 
 ## Plan self-review and execution selection
 
@@ -623,5 +623,51 @@ managed worktree and all old runtime/receipt bytes. The one conditional rehearsa
 is still unconsumed at this engineering checkpoint; exact clean-source/input
 checks and actual native result remain the next gate. Unit/review PASS is not
 native readiness or live HF permission.
+
+## Single preparation outcome, 2026-09-16
+
+The one approved conditional rehearsal was performed at exact clean source
+7d5c58372040ecf5b7c1fdd9c9d7ea3ddcd06205, constant rehearsal mode with fresh nonce.
+Full run: v3b2-254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d.
+Runtime: /Users/mistorm/.kil-hf/r254877dc1b1462c4. Receipt remains repository
+.tools/hf-exploratory-private/hf-exploratory-254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d.
+
+Compact native startup succeeded: Colima start began20:20:42 PDT, VZ running
+was reported20:20:48; SSH ControlMaster satisfied20:24:55; Colima done20:25:00,
+returncode0. The profile was creation-bound to eight resources, native saved
+profile/instance hashes matched pinned fixtures, then exact Docker container
+inventory returned0 with empty stdout. No Kind cluster/Calico/workload application
+Pods were created and instruction phase was never reached. KIL did nothing live;
+zero HF request intents and zero attempts. This proves neither HF prevention nor
+full Kind/Calico acceptance. Native stdout also observes reuse/decompression of
+an existing Colima image-cache path outside the configured runtime namespace;
+protected-default preservation is not a whole-host-filesystem immutability claim.
+
+Actual report is status=inconclusive, reached_gate=inconclusive_at_private_endpoint_empty,
+error='ValueError: private_colima_profile_roster_unknown; cleanup: private_colima_profile_roster_unknown',
+manual_recovery=true, owned_teardown=false, profile_delete_completed=false,
+cluster_removed=false. The private Colima roster contains exactly one extra name
+relative to the unchanged closed table: ssh_config. Bounded read observed a regular
+UID501,0644,single-link,767-byte file, SHA256
+0788dfecc6e2e6d6301a2eca6d9bebe153de450cac6d4657b053f2676a9564e9.
+Current pure eight-resource binding still equals retained creation binding; that
+does not authorize cleanup past the unknown-roster refusal. No stop/delete was
+dispatched; the private VM was left running. All partial/new/older bytes retained.
+
+Root post-verification used exactly three plain nonmutating default inventory
+commands (Colima list, Docker context show, Colima list) bracketed by unchanged
+collector/file checks. Protected default/global state equals retained baseline
+exactly. All46 new receipt SHA entries, including runtime-binding.json, passed;
+both older failed40-entry sets also passed,126 total. No sealed receipt writes,
+full native disk hash, VM retry, adoption, recovery, image audit or Ollama operation.
+Exact native source remained clean before this outcome append.
+
+All preparation steps above are checked as performed, NOT as successful readiness:
+complete rehearsal/owned-teardown readiness remains UNSATISFIED. The one native
+permission is consumed; another launch is not authorized. Next direction requires
+a separately approved narrowly scoped residual-VM recovery design and bounded
+handling of the observed native ssh_config control, not blanket name allowlisting
+or platform-image provenance audit. Existing Native/strict production remains
+unchanged. Live HF action still requires separate explicit approval.
 
 KTP citation: [canonical CITATION.cff](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
