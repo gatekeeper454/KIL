@@ -22096,3 +22096,79 @@ compact private-runtime design, followed by separately approved test-first work
 and any new rehearsal permission. Do not start a second native attempt now.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T406 — 2026-09-16 — Compact private runtime design exploration and HF-prep intent
+
+**Input:** The user instructed: "Approve designing a shorter private runtime
+location next, then attempt to prep for the HF test."
+
+**Interpretation:** Compact-runtime design exploration and subsequent HF
+preparation are CONFIRMED in scope. This does not silently approve a particular
+new filesystem authority contract, modification of failed runtimes, or action-mode
+HF requests. Use brainstorming to present the concrete design and obtain approval
+before writing its validated spec and test-first implementation plan. No new native
+attempt occurs at this design checkpoint; its bounded permission/readiness terms
+will be explicit in the written specification and user review.
+
+**Decision status:** PROPOSED recommendation: one fresh persistent private runtime
+under actual passwd home/.kil-hf/r<first-16-hex-of-full-run-digest>. On this pinned
+host the parent is /Users/mistorm/.kil-hf; the projected longest known Lima socket
+path is 98 UTF-8 bytes, below the native exclusive limit 104. A read-only projection
+from actual passwd_home confirmed the arithmetic; no directory or environment was
+changed. Native refusal remains the recorded 247-character path in command-0014
+of the 3e71b5b0 run, not an experimentally validated success of the new proposal.
+
+**Rationale:** The long worktree ancestry AND full-digest runtime filename must
+leave the native pathname. Keep full 64-hex run identity and durable receipt in
+the existing repository evidence store; the 16-hex label is a locator, not a
+replacement identity. Derive it internally from the full digest, require exclusive
+fresh mkdir and refuse collision without reuse/adoption/retry. Bind short root to
+the complete digest and exact receipt with bounded durable metadata and retained
+no-follow FD identities on BOTH receipt and runtime ancestries before native use.
+New registry/run directories remain UID-owned 0700, binding controls 0600 and
+single-link. Reuse only a proven canonical private registry with an exact bounded
+KIL marker; refuse foreign/unmarked, symlinked, reanchored or unsafe-mode state,
+without chmod/repair/fallback. Keep derived Colima/Lima/Docker/temp/Kind/kube paths
+together under that root; passwd HOME itself and default Colima/Docker/kube state
+remain unchanged. Check the complete native socket byte budget before allocation
+and every native handoff; longer homes fail closed rather than silently falling
+back to another location. This is not a zero-TOCTOU or external-exclusion claim.
+
+Alternatives explored: /private/tmp/khf-501 with the same compact label projects
+to 95 bytes but introduces OS temporary-cleanup/reboot retention risk; moving
+only Lima splits authority and leaves other native endpoint paths long; a short
+symlink alias conflicts with canonical/no-follow guards. Persistent whole-runtime
+placement is recommended, not yet user-approved. Preserve legacy pure saved-form
+analysis if needed without allowing live creation/adoption of legacy namespaces.
+
+Planned verification boundary: actual short-path budget, collision refusal, marker/
+full-ID/receipt binding, both ancestry replacements, UID/mode/link/fd lifecycle,
+unchanged derived command consumers and retained evidence. Real temporary filesystem
+fixtures may narrowly select an internal test registry; no caller path override or
+production test-only API. After concrete and written-spec approval, use TDD and
+independent reviews, then prepare a separately bounded request-free fresh rehearsal.
+Only successful retained rehearsal/owned teardown can gate a later explicitly
+approved action test. Do not audit platform-image provenance to unblock this fix.
+
+**Affected artifacts:** Append only this actual-EOF lineage entry and regenerate
+its reader. Source/tests, plans/specs, strict contracts, accepted inputs/local Envoy,
+historical receipts, failed runtimes/sparse disk, citation policy and deferrals stay
+unchanged. Read-only inspected current RuntimeAuthority/ProfilePaths/evidence and
+command consumers, actual passwd home and /private/tmp ownership, recorded native
+refusal and pure path arithmetic. No native tool, VM, HTTP/HF/Ollama, installation,
+runtime allocation/relocation/cleanup, symlink workaround, branch move, merge,
+push or new worktree occurred. Current .kil-hf parent was not created.
+
+**Unresolved questions:** User approval of persistent whole-runtime architecture
+is pending. Exact spec and preparation/rehearsal permission terms require written
+review. Live native compatibility remains unverified; platform-image provenance
+and full Kind/Calico acceptance remain unverified, with accepted local Envoy intact.
+
+**Next gate:** Verify exact 8cede02 Markdown prefix, all 90 readers, diff and
+unchanged source; checkpoint this two-path design-exploration record. Present
+recommendation/tradeoffs and request concrete architecture approval under the
+brainstorming gate. Then write/self-review the validated compact-runtime spec,
+obtain written-spec approval and transition to writing-plans. Do not implement
+or start another rehearsal at this preliminary design gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
