@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mode-only remediation of the fixed HF recovery evidence parent</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/specs/2026-09-17-hf-recovery-parent-permissions-design.md">
+<meta name="source-sha256" content="b4888943cf6d3b31a3db2655caf69bacd4cf66d6bc4252a9af8f9a9da15c26e7">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-09-17-hf-recovery-parent-permissions-design.md</code> (<code>b4888943cf6d3b31a3db2655caf69bacd4cf66d6bc4252a9af8f9a9da15c26e7</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">Mode-only remediation of the fixed HF recovery evidence parent</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-09-17-hf-recovery-parent-permissions-design.md</code> (<code>b4888943cf6d3b31a3db2655caf69bacd4cf66d6bc4252a9af8f9a9da15c26e7</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#mode-only-remediation-of-the-fixed-hf-recovery-evidence-parent">Mode-only remediation of the fixed HF recovery evidence parent</a></li><li class="level-2"><a href="#goal-and-boundaries">Goal and boundaries</a></li><li class="level-2"><a href="#fixed-target-and-expected-identity">Fixed target and expected identity</a></li><li class="level-2"><a href="#one-shot-architecture-and-engineering-file-scope">One-shot architecture and engineering file scope</a></li><li class="level-2"><a href="#proof-existing-lock-and-preflight">Proof, existing lock and preflight</a></li><li class="level-2"><a href="#sole-mutation-and-postconditions">Sole mutation and postconditions</a></li><li class="level-2"><a href="#honest-result-and-evidence">Honest result and evidence</a></li><li class="level-2"><a href="#test-first-verification-and-approval-gates">Test-first verification and approval gates</a></li><li class="level-2"><a href="#spec-self-review">Spec self-review</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="mode-only-remediation-of-the-fixed-hf-recovery-evidence-parent" href="#mode-only-remediation-of-the-fixed-hf-recovery-evidence-parent">Mode-only remediation of the fixed HF recovery evidence parent</a></li><li class="level-2"><a data-section-id="goal-and-boundaries" href="#goal-and-boundaries">Goal and boundaries</a></li><li class="level-2"><a data-section-id="fixed-target-and-expected-identity" href="#fixed-target-and-expected-identity">Fixed target and expected identity</a></li><li class="level-2"><a data-section-id="one-shot-architecture-and-engineering-file-scope" href="#one-shot-architecture-and-engineering-file-scope">One-shot architecture and engineering file scope</a></li><li class="level-2"><a data-section-id="proof-existing-lock-and-preflight" href="#proof-existing-lock-and-preflight">Proof, existing lock and preflight</a></li><li class="level-2"><a data-section-id="sole-mutation-and-postconditions" href="#sole-mutation-and-postconditions">Sole mutation and postconditions</a></li><li class="level-2"><a data-section-id="honest-result-and-evidence" href="#honest-result-and-evidence">Honest result and evidence</a></li><li class="level-2"><a data-section-id="test-first-verification-and-approval-gates" href="#test-first-verification-and-approval-gates">Test-first verification and approval gates</a></li><li class="level-2"><a data-section-id="spec-self-review" href="#spec-self-review">Spec self-review</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="mode-only-remediation-of-the-fixed-hf-recovery-evidence-parent">Mode-only remediation of the fixed HF recovery evidence parent</h1>
+<p>Date: 2026-09-17.</p>
+<p>Status: The user answered &quot;approved&quot; to the minimal descriptor-anchored design
+presented after T431. Design approval is CONFIRMED. This written specification
+awaits user review before writing-plans. No implementation, chmod or new recovery
+attempt is authorized by this document.</p>
+<h2 id="goal-and-boundaries">Goal and boundaries</h2>
+<p>Remove only the evidence-parent mode blocker from the refused compact residual
+VM recovery attempt. Authenticate the existing directory, make at most one
+0755→0700 permission operation through its retained descriptor, and verify the
+directory identity, ownership and observed children without editing any receipt.</p>
+<p>This is not VM recovery, resource release, receipt repair, directory adoption or
+an extension of the spent stop permission. The attempt recorded by T430 returned
+preflight_refused/Stop0 before new evidence creation or native VM commands.
+Current VM status remains unobserved. Fixing this mode condition does not promise
+that all later recovery preflight conditions will pass.</p>
+<p>The alternative is leaving the parent unchanged and retaining the blocker.
+Replacing/moving the parent, selecting another evidence root or relaxing the
+accepted recovery guard are outside the approved design.</p>
+<h2 id="fixed-target-and-expected-identity">Fixed target and expected identity</h2>
+<p>Repository:
+<code>/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL</code>.</p>
+<p>Sole permission target:
+<code>/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/.tools/hf-recovery-private</code>.</p>
+<p>Expected device16777232/inode612764151, directory type, real/effective UID501 and
+owner UID501. Expected initial permission bits0755; intended final bits0700.
+Any different inode/device/type/owner or initial mode refuses; including an
+already0700 directory, which may be reported as observed but receives no mutation.
+Never normalize another mode or substitute a newly created directory.</p>
+<p>Actual passwd home must be <code>/Users/mistorm</code>. Real/effective identity and passwd
+home are rechecked before mutation and final acceptance. The existing <code>.tools</code>
+parent is expected device16777232/inode612669178, UID501-owned0700 directory;
+it must not be chmodded. Other directory ancestors retain their independently
+observed device/inode/type/mode/UID identities, not frozen timestamps/rosters.</p>
+<p>These pins derive from T430/T431, not an upstream attestation. Their observation
+is historical; future execution must freshly authenticate them without repinning.</p>
+<h2 id="one-shot-architecture-and-engineering-file-scope">One-shot architecture and engineering file scope</h2>
+<p>The future plan may implement a dedicated fixed-target one-shot procedure in
+<code>tools/hf_recovery_parent_permissions.py</code>, tested by
+<code>tests/test_hf_recovery_parent_permissions.py</code>. It is separate from the accepted
+stop-only tool and introduces no reusable recovery API or caller-selected target.
+No source implementation is part of this specification checkpoint.</p>
+<p>Read-only dependencies may supply clean-source/account/canonical-output helpers
+and no-follow proof patterns. Do not edit production Native/Runtime/IO/Profile,
+the accepted recovery tool/tests, strict verifiers or launcher. Do not invoke
+launcher main, RuntimeAuthority creation, a lifecycle, _Native or native tools.
+Import and CLI argument rejection must not open the real target or mutate state.</p>
+<p>The execution entry must require --reviewed-source with an exact40-hex source,
+--execution-approval with the actual nonblank valid-UTF-8 approval text (at most
+4096 bytes), and --execute-approved-mode-change as a required true flag. Reject
+flag abbreviations and target/path/home/mode/tool/receipt/retry/rollback overrides.
+Argument errors exit2 before real access; confirmed change alone exits0, handled
+refusal/uncertainty exits1. The plan must show the actual command after fixture
+verification without inventing approval or accepting an observed mode as success.</p>
+<h2 id="proof-existing-lock-and-preflight">Proof, existing lock and preflight</h2>
+<p>Require the exact clean reviewed Git HEAD before acquiring the lock or making
+any filesystem mutation. Preserve source warnings and exceptions; never filter
+them to manufacture clean status. Use the existing managed detached worktree:
+no new branch/worktree, relocation, install, merge or push.</p>
+<p>Walk read-only/no-follow directory descriptors from <code>/</code> to the repository,
+<code>.tools</code>, existing lock ancestry and fixed target. Recheck each named directory
+against its held descriptor before/after all observation IO. Never follow a
+target or ancestor symlink, tolerate a partial ancestry or create missing state.</p>
+<p>Hold the existing cooperating LabLock's lock location/protocol throughout:
+<code>/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/.tools/hf-exploratory-private/profile.lock</code>.
+Its parent must already be UID501-owned0700. Open only this already-existing
+UID501-owned0600 regular single-link file, bounded to1MiB, with no-follow and
+without O_CREAT. Acquire the same nonblocking exclusive flock as LabLock.
+Retain the named/held device/inode/mode/UID/link-count/size/mtime_ns/ctime_ns and
+authenticated bounded bytes until final closure; refuse busy or substituted lock.</p>
+<p>Do not call the ordinary LabLock create-capable <strong>enter</strong> path: it can create
+missing parents/lock, violating this mode-only scope. Reusing the existing lock
+protocol is not a new authority, general lock API or arbitrary external exclusion.
+All acquired descriptors must close on every path, and late teardown errors must
+retain actual mutation history instead of becoming a zero-attempt startup claim.</p>
+<p>Record the target's named/held device/inode/type/mode/UID/GID/link-count/size and
+nanosecond mtime/ctime. Collect two equal bounded direct-child observations using
+the held target descriptor and no-follow metadata only. At most256 direct names;
+each must be a nonempty basename of at most128 UTF-8 bytes, with no slash, NUL,
+<code>.</code> or <code>..</code>. Stop enumeration/refuse at the257th name. Do not interpret, follow,
+open or traverse children; record their type and full stat fields above.
+Directory enumeration/stat errors or unequal complete observations refuse.</p>
+<p>Immediately repeat source/account/lock/ancestry/target/child authentication.
+After all content/enumeration IO, perform a final metadata-only named/FD closure
+before mutation, with no later directory listing, file read or native acquisition.
+Require the same preflight target and child commitments, not a replacement baseline.</p>
+<h2 id="sole-mutation-and-postconditions">Sole mutation and postconditions</h2>
+<p>Consume the procedure's slot before entering exactly one
+<code>os.fchmod(held_target_directory_fd, 0o700)</code>. Count entry attempts separately from
+syscall certainty and observed mode: a raised/lost result never authorizes a
+second call. No path-based or recursive chmod, chown, ACL/flag repair, file write,
+rename, mkdir, unlink or directory replacement. Do not chmod ancestors/children.</p>
+<p>If the call returns normally, fsync the retained target directory and obtain
+fresh stable bounded read-only post-observations. Confirmation requires the same
+named/held target device/inode/type/UID/GID/link-count/size/mtime and mode0700;
+its ctime is expected to change and is captured, not compared with initial ctime.
+Close final named/FD continuity against the fresh post identity. Ancestor and
+lock identities/bytes and the exact direct-child roster/stat commitments must
+remain unchanged. Recheck source and account after observation IO, then final
+metadata-only proof closure and all owned teardown before accepting success.</p>
+<p>0700 intentionally removes group/other mode-based access through this parent;
+it does not change children's own modes or promise a broader access-control
+assessment. Direct-child stat equality is not a descendant-content attestation.
+The procedure itself must write no receipt bytes and perform no recursive
+traversal/hash; it cannot promise absence of arbitrary external descendant writes
+or an atomic filesystem snapshot. Do not overstate preservation from metadata.</p>
+<h2 id="honest-result-and-evidence">Honest result and evidence</h2>
+<p>Keep outcomes separate: preflight_refused, mode_change_confirmed,
+mutation_uncertain and postverification_inconclusive. Record reviewed source,
+actual execution approval, fixed target/pins, entry-attempt count, syscall
+certainty, observed pre/post mode and identity/child/lock preservation status.
+Record earlier and late teardown exceptions, at most16 records, each with a
+type of at most128 UTF-8 bytes and message of at most4096 UTF-8 bytes; overflow
+must refuse confirmation, not discard failures to claim success.</p>
+<p>Known precheck refusal has0 fchmod attempts. Entered-call failure has1 attempt
+and uncertain syscall result even if later mode is0700. A normally returned call
+with failed fsync/post/source/closure/teardown is postverification_inconclusive,
+not confirmed and not an invented zero attempt. Observed mode and syscall success
+remain distinct from complete preservation verification.</p>
+<p>Use bounded canonical stdout (at most1MiB) for the result, captured by root and
+recorded verbatim as appropriate in factual plan/lineage. Do not create a new
+private receipt, date directory, alternate suffix or overwrite earlier exports.
+No seal is claimed for an uncreated evidence directory. Root records only actual
+observations and regenerates readers after the procedure ends.</p>
+<p>Any refused/uncertain/postcheck-failed attempt ends its permission. Do not retry,
+automatically restore0755, roll back metadata, adopt changed state or launch the
+recovery tool. If observed mode changed but proof failed, preserve that fact and
+request direction. Never hide a partial result by repair/rebaseline/reseal.</p>
+<h2 id="test-first-verification-and-approval-gates">Test-first verification and approval gates</h2>
+<p>After user review of this written specification, use writing-plans to detail
+fixture-only implementation and exact checks. Before adding mutation behavior,
+run genuine failing real-owned-temp tests. Mock only unavoidable source/account
+selection or inject narrowly controlled syscall failures; use real descriptor
+ancestry, existing flock, stat/enumeration, files, fchmod/fsync and cleanup.</p>
+<p>Required tests: preserved fixture receipt payloads/seals/child modes; exact one
+0755→0700 change with same inode/owner; wrong UID/type/mode/device/inode refusal;
+target/ancestor symlink or replacement; missing/busy/substituted lock with no
+creation; child roster/metadata drift and256/257 bounds; precheck source/account/
+late-IO drift yields0 calls; fchmod/fsync/post/final-closure/teardown failures retain
+actual attempt/observed-mode history; no retry/rollback/recovery/native call;
+all descriptors released, import/invalid CLI no real access. Important review
+findings receive a failing regression before the minimum scoped fix.</p>
+<p>Use the existing Python3.12 interpreter at
+<code>/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python</code>,
+bytecode disabled, PYTHONPATH=src and ResourceWarning fatal. Run the new tests
+and relevant retained-proof/IO/recovery regressions. Require independent spec
+and quality review plus root verification before permission execution. Fixture
+GREEN is not a live permission change or a recovered VM.</p>
+<p>Verify exact protected paths, append-only predecessor lineage, canonical new
+citations, generated readers, scoped local commit and clean exact HEAD. Do not
+repair or exempt the four known immutable historical citation omissions or claim
+full discovery green from scoped checks.</p>
+<p>Written-spec approval authorizes writing-plans and fixture-only preparation,
+not actual fchmod. After verified preparation, ask explicit approval for one
+fixed mode-change attempt and use the scoped outside-sandbox route if required.
+After that attempt ends, any VM recovery needs NEW separate one-stop approval;
+T430's spent permission is not revived by absent intent or corrected permissions.</p>
+<p>No runtime/guest/disk access, Colima/Lima/Docker/Kind/kubectl operation, HF request,
+Ollama, image audit, SSH compatibility change, rehearsal, force/delete/restart or
+implicit continuation. Platform-image provenance stays unverified, full Kind/
+Calico acceptance false and accepted local Envoy unchanged. HF readiness retains
+its separate compatibility, request-free rehearsal and live-action gates.</p>
+<h2 id="spec-self-review">Spec self-review</h2>
+<p>The sole pinned directory/0755→0700 operation, unchanged descendants, no-follow
+held-FD proof, open-existing-only cooperating lock, finite child observations,
+separate attempt/certainty/mode/preservation outcomes, no rollback/retry and
+design/spec/engineering/execution/recovery approval boundaries are explicit.
+This document contains requirements, not unverified implementation or a claim
+that its future engineering/execution has passed. User review is required next.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

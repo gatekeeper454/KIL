@@ -23871,3 +23871,78 @@ written-spec review then precedes writing-plans and any test-first implementatio
 This pause does not ask again for permission to plan or grant live execution.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T432 — 2026-09-17, approved parent-mode design written for specification review
+
+**Input:** "approved" to the proposed minimal descriptor-anchored one-directory
+0755→0700 design, preserving existing receipts and keeping native recovery
+separately gated.
+
+**Interpretation:** CONFIRMED design approval, not permission execution or revival
+of T430's spent recovery attempt. Brainstorming now requires the validated written
+spec and user review before writing-plans; no implementation skill/action invoked.
+
+**Decision status:** CONFIRMED minimal design accepted and written specification
+self-review completed. Written-spec user approval PENDING. Planning/test-first
+engineering details and any actual fchmod remain unperformed/unapproved here.
+
+**Rationale/evidence:** Clean checkpoint618d79b8f29c134212e99e78e1c456e0533899da;
+read actual current T431, recovery _new_store context and cooperating LabLock
+acquisition, plus bounded check_source behavior. Dedicated fixed-target spec
+docs/superpowers/specs/2026-09-17-hf-recovery-parent-permissions-design.md states
+the existing UID501/device16777232/inode612764151 target,0755→0700-only change,
+retained no-follow ancestry/FD proof, unchanged descendants and no native calls.
+T430/T431 metadata pins remain explicitly historical; no new target/runtime or
+image audit was performed to write this document.
+
+Spec self-review clarified an important mode-only detail: LabLock.__enter__ can
+create missing parents/profile.lock. Require instead the already-existing lock
+location and identical nonblocking cooperating flock protocol, no O_CREAT;
+missing/unsafe/busy/substituted state refuses. This keeps only the authorized
+future target permission operation possible and changes no production LabLock.
+No authority is constructed by reusing its protocol.
+
+The spec defines256 direct-child/128-byte-name bounds without following/opening
+descendants, exact required non-abbreviated CLI flags/source/approval bounds,
+single fchmod entry before slot loss, expected target mode/ctime change versus
+unchanged inode/owner/observed child metadata, fsync and final source/account/
+metadata/owned-teardown closure. Attempt count, syscall certainty, observed mode
+and preservation are separate; late errors cannot erase mutation history.
+Exceptions/output are bounded; no receipt/date creation, automatic rollback,
+repair/rebaseline/retry or recovery invocation. Direct child metadata is not
+a full descendant-content or arbitrary external exclusion/atomicity claim.
+
+Inline self-review covered placeholders, contradictory scope, initial already-
+private refusal, exact CLI semantics and gate separation. Required genuine
+failing real-temp mutation/drift/cleanup tests, independent spec/quality review
+and root verification precede any permission execution. No tests or syscall
+behavior are represented as freshly passing merely from this document.
+
+Verification checkpoint: complete618d79b predecessor prefix1,412,081B preserved,
+protected scope/whitespace and new canonical citation checks pass; placeholder
+scan has no matches. Initial renderer94 check covered only existing tracked docs.
+Systematic debugging of actual discover_sources confirmed tracked-source selection;
+stage only the new spec, then generate95/check95 readers OK. No renderer change
+or broad evidence scan. Final scoped commit/clean-HEAD checks follow.
+
+**Affected artifacts:** New written spec/generated reader and this actual-EOF
+lineage/generated reader only. Existing recovery plan/spec/tool/tests, production,
+strict contracts, accepted artifacts, citation policy and historical private
+evidence unchanged. No code/helper/test implementation, chmod, target inspection,
+receipt reread/reservation, VM/current-status command, HF/Ollama/rehearsal/image
+audit, force/delete/restart/rollback/retry. Existing worktree retained.
+
+**Unresolved questions:** User review of the written specification. Parent mode
+origin unestablished; its live mode and VM status are not refreshed by spec writing.
+Recovery/HF readiness unverified; local Envoy unchanged/platform provenance
+unverified/full Kind-Calico acceptance false. Known four historical immutable
+citation omissions remain disclosed and unmodified.
+
+**Next gate:** Preserve complete618d79b predecessor lineage prefix1,412,081B;
+regenerate/check all readers/new canonical citations/unchanged protected scope,
+commit only spec/lineage Markdown-reader pairs and verify clean exact HEAD.
+Ask written-spec approval, then writing-plans and fixture-only preparation.
+Actual one-mode-change execution and any subsequent one-stop recovery each need
+their own explicit new approval after verified preparation. Do not run either now.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
