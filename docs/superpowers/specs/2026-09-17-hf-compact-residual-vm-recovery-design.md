@@ -294,3 +294,11 @@ no placeholder, alternate target or implicit HF continuation is specified.
 Request user review of this written specification before writing-plans.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Written-spec approval — 2026-09-17
+
+The user answered "approved" to review of this written specification for planning
+and test-first preparation. That gate is CONFIRMED, superseding the historical
+pending status above without rewriting it. Proceed through writing-plans and
+fixture-only engineering; no live preflight or stop is authorized. Explicit
+native execution approval remains required after verified preparation.

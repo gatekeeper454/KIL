@@ -23182,3 +23182,62 @@ commit ONLY spec/lineage Markdown-reader pairs. Ask user to review/approve this
 written spec before writing-plans. No stop/delete/retry/force/HF request now.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T423 — 2026-09-17, written stop-only recovery spec approved and test-first plan prepared
+
+**Input:** User answered "approved" to the written recovery spec for planning and
+test-first preparation, with executing the stop explicitly separately gated.
+Starting checkpoint77ce6ecaa8dba2191d7a280ad9ff7d9b726c3726 is clean/detached.
+
+**Interpretation:** CONFIRMED written-spec review; append the approval record
+without rewriting its historical pending status. Root uses writing-plans to
+prepare the engineering tasks. Its execution-method choice remains pending;
+native preflight, evidence-directory reservation and stop are NOT authorized.
+
+**Decision status:** CONFIRMED prepared/self-reviewed implementation plan at
+docs/superpowers/plans/2026-09-17-hf-compact-residual-vm-recovery.md. Scope is one
+new fixed-target recovery tool and one test file outside production, with
+sequential real-filesystem RED/GREEN tasks, complete code recipes, composed
+fixture/refusal/uncertainty coverage, required regressions and review checkpoints.
+Actual implementation/tests/native recovery are NOT performed this turn.
+
+**Rationale:** Tasks1–2 cover retained no-follow ancestry/file/full-ID/evidence /
+registry/root/saved-footprint guards; Task3 closed observations, original foreign
+baseline and finite controls; Task4 durable once-only intent and bounded graceful
+stop/stopped no-op/postconditions; Task5 composed engineering verification; Task6
+later separately approved native execution. Self-review clarified full proof
+ordering across both independently retained chains, fresh intent authentication,
+held lock/store identity, owned-resource UID checks, immutable evidence versus
+mutable SSH controls, bounded sealing, stopped no-op final observation, optional
+inventory address display and separate command/preservation uncertainty. Ten
+Python recipe blocks and four composed tool sections pass syntax-only AST checks;
+none are executed or written into an executable/test file. No test-pass claim.
+
+**Affected artifacts:** New plan/reader, appended written-spec approval/reader and
+actual-EOF lineage/reader only. Existing sources/tests/tools/strict contracts /
+accepted evidence and all private receipts/runtimes/disks remain untouched.
+using-git-worktrees read-only topology check confirms distinct Git/common paths,
+no superproject and detached linked worktree; keep this externally managed
+isolation, do not create a branch/worktree or install dependencies. No native
+Colima/Docker/Lima command, stop/delete/retry, image audit, Ollama operation,
+HF request, relocation, cleanup, merge or push.
+
+**Unresolved questions:** User execution-method choice required by writing-plans:
+subagent-driven preparation with two-stage review, or inline executing-plans
+batch checkpoints. Only fixture locations/private selectors and unavoidable
+native acquisition may be replaced in tests; no real VM/root/recovery receipt
+access during engineering. Current VM status remains unobserved, last running
+is historical T419. The plan recipe is not verified implementation or recovery
+evidence; important composed findings require failing tests/minimum scoped fixes.
+Live stop still needs separate approval and fresh original protected-state proof.
+HF readiness remains unsatisfied; image provenance unverified/full Kind-Calico
+acceptance false/accepted local Envoy unchanged. Known four historical citation
+omissions stay disclosed and immutable.
+
+**Next gate:** Preserve the entire77ce6ec predecessor lineage prefix1,366,349B,
+index the new plan, render/check94 readers, syntax/citation/diff and protected-
+path proofs, then commit ONLY plan/spec/lineage Markdown-reader pairs. Offer the
+two preparation execution methods and wait for that choice. No actual test-first
+implementation, live preflight, stop or new rehearsal under this planning turn.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
