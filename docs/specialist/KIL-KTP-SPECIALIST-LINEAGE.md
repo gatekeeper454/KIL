@@ -23001,3 +23001,63 @@ user direction for narrow recovery design; no retry, stop/delete, artifact erasu
 Native implementation expansion or live HF action under current approval.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T420 — 2026-09-17, residual compact-VM recovery design discovery and stop-only scope question
+
+**Input:** User answered "yes" to the request for a narrowly scoped recovery
+design for the private VM left by T419. Current clean detached checkpoint is
+7c0e00f75d0bf325dfc18346d534c76f60163a22.
+
+**Interpretation:** Approval is for design discovery, not a native recovery
+instruction, stop/delete, retry, runtime adoption, implementation or HF action.
+Root uses brainstorming and keeps its architecture and written-spec gates.
+This is an operational, text-only design; no visual companion is needed.
+
+**Decision status:** CONFIRMED design-only discovery. Read exact retained report,
+runtime binding, current private-inventory refusal and relevant existing recovery
+runbook/post-verification exception. Fresh checksum verification passes all46
+entries of the sealed254877dc receipt. PROPOSED success criterion is a stop-only
+recovery that frees the residual VM's CPU/RAM while retaining both disks,
+profile and sealed evidence; user scope clarification remains pending. No design
+approach, architecture, written specification or execution is yet approved.
+
+**Rationale:** The sole candidate is full digest
+254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d,
+run_id v3b2-254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d,
+runtime /Users/mistorm/.kil-hf/r254877dc1b1462c4 and its exact repository receipt.
+Retained root binding is UID501/device16777232/inode615011851/mode16832.
+The original request-free rehearsal had a successful eight-resource creation
+binding but stopped at private_colima_profile_roster_unknown on generated
+ssh_config; cleanup dispatched no stop/delete. A saved binding comparison is
+not fresh live authority, and RuntimeAuthority.create must not be used to adopt
+this existing root. Last native observation left the VM running; its current
+running/stopped state has NOT been re-established in this design-only turn.
+No current resource-utilization or fresh foreign-preservation assertion is made.
+
+**Affected artifacts:** Append only this actual-EOF lineage entry and regenerate
+its reader. No recovery spec/plan, source/test, sealed receipt, registry, runtime,
+disk, protected-default state, branch or worktree change. No native command,
+image-provenance audit, tool install, Ollama operation or HF request.
+
+**Unresolved questions:** Confirm stop-only retention versus a materially
+different disk-reclamation goal. The historical4bf manual-stop runbook is spent
+and concerns another target; its authority must not be copied to254. Its recorded
+post-stop loss of native Docker-context metadata shows why a new design must
+preserve immutable evidence copies while explicitly observing Colima-managed
+control-file changes, rather than promising all runtime bytes remain unchanged.
+The new254 receipt already includes a sealed Docker-context metadata copy.
+Unknown SSH controls require bounded exact validation under any future recovery
+design, not blanket allowlisting or a production inventory bypass. No recovery
+success, complete rehearsal or HF readiness is claimed. Platform-image provenance
+remains unverified, full Kind/Calico acceptance false and accepted local Envoy
+unchanged; known broader citation omissions remain outside this scope.
+
+**Next gate:** Preserve the entire predecessor Markdown prefix1,354,546B,
+render/check92 indexed readers and verify the exact lineage-only diff. Ask the
+user to confirm stop-only recovery as the design's success criterion. Then
+compare narrowly bounded approaches, present the recommended architecture and
+obtain design approval before writing a dated spec. Written-spec approval and
+the appropriate plan/execution gates remain separate; no implicit stop/delete,
+force shutdown, direct process kill, automatic retry or HF rerun.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
