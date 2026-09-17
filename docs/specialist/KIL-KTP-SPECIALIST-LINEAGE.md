@@ -23061,3 +23061,66 @@ the appropriate plan/execution gates remain separate; no implicit stop/delete,
 force shutdown, direct process kill, automatic retry or HF rerun.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T421 — 2026-09-17, stop-only goal confirmed and isolated recovery architecture proposed
+
+**Input:** User replied "fine. move ahead" to T420's stop-only retention versus
+disk-reclamation question. Fresh repository checks confirm clean detached
+e1372fcf79587ec704e0ecc09435d0359e242d4a before this append.
+
+**Interpretation:** CONFIRMED stop-only recovery goal: free the residual VM's
+CPU/RAM if running, preserve profile/disks and immutable evidence, do not reclaim
+disk space. Continue brainstorming design; no native execution is authorized.
+
+**Decision status:** PROPOSED architecture for user approval, not implemented.
+Recommend a separate one-shot manual recovery runbook for full digest
+254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d,
+runtime /Users/mistorm/.kil-hf/r254877dc1b1462c4 and its sealed repository receipt.
+Alternatives considered are production inventory compatibility work first
+(broader scope, does not grant authority over this existing closed runtime) or
+no native operation (avoids mutation but does not establish stopped state).
+Neither a harness bypass nor reuse of the spent4bf runbook is recommended.
+
+**Rationale:** Establish new stop-only authority, never recreate/adopt the
+existing RuntimeAuthority or resume ExploratoryLifecycle. Before any future
+approved dispatch: hold the existing local lock, authenticate the sealed receipt
+and full-ID/UID/root/registry binding, retain no-follow ancestry/identity checks,
+match eight-resource saved binding and disk/config records, validate only the
+known SSH control using bounded exact metadata/bytes, require stable complete
+private inventory and an empty explicit Docker endpoint, and compare protected
+default/global state. Unexpected entries, replacement, nonempty workload,
+concurrent activity or uncertain observations refuse the action.
+
+The only proposed mutation is one absolute Colima graceful stop for kil-v3-lab,
+with explicit COLIMA_HOME/LIMA_HOME/DOCKER_CONFIG/TMPDIR derived from this exact
+private root, passwd HOME and scoped authenticated tool PATH. A fresh separate
+private recovery receipt durably retains observations/control-byte copies and
+once-only intent before dispatch; nothing is written into the old sealed receipt.
+If already stopped, dispatch zero stop instructions and report that condition.
+After one bounded instruction, observe stopped status, disk/profile retention,
+all46 old checksums and protected foreign/global state. Record actual control-
+file changes; do not promise Colima preserves sockets/PIDs/context metadata.
+No force, kill, deletion, fallback, retry, second rehearsal or HF request.
+
+**Affected artifacts:** Only append this actual-EOF lineage and regenerate its
+reader. Read existing command adapter/environment and bounded process helper
+to constrain the proposal; no source/test/spec/plan/native/runtime/receipt edits.
+No native command, image audit, install, Ollama operation, branch move or push.
+
+**Unresolved questions:** User architecture approval remains pending. The written
+spec must define exact finite refusal rules, pre/post expectations and isolated
+evidence paths without borrowing live authority from pure parsing. Any new
+recovery code requires test-first guard/one-dispatch refusal checks before use;
+mocked success never substitutes for fresh native pre/post observations. Current
+VM running/stopped state is still unobserved this turn; T419's running state is
+historical. Recovery alone does not repair native SSH compatibility, establish
+HF readiness or grant another launch. Platform-image provenance remains
+unverified/full Kind-Calico acceptance false/accepted local Envoy unchanged.
+
+**Next gate:** Preserve the entire e1372fc Markdown prefix1,358,476B, render/check92
+readers, verify the lineage-only diff and retain this proposal checkpoint. Present
+the compact architecture and ask approval before writing the dated recovery
+spec; self-review and user written-spec approval precede writing-plans. A native
+stop still requires explicit execution approval and fresh scoped preconditions.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
