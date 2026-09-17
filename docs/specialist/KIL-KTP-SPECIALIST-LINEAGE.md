@@ -24015,3 +24015,74 @@ and NEW explicit execution approval. Subsequent native recovery independently
 needs another NEW one-stop approval; do neither during preparation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T434 — 2026-09-17, fixture-only parent permission Task1 ancestry checkpoint
+
+**Input:** Approved written spec/fixture preparation and requested subagent-driven
+workflow; Task1 reports from fresh permission_task1_impl, independent
+permission_task1_spec and permission_task1_quality.
+
+**Interpretation:** Execute preparation continuously within engineering scope;
+live fchmod/recovery/HF authority remains absent. Root alone owns docs/lineage/git;
+implementer edits only new tool/tests, reviewers inspect actual bytes read-only.
+
+**Decision status:** CONFIRMED Task1 retained read-only ancestry implemented,
+genuine RED/GREEN and independent SPEC/QUALITY gates passed. Other four tasks
+remain pending. This checkpoint is not a runnable permission/recovery tool.
+
+**Rationale/evidence:** At clean817c47f plan, root prescribed existing IO/profile/
+accepted recovery fixture baseline309/134.159s exit0 OK with bytecode disabled,
+ResourceWarning fatal; protected recovery SHA256 values unchanged. Implementer
+received BASELINE GO only afterward. Genuine initial absence RED3 intentional
+missing-tool assertions, then ancestry GREEN3; root repeated3/0.023s.
+No lock or native acquisition from the new implementation.
+
+Task1 fixed literal repository/UID/home/pins and private no-follow FD ancestry
+retain each owned descriptor before throwing stat operations, compare named/
+held original ID4, reject partial/reanchored/mode-changed identity and close
+every FD reverse-order with collected failures/idempotent close. Full stat9
+includes GID/size/nanosecond times; canonical helper is compact sorted newline
+UTF8/no NaN. No top-level target/source access or CLI/mutation implementation.
+
+Independent SPEC initially found the proposed after=True identity expectation
+admitted captured0705/0777/0700→0700, rather than ONLY0755→0700. Root traced the
+unconditional expected-mode rewrite and independently reproduced genuine RED1/
+0.020s with ValueError not raised. Implementer added negative matrix and positive
+retained-baseline test, then minimum original-mode0755 requirement before the
+expected0700 proof. No anchor rebaseline or new design/authority. Five tests now
+pass; independent SPEC rereview5/0.034s PASS. Root pre-quality5/0.033s PASS.
+
+Independent QUALITY5/0.055s PASS plus real owned-temp probes: EBADF close error
+does not prevent remaining releases; partial symlink walk closes owned handles;
+reused ancestor replacement refuses; canonical encoding rejects NaN. No Critical/
+Important findings. Minor first-test cleanup registration fixed with one test-only
+addCleanup line, reviewed exact delta; QUALITY rereview5/0.053s PASS/minor closed.
+Final root5/0.032s exit0 OK, strict ResourceWarning.
+
+Final toolSHA256b2911e161a5d501d94c2a4191d5a4e1e766fde9d1785f013babe646aa3096594;
+testsSHA256fedf1e824e0fea7cd49efc0705217ff004eb9d4d34e1bf910b581d9beb9967aa.
+Plan examples updated faithfully for review finding/test hygiene; AST compile
+only: tool360 lines, tests723 lines/41 methods. No example execution represented
+as actual future syscall behavior. Existing acceptance results remain separate.
+
+**Affected artifacts:** New tools/hf_recovery_parent_permissions.py and
+tests/test_hf_recovery_parent_permissions.py; Task1 checks/results in current
+plan/reader and this actual-EOF lineage/reader only. Approved spec/accepted
+recovery/production/deploy/artifacts unchanged. No actual target/lock/receipt/
+runtime observation, chmod, VM-status/native command, HF/Ollama/rehearsal/image/
+SSH audit, evidence creation/repair, force/delete/restart/retry/rollback.
+
+**Unresolved questions:** Tasks2–5 real fixture results and independent reviews.
+Historical target mode/VM status not refreshed; origin0755 unestablished.
+Mode-only preparation does not promise later preflight/HF readiness. Local Envoy
+unchanged/platform provenance unverified/full Kind-Calico acceptance false;
+four known historical immutable citation omissions untouched.
+
+**Next gate:** Preserve full817c47f predecessor lineage prefix1,421,308B,
+verify96 readers/canonical citation/exact protected scope and commit only new
+engineering pair/plan-reader/lineage-reader; clean exact HEAD. Then fresh Task2
+implementer for existing-only cooperating lock and finite direct-child proof,
+SPEC then QUALITY/root verification. No new human preparation approval needed.
+Live one-mode-change and later one-stop each still require NEW separate approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

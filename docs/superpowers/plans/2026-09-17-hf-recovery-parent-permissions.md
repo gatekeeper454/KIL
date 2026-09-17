@@ -74,7 +74,7 @@ edit files, acquire actual locks or execute any live permission/native command.
 **Files:** Create the two new paths. Read the approved spec and
 `src/kil/v3b2_profile_state.py` for no-follow patterns; edit neither.
 
-- [ ] Add this initial test block before creating the tool.
+- [x] Add this initial test block before creating the tool.
 
 <!-- permission-tests -->
 ```python
@@ -154,6 +154,7 @@ class Fixture(unittest.TestCase):
 class AncestryTests(Fixture):
     def test_real_named_fd_ancestry_and_all_descriptors_close(self):
         dirs = self.tool._Directories()
+        self.addCleanup(dirs.close)
         fd = dirs.directory(self.target)
         dirs.guard()
         self.assertEqual(os.fstat(fd).st_ino, self.target.stat().st_ino)
@@ -165,6 +166,32 @@ class AncestryTests(Fixture):
                 os.fstat(descriptor)
         with self.assertRaises(ValueError):
             dirs.guard()
+
+        self.unchanged_receipts()
+
+    def test_after_guard_rejects_unapproved_initial_target_modes(self):
+        for initial_mode in (0o705, 0o777, 0o700):
+            self.target.chmod(initial_mode)
+            dirs = self.tool._Directories()
+            try:
+                dirs.directory(self.target)
+                self.target.chmod(0o700)
+                with self.assertRaises(ValueError):
+                    dirs.guard(after=True)
+            finally:
+                dirs.close()
+
+    def test_after_guard_allows_only_captured_755_to_700(self):
+        self.target.chmod(0o755)
+        dirs = self.tool._Directories()
+        try:
+            dirs.directory(self.target)
+            captured = {path: record[2] for path, record in dirs.records.items()}
+            self.target.chmod(0o700)
+            dirs.guard(after=True)
+            self.assertEqual(captured, {path: record[2] for path, record in dirs.records.items()})
+        finally:
+            dirs.close()
         self.unchanged_receipts()
 
     def test_real_ancestor_reanchor_and_symlink_refuse(self):
@@ -195,7 +222,7 @@ class AncestryTests(Fixture):
             dirs.guard()
 ```
 
-- [ ] Run RED:
+- [x] Run RED:
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_recovery_parent_permissions.AncestryTests
@@ -204,7 +231,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/K
 Expected nonzero, with `fixed permission tool is missing`; inspect actual output
 to distinguish this intentional absence from an unrelated import failure.
 
-- [ ] Create the tool with this complete ancestry block. It contains no mutation.
+- [x] Create the tool with this complete ancestry block. It contains no mutation.
 
 <!-- permission-tool -->
 ```python
@@ -279,6 +306,8 @@ class _Directories:
         for path, fd, original, parent, name in self.records.values():
             expected = original
             if after and path == TARGET and original is not None:
+                if stat.S_IMODE(original[2]) != 0o755:
+                    raise ValueError('permission_initial_transition_not_755')
                 expected = (*original[:2],
                             (original[2] & ~0o7777) | 0o700, original[3])
             if (expected is None or _id(os.fstat(fd)) != expected
@@ -299,7 +328,7 @@ class _Directories:
         return errors
 ```
 
-- [ ] Repeat the exact Task1 command; require actual OK, closed FD assertions and
+- [x] Repeat the exact Task1 command; require actual OK, closed FD assertions and
   no receipt changes. Review then commit with exact paths:
 
 ```sh
@@ -1384,3 +1413,39 @@ unverified, full Kind/Calico acceptance false. No broad provenance audit is
 required or authorized by this mode-only preparation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Engineering execution record — 2026-09-17
+
+At clean committed plan checkpoint817c47fba7bfb16751e34311fe788bf51d50f497,
+root's prescribed baseline completed:309 tests/134.159s, exit0/OK, bytecode
+disabled and ResourceWarning fatal. Scope: new preparation baseline's existing
+IO, profile-state and accepted compact-recovery fixture modules. Accepted
+recovery tool SHA2562b58ab2392543611f64044f5d2624f07edfa03ed4c988e1bff2c03d137ccf864
+and tests SHA256a4ee14ce13dd569bc1a1202ffab3be450fed8bbae954be96b98600caeccaf64f
+unchanged. Root sent BASELINE GO to fresh Task1 implementer only afterward.
+No actual private-target/lock/receipt/runtime observation or native action.
+Task1 implementation/review/verification results are pending at this record.
+
+Task1 subsequently completed by fresh permission_task1_impl with genuine initial
+RED3 missing-tool failures, then GREEN3. Independent permission_task1_spec found
+the proposed after=True guard admitted unapproved initial modes; root reproduced
+RED1/0.020s. Minimal captured0755 requirement plus negative0705/0777/0700 and
+positive0755→0700 tests produced GREEN5. Root whole5/0.033s and independent SPEC
+rereview5/0.034s passed. Independent permission_task1_quality passed5/0.055s and
+real-owned-temp close-error/partial-walk/reused-ancestor/canonical-output probes,
+no Critical/Important issues. Final root run and exact doc checkpoint follow.
+Proposed plan examples updated with the faithful guard/test correction and
+compile without execution: tool360 lines, tests722 lines/41 methods.
+Only read-only ancestry is implemented; existing lock/proof/syscall/CLI tasks
+remain pending. No live target/VM state change or permission attempt consumed.
+
+Quality's minor test-hygiene note is addressed by registering first-test
+dirs.close before assertions as well as its explicit release checks. Root's
+fresh post-review whole module5/0.055s passed before this test-only adjustment;
+repeat verification/review of that adjustment precedes the actual checkpoint.
+
+Final Task1 root verification5/0.032s OK; quality exact-delta rereview5/0.053s
+PASS, minor closed. ToolSHA256b2911e161a5d501d94c2a4191d5a4e1e766fde9d1785f013babe646aa3096594;
+testSHA256fedf1e824e0fea7cd49efc0705217ff004eb9d4d34e1bf910b581d9beb9967aa.
+Updated plan examples syntax-check only: tool360 lines/tests723 lines/41 methods.
+Task1 engineering acceptance confirmed; fresh Task2 follows the scoped checkpoint.

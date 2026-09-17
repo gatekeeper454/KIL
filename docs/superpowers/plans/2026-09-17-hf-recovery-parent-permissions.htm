@@ -6,7 +6,7 @@
 <title>Fixed HF recovery parent permission preparation implementation plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md">
-<meta name="source-sha256" content="88d9caf92e24ee042e5c6369b4388f3d357d9959257f4b8c07ba44b5a053ec63">
+<meta name="source-sha256" content="64e2032b7bc82eec44843bf3b348cc9f8cd52b76e524363261fc0544f07171dd">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,14 +55,14 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md</code> (<code>88d9caf92e24ee042e5c6369b4388f3d357d9959257f4b8c07ba44b5a053ec63</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md</code> (<code>64e2032b7bc82eec44843bf3b348cc9f8cd52b76e524363261fc0544f07171dd</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Fixed HF recovery parent permission preparation implementation plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md</code> (<code>88d9caf92e24ee042e5c6369b4388f3d357d9959257f4b8c07ba44b5a053ec63</code>); edit the Markdown source, not this reader.</p></div>
-<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#fixed-hf-recovery-parent-permission-preparation-implementation-plan">Fixed HF recovery parent permission preparation implementation plan</a></li><li class="level-2"><a href="#approval-worktree-and-file-map">Approval, worktree and file map</a></li><li class="level-2"><a href="#common-commands-and-baseline">Common commands and baseline</a></li><li class="level-2"><a href="#task-1-retained-read-only-ancestry-and-exact-pins">Task 1: Retained read-only ancestry and exact pins</a></li><li class="level-2"><a href="#task-2-existing-lock-and-bounded-direct-child-commitment">Task 2: Existing lock and bounded direct-child commitment</a></li><li class="level-2"><a href="#task-3-entry-consumed-syscall-slot-and-bounded-honest-errors">Task 3: Entry-consumed syscall slot and bounded honest errors</a></li><li class="level-2"><a href="#task-4-complete-closure-truthful-outcomes-and-strict-non-action-cli">Task 4: Complete closure, truthful outcomes and strict non-action CLI</a></li><li class="level-2"><a href="#task-5-adversarial-coverage-independent-whole-review-and-root-verification">Task 5: Adversarial coverage, independent whole review and root verification</a></li><li class="level-2"><a href="#spec-coverage-and-plan-self-review">Spec coverage and plan self-review</a></li><li class="level-2"><a href="#execution-handoff-and-live-gates-do-not-execute-now">Execution handoff and live gates — do not execute now</a></li></ol></nav></details><div class="reader-layout">
-<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="fixed-hf-recovery-parent-permission-preparation-implementation-plan" href="#fixed-hf-recovery-parent-permission-preparation-implementation-plan">Fixed HF recovery parent permission preparation implementation plan</a></li><li class="level-2"><a data-section-id="approval-worktree-and-file-map" href="#approval-worktree-and-file-map">Approval, worktree and file map</a></li><li class="level-2"><a data-section-id="common-commands-and-baseline" href="#common-commands-and-baseline">Common commands and baseline</a></li><li class="level-2"><a data-section-id="task-1-retained-read-only-ancestry-and-exact-pins" href="#task-1-retained-read-only-ancestry-and-exact-pins">Task 1: Retained read-only ancestry and exact pins</a></li><li class="level-2"><a data-section-id="task-2-existing-lock-and-bounded-direct-child-commitment" href="#task-2-existing-lock-and-bounded-direct-child-commitment">Task 2: Existing lock and bounded direct-child commitment</a></li><li class="level-2"><a data-section-id="task-3-entry-consumed-syscall-slot-and-bounded-honest-errors" href="#task-3-entry-consumed-syscall-slot-and-bounded-honest-errors">Task 3: Entry-consumed syscall slot and bounded honest errors</a></li><li class="level-2"><a data-section-id="task-4-complete-closure-truthful-outcomes-and-strict-non-action-cli" href="#task-4-complete-closure-truthful-outcomes-and-strict-non-action-cli">Task 4: Complete closure, truthful outcomes and strict non-action CLI</a></li><li class="level-2"><a data-section-id="task-5-adversarial-coverage-independent-whole-review-and-root-verification" href="#task-5-adversarial-coverage-independent-whole-review-and-root-verification">Task 5: Adversarial coverage, independent whole review and root verification</a></li><li class="level-2"><a data-section-id="spec-coverage-and-plan-self-review" href="#spec-coverage-and-plan-self-review">Spec coverage and plan self-review</a></li><li class="level-2"><a data-section-id="execution-handoff-and-live-gates-do-not-execute-now" href="#execution-handoff-and-live-gates-do-not-execute-now">Execution handoff and live gates — do not execute now</a></li></ol></nav>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md</code> (<code>64e2032b7bc82eec44843bf3b348cc9f8cd52b76e524363261fc0544f07171dd</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#fixed-hf-recovery-parent-permission-preparation-implementation-plan">Fixed HF recovery parent permission preparation implementation plan</a></li><li class="level-2"><a href="#approval-worktree-and-file-map">Approval, worktree and file map</a></li><li class="level-2"><a href="#common-commands-and-baseline">Common commands and baseline</a></li><li class="level-2"><a href="#task-1-retained-read-only-ancestry-and-exact-pins">Task 1: Retained read-only ancestry and exact pins</a></li><li class="level-2"><a href="#task-2-existing-lock-and-bounded-direct-child-commitment">Task 2: Existing lock and bounded direct-child commitment</a></li><li class="level-2"><a href="#task-3-entry-consumed-syscall-slot-and-bounded-honest-errors">Task 3: Entry-consumed syscall slot and bounded honest errors</a></li><li class="level-2"><a href="#task-4-complete-closure-truthful-outcomes-and-strict-non-action-cli">Task 4: Complete closure, truthful outcomes and strict non-action CLI</a></li><li class="level-2"><a href="#task-5-adversarial-coverage-independent-whole-review-and-root-verification">Task 5: Adversarial coverage, independent whole review and root verification</a></li><li class="level-2"><a href="#spec-coverage-and-plan-self-review">Spec coverage and plan self-review</a></li><li class="level-2"><a href="#execution-handoff-and-live-gates-do-not-execute-now">Execution handoff and live gates — do not execute now</a></li><li class="level-2"><a href="#engineering-execution-record-2026-09-17">Engineering execution record — 2026-09-17</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="fixed-hf-recovery-parent-permission-preparation-implementation-plan" href="#fixed-hf-recovery-parent-permission-preparation-implementation-plan">Fixed HF recovery parent permission preparation implementation plan</a></li><li class="level-2"><a data-section-id="approval-worktree-and-file-map" href="#approval-worktree-and-file-map">Approval, worktree and file map</a></li><li class="level-2"><a data-section-id="common-commands-and-baseline" href="#common-commands-and-baseline">Common commands and baseline</a></li><li class="level-2"><a data-section-id="task-1-retained-read-only-ancestry-and-exact-pins" href="#task-1-retained-read-only-ancestry-and-exact-pins">Task 1: Retained read-only ancestry and exact pins</a></li><li class="level-2"><a data-section-id="task-2-existing-lock-and-bounded-direct-child-commitment" href="#task-2-existing-lock-and-bounded-direct-child-commitment">Task 2: Existing lock and bounded direct-child commitment</a></li><li class="level-2"><a data-section-id="task-3-entry-consumed-syscall-slot-and-bounded-honest-errors" href="#task-3-entry-consumed-syscall-slot-and-bounded-honest-errors">Task 3: Entry-consumed syscall slot and bounded honest errors</a></li><li class="level-2"><a data-section-id="task-4-complete-closure-truthful-outcomes-and-strict-non-action-cli" href="#task-4-complete-closure-truthful-outcomes-and-strict-non-action-cli">Task 4: Complete closure, truthful outcomes and strict non-action CLI</a></li><li class="level-2"><a data-section-id="task-5-adversarial-coverage-independent-whole-review-and-root-verification" href="#task-5-adversarial-coverage-independent-whole-review-and-root-verification">Task 5: Adversarial coverage, independent whole review and root verification</a></li><li class="level-2"><a data-section-id="spec-coverage-and-plan-self-review" href="#spec-coverage-and-plan-self-review">Spec coverage and plan self-review</a></li><li class="level-2"><a data-section-id="execution-handoff-and-live-gates-do-not-execute-now" href="#execution-handoff-and-live-gates-do-not-execute-now">Execution handoff and live gates — do not execute now</a></li><li class="level-2"><a data-section-id="engineering-execution-record-2026-09-17" href="#engineering-execution-record-2026-09-17">Engineering execution record — 2026-09-17</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
 <h1 id="fixed-hf-recovery-parent-permission-preparation-implementation-plan">Fixed HF recovery parent permission preparation implementation plan</h1>
 <blockquote>
@@ -124,7 +124,7 @@ edit files, acquire actual locks or execute any live permission/native command.<
 <p><strong>Files:</strong> Create the two new paths. Read the approved spec and
 <code>src/kil/v3b2_profile_state.py</code> for no-follow patterns; edit neither.</p>
 <ul>
-<li>[ ] Add this initial test block before creating the tool.</li>
+<li>[x] Add this initial test block before creating the tool.</li>
 </ul>
 <p>&lt;!-- permission-tests --&gt;</p>
 <pre><code class="language-python">import importlib.util
@@ -203,6 +203,7 @@ class Fixture(unittest.TestCase):
 class AncestryTests(Fixture):
     def test_real_named_fd_ancestry_and_all_descriptors_close(self):
         dirs = self.tool._Directories()
+        self.addCleanup(dirs.close)
         fd = dirs.directory(self.target)
         dirs.guard()
         self.assertEqual(os.fstat(fd).st_ino, self.target.stat().st_ino)
@@ -214,6 +215,32 @@ class AncestryTests(Fixture):
                 os.fstat(descriptor)
         with self.assertRaises(ValueError):
             dirs.guard()
+
+        self.unchanged_receipts()
+
+    def test_after_guard_rejects_unapproved_initial_target_modes(self):
+        for initial_mode in (0o705, 0o777, 0o700):
+            self.target.chmod(initial_mode)
+            dirs = self.tool._Directories()
+            try:
+                dirs.directory(self.target)
+                self.target.chmod(0o700)
+                with self.assertRaises(ValueError):
+                    dirs.guard(after=True)
+            finally:
+                dirs.close()
+
+    def test_after_guard_allows_only_captured_755_to_700(self):
+        self.target.chmod(0o755)
+        dirs = self.tool._Directories()
+        try:
+            dirs.directory(self.target)
+            captured = {path: record[2] for path, record in dirs.records.items()}
+            self.target.chmod(0o700)
+            dirs.guard(after=True)
+            self.assertEqual(captured, {path: record[2] for path, record in dirs.records.items()})
+        finally:
+            dirs.close()
         self.unchanged_receipts()
 
     def test_real_ancestor_reanchor_and_symlink_refuse(self):
@@ -244,14 +271,14 @@ class AncestryTests(Fixture):
             dirs.guard()
 </code></pre>
 <ul>
-<li>[ ] Run RED:</li>
+<li>[x] Run RED:</li>
 </ul>
 <pre><code class="language-sh">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_recovery_parent_permissions.AncestryTests
 </code></pre>
 <p>Expected nonzero, with <code>fixed permission tool is missing</code>; inspect actual output
 to distinguish this intentional absence from an unrelated import failure.</p>
 <ul>
-<li>[ ] Create the tool with this complete ancestry block. It contains no mutation.</li>
+<li>[x] Create the tool with this complete ancestry block. It contains no mutation.</li>
 </ul>
 <p>&lt;!-- permission-tool --&gt;</p>
 <pre><code class="language-python">&quot;&quot;&quot;Fixed, separately approved one-directory mode change; never VM recovery.&quot;&quot;&quot;
@@ -325,6 +352,8 @@ class _Directories:
         for path, fd, original, parent, name in self.records.values():
             expected = original
             if after and path == TARGET and original is not None:
+                if stat.S_IMODE(original[2]) != 0o755:
+                    raise ValueError('permission_initial_transition_not_755')
                 expected = (*original[:2],
                             (original[2] &amp; ~0o7777) | 0o700, original[3])
             if (expected is None or _id(os.fstat(fd)) != expected
@@ -345,7 +374,7 @@ class _Directories:
         return errors
 </code></pre>
 <ul>
-<li>[ ] Repeat the exact Task1 command; require actual OK, closed FD assertions and
+<li>[x] Repeat the exact Task1 command; require actual OK, closed FD assertions and
 no receipt changes. Review then commit with exact paths:</li>
 </ul>
 <pre><code class="language-sh">git add -- tools/hf_recovery_parent_permissions.py tests/test_hf_recovery_parent_permissions.py docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.htm docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.md docs/specialist/KIL-KTP-SPECIALIST-LINEAGE.htm
@@ -1396,6 +1425,37 @@ action gates. Accepted local Envoy stays unchanged; platform-image provenance
 unverified, full Kind/Calico acceptance false. No broad provenance audit is
 required or authorized by this mode-only preparation.</p>
 <p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+<h2 id="engineering-execution-record-2026-09-17">Engineering execution record — 2026-09-17</h2>
+<p>At clean committed plan checkpoint817c47fba7bfb16751e34311fe788bf51d50f497,
+root's prescribed baseline completed:309 tests/134.159s, exit0/OK, bytecode
+disabled and ResourceWarning fatal. Scope: new preparation baseline's existing
+IO, profile-state and accepted compact-recovery fixture modules. Accepted
+recovery tool SHA2562b58ab2392543611f64044f5d2624f07edfa03ed4c988e1bff2c03d137ccf864
+and tests SHA256a4ee14ce13dd569bc1a1202ffab3be450fed8bbae954be96b98600caeccaf64f
+unchanged. Root sent BASELINE GO to fresh Task1 implementer only afterward.
+No actual private-target/lock/receipt/runtime observation or native action.
+Task1 implementation/review/verification results are pending at this record.</p>
+<p>Task1 subsequently completed by fresh permission_task1_impl with genuine initial
+RED3 missing-tool failures, then GREEN3. Independent permission_task1_spec found
+the proposed after=True guard admitted unapproved initial modes; root reproduced
+RED1/0.020s. Minimal captured0755 requirement plus negative0705/0777/0700 and
+positive0755→0700 tests produced GREEN5. Root whole5/0.033s and independent SPEC
+rereview5/0.034s passed. Independent permission_task1_quality passed5/0.055s and
+real-owned-temp close-error/partial-walk/reused-ancestor/canonical-output probes,
+no Critical/Important issues. Final root run and exact doc checkpoint follow.
+Proposed plan examples updated with the faithful guard/test correction and
+compile without execution: tool360 lines, tests722 lines/41 methods.
+Only read-only ancestry is implemented; existing lock/proof/syscall/CLI tasks
+remain pending. No live target/VM state change or permission attempt consumed.</p>
+<p>Quality's minor test-hygiene note is addressed by registering first-test
+dirs.close before assertions as well as its explicit release checks. Root's
+fresh post-review whole module5/0.055s passed before this test-only adjustment;
+repeat verification/review of that adjustment precedes the actual checkpoint.</p>
+<p>Final Task1 root verification5/0.032s OK; quality exact-delta rereview5/0.053s
+PASS, minor closed. ToolSHA256b2911e161a5d501d94c2a4191d5a4e1e766fde9d1785f013babe646aa3096594;
+testSHA256fedf1e824e0fea7cd49efc0705217ff004eb9d4d34e1bf910b581d9beb9967aa.
+Updated plan examples syntax-check only: tool360 lines/tests723 lines/41 methods.
+Task1 engineering acceptance confirmed; fresh Task2 follows the scoped checkpoint.</p>
 </article></main>
 </div></div>
 <script>(() => {
