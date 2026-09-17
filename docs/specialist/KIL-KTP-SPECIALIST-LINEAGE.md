@@ -24230,3 +24230,84 @@ and subsequent native one-stop each remain NEW separately approved root-only
 actions after complete verified preparation, never implicit continuation.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T437 — 2026-09-17, fixture-only permission orchestration/CLI Task4 accepted
+
+**Input:** Continue the approved written-spec preparation after Task3 clean
+checkpoint8f91b5a7789aaa93d6d3333948d439b7c7eaaa45, using a fresh implementer
+and independent specification then quality reviews.
+
+**Interpretation:** Connect accepted retained proofs, single-entry syscall and
+bounded errors to exact local-source/account checks, complete teardown outcomes
+and strict CLI; exercise only owned temporary fixtures. Root retains docs/git
+ownership and all distinct live execution gates.
+
+**Decision status:** CONFIRMED Task4 engineering accepted; Task5 adversarial
+coverage/whole regressions pending. Actual fixed-parent fchmod and subsequent
+VM stop remain separately UNAPPROVED, no permission consumed by these fixtures.
+
+**Rationale/evidence:** Fresh permission_task4_impl added tests first, reporting
+genuine focused RED13/0.213s,24 errors/exit1 from absent source/account/run/main.
+Root read tests during construction and caught check4 incorrectly expected to
+be preflight0 although it occurs after the syscall. Worker restricted preflight
+injections to checks1/3 before implementation; production ordering was never
+changed to satisfy that erroneous test. Both HEAD and uppercase source rejection
+are covered. FocusedGREEN13/0.139s, whole30/0.283s; root read actual diff/functions/
+source-helper definition and ran30/0.304s OK, ResourceWarning fatal.
+
+_source delegates to existing bounded exact local Git HEAD/clean status helper,
+no remote synchronization/provenance claim. _account requires actual real and
+effective UID and passwd home. Source/account before bind, before complete proof
+observations, and after all content/enumeration IO precede metadata-only closure
+and the single held-target fchmod entry. Post fstat/fsync, validated target mode/
+ctime baseline and original ancestry/lock/child observations precede final source/
+account and metadata-only closure of every known child. No descendant receipt
+opens or interpretation; no ancestor repair or rebaseline.
+
+All owned descriptors are torn down before confirmation. Original and late
+errors retain count/certainty: precheck0 refuses, entered raised1 stays uncertain
+even observed0700, normal return1 plus fsync/post/source/closure/teardown failure
+is inconclusive, not invented0. Fixed bounded canonical stdout includes exact
+source/approval/pins, pre/observed/validated stat9, child/lock commitments, separate
+attempt/certainty/mode/checks and explicitly limited preservation scope. No new
+private receipt/seal, retry/rollback or recovery/native dispatch.
+
+Strict nonabbreviating CLI requires lowercase exact40-hex source, nonblank valid
+UTF8 approval<=4096B and explicit boolean; no overrides. Invalid input rejects2
+before source/account/target access, import has no target/source access. Exit0
+only confirmed, refusals/uncertainty/inconclusive1. Actual real-fixture tests
+prove single change, same inode, unchanged receipt bytes/modes, zero-call source/
+account/final-target drift refusals, lost result, fsync/post/closure failures,
+original+late-close error retention/all released FDs, post-source and child drift,
+and prohibition of other filesystem/native operations. CLI tests isolate result
+formatting only, not successful filesystem proof.
+
+Independent SPEC30/0.348s plus2 probes/0.023s PASS (final target drift and late
+close). Independent QUALITY30/0.317s plus final-account refusal, otherwise-clean
+late close errors and known-child metadata drift after last content read PASS.
+No Critical/Important/Minor findings. Final root30/0.453s exit0 OK, fatal
+ResourceWarning. Actual toolSHA2568ba9dd1d4cb277878d4f778c36232e2d96863643187a13b6ae29962c7cfb2489;
+testsSHA25649b97cc883eb8571bf48b1319c18996e88bea00548e1877b124870e4e18c26c2.
+Complete8f91b5a lineage prefix1,435,193B/protected scope verified before append;
+96-reader/exact-scope/clean checkpoint checks follow before Task5 dispatch.
+
+**Affected artifacts:** Only new permission tool/tests, Task4 plan checks/results
+and lineage plus generated readers. Accepted recovery, production, deploy,
+artifacts and approved spec untouched. No actual target/lock/receipt/runtime/
+guest/disk/VM observation or mutation; no HF/Ollama/rehearsal/image/SSH audit,
+new private evidence, native resource acquisition/stop/delete/restart.
+
+**Unresolved questions:** Task5 full adversarial coverage/review/root combined
+regressions remain. Actual mode and VM status unrefreshed;0755 origin unestablished.
+Fixtures do not establish live recovery/HF readiness. Accepted local Envoy
+unchanged; platform provenance unverified/full Kind-Calico acceptance false;
+four immutable historical citation omissions remain unmodified/unexempted.
+
+**Next gate:** Verify readers/protected scope/full predecessor preservation,
+scoped clean local commit, then fresh Task5 fixture-only implementer, SPEC then
+QUALITY and complete independent review/root regressions. After complete verified
+preparation ask NEW explicit approval for one fixed mode-change attempt only.
+Any subsequent one-stop native recovery needs its own NEW separate approval;
+T430 spent permission is not revived, no implicit continuation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

@@ -730,7 +730,7 @@ class _Errors:
 **Files:** Append new tool/tests only. Read existing bounded
 `src/kil/hf_exploratory_native.py:125` check_source; do not edit protected code.
 
-- [ ] Append these orchestration/fault/argument tests before `_run`/`main`.
+- [x] Append these orchestration/fault/argument tests before `_run`/`main`.
 
 <!-- permission-tests -->
 ```python
@@ -946,13 +946,13 @@ class CLITests(unittest.TestCase):
             self.assertEqual(json.loads(raw)['fchmod_attempts'], document['fchmod_attempts'])
 ```
 
-- [ ] Run RED (expected missing `_run`/`main`, nonzero):
+- [x] Run RED (expected missing `_run`/`main`, nonzero):
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_recovery_parent_permissions.ProcedureTests tests.test_hf_recovery_parent_permissions.CLITests
 ```
 
-- [ ] Append complete orchestration and CLI. This is the last tool block.
+- [x] Append complete orchestration and CLI. This is the last tool block.
 
 <!-- permission-tool -->
 ```python
@@ -1073,7 +1073,7 @@ if __name__ == '__main__':
     raise SystemExit(main())
 ```
 
-- [ ] Repeat Task4 command and whole module; require actual OK. Use
+- [x] Repeat Task4 command and whole module; require actual OK. Use
   systematic-debugging for any unexpected failure, not a speculative change.
   Independent reviews must check the outer finally preserves prior errors/count,
   every owned close is attempted, no child receipt bytes are touched, and final
@@ -1524,3 +1524,26 @@ failure/overflow rather than claiming clean. Prior proof guards untouched.
 Final root whole17/0.397s OK, ResourceWarning fatal. Only owned temporary fixtures
 received syscalls; actual target/VM unobserved. Readers/scoped checkpoint precede
 Task4 orchestration; no actual permission/recovery authority granted.
+
+Task4 fresh permission_task4_impl completed genuine focused absence RED13/0.213s,
+24 errors/exit1 before source/account/run/main implementation. Root caught an
+in-progress test expectation that classified check4 as preflight; test injection
+was restricted to approved prechecks1/3 before implementation, without changing
+the four-check ordering. Invalid HEAD and uppercase source cases are both covered.
+FocusedGREEN13/0.139s and whole30/0.283s; root read actual diff/code and ran
+30/0.304s OK. Source delegates to the existing bounded exact-local-clean-HEAD
+validator; no remote synchronization or provenance assertion.
+
+Independent SPEC30/0.348s plus2 owned-fixture probes/0.023s PASS; QUALITY30/0.317s
+and final-account/late-close/final-child-drift probes PASS. No review findings.
+Final root30/0.453s OK, ResourceWarning fatal. Actual toolSHA256
+8ba9dd1d4cb277878d4f778c36232e2d96863643187a13b6ae29962c7cfb2489;
+testsSHA25649b97cc883eb8571bf48b1319c18996e88bea00548e1877b124870e4e18c26c2.
+All source/account/content/enumeration IO precedes final metadata-only closure;
+one-entry uncertainty and returned-call/postcheck failure remain distinct.
+Confirmed outcome is produced only after all owned teardown; canonical bounded
+stdout reports actual attempt/observed-mode/proof scope, never new private evidence.
+Complete8f91b5a predecessor lineage prefix1,435,193B and protected scope verified.
+Readers/scoped checkpoint precede Task5 adversarial tests and whole verification.
+Actual target/lock/receipt/runtime/VM status unobserved, no live permission or
+native recovery approval consumed. Task5 engineering remains pending.

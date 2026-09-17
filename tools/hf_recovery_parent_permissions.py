@@ -191,3 +191,115 @@ class _Proof:
             except BaseException as error: errors.append(error)
         errors.extend(self.dirs.close())
         return errors
+
+def _source(reviewed_source):
+    location = str(REPOSITORY / 'src')
+    if location not in sys.path:
+        sys.path.insert(0, location)
+    from kil.hf_exploratory_native import check_source
+    check_source(REPOSITORY, reviewed_source)
+
+def _account():
+    if os.getuid() != UID or os.geteuid() != UID or Path(pwd.getpwuid(os.getuid()).pw_dir) != HOME:
+        raise ValueError('permission_actual_account_changed')
+
+def _run(reviewed_source, execution_approval):
+    proof, attempt, errors = _Proof(), _Attempt(), _Errors()
+    observed_post = None
+    checks = {key: False for key in ('target', 'ancestors', 'children', 'lock', 'source', 'account', 'teardown')}
+    try:
+        _source(reviewed_source)
+        _account()
+        proof.bind()
+        _source(reviewed_source)
+        _account()
+        proof.observe()
+        _source(reviewed_source)
+        _account()
+        proof.metadata()
+        attempt.enter(proof.target)
+        observed_post = _full(os.fstat(proof.target))
+        os.fsync(proof.target)
+        proof.bind_post()
+        proof.observe(after=True)
+        _source(reviewed_source)
+        _account()
+        proof.metadata(after=True)
+        for key in checks:
+            if key != 'teardown':
+                checks[key] = True
+    except BaseException as error:
+        errors.add(error)
+        if attempt.attempts and proof.target is not None:
+            try:
+                observed_post = _full(os.fstat(proof.target))
+            except BaseException as observation_error:
+                errors.add(observation_error)
+    finally:
+        for error in proof.close():
+            errors.add(error)
+    checks['teardown'] = not errors.rows and not errors.overflow
+    if not attempt.attempts:
+        outcome = 'preflight_refused'
+    elif not attempt.returned:
+        outcome = 'mutation_uncertain'
+    elif errors.rows or errors.overflow or not all(checks.values()):
+        outcome = 'postverification_inconclusive'
+    else:
+        outcome = 'mode_change_confirmed'
+    def mode(row):
+        return None if row is None else format(stat.S_IMODE(row[2]), '04o')
+    return {
+        'outcome': outcome,
+        'reviewed_source': reviewed_source,
+        'execution_approval': execution_approval,
+        'target': str(TARGET),
+        'target_pin': TARGET_PIN,
+        'tools_pin': TOOLS_PIN,
+        'fchmod_attempts': attempt.attempts,
+        'syscall_certainty': ('not_entered' if not attempt.attempts else 'returned' if attempt.returned else 'uncertain'),
+        'observed_pre_mode': mode(proof.before),
+        'observed_post_mode': mode(observed_post),
+        'target_pre_stat9': proof.before,
+        'target_post_observed_stat9': observed_post,
+        'target_post_verified_stat9': proof.post,
+        'direct_children_count': None if proof.children is None else len(proof.children),
+        'direct_children_sha256': None if proof.children is None else sha256(_canonical(proof.children)).hexdigest(),
+        'lock_stat9': proof.lock_identity,
+        'lock_sha256': None if proof.lock_payload is None else sha256(proof.lock_payload).hexdigest(),
+        'preservation': outcome == 'mode_change_confirmed',
+        'preservation_checks': checks,
+        'errors': errors.rows,
+        'error_overflow': errors.overflow,
+        'preservation_scope': 'own_no_receipt_writes_and_direct_child_metadata_not_descendant_content',
+    }
+
+def _source_argument(value):
+    if re.fullmatch(r'[0-9a-f]{40}', value) is None:
+        raise argparse.ArgumentTypeError('reviewed source must be exact40-hex')
+    return value
+
+def _approval_argument(value):
+    try:
+        valid = bool(value.strip()) and len(value.encode('utf-8')) <= 4096
+    except UnicodeError:
+        valid = False
+    if not valid:
+        raise argparse.ArgumentTypeError('actual approval must be nonblank validUTF-8 <=4096 bytes')
+    return value
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
+    parser.add_argument('--reviewed-source', required=True, type=_source_argument)
+    parser.add_argument('--execution-approval', required=True, type=_approval_argument)
+    parser.add_argument('--execute-approved-mode-change', required=True, action='store_true')
+    args = parser.parse_args(argv)
+    result = _run(args.reviewed_source, args.execution_approval)
+    raw = _canonical(result)
+    if len(raw) > MAXIMUM:
+        raise ValueError('permission_result_exceeds_bound_after_attempt')
+    print(raw.decode('utf-8'), end='')
+    return 0 if result['outcome'] == 'mode_change_confirmed' else 1
+
+if __name__ == '__main__':
+    raise SystemExit(main())

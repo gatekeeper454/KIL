@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import tempfile
 import unittest
 from contextlib import ExitStack, redirect_stdout, redirect_stderr
@@ -59,6 +60,14 @@ class Fixture(unittest.TestCase):
         self.assertEqual(self.payload.read_bytes(), self.original_payload)
         self.assertEqual(self.seal.read_bytes(), self.original_seal)
         self.assertEqual([stat.S_IMODE(p.stat().st_mode) for p in (self.receipt, self.payload, self.seal)], self.original_modes)
+    def run_fixture(self, *, source=None, account=None):
+        with patch.object(self.tool, '_source', side_effect=source), patch.object(self.tool, '_account', side_effect=account):
+            return self.tool._run(SOURCE, APPROVAL)
+    def assert_refused(self, result):
+        self.assertEqual(result['outcome'], 'preflight_refused')
+        self.assertEqual(result['fchmod_attempts'], 0)
+        self.assertFalse(result['preservation'])
+        self.assertEqual(stat.S_IMODE(self.target.stat().st_mode), 0o755)
 
 class AncestryTests(Fixture):
     def test_real_named_fd_ancestry_and_all_descriptors_close(self):
@@ -276,3 +285,207 @@ class AttemptTests(Fixture):
         self.assertLessEqual(len(long.rows[0]['message'].encode('utf-8')), 4096)
         long.add(ValueError('\udcff'))
         self.assertTrue(long.rows)
+
+class ProcedureTests(Fixture):
+    def test_confirmed_records_complete_observation_and_closes_every_descriptor(self):
+        inode = self.target.stat().st_ino
+        original_close = self.tool._close_fd
+        closed = []
+        def close(fd):
+            original_close(fd)
+            closed.append(fd)
+        with patch.object(self.tool, '_close_fd', side_effect=close):
+            result = self.run_fixture()
+        self.assertEqual(result['outcome'], 'mode_change_confirmed')
+        self.assertEqual(result['fchmod_attempts'], 1)
+        self.assertEqual(result['syscall_certainty'], 'returned')
+        self.assertEqual(result['observed_pre_mode'], '0755')
+        self.assertEqual(result['observed_post_mode'], '0700')
+        self.assertTrue(result['preservation'])
+        self.assertTrue(all(result['preservation_checks'].values()))
+        self.assertEqual(self.target.stat().st_ino, inode)
+        self.assertEqual(result['reviewed_source'], SOURCE)
+        self.assertEqual(result['execution_approval'], APPROVAL)
+        self.assertTrue(closed)
+        for fd in closed:
+            with self.assertRaises(OSError): os.fstat(fd)
+        self.unchanged_receipts()
+
+    def test_each_preflight_source_or_account_failure_refuses_before_syscall(self):
+        for selected in (1, 3):
+            with self.subTest(kind='source', selected=selected):
+                calls = []
+                def source(_):
+                    calls.append('source')
+                    if len(calls) == selected:
+                        raise ValueError('selected source check')
+                with patch.object(self.tool.os, 'fchmod', wraps=os.fchmod) as fchmod:
+                    self.assert_refused(self.run_fixture(source=source))
+                self.assertEqual(len(calls), selected)
+                self.assertEqual(fchmod.call_count, 0)
+            self.target.chmod(0o755)
+            with self.subTest(kind='account', selected=selected):
+                calls = []
+                def account():
+                    calls.append('account')
+                    if len(calls) == selected:
+                        raise ValueError('selected account check')
+                with patch.object(self.tool.os, 'fchmod', wraps=os.fchmod) as fchmod:
+                    self.assert_refused(self.run_fixture(account=account))
+                self.assertEqual(len(calls), selected)
+                self.assertEqual(fchmod.call_count, 0)
+            self.target.chmod(0o755)
+
+    def test_target_replacement_during_final_preflight_is_refused(self):
+        def source(_):
+            if source.calls == 2:
+                self.target.rename(self.tools / 'old-target')
+                self.target.mkdir(mode=0o755)
+                self.target.chmod(0o755)
+            source.calls += 1
+        source.calls = 0
+        with patch.object(self.tool.os, 'fchmod', wraps=os.fchmod) as fchmod:
+            result = self.run_fixture(source=source)
+        self.assert_refused(result)
+        self.assertEqual(fchmod.call_count, 0)
+
+    def test_lost_syscall_result_is_uncertain_even_when_mode_changed(self):
+        original = os.fchmod
+        def lost(fd, mode):
+            original(fd, mode)
+            raise OSError('lost syscall result')
+        with patch.object(self.tool.os, 'fchmod', side_effect=lost) as fchmod:
+            result = self.run_fixture()
+        self.assertEqual(fchmod.call_count, 1)
+        self.assertEqual(result['outcome'], 'mutation_uncertain')
+        self.assertEqual(result['fchmod_attempts'], 1)
+        self.assertEqual(result['syscall_certainty'], 'uncertain')
+        self.assertEqual(result['observed_post_mode'], '0700')
+        self.assertFalse(result['preservation'])
+        self.unchanged_receipts()
+
+    def test_fsync_failure_after_return_is_inconclusive(self):
+        with patch.object(self.tool.os, 'fsync', side_effect=OSError('fsync failed')):
+            result = self.run_fixture()
+        self.assertEqual(result['outcome'], 'postverification_inconclusive')
+        self.assertEqual(result['fchmod_attempts'], 1)
+        self.assertEqual(result['syscall_certainty'], 'returned')
+        self.assertEqual(result['observed_post_mode'], '0700')
+        self.assertFalse(result['preservation'])
+
+    def test_post_observation_and_metadata_failures_are_inconclusive(self):
+        for name in ('observe', 'metadata'):
+            with self.subTest(name=name):
+                original = getattr(self.tool._Proof, name)
+                def injected(proof, *args, **kwargs):
+                    result = original(proof, *args, **kwargs)
+                    if kwargs.get('after'):
+                        raise OSError('post ' + name + ' failure')
+                    return result
+                with patch.object(self.tool._Proof, name, new=injected):
+                    result = self.run_fixture()
+                self.assertEqual(result['outcome'], 'postverification_inconclusive')
+                self.assertEqual(result['fchmod_attempts'], 1)
+                self.assertEqual(result['syscall_certainty'], 'returned')
+                self.assertEqual(result['observed_post_mode'], '0700')
+                self.assertFalse(result['preservation'])
+                self.unchanged_receipts()
+            self.target.chmod(0o755)
+
+    def test_late_teardown_error_does_not_hide_lost_syscall_result(self):
+        original_close = self.tool._close_fd
+        released = []
+        def late_close(fd):
+            original_close(fd)
+            released.append(fd)
+            raise OSError('late close after actual release')
+        original_fchmod = os.fchmod
+        def lost(fd, mode):
+            original_fchmod(fd, mode)
+            raise ValueError('original lost result')
+        with patch.object(self.tool, '_close_fd', side_effect=late_close), patch.object(self.tool.os, 'fchmod', side_effect=lost):
+            result = self.run_fixture()
+        self.assertEqual(result['outcome'], 'mutation_uncertain')
+        self.assertEqual(result['fchmod_attempts'], 1)
+        self.assertEqual(result['syscall_certainty'], 'uncertain')
+        self.assertEqual(result['errors'][0]['message'], 'original lost result')
+        self.assertTrue(any('late close' in row['message'] for row in result['errors']))
+        for fd in released:
+            with self.assertRaises(OSError): os.fstat(fd)
+
+    def test_final_source_failure_is_inconclusive_after_returned_change(self):
+        calls = []
+        def source(_):
+            calls.append(None)
+            if len(calls) == 4:
+                raise ValueError('last source check')
+        result = self.run_fixture(source=source)
+        self.assertEqual(result['outcome'], 'postverification_inconclusive')
+        self.assertEqual(result['fchmod_attempts'], 1)
+        self.assertEqual(result['syscall_certainty'], 'returned')
+        self.assertEqual(result['observed_post_mode'], '0700')
+
+    def test_child_metadata_drift_after_change_is_inconclusive(self):
+        original = os.fchmod
+        def drift(fd, mode):
+            original(fd, mode)
+            self.receipt.chmod(0o755)
+        with patch.object(self.tool.os, 'fchmod', side_effect=drift):
+            result = self.run_fixture()
+        self.assertEqual(result['outcome'], 'postverification_inconclusive')
+        self.assertEqual(result['fchmod_attempts'], 1)
+        self.assertEqual(result['syscall_certainty'], 'returned')
+        self.assertFalse(result['preservation'])
+
+    def test_success_never_uses_creation_or_mutation_helpers_other_than_fchmod(self):
+        forbidden = ('mkdir', 'write', 'unlink', 'rename', 'chmod', 'chown')
+        with ExitStack() as stack:
+            for name in forbidden:
+                stack.enter_context(patch.object(self.tool.os, name, side_effect=AssertionError('forbidden ' + name)))
+            stack.enter_context(patch.object(subprocess, 'Popen', side_effect=AssertionError('forbidden subprocess')))
+            result = self.run_fixture()
+        self.assertEqual(result['outcome'], 'mode_change_confirmed')
+        self.unchanged_receipts()
+
+class CLITests(unittest.TestCase):
+    def test_import_has_no_target_or_source_access(self):
+        load_tool()
+        spec = importlib.util.spec_from_file_location('hf_permission_import_only', TOOL)
+        module = importlib.util.module_from_spec(spec)
+        with patch.object(os, 'open', side_effect=AssertionError('no open during import')), patch.object(os, 'stat', side_effect=AssertionError('no stat during import')):
+            spec.loader.exec_module(module)
+
+    def test_invalid_arguments_reject_before_source_account_or_open(self):
+        tool = load_tool()
+        cases = [
+            [],
+            ['--reviewed-source', SOURCE, '--execution-approval', APPROVAL],
+            ['--reviewed', SOURCE],
+            ['--reviewed-source', SOURCE, '--execution-approval', APPROVAL, '--target', '/private/tmp/other', '--execute-approved-mode-change'],
+            ['--reviewed-source', 'HEAD', '--execution-approval', APPROVAL, '--execute-approved-mode-change'],
+            ['--reviewed-source', SOURCE.upper(), '--execution-approval', APPROVAL, '--execute-approved-mode-change'],
+            ['--reviewed-source', SOURCE, '--execution-approval', '   ', '--execute-approved-mode-change'],
+            ['--reviewed-source', SOURCE, '--execution-approval', 'x' * 4097, '--execute-approved-mode-change'],
+            ['--reviewed-source', SOURCE, '--execution-approval', '\udcff', '--execute-approved-mode-change'],
+        ]
+        for argv in cases:
+            with self.subTest(argv=argv), redirect_stderr(io.StringIO()):
+                with patch.object(tool, '_source', side_effect=AssertionError('source')), patch.object(tool, '_account', side_effect=AssertionError('account')), patch.object(tool.os, 'open', side_effect=AssertionError('open')):
+                    with self.assertRaises(SystemExit) as exit_value:
+                        tool.main(argv)
+            self.assertEqual(exit_value.exception.code, 2)
+
+    def test_canonical_stdout_and_exit_status_follow_outcome(self):
+        tool = load_tool()
+        for outcome in ('mode_change_confirmed', 'preflight_refused', 'mutation_uncertain', 'postverification_inconclusive'):
+            with self.subTest(outcome=outcome):
+                attempts = 0 if outcome == 'preflight_refused' else 1
+                document = {'outcome': outcome, 'fchmod_attempts': attempts, 'nested': {'count': attempts}}
+                stdout = io.StringIO()
+                with patch.object(tool, '_run', return_value=document), redirect_stdout(stdout):
+                    status = tool.main(['--reviewed-source', SOURCE, '--execution-approval', APPROVAL, '--execute-approved-mode-change'])
+                expected = tool._canonical(document)
+                self.assertEqual(stdout.getvalue(), expected.decode('utf-8'))
+                self.assertLessEqual(len(expected), tool.MAXIMUM)
+                self.assertEqual(status, 0 if outcome == 'mode_change_confirmed' else 1)
+                self.assertEqual(json.loads(stdout.getvalue())['fchmod_attempts'], attempts)
