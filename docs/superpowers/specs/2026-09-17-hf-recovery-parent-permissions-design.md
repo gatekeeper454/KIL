@@ -244,3 +244,29 @@ local Envoy unchanged; platform provenance unverified/full Kind-Calico acceptanc
 false. Actual mode-change and native one-stop gates remain UNAPPROVED.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Actual mode-only approval and outcome record — 2026-09-17
+
+The user answered "Do next" to the explicit one-pinned0755→0700 attempt question.
+That NEW mode-only approval was CONFIRMED. Root displayed/invoked the reviewed
+helper ONCE at clean88e37c5f1da777cc4da307fd948157a1c9c84a05 with actual approval
+"Do next"; exit0/mode_change_confirmed after all owned teardown. Exactly1 fchmod
+entry returned normally, observed0755→0700, same target16777232/612764151,
+UID501/GID20/linkcount/size/mtime. All named/held target/ancestors/account/source/
+existing-lock/direct-child metadata/teardown checks passed, no errors/overflow.
+Verbatim canonical result is recorded in the plan and T439 lineage.
+
+The helper wrote no receipt bytes or new private evidence, opened/traversed no
+child; preservation is direct-child metadata/own-no-writes, NOT descendant-content
+attestation, arbitrary external-write exclusion or an atomic snapshot.
+This one mode permission is ENDED/SPENT; prior engineering-only/unapproved
+records describe earlier checkpoints. No retry/rollback/rebaseline or recovery.
+
+No VM/guest/disk/native/compatibility/HF/Ollama/rehearsal/image/SSH action occurred;
+current VM status UNOBSERVED. NEW separate approval remains required for ONE
+accepted stop-only private-residual-VM recovery attempt and its unchanged preflight.
+T430 spent stop permission is not revived; no readiness guarantee from this mode
+change. Accepted local Envoy unchanged/platform provenance unverified/full
+Kind-Calico acceptance false. No broad audit or implicit HF continuation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

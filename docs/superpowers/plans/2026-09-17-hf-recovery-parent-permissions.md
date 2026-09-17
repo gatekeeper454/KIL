@@ -1597,3 +1597,57 @@ any subsequent native one-stop needs its own NEW separate approval. No revival
 of spent T430 permission or original rehearsal. Accepted local Envoy unchanged,
 platform-image provenance unverified/full Kind-Calico acceptance false. A broad
 provenance/SSH audit is neither required nor authorized by this preparation.
+
+## Actual mode-only execution record — 2026-09-17
+
+The user answered "Do next" to the explicit one-pinned-parent0755→0700 attempt
+approval question after complete verified preparation. This CONFIRMED one attempt
+only, not native recovery, a retry, rehearsal or HF. Root freshly verified clean
+HEAD88e37c5f1da777cc4da307fd948157a1c9c84a05 and unchanged reviewed tool/test
+hashes; no docs were changed before the procedure's final clean-source checks.
+Root displayed and invoked this exact command ONCE from the repository cwd,
+through the scoped outside-sandbox route:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning tools/hf_recovery_parent_permissions.py --reviewed-source 88e37c5f1da777cc4da307fd948157a1c9c84a05 --execution-approval 'Do next' --execute-approved-mode-change
+```
+
+Procedure completed by2026-09-17 20:45:42 UTC, exit0. Canonical stdout captured
+after all owned teardown (verbatim; nanosecond integers retained without rounding):
+
+```json
+{"direct_children_count":1,"direct_children_sha256":"bfdead6621ecab8120434aefa016594ee5401c24400a9c1cabaa5eb1b0e98d2f","error_overflow":false,"errors":[],"execution_approval":"Do next","fchmod_attempts":1,"lock_sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","lock_stat9":[16777232,612669180,33152,501,20,1,0,1789592430465087122,1789592430465106997],"observed_post_mode":"0700","observed_pre_mode":"0755","outcome":"mode_change_confirmed","preservation":true,"preservation_checks":{"account":true,"ancestors":true,"children":true,"lock":true,"source":true,"target":true,"teardown":true},"preservation_scope":"own_no_receipt_writes_and_direct_child_metadata_not_descendant_content","reviewed_source":"88e37c5f1da777cc4da307fd948157a1c9c84a05","syscall_certainty":"returned","target":"/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/.tools/hf-recovery-private","target_pin":[16777232,612764151],"target_post_observed_stat9":[16777232,612764151,16832,501,20,3,96,1789593335979176844,1789677941324674337],"target_post_verified_stat9":[16777232,612764151,16832,501,20,3,96,1789593335979176844,1789677941324674337],"target_pre_stat9":[16777232,612764151,16877,501,20,3,96,1789593335979176844,1789593335979176844],"tools_pin":[16777232,612669178]}
+```
+
+CONFIRMED mode_change_confirmed, fchmod_attempts1/syscall_certainty returned,
+observed0755→0700. Same pinned16777232/612764151 target, UID501/GID20, linkcount3,
+size96 and mtime; mode and ctime changed as permitted. All account/ancestors/
+children/lock/source/target/teardown preservation checks true, no errors/overflow.
+One direct child had unchanged complete observed metadata, commitment
+bfdead6621ecab8120434aefa016594ee5401c24400a9c1cabaa5eb1b0e98d2f.
+Existing empty lock's full stat9/zero-byte commitment unchanged. No child/receipt
+opens, traversal or own receipt-byte writes; this is NOT descendant-content
+attestation, arbitrary external-write exclusion or atomic snapshot.
+
+Fresh post-procedure fixture module43/0.460s OK, ResourceWarning fatal.
+Tracked engineering/protected diff against execution HEAD empty and working
+tree clean before factual doc append. Preserve complete execution predecessor
+lineage1,447,723B and spec body14,910B. Regenerate/check readers, exact six-doc
+local checkpoint and clean HEAD after this append; no implementation edits,
+new private receipt/date/suffix/seal/export overwrite, retry/rollback or rebaseline.
+
+This mode permission is ENDED/SPENT after its single confirmed attempt.
+Earlier unapproved-mode/engineering-only statuses remain historical; no silent
+rewrite. Current VM status remains UNOBSERVED: no native acquisition/stop/delete/
+restart/guest/disk/compatibility operation, HF request, Ollama, rehearsal, image
+or SSH audit ran. Accepted local Envoy unchanged/platform-image provenance
+unverified/full Kind-Calico acceptance false.0755 origin remains unestablished.
+
+Next gate is NEW explicit approval for ONE accepted stop-only recovery attempt
+for the fixed private residual VM, with its own unchanged preflight and exact
+new clean HEAD/actual approval. No recovery dispatch performed or promised ready;
+removing this mode blocker does not guarantee remaining conditions pass.
+Spent T430 stop permission and original rehearsal remain spent. No automatic
+continuation, force/delete/restart, platform provenance audit or HF action.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
