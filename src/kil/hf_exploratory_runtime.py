@@ -27,9 +27,13 @@ def _file_identity(row):
 def _registry_parent():
     """Production selection is actual passwd home, never a caller/environment path."""
     home = passwd_home()
-    if (not isinstance(home, Path) or not home.is_absolute() or '..' in home.parts
-            or home == Path('/') or home.resolve(strict=True) != home):
-        raise ValueError('runtime_passwd_home_noncanonical')
+    try:
+        if (not isinstance(home, Path) or not home.is_absolute() or '..' in home.parts
+                or home == Path('/') or home.resolve(strict=True) != home):
+            raise ValueError('runtime_passwd_home_noncanonical')
+    except RuntimeError as error:
+        # Python 3.12 Path.resolve reports a real symlink loop as RuntimeError.
+        raise ValueError('runtime_passwd_home_noncanonical') from error
     return home / '.kil-hf'
 
 
@@ -270,7 +274,7 @@ class RuntimeAuthority:
         except BaseException as error:
             for fd in reversed(owned):
                 os.close(fd)
-            if isinstance(error, (OSError, AttributeError, KeyError, TypeError, ValueError, IndexError)):
+            if isinstance(error, (OSError, AttributeError, KeyError, TypeError, ValueError, IndexError, RuntimeError)):
                 raise ValueError('runtime_authority_creation_refused') from error
             raise
 
@@ -381,7 +385,7 @@ class RuntimeAuthority:
             _file_check(*self._marker, self._uid)
             _file_check(*self._binding, self._uid)
             directories_and_lock()
-        except (OSError, AttributeError, KeyError, TypeError, ValueError, IndexError) as error:
+        except (OSError, AttributeError, KeyError, TypeError, ValueError, IndexError, RuntimeError) as error:
             raise ValueError('runtime_authority_unavailable') from error
 
     def close(self):

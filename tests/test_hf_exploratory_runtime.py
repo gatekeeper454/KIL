@@ -171,6 +171,85 @@ class RuntimeTests(unittest.TestCase):
                     self.selector_original()
         self.assertFalse(self.registry.exists())
 
+    def loop_home(self):
+        home = Path(self.compact.name).resolve() / 'loop-home'
+        home.symlink_to(home, target_is_directory=True)
+        return home
+
+    def test_production_selector_normalizes_real_home_symlink_loop(self):
+        home = self.loop_home()
+        with patch.object(self.runtime, 'passwd_home', return_value=home), \
+                patch.object(self.runtime, '_registry_parent', self.selector_original):
+            with self.assertRaises(ValueError):
+                self.runtime._registry_parent()
+        self.assertFalse(self.registry.exists())
+
+    def test_create_normalizes_real_home_symlink_loop_without_allocation_or_fds(self):
+        home = self.loop_home()
+        opened = []
+        real_open = os.open
+        def tracked_open(*args, **kwargs):
+            fd = real_open(*args, **kwargs)
+            opened.append(fd)
+            return fd
+        with patch.object(self.runtime, 'passwd_home', return_value=home), \
+                patch.object(self.runtime, '_registry_parent', self.selector_original), \
+                patch.object(self.runtime.os, 'open', side_effect=tracked_open), \
+                patch('kil.hf_exploratory_io.capture_process') as capture:
+            with self.assertRaises(ValueError):
+                self.runtime.RuntimeAuthority.create(self.store, self.digest)
+            capture.assert_not_called()
+        self.assertEqual(opened, [], 'home loop must refuse before acquiring runtime descriptors')
+        self.assertFalse(self.registry.exists())
+        self.assertFalse((self.store.path / 'runtime-binding.json').exists())
+        self.store.write('still-live', b'ok')
+
+    def test_live_guard_normalizes_real_home_symlink_loop_and_stays_closable(self):
+        authority = self.authority()
+        owned = authority._descriptors
+        home = self.loop_home()
+        with patch.object(self.runtime, 'passwd_home', return_value=home), \
+                patch.object(self.runtime, '_registry_parent', self.selector_original), \
+                patch('kil.hf_exploratory_io.capture_process') as capture:
+            with self.assertRaises(ValueError):
+                authority.guard()
+            capture.assert_not_called()
+        authority.guard()
+        authority.close()
+        authority.close()
+        for fd in owned:
+            with self.assertRaises(OSError):
+                os.fstat(fd)
+        self.assertTrue((self.registry / 'registry.json').is_file())
+
+    def test_create_normalizes_real_receipt_resolution_symlink_loop(self):
+        path = self.store.path
+        moved = path.with_name('preserved-receipt')
+        path.rename(moved)
+        path.symlink_to(path, target_is_directory=True)
+        try:
+            with self.assertRaises(ValueError):
+                self.runtime.RuntimeAuthority.create(self.store, self.digest)
+            self.assertFalse(self.registry.exists())
+        finally:
+            path.unlink()
+            moved.rename(path)
+        self.store.write('still-live', b'ok')
+
+    def test_live_guard_normalizes_real_receipt_resolution_symlink_loop(self):
+        authority = self.authority()
+        path = self.store.path
+        moved = path.with_name('preserved-receipt')
+        path.rename(moved)
+        path.symlink_to(path, target_is_directory=True)
+        try:
+            with self.assertRaises(ValueError):
+                authority.guard()
+        finally:
+            path.unlink()
+            moved.rename(path)
+        authority.guard()
+
     def test_uid_mismatch_refuses_create_before_allocation_and_live_guard(self):
         with patch.object(self.runtime.os, 'getuid', return_value=os.geteuid() + 1):
             with self.assertRaises(ValueError):

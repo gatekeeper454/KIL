@@ -22503,3 +22503,99 @@ and fresh composed verification. Root alone retains any later conditional one
 request-free rehearsal authority after every engineering/review/input gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T413 — 2026-09-16, real resolution-loop normalization correction RED
+
+**Input:** Independent SPEC Important finding in T412, independently reproduced
+by root, and renewed exclusive implementer writer grant at clean e011b64. Fix
+only known symlink-loop exception normalization test-first; engineering only.
+
+**Interpretation:** Python 3.12.13 Path.resolve(strict=True) raises RuntimeError
+for an actual self-symlink. Existing private selector/create/liveguard refuse
+the pathname but emit the wrong type. Normalize this known filesystem/shape
+failure to ValueError without changing any authenticated authority checks.
+
+**Decision status:** CONFIRMED new observed RED before production edits: 5 real
+filesystem tests in 0.054s, errors=5. Every error is the intended production
+RuntimeError('Symlink loop') from Path.resolve, not import/setup failure. Tests
+exercise private helper, create and liveguard with genuine production selector
+and only passwd_home replaced by an owned temporary real self-symlink fixture.
+Separate receipt-name self-loops reproduce the same omission in create/guard
+normalization lists. Existing authority/receipt state is restored or closable;
+create home refusal occurs before descriptor acquisition/allocation and capture
+is mocked with zero calls. No deliberate implementation mutation produced RED.
+
+**Rationale:** Exception normalization is part of the approved fail-closed API,
+including callers handling known refusal via ValueError. A finite real pathname
+regression verifies the boundary instead of mocking Path.resolve itself or
+bypassing guard/authentication. The fix needs only selector known-loop handling
+and create/guard existing known-failure lists, not new architecture or fallback.
+
+**Affected artifacts:** Existing runtime tests plus this appended lineage entry/
+reader. Production not yet edited in this RED phase; all other sources/tests,
+accepted artifacts, old receipts/runtimes/disks and citation policy unchanged.
+No actual home registry, native/VM/HF/HTTP/Ollama/network, image audit, install,
+adoption/cleanup, global environment, branch move/merge/push or worktree changes.
+
+**Unresolved questions:** Corrected-source verification and independent SPEC
+re-review are pending. Native/HF readiness is still unverified; platform-image
+provenance unverified/full Kind-Calico acceptance false, accepted Envoy intact.
+
+**Next gate:** Apply minimal known-loop normalization, observe focused GREEN,
+run fresh required15 on final correction, preserve entire e011b64 lineage byte
+prefix, render/check 92 readers and exact allowed diff; commit/release clean HEAD
+for original SPEC reviewer before QUALITY. No implementer native rehearsal.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T414 — 2026-09-16, known resolution-loop correction verified checkpoint
+
+**Input:** T413 real-filesystem RED for the Important SPEC normalization finding,
+approved minimal correction scope and exclusive serial implementer writer grant.
+
+**Interpretation:** Normalize only the known resolution-loop refusal boundary;
+do not weaken authentication, alter runtime architecture or broaden native scope.
+
+**Decision status:** CONFIRMED minimal correction: private selector catches the
+Python 3.12 Path.resolve RuntimeError and raises ValueError with preserved cause;
+existing create/guard known-failure lists include RuntimeError for other actual
+canonical-path loop routes. Three small production hunks, four net source lines.
+No marker/binding, two-chain, FD lifecycle, byte-cap or control semantics change.
+
+CONFIRMED fresh GREEN: all 5 new actual-loop tests passed in 0.041s; broader
+runtime/profile/IO passed 145 tests in 3.871s. CONFIRMED required15 final corrected
+source run: 460 tests in 93.919s, OK. All use designated virtualenv Python,
+PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and ResourceWarning fatal. Earlier 455
+tests are pre-correction evidence, not current-source completion. The original
+five-error RED in 0.054s preceded every correction source edit and arose from
+real Path.resolve, with no deliberately altered implementation or mocked resolve.
+
+**Rationale:** Tests exercise genuine production selector with only passwd-home
+replaced by actual owned temporary self-symlink, plus actual receipt-name loop
+routes. Refusal is ValueError before any allocation/new runtime descriptor, zero
+mocked process captures; existing authority remains guarded again after fixture
+restoration and closes all retained handles idempotently. Real bytes/modes/
+nofollow identities remain authenticated. Self-review confirms minimal focused
+scope and no known unrelated defect; original SPEC reviewer must independently
+re-review before QUALITY/final composition.
+
+**Affected artifacts:** Exactly runtime production, existing runtime tests and
+lineage Markdown/reader. All other production/test paths, accepted artifacts,
+specification/plan and citation policy unchanged from e011b64. Full starting
+lineage prefix preserved: 1,320,294 bytes. All 92 readers generated/checked,
+diff --check clean; actual /Users/mistorm/.kil-hf absent/not symlink. No native/
+VM/HF/HTTP/Ollama/network, image audit, install, old receipt/runtime/disk mutation,
+adoption/deletion, global defaults, branch move/merge/push or worktree operation.
+
+**Unresolved questions:** Independent SPEC re-review and QUALITY/final gates
+remain pending; native/HF readiness is unverified. Root's one conditional fresh
+request-free rehearsal authority remains unconsumed. Accepted local Envoy intact,
+platform-image provenance unverified/full Kind-Calico acceptance false; live HF
+action separately unapproved. Historical broader citation failure/skips unchanged.
+
+**Next gate:** Regenerate/check final 92 readers, recheck complete e011b64 prefix,
+exact four-path diff/staging and commit; clean exact HEAD and release implementer
+writer grant for original independent SPEC re-review before QUALITY. Root alone
+owns any later conditional rehearsal after every engineering/review/input gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
