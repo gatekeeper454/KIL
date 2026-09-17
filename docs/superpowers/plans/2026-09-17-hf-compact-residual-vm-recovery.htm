@@ -6,7 +6,7 @@
 <title>Compact residual HF VM recovery preparation implementation plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-17-hf-compact-residual-vm-recovery.md">
-<meta name="source-sha256" content="c7f58577b7500518171f694fee3ccad16df95b4f8a7a1742c88193291a5027ef">
+<meta name="source-sha256" content="13b0a852b587cb50f8ed9c9823cdd561ccc39da9fb2b05dbe0eb1261e9804e10">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-compact-residual-vm-recovery.md</code> (<code>c7f58577b7500518171f694fee3ccad16df95b4f8a7a1742c88193291a5027ef</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-compact-residual-vm-recovery.md</code> (<code>13b0a852b587cb50f8ed9c9823cdd561ccc39da9fb2b05dbe0eb1261e9804e10</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Compact residual HF VM recovery preparation implementation plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-compact-residual-vm-recovery.md</code> (<code>c7f58577b7500518171f694fee3ccad16df95b4f8a7a1742c88193291a5027ef</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-compact-residual-vm-recovery.md</code> (<code>13b0a852b587cb50f8ed9c9823cdd561ccc39da9fb2b05dbe0eb1261e9804e10</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#compact-residual-hf-vm-recovery-preparation-implementation-plan">Compact residual HF VM recovery preparation implementation plan</a></li><li class="level-2"><a href="#approval-workspace-and-file-boundary">Approval, workspace and file boundary</a></li><li class="level-2"><a href="#common-test-command-and-baseline">Common test command and baseline</a></li><li class="level-2"><a href="#task-1-real-file-ancestry-proof-with-a-fixed-target">Task 1: Real file/ancestry proof with a fixed target</a></li><li class="level-2"><a href="#task-2-authenticated-receipt-and-exact-saved-footprint">Task 2: Authenticated receipt and exact saved footprint</a></li><li class="level-2"><a href="#task-3-closed-native-observations-original-foreign-baseline-and-control-copies">Task 3: Closed native observations, original foreign baseline and control copies</a></li><li class="level-2"><a href="#task-4-durable-one-stop-transaction-and-honest-post-observation">Task 4: Durable one-stop transaction and honest post-observation</a></li><li class="level-2"><a href="#task-5-independent-engineering-review-and-preparation-handoff">Task 5: Independent engineering review and preparation handoff</a></li><li class="level-2"><a href="#task-6-later-native-attempt-blocked-until-explicit-execution-approval">Task 6: Later native attempt — blocked until explicit execution approval</a></li><li class="level-2"><a href="#plan-self-review-and-coverage">Plan self-review and coverage</a></li><li class="level-2"><a href="#engineering-execution-record-2026-09-17">Engineering execution record — 2026-09-17</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="compact-residual-hf-vm-recovery-preparation-implementation-plan" href="#compact-residual-hf-vm-recovery-preparation-implementation-plan">Compact residual HF VM recovery preparation implementation plan</a></li><li class="level-2"><a data-section-id="approval-workspace-and-file-boundary" href="#approval-workspace-and-file-boundary">Approval, workspace and file boundary</a></li><li class="level-2"><a data-section-id="common-test-command-and-baseline" href="#common-test-command-and-baseline">Common test command and baseline</a></li><li class="level-2"><a data-section-id="task-1-real-file-ancestry-proof-with-a-fixed-target" href="#task-1-real-file-ancestry-proof-with-a-fixed-target">Task 1: Real file/ancestry proof with a fixed target</a></li><li class="level-2"><a data-section-id="task-2-authenticated-receipt-and-exact-saved-footprint" href="#task-2-authenticated-receipt-and-exact-saved-footprint">Task 2: Authenticated receipt and exact saved footprint</a></li><li class="level-2"><a data-section-id="task-3-closed-native-observations-original-foreign-baseline-and-control-copies" href="#task-3-closed-native-observations-original-foreign-baseline-and-control-copies">Task 3: Closed native observations, original foreign baseline and control copies</a></li><li class="level-2"><a data-section-id="task-4-durable-one-stop-transaction-and-honest-post-observation" href="#task-4-durable-one-stop-transaction-and-honest-post-observation">Task 4: Durable one-stop transaction and honest post-observation</a></li><li class="level-2"><a data-section-id="task-5-independent-engineering-review-and-preparation-handoff" href="#task-5-independent-engineering-review-and-preparation-handoff">Task 5: Independent engineering review and preparation handoff</a></li><li class="level-2"><a data-section-id="task-6-later-native-attempt-blocked-until-explicit-execution-approval" href="#task-6-later-native-attempt-blocked-until-explicit-execution-approval">Task 6: Later native attempt — blocked until explicit execution approval</a></li><li class="level-2"><a data-section-id="plan-self-review-and-coverage" href="#plan-self-review-and-coverage">Plan self-review and coverage</a></li><li class="level-2"><a data-section-id="engineering-execution-record-2026-09-17" href="#engineering-execution-record-2026-09-17">Engineering execution record — 2026-09-17</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -1458,6 +1458,57 @@ Spec and quality judged this coherent. The prior stale module-description Minor
 is fixed with the guarded CLI. Task5 final composed acceptance/full regression/
 whole-implementation review remain pending; Task6 stays separately unapproved.
 Actual VM activity/reservation/HF requests remain zero; current VM unobserved.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+<p>Task5 is VERIFIED at the final engineering checkpoint, superseding the pending
+status above without rewriting the planning recipe or earlier observations.
+The coverage-only extension uses the existing real composed fixture: sealed
+original same-name global Stopped inventory is never the private stop target;
+optional post-stop guest address is retained but nonbinding; returned results
+omit final_closure_pending while sealed observations retain it across success,
+no-op, constructor refusal and uncertainty. No missing-feature RED is claimed
+for these additions. Spec re-review required the final constructor-refusal flag
+assertion; focused1/0.494s OK, then fresh quality PASS208/82.405s on all38 added
+lines, bytecode disabled and ResourceWarning fatal.</p>
+<p>Fresh whole-implementation review then found Important/P1 outcome dishonesty:
+the outer ExitStack exited beyond recover's inner handler, so a real final
+LabLock ancestor failure could escape to main's startup fallback and report
+zero stops after one entered stop. Its independent real temporary repository
+replacement before ORIGINAL LabLock exit reproduced this; existing208/93.029s
+OK did not establish coverage of that edge. Same Task4b implementer added six
+real-ancestry regressions, genuine RED6/5.674s, then minimum GREEN6/5.827s.
+The retained native/outcome state and outer handler now enclose all owned
+teardown. Late exceptions retain actual dispatch/returncode/certainty/status and
+source/run/receipt identity, downgrade preservation/seal, and never reopen,
+overwrite or reseal evidence. Successful command becomes postverification_inconclusive;
+nonzero/timeout/lost command remains command_uncertain; no-op and
+prehand paths stay zero-stop refusal. The inner transaction is otherwise unchanged.</p>
+<p>Final implementer214/92.483s OK; ordered independent spec PASS214/94.073s plus
+the original real ancestry probe; independent quality PASS214/86.141s plus two
+real temporary constructor/lost-capture late-exit probes, confirming earlier
+exceptions retained and tracked proof/store/lock descriptors closed. Original
+whole reviewer re-review PASS: focused6/5.599s plus independent original
+reproducer/0.994s, no remaining Critical/Important finding. Root focused6/5.001s
+and final full16-module regression674/312.194s OK, bytecode disabled and
+ResourceWarning fatal. Final regression ran alongside read-only review on the
+frozen post-fix candidate; source/test hashes stayed2b58ab23…7ccf864/
+a4ee14ce…ccaf64f. The earlier668/318.381s run began before the last coverage
+assertion and teardown fix: superseded, not final candidate acceptance.</p>
+<p>Task5's explicit read-only retained-evidence check authenticated the actual
+3979-byte SHA256SUMS pin d128fd99…ba38ad0 (UID501/0600/single-link), then all46
+listed checksums passed. The fixed RECOVERY directory was absent at that check;
+no engineering test reserved it. This is retained receipt verification, not
+platform-image provenance or a live VM inventory. No actual runtime opening,
+Colima/Lima/Docker acquisition, live preflight/stop, HF request, Ollama operation,
+new rehearsal or production SSH compatibility change. Accepted local Envoy is
+unchanged; current VM status remains unobserved, platform provenance unverified
+and full Kind/Calico acceptance false. Four historical immutable citation
+omissions remain disclosed; scoped success is not full discovery success.</p>
+<p>Tasks1–5 engineering are verified. Final records/readers, complete predecessor
+lineage prefix, exact scoped local commit and clean HEAD checks complete this
+handoff. Task6 remains UNAPPROVED: ask separate explicit approval for one fixed
+stop-only recovery attempt including live preflight and exclusive evidence
+creation. Recovery readiness is not HF readiness; no restart, force, deletion,
+retry, alternate receipt suffix or inferred live continuation.</p>
 <p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
 </article></main>
 </div></div>

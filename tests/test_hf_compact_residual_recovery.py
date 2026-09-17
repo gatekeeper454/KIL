@@ -2263,6 +2263,7 @@ class Task4RecoveryTests(unittest.TestCase, RetainedFixture):
     def test_full_running_recovery_preserves_old_evidence_and_seals_one_stop(self):
         with self.scope(): outcome = self.recover()
         self.assertEqual(outcome['outcome'], 'graceful_stop_confirmed')
+        self.assertNotIn('final_closure_pending', outcome)
         self.assertEqual((outcome['stop_dispatches'], outcome['returncode'], outcome['command_certainty'],
                           outcome['observed_status'], outcome['preservation']), (1, 0, 'returned', 'Stopped', True))
         self.assertEqual((outcome['hf_request_intents'], outcome['hf_request_attempts']), (0, 0))
@@ -2281,6 +2282,36 @@ class Task4RecoveryTests(unittest.TestCase, RetainedFixture):
         self.assertEqual(intent['original_path'], str(self.bin))
         self.assertEqual(json.loads((self.recovery / 'post-observations.json').read_bytes())['controls']['ha.pid']['present'], False)
         self.assertEqual((self.recovery / 'post-colima-ssh.config').read_bytes(), b'# stopped SSH configuration\n')
+        self.assertTrue(json.loads((self.recovery / 'outcome.json').read_bytes())['final_closure_pending'])
+        self.assert_receipt_unchanged()
+        self.assert_seal()
+
+    def test_same_name_stopped_global_profile_is_observed_but_never_stop_target(self):
+        self.assertEqual(json.loads(self.saved_files['foreign-original.json'])['foreign_profiles'],
+                         [self.foreign_row])
+        with self.scope(): outcome = self.recover()
+        self.assertEqual(outcome['outcome'], 'graceful_stop_confirmed')
+        self.assertEqual(len(self.stops()), 1)
+        global_lists = [row for row in self.dispatches
+                        if row[0] == (str(self.colima), 'list', '--json') and 'COLIMA_HOME' not in row[1]]
+        self.assertTrue(global_lists)
+        for _, environment, _, _, _, _ in global_lists:
+            self.assertNotIn('COLIMA_HOME', environment)
+            self.assertNotIn('LIMA_HOME', environment)
+        self.assertEqual(self.stops()[0][1]['COLIMA_HOME'], str(self.paths.colima))
+        self.assertEqual(self.stops()[0][1]['LIMA_HOME'], str(self.paths.lima))
+        self.assert_receipt_unchanged()
+        self.assert_seal()
+
+    def test_post_stop_optional_guest_address_is_nonbinding(self):
+        def stopped_with_address():
+            self.stopped()
+            self.private_row['address'] = '192.168.5.3'
+        self.stop_effect = stopped_with_address
+        with self.scope(): outcome = self.recover()
+        self.assertEqual(outcome['outcome'], 'graceful_stop_confirmed', outcome)
+        post = json.loads((self.recovery / 'post-observations.json').read_bytes())
+        self.assertEqual(post['private_inventory'][0]['address'], '192.168.5.3')
         self.assert_receipt_unchanged()
         self.assert_seal()
 
@@ -2292,6 +2323,8 @@ class Task4RecoveryTests(unittest.TestCase, RetainedFixture):
         self.assertEqual((outcome['stop_dispatches'], outcome['preservation']), (0, True))
         self.assertEqual(self.stops(), [])
         saved = json.loads((self.recovery / 'outcome.json').read_bytes())
+        self.assertNotIn('final_closure_pending', outcome)
+        self.assertTrue(saved['final_closure_pending'])
         self.assertEqual(saved['reviewed_source'], self.reviewed)
         self.assertEqual(saved['run_id'], 'v3b2-' + 'a' * 64)
         self.assertEqual(saved['run_digest'], 'a' * 64)
@@ -2310,6 +2343,7 @@ class Task4RecoveryTests(unittest.TestCase, RetainedFixture):
         self.colima.write_bytes(b'substituted executable\n')
         with self.scope(): outcome = self.recover()
         self.assertEqual(outcome['outcome'], 'preflight_refused')
+        self.assertNotIn('final_closure_pending', outcome)
         self.assertEqual(outcome['stop_dispatches'], 0)
         self.assertEqual(self.dispatches, [])
         saved = json.loads((self.recovery / 'outcome.json').read_bytes())
@@ -2319,6 +2353,8 @@ class Task4RecoveryTests(unittest.TestCase, RetainedFixture):
         self.assertEqual(saved['receipt_manifest_pin'], [hashlib.sha256(self.saved_manifest).hexdigest(), len(self.saved_manifest)])
         self.assertEqual(saved['execution_approval'], self.approval)
         self.assertFalse((self.recovery / 'native-proof.json').exists())
+        self.assertTrue(saved['final_closure_pending'])
+        self.assert_receipt_unchanged()
         self.assert_seal()
 
     def test_cli_requires_exact_closed_flags_before_any_filesystem(self):
@@ -2474,6 +2510,8 @@ class Task4RecoveryTests(unittest.TestCase, RetainedFixture):
         with self.scope(): outcome = self.recover()
         self.assertEqual(outcome['outcome'], 'command_uncertain', outcome)
         self.assertEqual(outcome['command_certainty'], 'uncertain')
+        self.assertNotIn('final_closure_pending', outcome)
+        self.assertTrue(json.loads((self.recovery / 'outcome.json').read_bytes())['final_closure_pending'])
         self.assertEqual(outcome['observed_status'], 'Stopped')
         self.assertTrue(outcome['preservation'])
         self.assertEqual(outcome['stop_dispatches'], 1 if code is not None and code >= 0 else None)
@@ -2731,6 +2769,76 @@ class Task4RecoveryTests(unittest.TestCase, RetainedFixture):
                                     '--execute-approved-stop'])
         self.assertEqual(result, 0)
         self.assertEqual(json.loads(output.getvalue())['outcome'], 'already_stopped_observed')
+
+    def late_lab_exit(self, expected, dispatches, returncode, certainty, observed, actual_stops):
+        original_exit = self.tool.LabLock.__exit__
+        displaced = self.repository.with_name('repository-displaced-at-lock-exit')
+        snapshots, errors, descriptors = [], [], []
+        def move_then_exit(lock, *exception):
+            snapshots.append({path.name: path.read_bytes() for path in self.recovery.iterdir()})
+            descriptors.extend([lock.lock, *(fd for _, fd in lock.anchors)])
+            self.repository.rename(displaced)
+            self.repository.mkdir(mode=0o700)
+            try:
+                return original_exit(lock, *exception)
+            except Exception as error:
+                errors.append(error)
+                raise
+            finally:
+                # Restore only this temporary test fixture after the real exit
+                # has checked ancestry and closed its retained descriptors.
+                self.repository.rmdir()
+                displaced.rename(self.repository)
+        output = io.StringIO()
+        with self.scope(), patch.object(self.tool.LabLock, '__exit__', move_then_exit), \
+                patch.object(sys, 'stdout', output):
+            result = self.tool.main(['--reviewed-source', self.reviewed, '--execution-approval', self.approval,
+                                    '--execute-approved-stop'])
+        self.assertEqual(result, 1)
+        self.assertEqual(len(self.stops()), actual_stops)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(str(errors[0]), 'profile ancestor changed during observation')
+        for descriptor in descriptors:
+            with self.assertRaises(OSError): os.fstat(descriptor)
+        self.assertEqual(len(snapshots), 1)
+        self.assertEqual({path.name: path.read_bytes() for path in self.recovery.iterdir()}, snapshots[0])
+        self.assertTrue(json.loads(snapshots[0]['outcome.json'])['final_closure_pending'])
+        self.assert_receipt_unchanged()
+        self.assert_seal()
+        outcome = json.loads(output.getvalue())
+        self.assertEqual(outcome.get('stop_dispatches'), dispatches, outcome)
+        self.assertEqual(outcome.get('outcome'), expected, outcome)
+        self.assertEqual((outcome.get('returncode'), outcome.get('command_certainty'), outcome.get('observed_status')),
+                         (returncode, certainty, observed), outcome)
+        self.assertEqual((outcome['preservation'], outcome['seal_verified']), (False, False))
+        self.assertEqual(outcome.get('reviewed_source'), self.reviewed)
+        self.assertEqual(outcome.get('run_id'), 'v3b2-' + 'a' * 64)
+        self.assertEqual(outcome.get('receipt_files'), {name: hashlib.sha256(payload).hexdigest()
+                                                      for name, payload in self.saved_files.items()})
+        self.assertTrue(any(row['message'] == str(errors[0]) for row in outcome['exceptions']))
+
+    def test_late_lab_exit_preserves_successful_stop_history_in_cli_failure(self):
+        self.late_lab_exit('postverification_inconclusive', 1, 0, 'returned', 'Stopped', 1)
+
+    def test_late_lab_exit_preserves_uncertain_timeout_history_in_cli_failure(self):
+        self.stop_code = -1000
+        self.late_lab_exit('command_uncertain', None, -1000, 'uncertain', 'Stopped', 1)
+
+    def test_late_lab_exit_preserves_known_nonzero_stop_history_in_cli_failure(self):
+        self.stop_code = 2
+        self.late_lab_exit('command_uncertain', 1, 2, 'uncertain', 'Stopped', 1)
+
+    def test_late_lab_exit_preserves_lost_capture_history_in_cli_failure(self):
+        self.stop_exception = OSError('fixture opaque stop handoff')
+        self.late_lab_exit('command_uncertain', None, None, 'uncertain', 'Stopped', 1)
+
+    def test_late_lab_exit_refuses_already_stopped_without_losing_identity(self):
+        self.private_row['status'] = 'Stopped'
+        self.late_lab_exit('preflight_refused', 0, None, 'not_dispatched', 'Stopped', 0)
+
+    def test_late_lab_exit_keeps_prehand_refusal_without_inventing_a_stop(self):
+        self.ps_payload = b'fixture-container\n'
+        self.late_lab_exit('preflight_refused', 0, None, 'not_dispatched', 'Running', 0)
 
 
 class Task4StopGrammarTests(unittest.TestCase):

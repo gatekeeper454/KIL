@@ -1444,3 +1444,60 @@ whole-implementation review remain pending; Task6 stays separately unapproved.
 Actual VM activity/reservation/HF requests remain zero; current VM unobserved.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+Task5 is VERIFIED at the final engineering checkpoint, superseding the pending
+status above without rewriting the planning recipe or earlier observations.
+The coverage-only extension uses the existing real composed fixture: sealed
+original same-name global Stopped inventory is never the private stop target;
+optional post-stop guest address is retained but nonbinding; returned results
+omit final_closure_pending while sealed observations retain it across success,
+no-op, constructor refusal and uncertainty. No missing-feature RED is claimed
+for these additions. Spec re-review required the final constructor-refusal flag
+assertion; focused1/0.494s OK, then fresh quality PASS208/82.405s on all38 added
+lines, bytecode disabled and ResourceWarning fatal.
+
+Fresh whole-implementation review then found Important/P1 outcome dishonesty:
+the outer ExitStack exited beyond recover's inner handler, so a real final
+LabLock ancestor failure could escape to main's startup fallback and report
+zero stops after one entered stop. Its independent real temporary repository
+replacement before ORIGINAL LabLock exit reproduced this; existing208/93.029s
+OK did not establish coverage of that edge. Same Task4b implementer added six
+real-ancestry regressions, genuine RED6/5.674s, then minimum GREEN6/5.827s.
+The retained native/outcome state and outer handler now enclose all owned
+teardown. Late exceptions retain actual dispatch/returncode/certainty/status and
+source/run/receipt identity, downgrade preservation/seal, and never reopen,
+overwrite or reseal evidence. Successful command becomes postverification_inconclusive;
+nonzero/timeout/lost command remains command_uncertain; no-op and
+prehand paths stay zero-stop refusal. The inner transaction is otherwise unchanged.
+
+Final implementer214/92.483s OK; ordered independent spec PASS214/94.073s plus
+the original real ancestry probe; independent quality PASS214/86.141s plus two
+real temporary constructor/lost-capture late-exit probes, confirming earlier
+exceptions retained and tracked proof/store/lock descriptors closed. Original
+whole reviewer re-review PASS: focused6/5.599s plus independent original
+reproducer/0.994s, no remaining Critical/Important finding. Root focused6/5.001s
+and final full16-module regression674/312.194s OK, bytecode disabled and
+ResourceWarning fatal. Final regression ran alongside read-only review on the
+frozen post-fix candidate; source/test hashes stayed2b58ab23…7ccf864/
+a4ee14ce…ccaf64f. The earlier668/318.381s run began before the last coverage
+assertion and teardown fix: superseded, not final candidate acceptance.
+
+Task5's explicit read-only retained-evidence check authenticated the actual
+3979-byte SHA256SUMS pin d128fd99…ba38ad0 (UID501/0600/single-link), then all46
+listed checksums passed. The fixed RECOVERY directory was absent at that check;
+no engineering test reserved it. This is retained receipt verification, not
+platform-image provenance or a live VM inventory. No actual runtime opening,
+Colima/Lima/Docker acquisition, live preflight/stop, HF request, Ollama operation,
+new rehearsal or production SSH compatibility change. Accepted local Envoy is
+unchanged; current VM status remains unobserved, platform provenance unverified
+and full Kind/Calico acceptance false. Four historical immutable citation
+omissions remain disclosed; scoped success is not full discovery success.
+
+Tasks1–5 engineering are verified. Final records/readers, complete predecessor
+lineage prefix, exact scoped local commit and clean HEAD checks complete this
+handoff. Task6 remains UNAPPROVED: ask separate explicit approval for one fixed
+stop-only recovery attempt including live preflight and exclusive evidence
+creation. Recovery readiness is not HF readiness; no restart, force, deletion,
+retry, alternate receipt suffix or inferred live continuation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

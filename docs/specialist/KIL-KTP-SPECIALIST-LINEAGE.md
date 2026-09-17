@@ -23617,3 +23617,103 @@ regression and whole-implementation review/readonly old46 checksums. No native
 preflight/evidence reservation/stop without separate execution approval.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T429 — 2026-09-17, residual recovery preparation independently accepted
+
+**Input:** "subagent-driven preparation with independent reviews"; continue
+approved fixture-only preparation through Task5 from committed Task4 checkpoint
+c7817f1038a3fef1af3fe909323584a5b1ad4f68.
+
+**Interpretation:** CONFIRMED engineering Tasks1–5 only. Task5 coverage,
+independent reviews and test-first fixes are within existing preparation scope;
+neither specialist dispatch nor fixture success authorizes actual live preflight,
+recovery evidence reservation, stop or HF action. Root owns shared records/index.
+
+**Decision status:** CONFIRMED Task5 engineering VERIFIED after final spec,
+quality, whole-implementation re-review and root full16-module regression.
+Tasks1–5 engineering are accepted; Task6 is still UNAPPROVED. Scoped commit/clean
+handoff follows this record and does not perform native recovery.
+
+**Rationale/evidence:** A bounded Task5 implementer extended the existing real
+composed fixture, not a second mocked guard path. All38 coverage-only added lines
+verify sealed original same-name global Stopped inventory is not the private
+stop target, optional post-stop guest address is retained/nonbinding, old46 and
+new seals are intact, and provisional sealed versus returned pending-flag semantics
+hold across success/no-op/constructor refusal/uncertainty. Spec required one
+missing constructor-refusal flag assertion; focused1/0.494s OK and fresh quality
+PASS208/82.405s on the completed extension. No retroactive RED claim for coverage.
+
+Fresh whole review independently found Important/P1: outer ExitStack teardown
+ran beyond recover's inner exception handler. Real fixture repository replacement
+immediately before ORIGINAL LabLock.__exit__ made unchanged _parent detect
+"profile ancestor changed during observation" after actual simulated Stop1;
+main's generic startup fallback printed preflight_refused/0 despite provisional
+sealed graceful_stop_confirmed/1/pendingTrue. Existing208/93.029s OK did not cover
+this edge. Root accepted the concrete evidence, not a speculative broad audit.
+
+Same Task4b implementer wrote genuine RED6/5.674s, then minimum GREEN6/5.827s.
+Retained native/outcome state now sits outside an outer try enclosing all owned
+ExitStack callbacks. After cleanup, the late handler uses actual retained command
+history/identity only, performs NO filesystem/native IO and never overwrites or
+reseals. Known returned0/Stop1/Stopped becomes postverification_inconclusive/
+preservationFalse/sealFalse; known nonzero1 or timeout/lost opaqueNone remains
+command_uncertain. No-op/prehand remains zero-stop refusal with identity/certainty/
+observed status retained. Original startup-before-outcome exceptions still raise
+to the safe CLI fallback. No production helper/API/guard or inner transaction
+change beyond indentation. Six tests require exact real ancestry error, closed
+held lock FDs, unchanged old receipt and every provisional sealed byte.
+
+Final implementer214/92.483s OK. Ordered independent spec PASS214/94.073s plus
+independent original real ancestry repro; quality PASS214/86.141s plus two real
+temporary constructor/lost-capture late-exit probes: earlier exceptions retained,
+all tracked proof/store/lock descriptors closed, sealed/original bytes unchanged.
+Separate specialists retained independent roles; completed specialist sessions
+were reused for fresh bounded spec/quality assignments after the session's agent
+thread limit prevented another spawn, not for implementation/self-review.
+Original whole reviewer re-review PASS6/5.599s plus independent original probe/
+0.994s, no remaining Critical/Important finding. Root focused6/5.001s and final
+full16-module674/312.194s OK, bytecode disabled and ResourceWarning fatal. Final
+regression ran alongside read-only reviews on the frozen post-fix candidate;
+hashes remained source2b58ab2392543611f64044f5d2624f07edfa03ed4c988e1bff2c03d137ccf864
+and testa4ee14ce13dd569bc1a1202ffab3be450fed8bbae954be96b98600caeccaf64f.
+Earlier668/318.381s started before the final coverage assertion and important
+fix; superseded intermediate evidence, not acceptance of the final candidate.
+
+Reviewed adaptation remains explicit: dedicated internal outcome schema changes
+no existing consumer/protocol. Sealed outcome.json final_closure_pending=True
+is provisional alone. Only returned verification after all proof closure AND
+owned teardown can accept; late failure is honest without rewrite/reseal. Spec,
+quality and whole reviewers judged this coherent, including the fixed late edge.
+
+Task5's approved read-only actual retained-receipt check first authenticated
+SHA256SUMS d128fd99fcc32391db27804da8be86c0e62b238343b71c7f44009785cba38ad0,
+3979B/UID501/0600/single-link; then all46 checksums were OK. Fixed RECOVERY was
+absent at that check, and preparation did not create it. This does not inspect
+guest disks/runtime, platform images or current live VM inventory. Before this
+append94 readers verified; final regeneration/prefix/scoped-commit checks follow.
+
+**Affected artifacts:** Dedicated tool/test plus factual plan and actual-EOF
+lineage Markdown-reader pairs only. Task5 includes38 coverage lines and70
+late-teardown test lines; minimum functional helper change preserves existing
+transaction behavior. Protected production sources, earlier tools/tests, deploy,
+accepted artifacts/contracts, citation policy and historical sealed evidence
+remain unchanged. Actual native Colima/Lima/Docker acquisition/stop/HF attempts
+ZERO. Generic IO tests may run owned child Python. No actual runtime opening,
+recovery reservation, live preflight, Ollama operation, image audit, production
+SSH compatibility fix, force/retry/delete, new rehearsal or launch.
+
+**Unresolved questions:** Current VM status unobserved; historical Running is
+not refreshed by fixtures. Recovery itself and native SSH compatibility/HF
+readiness remain unverified. Accepted local Envoy unchanged; platform provenance
+unverified/full Kind-Calico acceptance false. Four historical immutable citation
+omissions remain disclosed; scoped regression is not full discovery green.
+
+**Next gate:** Preserve completec7817f1 predecessor lineage prefix1,395,589B;
+regenerate/check94 readers/canonical new citations/protected paths/exact scoped
+diffs, commit only tool/test and plan/lineage Markdown-reader pairs, verify clean
+exact HEAD. Ask separate explicit approval for ONE fixed stop-only recovery
+attempt, including live preflight and exclusive evidence creation. Any refusal/
+uncertainty ends that permission; no retry/suffix/force/delete/restart/rehearsal/
+HF or provenance continuation is inferred.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

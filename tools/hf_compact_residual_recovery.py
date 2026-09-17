@@ -1173,134 +1173,148 @@ def recover(reviewed_source, execution_approval):
     """One fixed approved graceful stop; no retries, discovery or cleanup."""
     _authority(reviewed_source, execution_approval)
     check_source(REPOSITORY, reviewed_source)
-    with ExitStack() as lifetime:
-        lab = lifetime.enter_context(LabLock(REPOSITORY))
-        receipt = _Files(); lifetime.callback(receipt.close)
-        receipt.read(lab.path / 'profile.lock', 1024 * 1024, 0o600, UID)
-        lab_record = receipt.files[-1]
-        if _fid(os.fstat(lab.lock)) != lab_record[2]:
-            raise ValueError('recovery_lab_lock_descriptor_changed')
-        runtime, files, paths, report, original = _retained(receipt)
-        lifetime.callback(runtime.close)
-        store = _new_store(receipt); lifetime.callback(store.close)
-        native = None
-        outcome = {'schema': 'kil.hf-compact-residual-recovery-outcome.v1',
-                   'reviewed_source': reviewed_source, 'execution_approval': execution_approval,
-                   'run_id': 'v3b2-' + DIGEST, 'run_digest': DIGEST, 'source_commit': SOURCE,
-                   'receipt_path': str(RECEIPT), 'recovery_path': str(RECOVERY),
-                   'runtime_root_identity': ROOT_ID,
-                   'runtime_binding': _sealed_json(files, 'runtime-binding.json'),
-                   'receipt_manifest_pin': MANIFEST_PIN,
-                   'receipt_files': {name: hashlib.sha256(payload).hexdigest() for name, payload in sorted(files.items())},
-                   'outcome': 'preflight_refused', 'stop_dispatches': 0, 'returncode': None,
-                   'command_certainty': 'not_dispatched', 'observed_status': None,
-                   'preservation': False, 'hf_request_intents': 0, 'hf_request_attempts': 0,
-                   'exceptions': []}
-
-        def status():
-            if native is not None:
-                outcome.update(stop_dispatches=native.stop_dispatches,
-                               returncode=native.stop_returncode,
-                               command_certainty=native.stop_certainty,
-                               observed_status=native.observed_status)
-
-        def exception(error):
-            outcome['exceptions'].append({'type': type(error).__name__[:128], 'message': str(error)[:4096]})
-
-        def close_metadata(observation_close):
-            # No directory listings or content reads after this boundary.
-            if os.environ.get('KUBECONFIG') is not None:
-                raise ValueError('recovery_inherited_kubeconfig_is_not_default')
-            native._account()
-            native._locator_metadata()
-            native._dependency_metadata()
-            native._check_store()
-            lab.guard()
+    native, outcome = None, None
+    try:
+        with ExitStack() as lifetime:
+            lab = lifetime.enter_context(LabLock(REPOSITORY))
+            receipt = _Files(); lifetime.callback(receipt.close)
+            receipt.read(lab.path / 'profile.lock', 1024 * 1024, 0o600, UID)
+            lab_record = receipt.files[-1]
             if _fid(os.fstat(lab.lock)) != lab_record[2]:
                 raise ValueError('recovery_lab_lock_descriptor_changed')
-            observation_close()
-            receipt.metadata_guard()
-            runtime.metadata_guard((RUNTIME / '.colima/ssh_config',) if native.after_stop else ())
-            if native.stop_proof is not None: native.stop_proof.metadata_guard()
+            runtime, files, paths, report, original = _retained(receipt)
+            lifetime.callback(runtime.close)
+            store = _new_store(receipt); lifetime.callback(store.close)
+            outcome = {'schema': 'kil.hf-compact-residual-recovery-outcome.v1',
+                       'reviewed_source': reviewed_source, 'execution_approval': execution_approval,
+                       'run_id': 'v3b2-' + DIGEST, 'run_digest': DIGEST, 'source_commit': SOURCE,
+                       'receipt_path': str(RECEIPT), 'recovery_path': str(RECOVERY),
+                       'runtime_root_identity': ROOT_ID,
+                       'runtime_binding': _sealed_json(files, 'runtime-binding.json'),
+                       'receipt_manifest_pin': MANIFEST_PIN,
+                       'receipt_files': {name: hashlib.sha256(payload).hexdigest() for name, payload in sorted(files.items())},
+                       'outcome': 'preflight_refused', 'stop_dispatches': 0, 'returncode': None,
+                       'command_certainty': 'not_dispatched', 'observed_status': None,
+                       'preservation': False, 'hf_request_intents': 0, 'hf_request_attempts': 0,
+                       'exceptions': []}
 
-        def authenticate(observation_close):
-            native.guard()
-            if native.stop_proof is not None: native._stop_authentication()
-            check_source(REPOSITORY, reviewed_source)
-            close_metadata(observation_close)
+            def status():
+                if native is not None:
+                    outcome.update(stop_dispatches=native.stop_dispatches,
+                                   returncode=native.stop_returncode,
+                                   command_certainty=native.stop_certainty,
+                                   observed_status=native.observed_status)
 
-        def finish(observation_close=None):
-            status()
-            if observation_close is not None: authenticate(observation_close)
-            # The sealed record is provisional until its seal and all retained
-            # scopes close below. A returned failure never promotes this record.
-            store.write('outcome.json', _proof_bytes({**outcome, 'final_closure_pending': True}))
-            with _seal_scope(store) as (digest, seal_close):
+            def exception(error):
+                outcome['exceptions'].append({'type': type(error).__name__[:128], 'message': str(error)[:4096]})
+
+            def close_metadata(observation_close):
+                # No directory listings or content reads after this boundary.
+                if os.environ.get('KUBECONFIG') is not None:
+                    raise ValueError('recovery_inherited_kubeconfig_is_not_default')
+                native._account()
+                native._locator_metadata()
+                native._dependency_metadata()
+                native._check_store()
+                lab.guard()
+                if _fid(os.fstat(lab.lock)) != lab_record[2]:
+                    raise ValueError('recovery_lab_lock_descriptor_changed')
+                observation_close()
+                receipt.metadata_guard()
+                runtime.metadata_guard((RUNTIME / '.colima/ssh_config',) if native.after_stop else ())
+                if native.stop_proof is not None: native.stop_proof.metadata_guard()
+
+            def authenticate(observation_close):
+                native.guard()
+                if native.stop_proof is not None: native._stop_authentication()
+                check_source(REPOSITORY, reviewed_source)
+                close_metadata(observation_close)
+
+            def finish(observation_close=None):
+                status()
                 if observation_close is not None: authenticate(observation_close)
-                seal_close()
-                if observation_close is not None: close_metadata(observation_close)
-                outcome.update(seal_sha256=digest, seal_verified=True)
-            return outcome
-
-        try:
-            native = _Native(receipt, runtime, paths, store)
-            store.write('native-proof.json', _proof_bytes(_tool_commitments(native)))
-            pre, pre_payloads = _preflight(native, paths, report, original, files)
-            outcome['observed_status'] = pre['status']
-            _save_observation(store, 'pre', pre, pre_payloads)
-            if pre['status'] == 'Stopped':
-                with _preflight_scope(native, paths, report, original, files, False) as (again, payloads, close):
-                    if (again, payloads) != (pre, pre_payloads):
-                        raise ValueError('recovery_preflight_commitment_changed')
-                    outcome.update(outcome='already_stopped_observed', preservation=True)
-                    return finish(close)
-
-            native.stop_intent = _manual_intent(native, files, pre, reviewed_source, execution_approval)
-            with ExitStack() as handoff:
-                def recheck():
-                    native.stop_proof = _Files(); lifetime.callback(native.stop_proof.close)
-                    native.stop_proof.read(RECOVERY / 'manual-stop-intent.json', 1024 * 1024, 0o600, UID,
-                                          (hashlib.sha256(native.stop_intent).hexdigest(), len(native.stop_intent)))
-                    again, payloads, close = handoff.enter_context(
-                        _preflight_scope(native, paths, report, original, files, False))
-                    if (again, payloads) != (pre, pre_payloads):
-                        raise ValueError('recovery_preflight_commitment_changed')
-                    native.stop_check = lambda: close_metadata(close)
-                    authenticate(close)
-                try:
-                    _Once(store).send(native.stop_intent, recheck,
-                                      lambda: native.acquire((str(COLIMA), 'stop', '--profile', 'kil-v3-lab'),
-                                                             'private', 300))
-                except Exception as error:
-                    exception(error)
-                    if not native.after_stop: raise
-            status()
-            outcome['outcome'] = ('postverification_inconclusive' if native.stop_certainty == 'returned'
-                                  else 'command_uncertain')
-            with _preflight_scope(native, paths, report, original, files, False) as (post, payloads, close):
-                outcome['observed_status'] = post['status']
-                _save_observation(store, 'post', post, payloads)
-                if post['status'] != 'Stopped':
-                    raise ValueError('recovery_post_status_is_not_stopped')
-                outcome['preservation'] = True
-                if native.stop_certainty == 'returned': outcome['outcome'] = 'graceful_stop_confirmed'
-                return finish(close)
-        except Exception as error:
-            exception(error)
-            status()
-            outcome['preservation'] = False
-            outcome['outcome'] = ('preflight_refused' if native is None or not native.after_stop else
-                                  'command_uncertain' if native.stop_certainty != 'returned' else
-                                  'postverification_inconclusive')
-            if (RECOVERY / 'SHA256SUMS').exists():
-                outcome['seal_verified'] = False
+                # The sealed record is provisional until its seal and all retained
+                # scopes close below. A returned failure never promotes this record.
+                store.write('outcome.json', _proof_bytes({**outcome, 'final_closure_pending': True}))
+                with _seal_scope(store) as (digest, seal_close):
+                    if observation_close is not None: authenticate(observation_close)
+                    seal_close()
+                    if observation_close is not None: close_metadata(observation_close)
+                    outcome.update(seal_sha256=digest, seal_verified=True)
                 return outcome
+
             try:
-                return finish()
-            except Exception as sealing_error:
-                exception(sealing_error)
-                outcome['seal_verified'] = False
-                return outcome
+                native = _Native(receipt, runtime, paths, store)
+                store.write('native-proof.json', _proof_bytes(_tool_commitments(native)))
+                pre, pre_payloads = _preflight(native, paths, report, original, files)
+                outcome['observed_status'] = pre['status']
+                _save_observation(store, 'pre', pre, pre_payloads)
+                if pre['status'] == 'Stopped':
+                    with _preflight_scope(native, paths, report, original, files, False) as (again, payloads, close):
+                        if (again, payloads) != (pre, pre_payloads):
+                            raise ValueError('recovery_preflight_commitment_changed')
+                        outcome.update(outcome='already_stopped_observed', preservation=True)
+                        return finish(close)
+
+                native.stop_intent = _manual_intent(native, files, pre, reviewed_source, execution_approval)
+                with ExitStack() as handoff:
+                    def recheck():
+                        native.stop_proof = _Files(); lifetime.callback(native.stop_proof.close)
+                        native.stop_proof.read(RECOVERY / 'manual-stop-intent.json', 1024 * 1024, 0o600, UID,
+                                              (hashlib.sha256(native.stop_intent).hexdigest(), len(native.stop_intent)))
+                        again, payloads, close = handoff.enter_context(
+                            _preflight_scope(native, paths, report, original, files, False))
+                        if (again, payloads) != (pre, pre_payloads):
+                            raise ValueError('recovery_preflight_commitment_changed')
+                        native.stop_check = lambda: close_metadata(close)
+                        authenticate(close)
+                    try:
+                        _Once(store).send(native.stop_intent, recheck,
+                                          lambda: native.acquire((str(COLIMA), 'stop', '--profile', 'kil-v3-lab'),
+                                                                 'private', 300))
+                    except Exception as error:
+                        exception(error)
+                        if not native.after_stop: raise
+                status()
+                outcome['outcome'] = ('postverification_inconclusive' if native.stop_certainty == 'returned'
+                                      else 'command_uncertain')
+                with _preflight_scope(native, paths, report, original, files, False) as (post, payloads, close):
+                    outcome['observed_status'] = post['status']
+                    _save_observation(store, 'post', post, payloads)
+                    if post['status'] != 'Stopped':
+                        raise ValueError('recovery_post_status_is_not_stopped')
+                    outcome['preservation'] = True
+                    if native.stop_certainty == 'returned': outcome['outcome'] = 'graceful_stop_confirmed'
+                    return finish(close)
+            except Exception as error:
+                exception(error)
+                status()
+                outcome['preservation'] = False
+                outcome['outcome'] = ('preflight_refused' if native is None or not native.after_stop else
+                                      'command_uncertain' if native.stop_certainty != 'returned' else
+                                      'postverification_inconclusive')
+                if (RECOVERY / 'SHA256SUMS').exists():
+                    outcome['seal_verified'] = False
+                    return outcome
+                try:
+                    return finish()
+                except Exception as sealing_error:
+                    exception(sealing_error)
+                    outcome['seal_verified'] = False
+                    return outcome
+    except Exception as error:
+        # ExitStack has completed every owned cleanup callback, including the
+        # LabLock ancestor check. Never replace an entered stop with startup's
+        # zero-dispatch fallback, and never reopen or reseal closed evidence.
+        if outcome is None:
+            raise
+        exception(error)
+        status()
+        outcome.update(preservation=False, seal_verified=False,
+                       outcome=('preflight_refused' if native is None or not native.after_stop else
+                                'command_uncertain' if native.stop_certainty != 'returned' else
+                                'postverification_inconclusive'))
+        return outcome
 
 
 class _Files:
