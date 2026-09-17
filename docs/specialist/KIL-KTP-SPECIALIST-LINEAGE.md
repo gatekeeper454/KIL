@@ -22746,3 +22746,112 @@ Complete retained request-free evidence and verified owned teardown are required
 before HF-test readiness; unit tests and this QUALITY PASS do not establish it.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T417 — 2026-09-16, independent compact-runtime final composed review PASS
+
+**Input:** Fresh independent final reviewer received clean HEAD
+02d7b2c8006102ca94e78c155516749b319c694b, engineering base
+84e8e4f87726212b496448ba77fb03d9fe857cd0 and final source commit
+2b2d891e9c21ba88935817a539f8f0057ec8e473. The approved written specification,
+prior independent SPEC and QUALITY reports, and root's reported fresh required15
+result (460 tests in 96.309s) are context, not substitutes for this reviewer's
+actual inspection or scoped execution. Exclusive writer grant permits only this
+lineage Markdown/reader append, generation and commit; root remains read-only.
+
+**Interpretation:** Read the complete approved specification without reading the
+plan; independently inspect the actual whole engineering diff, complete runtime
+and profile code, all changed test hunks and the unchanged runner, evidence,
+native lifecycle and CLI integration boundaries. Review the bounded composition
+and finite filesystem authority contract, not a new platform-image audit or an
+open-ended arbitrary hostile in-process execution audit. Use the
+requesting-code-review template and verification-before-completion evidence;
+do not fix source or consume the root-only native approval.
+
+**Decision status:** CONFIRMED final composed-change PASS. Strengths: internally
+derived locator with full-identity durable binding; independently retained and
+expected receipt/runtime descriptor chains; bounded stable canonical marker and
+binding authentication with final joint rechecks; exclusive refusal and preserved
+partial state; unchanged consumer and final dispatch-consistency ordering.
+Critical: none found. Important: none found. Minor: no concrete issue found.
+Assessment: ready to proceed through the remaining clean-source/input gates in
+the existing detached worktree, not authorization to merge or launch live HF.
+
+This reviewer freshly ran runtime/profile/IO/evidence together with the designated
+interpreter, PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and
+-W error::ResourceWarning: 157 tests in 4.883s, OK. A separate read-only production
+location calculation confirmed actual-home known Lima projection 98 bytes and
+known Docker projection 71 bytes, both below the exclusive 104-byte limit. No
+registry or run was allocated by that calculation. The root required15 result
+above remains attributed to root, not claimed as this reviewer's own execution;
+historical test-first RED runs were not independently reproduced here.
+
+**Rationale:** Runtime lines 27-51 derive from actual passwd home and enforce the
+complete fsencoded known socket budget before allocation and on guards. Lines
+141-279 validate exact store/full digest/real-effective UID, retain both complete
+no-follow ancestry chains, bootstrap only an absent registry and authenticate
+safe existing marked parents, make one exclusive short-root allocation, and
+persist the full eight-field receipt binding before returning usable authority.
+No caller path/home/environment selection, repair, label retry, old run adoption
+or automatic cleanup is introduced. Lines 305-389 reconstruct expected topology,
+validate explicit store/root/lock handles, private owner-0700 directories and
+named/retained identities, authenticate exact bounded canonical bytes through
+read-only/no-follow/nonblocking FDs, and recheck both files and all directory/
+store/lock identities after both reads. Ordinary ancestor timestamps/rosters are
+not accidentally made immutable. Acquired descriptor ownership precedes identity
+reads; known filesystem/shape/resolution failures refuse with ValueError, and
+failure/idempotent close releases handles only while retaining partial files.
+
+Runtime lines 397-427 preserve the exclusive bounded Kind control grammar and
+before/after guards using the explicit verified short-root FD. Profile lines
+27-46 preserve guarded exact live binding, actual passwd HOME, pure two-field
+documents and compact parent/leaf validation; a caller home cannot select the
+production registry. Legacy sibling forms remain offline evidence shape parsing,
+not a live authority or adoption route. The exact frozen adapter, finite Colima
+grammar, four derived environment keys and all whole-root native paths remain
+compatible. Unchanged IO lines 291-313 place final adapter/runtime/fingerprint
+checks before the final exact manifest/tool-metadata consistency block, with no
+authentication IO after that block. Unchanged evidence/native consumers retain
+seven fixed snapshot files, five bounded leftover rosters, automatic receipt
+binding checksums, durable intents/latches, foreign/default commitments,
+snapshot-before-teardown and refusal of unbound deletion. Owned native teardown
+does not erase registry/run controls or establish filesystem_fully_removed.
+The unchanged CLI still proceeds from a successful rehearsal into action; root
+must not call its main for the one separately bounded rehearsal. Recommendation:
+preserve this closed API and the real short filesystem fixtures through the next
+gate; do not widen the claims from green tests or this review.
+
+**Affected artifacts:** Only this appended entry and its generated reader are
+reviewer writes. The actual base-to-starting-HEAD diff contains exactly nine
+authorized paths: two production runtime/profile files, five existing runtime/
+profile/IO/evidence/native tests and the lineage pair. Source/tests at starting
+HEAD are byte-identical to final source commit 2b2d891. Protected production IO,
+evidence, Native, CLI, strict modules, accepted artifacts, .gitattributes,
+specification, plan, historical receipts and citation policy are unchanged.
+Frozen and current diff --check passed. The entire starting lineage Markdown
+was compared to its 02d7b2c Git blob: exactly 1,336,534 bytes, to be rechecked as a
+byte prefix after this append. No native/VM/Colima/Lima/Docker/Kind/kubectl/HF/
+HTTP/network/Ollama, install/image audit, actual-home registry allocation,
+old receipt/runtime/disk adoption/mutation/deletion, global PATH/default mutation,
+branch/integration/worktree change or subagent delegation occurred.
+
+**Unresolved questions:** Native compatibility and HF-test readiness remain
+unverified. The one approved conditional fresh root-only request-free rehearsal
+is still unconsumed; live HF action is separately unapproved. Accepted local
+Envoy remains intact, platform-image provenance unverified and full Kind/Calico
+acceptance false. Historical broader discovery's known one citation failure for
+four immutable omissions and sixteen intentional skips remains visible and
+untouched; this scoped PASS is not all-green discovery. No arbitrary same-UID
+exclusion, zero-TOCTOU, transaction, filesystem removal, exploit, full-HF/
+no-bypass/performance, V3B2/V4/V3C or broader acceptance claim follows.
+
+**Next gate:** Generate/check all 92 readers, verify the complete 1,336,534-byte
+starting lineage prefix and exact lineage-only diff/staging, commit the pair,
+confirm clean exact HEAD and release this exclusive grant. Root must finish all
+engineering/review/clean-source/input gates before the single conditional fresh
+constant-mode rehearsal through reviewed APIs. Any inconclusive, unbound or
+drifting result stops without an automatic second launch, adoption or unbound
+stop/delete. Complete retained request-free rehearsal with zero request intents
+and attempts plus verified owned teardown is required for HF-test readiness;
+this final review and unit tests alone are not readiness or action approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
