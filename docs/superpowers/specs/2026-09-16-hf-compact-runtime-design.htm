@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compact private runtime for exploratory HF preparation</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/specs/2026-09-16-hf-compact-runtime-design.md">
+<meta name="source-sha256" content="fce80a719af2000bd6c8851f162d2cae286f281e99251f4029a975d6045b48ce">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/specs/2026-09-16-hf-compact-runtime-design.md</code> (<code>fce80a719af2000bd6c8851f162d2cae286f281e99251f4029a975d6045b48ce</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">Compact private runtime for exploratory HF preparation</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/specs/2026-09-16-hf-compact-runtime-design.md</code> (<code>fce80a719af2000bd6c8851f162d2cae286f281e99251f4029a975d6045b48ce</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#compact-private-runtime-for-exploratory-hf-preparation">Compact private runtime for exploratory HF preparation</a></li><li class="level-2"><a href="#purpose-and-evidence">Purpose and evidence</a></li><li class="level-2"><a href="#approved-architecture-and-alternatives">Approved architecture and alternatives</a></li><li class="level-2"><a href="#registry-contract">Registry contract</a></li><li class="level-2"><a href="#fresh-run-and-durable-full-identity-binding">Fresh run and durable full-identity binding</a></li><li class="level-2"><a href="#authority-guard-and-path-budget">Authority guard and path budget</a></li><li class="level-2"><a href="#pure-paths-evidence-and-unchanged-consumers">Pure paths, evidence and unchanged consumers</a></li><li class="level-2"><a href="#test-first-engineering-readiness">Test-first engineering readiness</a></li><li class="level-2"><a href="#hf-preparation-and-bounded-native-approval-terms">HF preparation and bounded native approval terms</a></li><li class="level-2"><a href="#spec-self-review-and-next-gate">Spec self-review and next gate</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="compact-private-runtime-for-exploratory-hf-preparation" href="#compact-private-runtime-for-exploratory-hf-preparation">Compact private runtime for exploratory HF preparation</a></li><li class="level-2"><a data-section-id="purpose-and-evidence" href="#purpose-and-evidence">Purpose and evidence</a></li><li class="level-2"><a data-section-id="approved-architecture-and-alternatives" href="#approved-architecture-and-alternatives">Approved architecture and alternatives</a></li><li class="level-2"><a data-section-id="registry-contract" href="#registry-contract">Registry contract</a></li><li class="level-2"><a data-section-id="fresh-run-and-durable-full-identity-binding" href="#fresh-run-and-durable-full-identity-binding">Fresh run and durable full-identity binding</a></li><li class="level-2"><a data-section-id="authority-guard-and-path-budget" href="#authority-guard-and-path-budget">Authority guard and path budget</a></li><li class="level-2"><a data-section-id="pure-paths-evidence-and-unchanged-consumers" href="#pure-paths-evidence-and-unchanged-consumers">Pure paths, evidence and unchanged consumers</a></li><li class="level-2"><a data-section-id="test-first-engineering-readiness" href="#test-first-engineering-readiness">Test-first engineering readiness</a></li><li class="level-2"><a data-section-id="hf-preparation-and-bounded-native-approval-terms" href="#hf-preparation-and-bounded-native-approval-terms">HF preparation and bounded native approval terms</a></li><li class="level-2"><a data-section-id="spec-self-review-and-next-gate" href="#spec-self-review-and-next-gate">Spec self-review and next gate</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="compact-private-runtime-for-exploratory-hf-preparation">Compact private runtime for exploratory HF preparation</h1>
+<p>Date: 2026-09-16.</p>
+<p>Status: The user approved the persistent whole-runtime architecture proposed in
+T406. This is its concrete written specification, pending written-spec review
+before the implementation plan, production edits or another native attempt.</p>
+<h2 id="purpose-and-evidence">Purpose and evidence</h2>
+<p>The verified scoped PATH repair advanced the one authorized request-free rehearsal
+v3b2-3e71b5b05810b71567e14ac06c5accf1faebee0126ed4659aceec17da567a3ae beyond
+Docker dependency lookup. At 18:59:22 PDT, Lima 2.2.0 refused its projected SSH
+socket pathname: 247 characters, where less than UNIX_PATH_MAX=104 is required.
+The original refusal is retained in command-0014.stdout of that private receipt.
+The report is inconclusive_at_profile_start_attempted, not a successful rehearsal.</p>
+<p>Move ONLY fresh exploratory native runtime state to a compact, persistent,
+internally derived location. Keep durable receipts in their existing repository
+store. Preserve strict contracts, the accepted local-Envoy result, accepted inputs,
+the verified PATH repair and all claim exclusions. This does not require a new
+platform-image provenance audit or a dependency installation.</p>
+<p>The failed runtimes and receipts, including the 3e71b5b0 sparse data disk, are
+never moved, adopted, rewritten or deleted by this work. The old disk has 60-GiB
+logical size and stat reported zero allocated blocks; it is not teardown authority.</p>
+<h2 id="approved-architecture-and-alternatives">Approved architecture and alternatives</h2>
+<p>Use actual passwd home/.kil-hf/r&lt;first-16-lowercase-hex-of-full-run-digest&gt;.
+On this pinned host that is /Users/mistorm/.kil-hf/r&lt;16-hex-label&gt;. The complete
+known Lima socket projection is 98 UTF-8 bytes, below the exclusive 104-byte bound.
+The short label is a locator, NOT a replacement run identity or an ownership proof.
+The full 64-hex digest and v3b2-&lt;full-digest&gt; run ID remain authoritative.</p>
+<p>Alternatives considered: a whole-runtime /private/tmp location fits but exposes
+residual state to temporary-directory cleanup/reboot retention risk; a symlink
+alias conflicts with canonical/no-follow authority. Moving only Lima would split
+authority and leave other native endpoint paths long. No fallback is selected.</p>
+<p>Retain the existing exact RuntimeAuthority.create(store, run_digest) interface,
+closed constructor, frozen object and exact-type adapter checks. No caller runtime
+path/home/binary argument, environment override, CLI flag or new production module.
+Production location selection is private, takes no caller path and derives the
+actual passwd home, never ambient HOME or TMPDIR.</p>
+<p>All native paths stay together under the fresh short root: .colima, .colima/_lima,
+docker-config, runtime-tmp, kubeconfig and kind-config.yaml. Existing property names,
+fixed native profile/instance names and command/environment grammar stay unchanged.
+HOME remains actual passwd home; the four existing derived Colima namespace keys
+retain their exact meanings. Global PATH/default Colima/Docker/kube state is untouched.</p>
+<h2 id="registry-contract">Registry contract</h2>
+<p>Here UID means the current effective UID; creation and every live guard require
+real and effective UIDs to agree. The actual passwd account supplies home, not a
+caller-supplied home. Reject a mismatched/elevated-UID route before allocation.</p>
+<p>The .kil-hf registry is a canonical, nonsymlink, actual-UID-owned 0700 directory.
+Open each ancestor from / with retained read-only directory/no-follow descriptors;
+validate named and retained identities and the expected derived topology. Ordinary
+ancestor directory timestamps/rosters are not immutable, but device/inode/type/
+mode/UID identities are retained and rechecked. Registry and run-home privacy is
+mandatory even if ordinary home ancestors have different modes.</p>
+<p>If the registry is absent, create it exclusively through the retained parent FD,
+retain its FD, verify UID/mode/identity and fsync the parent. Create registry.json
+exclusively as a bounded, single-link, UID-owned 0600 regular file; fsync that file
+and registry directory. Its exact canonical bytes have precisely these fields:</p>
+<ul>
+<li>schema: kil.hf-exploratory-runtime-registry.v1;</li>
+<li>uid: the actual numeric UID;</li>
+<li>runtime_parent: the exact canonical registry path string.</li>
+</ul>
+<p>If the registry exists, reuse ONLY its namespace parent after the same privacy,
+canonical/identity checks and exact registry marker authentication. An unmarked,
+partial, foreign, symlinked, nonregular, hardlinked or wrong-mode marker refuses.
+Do not install a marker into an existing unmarked directory, chmod it, repair it,
+search for another registry, scan/adopt old run children or retry bootstrap.
+Existing marked registries may contain old run directories; those are not authority
+for the new run. A marker establishes the closed namespace form, not exclusion of
+arbitrary same-UID host code or a cryptographic attestation of the operating system.</p>
+<h2 id="fresh-run-and-durable-full-identity-binding">Fresh run and durable full-identity binding</h2>
+<p>Validate the existing exact PrivateStore instance, full lowercase 64-hex digest,
+receipt name hf-exploratory-&lt;full-digest&gt;, canonical repository ancestry, private
+receipt directory and retained/named single-link 0600 store lock before allocation.
+The receipt namespace remains .tools/hf-exploratory-private. Retain its complete
+descriptor ancestry independently from the compact runtime ancestry.</p>
+<p>Compute the label r+run_digest[:16] internally. Require one exclusive fresh mkdir
+for that run root, then exclusive fresh 0700 .colima/_lima, docker-config and
+runtime-tmp homes with parent fsyncs. A preexisting label of ANY kind refuses,
+including an identical full digest or a different digest sharing the first 16 hex.
+Never adopt, inspect for reuse, truncate further, choose a second label or retry.
+Exclusive creation handles collision safely; collision-free naming is not claimed.</p>
+<p>Before returning a usable authority, persist runtime-binding.json through the
+existing exclusive bounded PrivateStore write. Its canonical document has exactly:</p>
+<ul>
+<li>schema: kil.hf-exploratory-runtime-binding.v1;</li>
+<li>uid: actual numeric UID;</li>
+<li>run_digest: full 64-hex digest;</li>
+<li>run_id: v3b2- plus that complete digest;</li>
+<li>receipt_path: exact canonical store path string;</li>
+<li>registry_path: exact canonical registry path string;</li>
+<li>runtime_path: exact canonical fresh short-root path string;</li>
+<li>runtime_identity: device/inode/mode/uid integer fields from the retained root FD.</li>
+</ul>
+<p>Retain the expected bytes and stable file identity of both marker and binding.
+Both are at most 8192 bytes, UID-owned single-link 0600 regular files, opened
+read-only/no-follow/nonblocking for stable bounded authentication. Compare named
+and retained file identities (device/inode/mode/UID/link-count/size/nanosecond
+mtime/ctime) before and after the exact full-byte read; require exact canonical
+expected bytes and field types. Neither a caller-owned mutable map nor a short
+prefix alone can authorize runtime use. Marker/binding persistence failure closes
+all acquired descriptors and leaves observable partial state; no native dispatch
+or automatic filesystem cleanup follows.</p>
+<h2 id="authority-guard-and-path-budget">Authority guard and path budget</h2>
+<p>RuntimeAuthority.guard validates its exact class, closed/live state, full digest,
+store object/path/lock, derived registry/label/root and the complete expected
+topology of BOTH retained ancestry chains. Keep explicit verified store/root handles
+rather than indexing a presumed store-sibling runtime root. Every directory's named
+and FD identity must match; private registry/root/native homes remain UID-owned 0700.
+write_control retains its existing sole Kind-control grammar, exclusive 0600 file
+creation, bound, fsyncs and before/after guards, using the verified short-root FD.</p>
+<p>Authenticate marker/binding through their retained directories as above. After
+both reads, recheck BOTH named/retained file identities and directory/store/lock
+identities, so later authentication cannot leave an earlier file substituted. Refuse any
+known name/topology/content/link/mode/UID drift or source-object substitution before
+native acquisition. Preserve existing final adapter/runtime/fingerprint checks and
+final exact manifest/tool-metadata consistency AFTER all authentication/guard IO.
+No new authentication IO is inserted after that final runner consistency block.
+Normalize known authority filesystem/shape failures to ValueError before dispatch.
+All directory/file descriptors close exactly once on failure and idempotent close;
+close releases handles only, never native resources or disk files.</p>
+<p>Before any registry/run allocation AND in every guard, compute the byte length
+of the full derived Lima projection:
+runtime/.colima/_lima/colima-kil-v3-lab/ssh.sock.1234567890123456.
+Require os.fsencode(projected_path) length &lt;104, also checking the known derived
+Docker socket path. A longer/noncanonical actual home refuses before native start;
+there is no temporary-directory, alias, shortened-second-label or environment
+fallback. The bound addresses the recorded pinned-native failure, not an unlimited
+promise about future serializers. No transaction, external exclusion, zero-TOCTOU
+or hostile arbitrary in-process code-execution guarantee is claimed.</p>
+<h2 id="pure-paths-evidence-and-unchanged-consumers">Pure paths, evidence and unchanged consumers</h2>
+<p>ProfilePaths.bind still requires exact live RuntimeAuthority and its guard.
+Pure ProfilePaths/saved-form validation accepts the internally derived compact
+shape: parent equals the private registry selector's expected location and leaf
+matches r[0-9a-f]{16}; a provided home field cannot choose a production registry.
+It may retain the existing legacy sibling shape for OFFLINE saved-evidence
+analysis only; no legacy RuntimeAuthority creation/adoption path is added. Existing
+two-field home/runtime path documents and strict capture/binding schemas stay
+unchanged. Pure document parsing or a registry marker never grants live authority.</p>
+<p>Existing seven-file runtime snapshots and five-directory leftover observations
+consume derived properties without broader traversal. The binding file is durable
+receipt evidence and automatically participates in the retained SHA-256 set; do
+not add another full runtime/disk scan. Native/CLI behavior, durable intent/latches,
+Kind-control consumer checks, foreign/default commitments, snapshot-before-teardown
+and refusal of unbound cleanup remain unchanged. Successful owned native teardown
+does NOT erase the registry/run controls or imply filesystem_fully_removed.</p>
+<p>Production changes are limited to src/kil/hf_exploratory_runtime.py and
+src/kil/hf_exploratory_profile.py. Update existing runtime/profile/IO/evidence/Native
+tests only as needed for the approved locator/fixture contract. Do not edit IO,
+evidence, Native or CLI production modules, strict modules, accepted artifacts,
+gitattributes, historical receipts or citation policy. No unrelated refactor.</p>
+<h2 id="test-first-engineering-readiness">Test-first engineering readiness</h2>
+<p>After written-spec approval, write failing behavior assertions before implementation:
+compact derivation and actual byte cap, whole-root consumer paths, exclusive prefix
+collision, registry first creation/safe reuse/unsafe refusal, exact durable full-ID
+binding, changed marker/binding bytes/types/links/modes, both ancestry replacement,
+substituted digest/path/store/handles, close/failure descriptor lifecycle, unchanged
+strict/global/read-only command behavior and finite snapshot/teardown semantics.</p>
+<p>Use real short temporary filesystem fixtures. Tests may narrowly replace the
+private registry-location selector with an owned canonical short fixture registry
+under /private/tmp; this is not a public API or production caller override. All
+file bytes, markers, metadata types, permissions, no-follow and retained FD guards
+remain real. Retain the IO module's already narrow executable-digest fixtures and
+mock only unavoidable process acquisition. Reject known drift with zero capture.</p>
+<p>Use the designated interpreter, bytecode off, PYTHONPATH=src and
+-W error::ResourceWarning. Run focused affected modules and all existing required
+15-module exploratory/strict regressions, recording actual counts rather than
+assuming the prior 425-test count. Independent SPEC, QUALITY and final composed
+review must pass; fix important findings test-first and independently re-review.
+Verify complete predecessor lineage bytes, generated readers, diff checks,
+unchanged protected production/artifact paths and clean committed exact HEAD.
+Keep the existing externally managed detached worktree; no branch move, merge,
+push, new worktree or cleanup. Prior broader discovery's one failure for four
+immutable historical citation omissions and sixteen intentional skips remains
+visible; do not rewrite old receipts or exemptions to claim all-green discovery.</p>
+<h2 id="hf-preparation-and-bounded-native-approval-terms">HF preparation and bounded native approval terms</h2>
+<p>The latest user messages confirm design approval and intent to proceed through
+test-first implementation/HF preparation. Review of THIS written spec is the next
+gate. Approval of it also approves ONE new, fresh, request-free private rehearsal
+conditionally on all engineering/review/clean-source/input gates above passing.
+No native attempt occurs while this written review is pending.</p>
+<p>Root alone uses reviewed LabLock/verify_inputs/PrivateStore/BoundedRunner/
+ExploratoryLifecycle APIs with constant mode='rehearsal', fresh nonce and exact
+clean reviewed HEAD. Never call the unchanged CLI main, whose successful rehearsal
+automatically continues into action. Source/input/native execution may use the
+existing outside-sandbox route because sandboxed macOS Git stderr warnings trip
+the unchanged fail-closed source gate; do not filter warnings or bypass guards.</p>
+<p>The one preparation attempt may create only its fresh compact private namespace,
+private Colima VZ/Kind setup and retained request-free evidence, then exact guarded
+owned teardown. It must record zero request intents AND zero request attempts.
+Verify every retained receipt checksum, bracketed protected foreign/default state,
+observed runtime controls/leftovers and actual report. Preserve all old/new failed
+bytes. Inconclusive result, missing ownership binding or unknown/drifting state
+ends the attempt without a second automatic launch, adoption or unbound stop/delete.</p>
+<p>HF-test readiness requires a complete retained request-free rehearsal AND verified
+owned teardown, not merely successful VM startup or unit tests. Even that does
+not authorize action mode/live HF requests: fresh three-track action requires
+separate explicit user approval. Platform-image provenance remains unverified,
+full Kind/Calico acceptance remains false and accepted local Envoy is unaffected.
+No original exploit, full-HF prevention, all-eight-phase, NetworkPolicy/no-bypass,
+performance, V3B2 acceptance, V4 or V3C claim is established by this preparation.</p>
+<h2 id="spec-self-review-and-next-gate">Spec self-review and next gate</h2>
+<p>The selected location, locator/full-identity distinction, marker/bootstrap/reuse,
+collision refusal, complete binding fields, fd/byte bounds, consumer compatibility,
+file scope, test fixtures and single native attempt terms are explicit. There are
+no placeholder requirements, dynamic fallback or unrelated image/installation
+tasks. Offline legacy parsing is distinguished from forbidden live adoption;
+performed preparation is distinguished from successful readiness/acceptance.</p>
+<p>Request written-spec approval before invoking writing-plans. Production code and
+native runtimes are unchanged at this document checkpoint.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical CITATION.cff</a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

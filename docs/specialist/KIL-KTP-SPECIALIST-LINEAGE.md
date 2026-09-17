@@ -22172,3 +22172,64 @@ obtain written-spec approval and transition to writing-plans. Do not implement
 or start another rehearsal at this preliminary design gate.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T407 — 2026-09-16 — Persistent compact runtime architecture approved; written spec
+
+**Input:** The user replied "Approved - design approval, I’ll write the spec,
+then proceed through test-first implementation and HF-test preparation" to the
+concrete persistent .kil-hf whole-runtime proposal.
+
+**Interpretation:** Persistent whole-runtime architecture is CONFIRMED approved.
+Write its concrete validated spec and self-review it; brainstorming still requires
+review of that written file before the implementation plan/production edits. Make
+HF-preparation/native boundaries explicit rather than silently broadening approval
+into live action or another open-ended native retry loop.
+
+**Decision status:** Approved architecture recorded in
+docs/superpowers/specs/2026-09-16-hf-compact-runtime-design.md. Full written-spec
+review remains PENDING. Exact contract: actual passwd home/.kil-hf/r<first16digest>,
+98-byte projected known Lima socket on this host, full 64-hex run/receipt identity,
+UID-owned private registry marker, exclusive collision refusal, durable bounded
+runtime-binding.json in receipt and both retained no-follow ancestry chains.
+No production or native implementation occurs at this document gate.
+
+**Rationale:** Compact persistent runtime avoids native path overflow without
+discarding full semantic identity or exposing residual state to ordinary temporary
+cleanup. Marker/exclusive bootstrap refuses foreign/unmarked existing state;
+binding/store/directory/file identity checks refuse known drift before native use.
+Existing property/command/strict capture interfaces remain; replace only positional
+runtime handles tied to the old sibling assumption. Every native consumer stays
+under the same fresh short root. Offline legacy pure saved-form analysis is not
+live adoption. Production scope only RuntimeAuthority and ProfilePaths; IO/PATH,
+evidence, Native and CLI code can remain unchanged with consumer regressions.
+
+The specification defines real short filesystem fixtures, TDD, independent SPEC/
+QUALITY/final review, designated interpreter/ResourceWarning-fatal required modules,
+exact lineage prefix, reader/diff/protected-source and clean-head gates. Counts will
+be measured, not assumed from the previous 425-test run. Known historical citation
+failure/skips remain visible. Its written approval explicitly covers ONE root-only
+fresh request-free rehearsal after engineering gates, no CLI action fallthrough,
+no retry/adoption/unbound cleanup and separate later action permission. That new
+bounded native permission is PENDING this file's written user review, not executed.
+
+**Affected artifacts:** Add compact-runtime design Markdown and generated reader;
+append only this actual-EOF lineage entry/reader. Source/tests, older spec/plan,
+strict contracts, accepted local Envoy/inputs, old receipts/runtimes/sparse disk,
+default environment, deferrals and citation policy are unchanged. No .kil-hf
+allocation, VM/native/HTTP/HF/Ollama/image audit, install, symlink, relocation,
+cleanup, branch move, merge, push or new worktree. No fresh tests/native success
+claim is inferred from this design document.
+
+**Unresolved questions:** User review of exact marker/binding/fd/path-budget,
+engineering and bounded-preparation terms is pending. Live compatibility and
+successful owned teardown are unverified; platform-image provenance/full Kind/
+Calico acceptance remain unverified, with accepted local Envoy intact.
+
+**Next gate:** Inline spec self-review for placeholders, contradictions, ambiguity
+and scope; index the new Markdown so renderer discovers it, render/check all 91
+readers, preserve the exact 6525691 Markdown prefix and diff-check. Stage/commit
+only new spec and lineage Markdown/reader pairs, confirm clean source and present
+written spec for user approval. Only then invoke writing-plans for test-first
+implementation/HF preparation. Do not start another native attempt now.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
