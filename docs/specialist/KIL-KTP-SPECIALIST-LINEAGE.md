@@ -23291,3 +23291,68 @@ and independent ordered reviews under existing engineering approval. No native
 preflight, real recovery reservation, stop, restart or new rehearsal.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T425 — 2026-09-17, fixed receipt/binding and residual-footprint Task2 independently verified
+
+**Input:** Continue the user's confirmed subagent-driven preparation with
+independent reviews from Task1 checkpoint cb2c743979dcf11f41490c56b56e5c6db30bfd83.
+
+**Interpretation:** CONFIRMED fixture-only Task2 engineering within approved
+Tasks1–5, using a fresh implementer and isolated spec-then-quality review. Native
+Task6, actual recovery evidence reservation and HF requests remain UNAPPROVED.
+
+**Decision status:** CONFIRMED Task2 verified after review/fix/re-review, not on
+the strength of its earlier intermediate passing suites. Only the fixed adapter
+and its tests implement new executable behavior; no production guard is relaxed.
+
+**Rationale/evidence:** Receipt RED3 missing-API assertions and retained/footprint
+RED7 preceded implementation. The final proof verifies46 unique bounded pinned
+files, UID/mode/single-link metadata, canonical full runtime binding/marker,
+sealed report premises and five saved home identities. Running requires the
+saved footprint; Stopped permits only enumerated socket/PID/lock/SSH removals.
+Eight resource identities, three YAML hashes, raw60/20GiB capacities and512-byte
+format probes remain bound. Tests distinguish disk inode replacement from
+unrelated roster changes and wrong capacity from an unreadably truncated probe.
+
+Independent spec review demonstrated canonical int/float binding confusion;
+genuine RED1 then exact expected canonical-byte comparison GREEN. Additional
+fixture coverage corrected independently fixed HOME/root selectors, strict
+leftover schema, saved resource substitutions and finite stopped controls.
+Quality review demonstrated a same-size raw disk reanchor during later ownership
+IO; genuine RED1 preceded its fix. Subsequent spec probes showed unknown-root
+and final-tmp-read drift remained accepted: simply adding captures moved the
+ordering omission. Genuine RED1 and final RED2 preceded the complete scoped
+metadata closure. These are engineering adapter defects demonstrated with real
+temporary filesystem mutations, not findings about a live HF deployment.
+
+Final metadata-only validation follows ALL bounded content/roster reads across
+17 named resources/controls/directories. Small controls and directly observed
+directory epochs are checked; disk identity/mode/UID/link/size are checked without
+freezing guest writes/timestamps or unrelated ancestors/registry siblings. No
+atomic filesystem or zero-TOCTOU assertion. Permanent late-read regressions keep
+both earlier ownership timings and final namespace timings. Final spec PASS:
+47 tests/12.583s; final quality PASS:47/11.255s and eight independent supplemental
+real-IO cases/2.466s. Root fresh four-module regression157/52.561s OK with bytecode
+disabled/ResourceWarning fatal. The supplements refused late YAML/store/startup/
+lock and Docker/tmp namespace drift while allowing guest writes beyond the raw
+header and unrelated registry sibling creation. No remaining review findings.
+
+**Affected artifacts:** tools/hf_compact_residual_recovery.py and
+tests/test_hf_compact_residual_recovery.py; factual plan/reader append and this
+actual-EOF lineage/reader. Protected sources, prior tools/tests, strict contracts,
+accepted artifacts, citation policy and historical receipts/runtime/disks remain
+unchanged. No Colima/Lima/Docker native acquisition, stop/delete/force/retry,
+HF request, Ollama operation, production SSH compatibility fix or image audit.
+
+**Unresolved questions:** Tasks3–5 remain unverified; preparation is not ready
+for native recovery or HF. Current VM status remains unobserved; historical
+Running is not refreshed by these fixtures. Four known historical immutable
+citation omissions remain disclosed, neither repaired nor exempted.
+
+**Next gate:** Preserve the entire cb2c743 predecessor lineage prefix1,373,557B;
+render/check94 readers, verify protected paths and exact scoped diffs, commit
+only tool/test plus plan/lineage Markdown-reader pairs. Then execute Task3 with
+a fresh implementer and ordered independent reviews under existing preparation
+approval. No actual live preflight, evidence reservation, stop or new rehearsal.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

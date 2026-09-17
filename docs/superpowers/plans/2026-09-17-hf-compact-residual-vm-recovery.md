@@ -1331,3 +1331,20 @@ retained-descriptor substitution regression, independently9/0.092s OK. The tool
 has only internal fixed-target file/ancestry proof; no process/CLI/orchestration.
 No live runtime observation or recovery receipt reservation. Next is Task2 under
 the same preparation approval; subsequent engineering tasks are not yet complete.
+
+Task2 is VERIFIED at the subsequent engineering checkpoint. The receipt proof
+authenticates all46 pinned files and the exact canonical saved binding/report;
+fresh footprint checks preserve eight resource identities, three YAMLs, raw disk
+capacities/headers, finite Running/Stopped roster rules and five private homes.
+Independent reviews exposed typed-JSON equality and late authentication-IO gaps;
+each implementation defect received genuine failing real-filesystem regressions
+before its minimum fix. Final metadata-only checks follow all content/roster IO
+across17 named targets; guest disk timestamps/content and unrelated registry
+siblings are deliberately not frozen. No atomic-snapshot claim.
+Final independent spec PASS47/12.583s; quality PASS47/11.255s plus eight independent
+supplemental real-IO cases/2.466s. Root scoped regression157/52.561s OK, bytecode
+disabled/ResourceWarning fatal. Prior intermediate passes did not override the
+supplemental defects. Only the fixed tool/test and append-only plan/lineage readers
+changed; no native command, actual runtime/receipt access or recovery reservation.
+Next is Task3 under the same preparation approval. Tasks3–5 are not yet complete;
+Task6 and the live HF test remain unapproved.
