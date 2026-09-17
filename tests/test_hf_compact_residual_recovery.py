@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from kil.v3b2_proofs import canonical
 from kil.v3b2_profile_state import _read
+from kil.v3b2_controller import CommandResult
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -344,6 +345,10 @@ class RetainedFixture:
                 (parent / name).chmod(0o600)
         (paths.profile / 'ordinary-control').write_bytes(b'fixture ordinary control\n')
         (paths.profile / 'ordinary-control').chmod(0o600)
+        if getattr(self, 'include_native_logs', False):
+            for name in ('ha.stdout.log', 'ha.stderr.log', 'serialv.log'):
+                (paths.instance / name).write_bytes(b'original log\n')
+                (paths.instance / name).chmod(0o600)
         original = profile.capture(paths)
         binding = profile.creation_binding(paths.document(), original)
         receipt_parent = root / 'receipts'; receipt_parent.mkdir(mode=0o700)
@@ -704,6 +709,1037 @@ class RetainedAndFootprintTests(unittest.TestCase, RetainedFixture):
         runtime, _, paths, report, original = self.retained(); self.addCleanup(runtime.close)
         (paths.runtime / 'foreign').write_bytes(b'x')
         with self.assertRaises(ValueError): self.tool._footprint(paths, report, original, 'Running')
+
+
+class Task3FinalProofTests(unittest.TestCase):
+    def test_default_accepted_manifest_uses_canonical_accepted_run(self):
+        from kil.hf_exploratory_inputs import ACCEPTED_RUN
+        tool = load_tool()
+        self.assertEqual(tool.ACCEPTED_MANIFEST,
+                         REPOSITORY / 'artifacts/generated/v3b1-local-envoy' / ACCEPTED_RUN / 'manifest.json')
+
+    def test_default_fixed_authority_constants_match_approved_target_without_reading_it(self):
+        tool = load_tool()
+        digest = '254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d'
+        self.assertEqual((tool.DIGEST, tool.UID, tool.HOME), (digest, 501, Path('/Users/mistorm')))
+        self.assertEqual(tool.RUNTIME, tool.HOME / '.kil-hf' / ('r' + digest[:16]))
+        self.assertEqual(tool.RECEIPT, REPOSITORY / '.tools/hf-exploratory-private' / ('hf-exploratory-' + digest))
+        self.assertEqual(tool.ROOT_ID, (16777232, 615011851, 16832, 501))
+        self.assertEqual(tool.SOURCE, '7d5c58372040ecf5b7c1fdd9c9d7ea3ddcd06205')
+        self.assertEqual(tool.MANIFEST_PIN,
+                         ('d128fd99fcc32391db27804da8be86c0e62b238343b71c7f44009785cba38ad0', 3979))
+        self.assertEqual(tool.SSH_PIN,
+                         ('0788dfecc6e2e6d6301a2eca6d9bebe153de450cac6d4657b053f2676a9564e9', 767))
+        self.assertEqual(tool.COLIMA_PIN,
+                         ('980ad8bf61a4ca370243f4cb41401a61276dcd2c2502bee7b9b86f9250169f34', 15656320))
+
+    def test_final_files_rechecks_receipt_after_later_runtime_authentication_io(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory(prefix='kil-final-', dir='/private/tmp') as temporary:
+            root = Path(temporary).resolve()
+            receipt_path, runtime_path = root / 'receipt', root / 'runtime'
+            receipt_path.mkdir(mode=0o700); runtime_path.mkdir(mode=0o700)
+            receipt_file, runtime_file = receipt_path / 'saved', runtime_path / 'saved'
+            for path in (receipt_file, runtime_file):
+                path.write_bytes(b'original\n'); path.chmod(0o600)
+            receipt, runtime = tool._Files(), tool._Files()
+            try:
+                receipt.read(receipt_file, 64, 0o600, os.geteuid())
+                runtime.read(runtime_file, 64, 0o600, os.geteuid())
+                original = runtime._retained_bytes
+                def late_runtime_read(record):
+                    payload = original(record)
+                    receipt_file.write_bytes(b'late replacement\n')
+                    receipt_file.chmod(0o600)
+                    return payload
+                runtime._retained_bytes = late_runtime_read
+                with self.assertRaises(ValueError):
+                    tool._final_files(receipt, runtime)
+            finally:
+                receipt.close(); runtime.close()
+
+
+class Task3ObservationTests(unittest.TestCase):
+    def setUp(self):
+        self.tool = load_tool()
+        self.temporary = tempfile.TemporaryDirectory(prefix='kil-task3-observe-', dir='/private/tmp')
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        self.home = self.root / 'home'; self.home.mkdir(mode=0o700)
+        self.runtime = (self.root / '.tools' / 'hf-exploratory-private' /
+                        ('hf-exploratory-runtime-' + 'a' * 64))
+        self.runtime.parent.mkdir(parents=True, mode=0o700); self.runtime.mkdir(mode=0o700)
+        self.paths = self.tool.ProfilePaths(self.home, self.runtime)
+        self.paths.lima.mkdir(parents=True, mode=0o700)
+        (self.paths.lima / 'colima-kil-v3-lab').mkdir(mode=0o700)
+
+    def test_inventory_refuses_successful_empty_and_accepts_complete_singleton(self):
+        row = {'name': 'kil-v3-lab', 'status': 'Running', 'arch': 'aarch64',
+               'cpus': 4, 'memory': 8 * 1024**3, 'disk': 60 * 1024**3, 'runtime': 'docker'}
+        with self.assertRaises(ValueError): self.tool._inventory(self.paths, lambda: b'')
+        self.assertEqual(self.tool._inventory(self.paths, lambda: canonical([row])), [row])
+
+    def test_fingerprint_records_absence_only_after_nofollow_parent_walk(self):
+        missing = self.paths.lima / 'missing.yaml'
+        observed = self.tool._fingerprint(missing)
+        self.assertEqual(observed, {'path': str(missing), 'present': False, 'identity': None,
+                                    'byte_count': None, 'sha256': None})
+        link_parent = self.root / 'linked'; link_parent.symlink_to(self.paths.lima, target_is_directory=True)
+        with self.assertRaises(ValueError): self.tool._fingerprint(link_parent / 'missing.yaml')
+
+    def test_control_paths_are_the_exact_twelve_fixed_locations(self):
+        pairs = self.tool._control_paths(self.paths)
+        self.assertEqual([label for label, _ in pairs], [
+            'profile.yaml', 'instance.yaml', 'lima.yaml', 'colima-ssh.config',
+            'instance-ssh.config', 'ha.pid', 'vz.pid', 'kind.yaml', 'docker-meta.json',
+            'ha.stdout.log', 'ha.stderr.log', 'serialv.log'])
+        self.assertEqual(dict(pairs)['kind.yaml'], self.runtime / 'kind-config.yaml')
+
+    def test_controls_return_honest_absence_and_copy_present_private_bytes(self):
+        control = self.paths.profile / 'colima.yaml'
+        self.paths.profile.mkdir(mode=0o700); control.write_bytes(b'profile: fixture\n'); control.chmod(0o600)
+        proof = self.tool._Files(); self.addCleanup(proof.close)
+        observed, payloads = self.tool._controls(self.paths, proof)
+        self.assertEqual(payloads['profile.yaml'], b'profile: fixture\n')
+        self.assertFalse(observed['instance.yaml']['present'])
+
+    def test_inventory_rejects_malformed_partial_unknown_and_replaced_roster(self):
+        row = {'name': 'kil-v3-lab', 'status': 'Running', 'arch': 'aarch64',
+               'cpus': 4, 'memory': 8 * 1024**3, 'disk': 60 * 1024**3, 'runtime': 'docker'}
+        for payload in (b'{', b'[]\n', canonical([{**row, 'unknown': True}]),
+                        canonical([{**row, 'name': 'other'}])):
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                self.tool._inventory(self.paths, lambda: payload)
+        (self.paths.lima / 'unrecognized').mkdir(mode=0o700)
+        with self.assertRaises(ValueError): self.tool._inventory(self.paths, lambda: canonical([row]))
+        (self.paths.lima / 'unrecognized').rmdir()
+        def replace_child():
+            (self.paths.lima / 'colima-kil-v3-lab').rename(self.root / 'old-instance')
+            (self.paths.lima / 'colima-kil-v3-lab').mkdir(mode=0o700)
+            return canonical([row])
+        with self.assertRaises(ValueError): self.tool._inventory(self.paths, replace_child)
+
+    def test_fingerprint_rejects_linked_oversized_or_changed_regular_files(self):
+        path = self.root / 'foreign'; path.write_bytes(b'original\n'); path.chmod(0o600)
+        os.link(path, self.root / 'hardlink')
+        with self.assertRaises(ValueError): self.tool._fingerprint(path)
+        (self.root / 'hardlink').unlink()
+        with path.open('wb') as stream: stream.truncate(self.tool.MAXIMUM + 1)
+        with self.assertRaises(ValueError): self.tool._fingerprint(path)
+        path.write_bytes(b'original\n')
+        real_read = self.tool.read_regular
+        def late_change(target, maximum):
+            payload = real_read(target, maximum)
+            target.write_bytes(b'changed\n')
+            return payload
+        with patch.object(self.tool, 'read_regular', side_effect=late_change):
+            with self.assertRaises(ValueError): self.tool._fingerprint(path)
+
+    def test_controls_recheck_earlier_present_file_after_last_control_content_read(self):
+        control = self.paths.profile / 'colima.yaml'
+        self.paths.profile.mkdir(mode=0o700); control.write_bytes(b'profile\n'); control.chmod(0o600)
+        last = self.paths.instance / 'serialv.log'
+        last.parent.mkdir(mode=0o700, exist_ok=True)
+        proof = self.tool._Files(); self.addCleanup(proof.close)
+        real_read = self.tool.read_regular
+        def late_change(path, maximum):
+            payload = real_read(path, maximum)
+            if path == last: control.write_bytes(b'changed earlier control\n')
+            return payload
+        last.write_bytes(b'log\n'); last.chmod(0o600)
+        with patch.object(self.tool, 'read_regular', side_effect=late_change):
+            with self.assertRaises(ValueError): self.tool._controls(self.paths, proof)
+
+    def test_controls_refuse_replacement_between_fingerprint_and_retained_copy(self):
+        control = self.paths.profile / 'colima.yaml'
+        self.paths.profile.mkdir(mode=0o700); control.write_bytes(b'profile\n'); control.chmod(0o644)
+        proof = self.tool._Files(); self.addCleanup(proof.close)
+        actual = self.tool._fingerprint
+        changed = False
+        def fingerprint_then_replace(path):
+            nonlocal changed
+            result = actual(path)
+            if path == control and not changed:
+                changed = True
+                path.rename(self.root / 'original-control')
+                path.write_bytes(b'profile\n'); path.chmod(0o644)
+            return result
+        with patch.object(self.tool, '_fingerprint', side_effect=fingerprint_then_replace):
+            with self.assertRaises(ValueError): self.tool._controls(self.paths, proof)
+        self.assertTrue(changed)
+
+    def test_controls_refuse_replacement_during_real_copy_parent_authentication(self):
+        control = self.paths.profile / 'colima.yaml'
+        self.paths.profile.mkdir(mode=0o700); control.write_bytes(b'profile\n'); control.chmod(0o644)
+        proof = self.tool._Files(); self.addCleanup(proof.close)
+        actual_directory = proof.directory
+        changed = False
+        def directory_then_replace(path, private=False):
+            nonlocal changed
+            descriptor = actual_directory(path, private)
+            if path == control.parent and not changed:
+                changed = True
+                control.rename(self.root / 'original-copy-control')
+                control.write_bytes(b'profile\n'); control.chmod(0o644)
+            return descriptor
+        with patch.object(proof, 'directory', side_effect=directory_then_replace):
+            with self.assertRaises(ValueError): self.tool._controls(self.paths, proof)
+        self.assertTrue(changed)
+
+
+class Task3NativeGrammarTests(unittest.TestCase):
+    def setUp(self):
+        self.tool = load_tool()
+        self.temporary = tempfile.TemporaryDirectory(prefix='kil-task3-native-', dir='/private/tmp')
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        self.home = self.root / 'home'; self.home.mkdir(mode=0o700)
+        self.runtime = (self.root / '.tools' / 'hf-exploratory-private' /
+                        ('hf-exploratory-runtime-' + 'a' * 64))
+        self.runtime.parent.mkdir(parents=True, mode=0o700); self.runtime.mkdir(mode=0o700)
+        self.paths = self.tool.ProfilePaths(self.home, self.runtime)
+        for directory in (self.paths.colima, self.paths.lima, self.runtime / 'docker-config', self.paths.tmp):
+            directory.mkdir(parents=True, mode=0o700, exist_ok=True)
+        self.receipt = self.tool._Files(); self.runtime_proof = self.tool._Files()
+        self.addCleanup(self.receipt.close); self.addCleanup(self.runtime_proof.close)
+        self.tools = self.root / 'tools'; self.tools.mkdir(mode=0o700)
+        records = {}
+        for name in ('docker', 'kind', 'kubectl'):
+            payload = ('fixture ' + name + '\n').encode()
+            executable = self.tools / name; executable.write_bytes(payload); executable.chmod(0o755)
+            records[name] = {'executable_sha256': hashlib.sha256(payload).hexdigest(), 'byte_size': len(payload)}
+        self.manifest = self.root / 'manifest.json'
+        payload = canonical({'verified_tool_identities': records})
+        self.manifest.write_bytes(payload); self.manifest.chmod(0o644)
+        self.colima = self.home / 'colima'; self.colima.write_bytes(b'colima fixture\n'); self.colima.chmod(0o755)
+        self.lima_dir = self.root / 'original-bin'; self.lima_dir.mkdir(mode=0o700)
+        self.lima = self.lima_dir / 'limactl'; self.lima.write_bytes(b'lima fixture\n'); self.lima.chmod(0o755)
+        self.store = self.tool.PrivateStore(self.runtime / 'store')
+        self.addCleanup(self.store.close)
+
+    def native(self, original_path=None):
+        selectors = (patch.multiple(self.tool, HOME=self.home, UID=os.geteuid(), TOOLS=self.tools,
+                                    COLIMA=self.colima, ACCEPTED_MANIFEST=self.manifest,
+                                    ACCEPTED_MANIFEST_SHA256=hashlib.sha256(self.manifest.read_bytes()).hexdigest(),
+                                    COLIMA_PIN=(hashlib.sha256(self.colima.read_bytes()).hexdigest(), self.colima.stat().st_size),
+                                    passwd_home=lambda: self.home),
+                     patch.dict(os.environ, {'PATH': str(self.lima_dir) if original_path is None else original_path}, clear=True))
+        for selector in selectors: selector.start(); self.addCleanup(selector.stop)
+        return self.tool._Native(self.receipt, self.runtime_proof, self.paths, self.store)
+
+    def test_native_exposes_minimal_namespace_environments_and_closed_read_grammar(self):
+        native = self.native()
+        private = native.environment_for('private')
+        self.assertEqual(private['HOME'], str(self.home))
+        self.assertEqual(private['PATH'], str(self.tools) + os.pathsep + str(self.lima_dir))
+        self.assertEqual(private['COLIMA_HOME'], str(self.paths.colima))
+        self.assertNotIn('COLIMA_HOME', native.environment_for('global'))
+        endpoint = 'unix://' + str(self.paths.profile / 'docker.sock')
+        self.assertTrue(native.allowed(('docker', '--host', endpoint, 'ps', '--all', '--quiet', '--no-trunc'), 'docker'))
+        for argv in (('colima', 'stop'), ('docker', 'context', 'use', 'default'), ('docker', '--host', endpoint, 'ps')):
+            with self.subTest(argv=argv): self.assertFalse(native.allowed(argv, 'private'))
+
+    def test_native_rejects_empty_or_relative_original_path_before_process_acquisition(self):
+        for path in ('', 'relative:/bin', '/bin:', ':/bin', '/bin::/usr/bin', '/bin/../usr/bin'):
+            with self.subTest(path=path), patch.object(self.tool, 'capture_process') as capture:
+                with self.assertRaisesRegex(ValueError, 'recovery_original_path_is_invalid'):
+                    self.native(original_path=path)
+                capture.assert_not_called()
+
+    def test_acquire_journals_effective_pinned_dispatch_and_raw_terminal_copies(self):
+        native = self.native()
+        expected = CommandResult(0, 'fixture\n', '', b'fixture\n', b'')
+        with patch.object(self.tool, 'capture_process', return_value=expected) as capture:
+            result = native.acquire(('docker', 'context', 'show'), 'global')
+        self.assertIs(result, expected)
+        argv, environment, stdin, timeout, maximum, cwd = capture.call_args.args
+        self.assertEqual(argv, (str(self.tools / 'docker'), 'context', 'show'))
+        self.assertEqual(environment['DOCKER_CONFIG'], str(self.home / '.docker'))
+        self.assertEqual((stdin, timeout, maximum, cwd), (None, 10, 8 * 1024**2, self.tool.REPOSITORY))
+        journal = self.store.journal.read_bytes()
+        intent = next(json.loads(line)['details'] for line in journal.splitlines()
+                      if json.loads(line)['event'] == 'command_intent')
+        self.assertEqual(intent.get('cwd'), str(self.tool.REPOSITORY))
+        self.assertEqual(intent['argv'], list(argv))
+        self.assertEqual(intent['environment'], environment)
+        self.assertIn(b'command_terminal', journal)
+        self.assertTrue(any(path.name.endswith('.stdout') for path in self.store.path.iterdir()))
+
+    def test_guard_rejects_accepted_tool_replaced_during_later_lima_authentication(self):
+        native = self.native()
+        original = self.tool._locator_snapshot
+        def mutate_after_lima(path):
+            value = original(path)
+            docker = self.tools / 'docker'
+            docker.write_bytes(b'replaced docker\n'); docker.chmod(0o755)
+            return value
+        with patch.object(self.tool, '_locator_snapshot', side_effect=mutate_after_lima):
+            with self.assertRaises(ValueError): native.guard()
+
+    def test_constructor_retains_resolved_lima_descriptor_and_bytes(self):
+        native = self.native()
+        retained = [record for record in native.runtime.files if record[0] == self.lima]
+        self.assertEqual(len(retained), 1)
+        self.assertEqual(os.fstat(retained[0][1]).st_ino, self.lima.stat().st_ino)
+        self.assertEqual(retained[0][3], hashlib.sha256(self.lima.read_bytes()).hexdigest())
+
+    def test_guard_rejects_new_higher_priority_locator_during_last_lima_read(self):
+        earlier = self.root / 'earlier-bin'; earlier.mkdir(mode=0o700)
+        native = self.native(original_path=str(earlier) + os.pathsep + str(self.lima_dir))
+        real_read = self.tool.read_regular
+        changed = False
+        def read_then_add(path, maximum):
+            nonlocal changed
+            payload = real_read(path, maximum)
+            if path == self.lima and not changed:
+                changed = True
+                replacement = earlier / 'limactl'
+                replacement.write_bytes(b'higher priority executable\n'); replacement.chmod(0o755)
+            return payload
+        with patch.object(self.tool, 'read_regular', side_effect=read_then_add):
+            with self.assertRaises(ValueError): native.guard()
+        self.assertTrue(changed)
+
+    def test_acquisition_terminal_distinguishes_returned_and_uncertain_process_results(self):
+        native = self.native()
+        for returncode in (0, 1, -9):
+            with patch.object(self.tool, 'capture_process', return_value=CommandResult(
+                    returncode, 'out', 'err', b'out', b'err')):
+                native.acquire(('docker', 'context', 'show'), 'global')
+        terminals = [json.loads(line)['details'] for line in self.store.journal.read_bytes().splitlines()
+                     if json.loads(line)['event'] == 'command_terminal']
+        self.assertEqual([row.get('certainty') for row in terminals], ['returned', 'returned', 'uncertain'])
+
+    def test_capture_exception_has_uncertain_terminal_and_preserves_original_error(self):
+        native = self.native()
+        failure = OSError('fixture capture failed')
+        with patch.object(self.tool, 'capture_process', side_effect=failure):
+            with self.assertRaises(OSError) as raised:
+                native.acquire(('docker', 'context', 'show'), 'global')
+        self.assertIs(raised.exception, failure)
+        terminal = json.loads(self.store.journal.read_bytes().splitlines()[-1])
+        self.assertEqual(terminal['event'], 'command_terminal')
+        self.assertEqual(terminal['details']['certainty'], 'uncertain')
+        self.assertIsNone(terminal['details']['returncode'])
+        self.assertEqual(terminal['details']['error_type'], 'OSError')
+
+    def test_native_environment_excludes_inherited_overrides_and_separates_namespaces(self):
+        native = self.native()
+        with patch.dict(os.environ, {'HOME': '/wrong', 'PATH': '/different', 'DOCKER_HOST': 'tcp://wrong',
+                                     'COLIMA_HOME': '/wrong', 'LIMA_HOME': '/wrong', 'TMPDIR': '/wrong',
+                                     'KUBECONFIG': '/wrong', 'HTTPS_PROXY': 'secret', 'TOKEN': 'secret',
+                                     'LANG': 'C', 'LC_ALL': 'C'}):
+            common = {'HOME': str(self.home), 'PATH': str(self.tools) + os.pathsep + str(self.lima_dir),
+                      'LANG': 'C', 'LC_ALL': 'C'}
+            self.assertEqual(native.environment_for('global'), {**common, 'DOCKER_CONFIG': str(self.home / '.docker')})
+            docker = {**common, 'DOCKER_CONFIG': str(self.runtime / 'docker-config'), 'TMPDIR': str(self.paths.tmp)}
+            self.assertEqual(native.environment_for('docker'), docker)
+            self.assertEqual(native.environment_for('private'),
+                             {**docker, 'COLIMA_HOME': str(self.paths.colima), 'LIMA_HOME': str(self.paths.lima)})
+
+    def test_closed_native_argv_and_timeout_refusals_produce_zero_acquisitions(self):
+        native = self.native()
+        before = self.store.journal.read_bytes()
+        with patch.object(self.tool, 'capture_process') as capture:
+            for argv, namespace in (
+                    (('colima', 'stop', '--force', 'kil-v3-lab'), 'private'),
+                    (('colima', 'delete', 'kil-v3-lab'), 'private'),
+                    (('limactl', 'stop', 'colima-kil-v3-lab'), 'global'),
+                    ((str(self.lima), '--version'), 'global'),
+                    (('docker', 'ps'), 'global'), (('docker', 'context', 'use', 'default'), 'global'),
+                    (('docker', '--host', 'unix:///wrong', 'ps', '--all', '--quiet', '--no-trunc'), 'docker'),
+                    (('colima', '--home', '/wrong', 'list', '--json'), 'private'),
+                    (('env', 'COLIMA_HOME=/wrong', 'colima', 'list'), 'private'),
+                    (('colima', 'list', '--json'), 'docker')):
+                with self.subTest(argv=argv), self.assertRaises(ValueError): native.acquire(argv, namespace)
+            for timeout in (True, 10.0, 9, 11, '10'):
+                with self.subTest(timeout=timeout), self.assertRaises(ValueError):
+                    native.acquire(('colima', 'version'), 'private', timeout)
+            capture.assert_not_called()
+        self.assertEqual(self.store.journal.read_bytes(), before)
+        self.assertEqual(native.sequence, 0)
+
+    def test_guard_after_durable_intent_refuses_late_tool_change_before_capture(self):
+        native = self.native()
+        real_record = self.store.record
+        def record_then_change(event, details):
+            real_record(event, details)
+            if event == 'command_intent': (self.tools / 'docker').write_bytes(b'changed after fsync\n')
+        with patch.object(self.store, 'record', side_effect=record_then_change), patch.object(self.tool, 'capture_process') as capture:
+            with self.assertRaises(ValueError): native.acquire(('docker', 'context', 'show'), 'global')
+            capture.assert_not_called()
+        self.assertEqual(json.loads(self.store.journal.read_bytes().splitlines()[-1])['event'], 'command_intent')
+
+    def test_late_accepted_tools_directory_addition_refuses_after_intent_before_capture(self):
+        native = self.native()
+        real_read, reads = self.tool.read_regular, 0
+        def read_then_add(path, maximum):
+            nonlocal reads
+            payload = real_read(path, maximum)
+            if path == self.lima:
+                reads += 1
+                if reads == 2:
+                    extra = self.tools / 'limactl'
+                    extra.write_bytes(b'unaccepted PATH prefix executable\n'); extra.chmod(0o755)
+            return payload
+        expected = CommandResult(0, '[]\n', '', b'[]\n', b'')
+        with patch.object(self.tool, 'read_regular', side_effect=read_then_add), \
+             patch.object(self.tool, 'capture_process', return_value=expected) as capture:
+            with self.assertRaises(ValueError): native.acquire(('colima', 'list', '--json'), 'private')
+            capture.assert_not_called()
+        self.assertEqual(reads, 2)
+        self.assertTrue((self.tools / 'limactl').exists())
+        self.assertEqual(json.loads(self.store.journal.read_bytes().splitlines()[-1])['event'], 'command_intent')
+
+    def test_store_lock_named_replacement_refuses_before_capture(self):
+        native = self.native()
+        lock = self.store.path / 'lock'; lock.rename(self.root / 'old-lock')
+        lock.touch(mode=0o600)
+        with patch.object(self.tool, 'capture_process') as capture:
+            with self.assertRaises(ValueError): native.acquire(('docker', 'context', 'show'), 'global')
+            capture.assert_not_called()
+
+    def test_store_lock_descriptor_substitution_refuses(self):
+        native = self.native()
+        replacement = self.root / 'replacement-lock'; replacement.touch(mode=0o600)
+        fd = os.open(replacement, os.O_RDWR | os.O_NOFOLLOW)
+        try: os.dup2(fd, self.store._lock)
+        finally: os.close(fd)
+        with self.assertRaises(ValueError): native.guard()
+
+    def test_store_directory_named_replacement_refuses(self):
+        native = self.native()
+        self.store.path.rename(self.root / 'moved-store')
+        self.store.path.mkdir(mode=0o700)
+        with self.assertRaises(ValueError): native.guard()
+
+    def test_store_directory_descriptor_substitution_refuses(self):
+        native = self.native()
+        replacement = self.root / 'replacement-store'; replacement.mkdir(mode=0o700)
+        fd = os.open(replacement, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try: os.dup2(fd, self.store._directory)
+        finally: os.close(fd)
+        with self.assertRaises(ValueError): native.guard()
+
+    def test_store_mode_and_zero_lock_requirements_are_checked(self):
+        native = self.native()
+        self.store.path.chmod(0o755)
+        with self.assertRaises(ValueError): native.guard()
+        self.store.path.chmod(0o700)
+        (self.store.path / 'lock').write_bytes(b'not zero')
+        with self.assertRaises(ValueError): native.guard()
+
+    def test_constructor_rejects_resolved_lima_changed_during_later_retained_receipt_read(self):
+        real_read = self.tool._Files._retained_bytes
+        changed = False
+        def read_then_change(proof, record):
+            nonlocal changed
+            payload = real_read(proof, record)
+            if (proof is self.receipt and not changed
+                    and any(item[0] == self.lima for item in self.runtime_proof.files)):
+                changed = True
+                self.lima.write_bytes(b'changed retained lima\n')
+            return payload
+        with patch.object(self.tool._Files, '_retained_bytes', new=read_then_change), patch.object(self.tool, 'capture_process') as capture:
+            with self.assertRaises(ValueError): self.native()
+            capture.assert_not_called()
+        self.assertTrue(changed)
+
+    def test_constructor_rejects_accepted_docker_changed_during_real_lima_read(self):
+        real_read = self.tool.read_regular
+        changed = False
+        def read_then_change(path, maximum):
+            nonlocal changed
+            payload = real_read(path, maximum)
+            if path == self.lima and not changed:
+                changed = True
+                (self.tools / 'docker').write_bytes(b'changed accepted docker\n')
+            return payload
+        with patch.object(self.tool, 'read_regular', side_effect=read_then_change), patch.object(self.tool, 'capture_process') as capture:
+            with self.assertRaises(ValueError): self.native()
+            capture.assert_not_called()
+        self.assertTrue(changed)
+
+    def test_symlink_original_locator_is_recorded_separately_from_resolved_file(self):
+        resolved = self.root / 'resolved-lima'
+        self.lima.rename(resolved); self.lima.symlink_to(resolved)
+        native = self.native()
+        self.assertEqual(native.lima['locator'], str(self.lima))
+        self.assertEqual(native.lima['resolved'], str(resolved))
+        native.guard()
+        self.lima.unlink(); self.lima.symlink_to(self.colima)
+        with self.assertRaises(ValueError): native.guard()
+
+    def test_observe_requires_zero_exit_and_empty_stderr(self):
+        native = self.native()
+        for result in (CommandResult(1, '', '', b'', b''), CommandResult(0, '', 'warn', b'', b'warn')):
+            with patch.object(self.tool, 'capture_process', return_value=result):
+                with self.assertRaisesRegex(ValueError, 'recovery_native_observation_failed'):
+                    native.observe(('docker', 'context', 'show'), 'global')
+
+    def test_output_persistence_failure_records_uncertainty_and_original_error(self):
+        native = self.native()
+        failure = OSError('fixture stderr persistence failed')
+        real_write = self.store.write
+        def write(name, payload):
+            if name.endswith('.stderr'): raise failure
+            return real_write(name, payload)
+        result = CommandResult(0, 'out', 'err', b'out', b'err')
+        with patch.object(self.tool, 'capture_process', return_value=result), patch.object(self.store, 'write', side_effect=write):
+            with self.assertRaises(OSError) as raised: native.acquire(('docker', 'context', 'show'), 'global')
+        self.assertIs(raised.exception, failure)
+        terminal = json.loads(self.store.journal.read_bytes().splitlines()[-1])['details']
+        self.assertEqual(terminal['certainty'], 'uncertain')
+        self.assertEqual(terminal['stdout_sha256'], hashlib.sha256(b'out').hexdigest())
+        self.assertIsNone(terminal['stderr_sha256'])
+
+    def test_capture_exception_survives_terminal_record_failure(self):
+        native = self.native()
+        failure = OSError('fixture capture failed')
+        real_record = self.store.record
+        def record(event, details):
+            if event == 'command_terminal': raise RuntimeError('fixture journal failed')
+            return real_record(event, details)
+        with patch.object(self.tool, 'capture_process', side_effect=failure), patch.object(self.store, 'record', side_effect=record):
+            with self.assertRaises(OSError) as raised: native.acquire(('docker', 'context', 'show'), 'global')
+        self.assertIs(raised.exception, failure)
+
+
+class Task3ForeignTests(unittest.TestCase):
+    def setUp(self):
+        self.tool = load_tool()
+        self.temporary = tempfile.TemporaryDirectory(prefix='kil-task3-foreign-', dir='/private/tmp')
+        self.addCleanup(self.temporary.cleanup)
+        self.home = Path(self.temporary.name).resolve() / 'home'; self.home.mkdir(mode=0o700)
+        lima = self.home / '.colima/_lima'; (lima / 'colima-kil-v3-lab').mkdir(parents=True, mode=0o700)
+        (lima / '_config').mkdir(mode=0o700); (lima / '_config/networks.yaml').write_bytes(b'networks: {}\n')
+        (lima / '_config/networks.yaml').chmod(0o600)
+        (self.home / '.docker').mkdir(mode=0o700); (self.home / '.docker/config.json').write_bytes(b'{}\n')
+        (self.home / '.docker/config.json').chmod(0o600)
+        (self.home / '.kube').mkdir(mode=0o700)
+        self.row = {'name': 'kil-v3-lab', 'status': 'Stopped', 'arch': 'aarch64',
+                    'cpus': 4, 'memory': 8 * 1024**3, 'disk': 60 * 1024**3, 'runtime': 'docker'}
+        class Native:
+            def __init__(inner, row): inner.row, inner.calls = row, []
+            def observe(inner, argv, namespace):
+                inner.calls.append((argv, namespace))
+                if argv == ('colima', 'list', '--json'):
+                    payload = canonical([inner.row])
+                elif argv == ('docker', 'context', 'show'):
+                    payload = b'default\n'
+                else: raise AssertionError(argv)
+                return CommandResult(0, payload.decode(), '', payload, b'')
+        self.native = Native(self.row)
+
+    def test_foreign_is_stable_and_keeps_default_kubeconfig_inherited_none(self):
+        with patch.multiple(self.tool, HOME=self.home, UID=os.geteuid()), patch.dict(os.environ, {}, clear=True):
+            observed = self.tool._foreign(self.native)
+        self.assertEqual(observed['kubeconfig']['inherited'], None)
+        self.assertEqual(observed['foreign_profiles'], [self.row])
+        self.assertEqual(self.native.calls.count((('colima', 'list', '--json'), 'global')), 2)
+
+    def test_foreign_rejects_inherited_kubeconfig_and_changed_inventory(self):
+        with patch.multiple(self.tool, HOME=self.home, UID=os.geteuid()), patch.dict(os.environ, {'KUBECONFIG': '/tmp/no'}, clear=True):
+            with self.assertRaises(ValueError): self.tool._foreign(self.native)
+        class Changing(type(self.native)):
+            def observe(inner, argv, namespace):
+                result = super().observe(argv, namespace)
+                if argv == ('colima', 'list', '--json') and len(inner.calls) == 1:
+                    inner.row = {**inner.row, 'status': 'Running'}
+                return result
+        with patch.multiple(self.tool, HOME=self.home, UID=os.geteuid()), patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(ValueError): self.tool._foreign(Changing(self.row))
+
+
+class Task3PreflightTests(unittest.TestCase):
+    def test_preflight_refuses_wrong_pinned_colima_version_before_lifecycle(self):
+        tool = load_tool()
+        class Native:
+            def observe(self, argv, namespace):
+                payload = b'wrong\n'
+                return CommandResult(0, 'wrong\n', '', payload, b'')
+        paths = object()
+        with self.assertRaises(ValueError):
+            tool._preflight(Native(), paths, {}, {}, {}, authenticate=True)
+
+
+class Task3IntegratedPreflightTests(unittest.TestCase, RetainedFixture):
+    """Composed Task 3 proof with only process acquisition replaced."""
+    include_native_logs = True
+    def setUp(self):
+        self.tool = load_tool()
+        self.temporary = tempfile.TemporaryDirectory(prefix='kil-task3-integrated-', dir='/private/tmp')
+        self.addCleanup(self.temporary.cleanup)
+        (self.home, self.registry, self.runtime, self.receipt_path, self.paths,
+         self.original, self.binding, self.manifest) = self.retained_fixture()
+        (self.paths.colima / 'ssh_config').chmod(0o644)
+        self.tools = self.home / 'tools'; self.tools.mkdir(mode=0o700)
+        records = {}
+        for name in ('docker', 'kind', 'kubectl'):
+            payload = ('tool ' + name + '\n').encode(); path = self.tools / name
+            path.write_bytes(payload); path.chmod(0o755)
+            records[name] = {'executable_sha256': hashlib.sha256(payload).hexdigest(), 'byte_size': len(payload)}
+        self.accepted_manifest = self.home / 'manifest.json'
+        manifest = canonical({'verified_tool_identities': records})
+        self.accepted_manifest.write_bytes(manifest); self.accepted_manifest.chmod(0o644)
+        self.colima = self.home / 'colima'; self.colima.write_bytes(b'colima fixture\n'); self.colima.chmod(0o755)
+        self.bin = self.home / 'bin'; self.bin.mkdir(mode=0o700)
+        (self.bin / 'limactl').write_bytes(b'lima fixture\n'); (self.bin / 'limactl').chmod(0o755)
+        global_lima = self.home / '.colima/_lima'
+        (global_lima / 'colima-kil-v3-lab').mkdir(parents=True, mode=0o700)
+        (global_lima / '_config').mkdir(mode=0o700)
+        (global_lima / '_config/networks.yaml').write_bytes(b'networks: {}\n')
+        (global_lima / '_config/networks.yaml').chmod(0o600)
+        (self.home / '.docker').mkdir(mode=0o700); (self.home / '.docker/config.json').write_bytes(b'{}\n')
+        (self.home / '.docker/config.json').chmod(0o600)
+        (self.home / '.kube').mkdir(mode=0o700)
+        self.store = self.tool.PrivateStore(self.home / 'recovery-store'); self.addCleanup(self.store.close)
+        self.receipt = self.tool._Files()
+        self.addCleanup(self.receipt.close)
+        self.private_row = {'name': 'kil-v3-lab', 'status': 'Running', 'arch': 'aarch64', 'cpus': 4,
+                            'memory': 8 * 1024**3, 'disk': 60 * 1024**3, 'runtime': 'docker'}
+        self.foreign_row = {**self.private_row, 'status': 'Stopped'}
+        self.root_id = self.tool._id(self.runtime.lstat())
+        self.ssh_bytes = (self.paths.colima / 'ssh_config').read_bytes()
+        self.ssh_pin = (hashlib.sha256(self.ssh_bytes).hexdigest(), len(self.ssh_bytes))
+        self.accepted_pin = hashlib.sha256(manifest).hexdigest()
+        self.colima_pin = (hashlib.sha256(self.colima.read_bytes()).hexdigest(), self.colima.stat().st_size)
+        self.observed_home = self.home
+        self.dispatches = []
+        self.private_payload = None
+        self.foreign_payload = None
+        self.ps_payload = b''
+        self.context_payload = b'default\n'
+        self.saved_files = self.sealed_files(self.original_foreign(global_lima))
+        self.saved_manifest = (self.receipt_path / 'SHA256SUMS').read_bytes()
+
+    def original_foreign(self, lima):
+        # Build the original sealed document before authentication, independently
+        # of _foreign and its native observations. Never refresh this baseline.
+        def fingerprint(path):
+            if not path.exists():
+                return {'path': str(path), 'present': False, 'identity': None,
+                        'byte_count': None, 'sha256': None}
+            row, payload = path.lstat(), path.read_bytes()
+            return {'path': str(path), 'present': True,
+                    'identity': {key: getattr(row, key) for key in
+                                 ('st_dev', 'st_ino', 'st_mode', 'st_size', 'st_mtime_ns', 'st_ctime_ns')},
+                    'byte_count': len(payload), 'sha256': hashlib.sha256(payload).hexdigest()}
+        def identity(path):
+            row = path.lstat()
+            return {'device': row.st_dev, 'inode': row.st_ino, 'mode': row.st_mode}
+        names = sorted(path.name for path in lima.iterdir())
+        return {'foreign_profiles': [dict(self.foreign_row)],
+                'foreign_lima_roster': {'directory': {**identity(lima), 'entries': names},
+                                       'children': [{'name': name, **identity(lima / name)} for name in names]},
+                'global_docker_context': 'default',
+                'default_networks': _read(lima / '_config/networks.yaml'),
+                'global_docker_config': str(self.home / '.docker'),
+                'global_docker_directory': {**identity(self.home / '.docker'), 'entries': ['config.json']},
+                'global_docker_file': fingerprint(self.home / '.docker/config.json'),
+                'kubeconfig': {'inherited': None, 'files': [fingerprint(self.home / '.kube/config')]}}
+
+    def selectors(self):
+        return (patch.multiple(self.tool, HOME=self.home, RUNTIME=self.runtime, UID=os.geteuid(), TOOLS=self.tools,
+                               RECEIPT=self.receipt_path, ROOT_ID=self.root_id,
+                               DIGEST=self.receipt_path.name.removeprefix('hf-exploratory-'),
+                               MANIFEST_PIN=(hashlib.sha256(self.saved_manifest).hexdigest(), len(self.saved_manifest)),
+                               COLIMA=self.colima, ACCEPTED_MANIFEST=self.accepted_manifest,
+                               ACCEPTED_MANIFEST_SHA256=self.accepted_pin,
+                               COLIMA_PIN=self.colima_pin, SSH_PIN=self.ssh_pin,
+                               passwd_home=lambda: self.observed_home),
+                patch.dict(os.environ, {'PATH': str(self.bin)}, clear=True))
+
+    def native(self):
+        for selector in self.selectors():
+            selector.start(); self.addCleanup(selector.stop)
+        selector = patch.object(self.tool, 'capture_process', side_effect=self.capture)
+        selector.start(); self.addCleanup(selector.stop)
+        (self.runtime_proof, self.files, self.authenticated_paths,
+         self.report, self.authenticated_original) = self.tool._retained(self.receipt)
+        self.addCleanup(self.runtime_proof.close)
+        self.assertEqual(self.files, self.saved_files)
+        self.assertEqual(self.authenticated_original, self.original)
+        return self.tool._Native(self.receipt, self.runtime_proof, self.authenticated_paths, self.store)
+
+    def preflight(self, native, authenticate=True):
+        return self.tool._preflight(native, self.authenticated_paths, self.report,
+                                    self.authenticated_original, self.files, authenticate)
+
+    def assert_receipt_unchanged(self):
+        self.assertEqual({path.name: path.read_bytes() for path in self.receipt_path.iterdir()},
+                         {**self.saved_files, 'SHA256SUMS': self.saved_manifest})
+
+    def last_auth_mutation(self, native, mutate, *, refuse=True, authenticate=True):
+        real_read = self.tool.read_regular
+        dispatch_count = len(self.dispatches) + (7 if self.private_row['status'] == 'Running' else 6)
+        changed = False
+        def read_then_change(path, maximum):
+            nonlocal changed
+            payload = real_read(path, maximum)
+            if path == self.bin / 'limactl' and len(self.dispatches) == dispatch_count and not changed:
+                changed = True
+                mutate()
+            return payload
+        with patch.object(self.tool, 'read_regular', side_effect=read_then_change):
+            if refuse:
+                with self.assertRaises(ValueError): self.preflight(native, authenticate)
+            else:
+                self.preflight(native, authenticate)
+        self.assertTrue(changed)
+
+    def result(self, argv):
+        tail = argv[1:]
+        if argv[0] == str(self.colima) and tail == ('version',): payload = self.tool.COLIMA_VERSION
+        elif argv[0] == str(self.bin / 'limactl'): payload = b'limactl version 2.2.0\n'
+        elif argv[0] == str(self.colima) and tail == ('list', '--json'):
+            private = 'COLIMA_HOME' in self.last_environment
+            override = self.private_payload if private else self.foreign_payload
+            payload = override if override is not None else canonical([self.private_row if private else self.foreign_row])
+        elif argv[0] == str(self.tools / 'docker') and tail == ('context', 'show'): payload = self.context_payload
+        elif argv[0] == str(self.tools / 'docker') and tail[0] == '--host' and tail[2:] == ('ps', '--all', '--quiet', '--no-trunc'): payload = self.ps_payload
+        else: raise AssertionError(argv)
+        return CommandResult(0, payload.decode('utf-8', 'replace'), '', payload, b'')
+
+    def capture(self, argv, environment, stdin, timeout, maximum, cwd):
+        self.dispatches.append((argv, environment, stdin, timeout, maximum, cwd))
+        self.last_environment = environment
+        return self.result(argv)
+
+    def sealed_files(self, foreign):
+        records = {path.name: path.read_bytes() for path in self.receipt_path.iterdir()
+                   if path.name != 'SHA256SUMS'}
+        self.assertEqual(len(records), 46)
+        for name in ('file-0000.json', 'file-0001.json'):
+            (self.receipt_path / name).unlink(); records.pop(name)
+        records['foreign-original.json'] = canonical(foreign)
+        records['runtime-kind-config.yaml'] = (self.runtime / 'kind-config.yaml').read_bytes()
+        for name in ('foreign-original.json', 'runtime-kind-config.yaml'):
+            (self.receipt_path / name).write_bytes(records[name]); (self.receipt_path / name).chmod(0o600)
+        manifest = b''.join(hashlib.sha256(payload).hexdigest().encode() + b'  ' + name.encode() + b'\n'
+                            for name, payload in sorted(records.items()))
+        (self.receipt_path / 'SHA256SUMS').write_bytes(manifest); (self.receipt_path / 'SHA256SUMS').chmod(0o600)
+        self.assertEqual(len(records), 46)
+        return records
+
+    def test_real_native_and_preflight_accept_exact_running_fixture(self):
+        native = self.native()
+        self.assertEqual(self.dispatches, [])
+        preflight, payloads = self.preflight(native)
+        self.assertEqual(preflight['private_inventory'], [self.private_row])
+        self.assertEqual(preflight['foreign']['foreign_profiles'], [self.foreign_row])
+        self.assertEqual(payloads['kind.yaml'], self.files['runtime-kind-config.yaml'])
+        self.assertEqual(len(self.dispatches), 7)
+        self.assert_receipt_unchanged()
+
+    def test_real_native_preflight_rejects_nonempty_private_docker(self):
+        native = self.native()
+        self.ps_payload = b'id\n'
+        with self.assertRaisesRegex(ValueError, 'recovery_private_docker_is_not_empty'):
+            self.preflight(native)
+        self.assert_receipt_unchanged()
+
+    def test_authenticate_false_never_skips_original_ssh_pin(self):
+        (self.paths.colima / 'ssh_config').write_bytes(b'wrong original SSH\n')
+        native = self.native()
+        with self.assertRaises(ValueError):
+            self.preflight(native, authenticate=False)
+
+    def test_preflight_refuses_foreign_file_changed_during_final_native_authentication(self):
+        native = self.native()
+        self.last_auth_mutation(native, lambda: (self.home / '.docker/config.json').write_bytes(b'{"late":true}\n'))
+
+    def test_true_and_false_preflights_return_identical_fresh_observations(self):
+        native = self.native()
+        first = self.preflight(native)
+        second = self.preflight(native, authenticate=False)
+        self.assertEqual(first, second)
+        self.assertFalse(native.after_stop)
+        self.assertEqual(len(self.dispatches), 14)
+        self.assertEqual(len(first[1]), 12)
+        self.assertIsNone(first[1]['instance-ssh.config'])
+        self.assertEqual(first[1]['ha.stdout.log'], b'original log\n')
+        retained = {record[0] for record in native.runtime.files}
+        self.assertNotIn(self.paths.instance / 'ha.pid', retained)
+        self.assertNotIn(self.paths.instance / 'ha.stdout.log', retained)
+        self.assert_receipt_unchanged()
+
+    def test_stopped_lock_release_keeps_original_running_capture_and_skips_ps(self):
+        (self.paths.disk / 'in_use_by').unlink()
+        self.private_row['status'] = 'Stopped'
+        native = self.native()
+        preflight, _ = self.preflight(native)
+        self.assertEqual(preflight['status'], 'Stopped')
+        self.assertIsNotNone(self.authenticated_original['lock'])
+        self.assertIsNone(preflight['footprint']['lock'])
+        self.assertEqual(len(self.dispatches), 6)
+        self.assertFalse(any('--host' in call[0] for call in self.dispatches))
+        self.assertFalse(native.after_stop)
+        self.assert_receipt_unchanged()
+
+    def test_wrong_ssh_before_initial_authentication_is_not_resealed(self):
+        (self.paths.colima / 'ssh_config').write_bytes(b'wrong SSH\n')
+        native = self.native()
+        with self.assertRaises(ValueError): self.preflight(native)
+        self.assertEqual(self.tool.SSH_PIN, self.ssh_pin)
+        self.assert_receipt_unchanged()
+
+    def test_ssh_change_during_false_preflight_still_refuses_before_stop(self):
+        native = self.native()
+        self.preflight(native)
+        self.last_auth_mutation(native, lambda: (self.paths.colima / 'ssh_config').write_bytes(b'late SSH\n'),
+                                authenticate=False)
+        self.assertFalse(native.after_stop)
+
+    def test_kind_mode_and_sealed_bytes_are_required_even_without_rebinding(self):
+        native = self.native()
+        kind = self.runtime / 'kind-config.yaml'
+        kind.chmod(0o644)
+        with self.assertRaisesRegex(ValueError, 'recovery_control_mode_is_invalid'):
+            self.preflight(native, authenticate=False)
+        kind.chmod(0o600); kind.write_bytes(b'changed kind\n')
+        with self.assertRaisesRegex(ValueError, 'recovery_kind_control_changed'):
+            self.preflight(native, authenticate=False)
+
+    def test_yaml_mode_is_checked_in_composed_preflight(self):
+        native = self.native()
+        (self.paths.instance / 'lima.yaml').chmod(0o600)
+        with self.assertRaises(ValueError): self.preflight(native)
+
+    def test_changed_original_foreign_config_is_not_adopted(self):
+        (self.home / '.docker/config.json').write_bytes(b'{"changed":true}\n')
+        native = self.native()
+        with self.assertRaisesRegex(ValueError, 'recovery_foreign_state_changed'): self.preflight(native)
+        self.assert_receipt_unchanged()
+
+    def test_changed_global_context_is_not_adopted(self):
+        native = self.native()
+        self.context_payload = b'other\n'
+        with self.assertRaisesRegex(ValueError, 'recovery_foreign_state_changed'): self.preflight(native)
+
+    def test_changed_global_roster_is_not_adopted(self):
+        native = self.native()
+        (self.home / '.colima/_lima/colima-unknown').mkdir(mode=0o700)
+        with self.assertRaises(ValueError): self.preflight(native)
+
+    def test_composed_inventory_rejects_empty_partial_malformed_and_unknown_rows(self):
+        native = self.native()
+        for payload in (b'', b'[]\n', b'{', canonical([{**self.private_row, 'unknown': True}]),
+                        canonical([{**self.private_row, 'cpus': 2}])):
+            self.private_payload = payload
+            with self.subTest(payload=payload), self.assertRaises(ValueError): self.preflight(native)
+
+    def test_private_ps_whitespace_is_not_empty(self):
+        native = self.native()
+        self.ps_payload = b'\n'
+        with self.assertRaisesRegex(ValueError, 'recovery_private_docker_is_not_empty'): self.preflight(native)
+
+    def test_final_native_read_cannot_change_earlier_receipt(self):
+        native = self.native()
+        self.last_auth_mutation(native, lambda: (self.receipt_path / 'file-0002.json').write_bytes(b'{"late":true}\n'))
+
+    def test_final_native_read_cannot_replace_accepted_docker(self):
+        native = self.native()
+        self.last_auth_mutation(native, lambda: (self.tools / 'docker').write_bytes(b'late docker\n'))
+
+    def test_final_native_read_cannot_change_passwd_home(self):
+        native = self.native()
+        self.last_auth_mutation(native, lambda: setattr(self, 'observed_home', self.home / 'other'))
+
+    def test_final_native_read_cannot_change_effective_uid(self):
+        native = self.native()
+        uid, changed = os.geteuid(), False
+        def change():
+            nonlocal changed
+            changed = True
+        with patch.object(self.tool.os, 'geteuid', side_effect=lambda: uid + 1 if changed else uid):
+            self.last_auth_mutation(native, change)
+
+    def test_final_native_read_cannot_change_earlier_yaml(self):
+        native = self.native()
+        self.last_auth_mutation(native, lambda: (self.paths.profile / 'colima.yaml').write_bytes(b'late YAML\n'))
+
+    def test_final_native_read_cannot_replace_earlier_disk(self):
+        native = self.native()
+        data = self.paths.disk / 'datadisk'
+        def replace():
+            size, mode = data.stat().st_size, stat.S_IMODE(data.stat().st_mode)
+            data.rename(self.registry / 'saved-datadisk')
+            with data.open('wb') as stream: stream.truncate(size)
+            data.chmod(mode)
+        self.last_auth_mutation(native, replace)
+
+    def test_final_native_read_cannot_add_private_namespace_entry(self):
+        native = self.native()
+        self.last_auth_mutation(native, lambda: (self.runtime / 'unexpected').write_bytes(b'late\n'))
+
+    def test_final_native_read_cannot_change_transient_present_control(self):
+        native = self.native()
+        self.last_auth_mutation(native, lambda: (self.paths.instance / 'ha.stdout.log').write_bytes(b'late log\n'))
+
+    def test_final_native_read_cannot_create_transient_absent_control(self):
+        native = self.native()
+        self.last_auth_mutation(native, lambda: (self.paths.instance / 'ssh.config').write_bytes(b'late ssh\n'))
+
+    def test_guest_disk_write_beyond_header_is_not_a_whole_disk_fingerprint(self):
+        native = self.native()
+        def write_guest():
+            with (self.paths.disk / 'datadisk').open('r+b') as stream:
+                stream.seek(1024); stream.write(b'ordinary guest write')
+        self.last_auth_mutation(native, write_guest, refuse=False)
+        self.assert_receipt_unchanged()
+
+    def test_unrelated_registry_sibling_is_not_part_of_final_scope(self):
+        native = self.native()
+        self.last_auth_mutation(native, lambda: (self.registry / 'unrelated-runtime').mkdir(mode=0o700), refuse=False)
+        self.assert_receipt_unchanged()
+
+    def test_last_foreign_roster_read_cannot_reanchor_private_disk(self):
+        from kil import v3b2_profile_state as profile_state
+        native = self.native()
+        actual_read, reads, changed = profile_state._read, 0, False
+        def read_then_change(path, **kwargs):
+            nonlocal reads, changed
+            value = actual_read(path, **kwargs)
+            if path == self.home / '.colima/_lima' and len(self.dispatches) == 7:
+                reads += 1
+                if reads == 2:
+                    changed = True
+                    data = self.paths.disk / 'datadisk'
+                    size, mode = data.stat().st_size, stat.S_IMODE(data.stat().st_mode)
+                    data.rename(self.registry / 'late-saved-disk')
+                    with data.open('wb') as stream: stream.truncate(size)
+                    data.chmod(mode)
+            return value
+        with patch.object(profile_state, '_read', side_effect=read_then_change):
+            try:
+                self.preflight(native)
+            except ValueError:
+                self.assertTrue(changed)
+            else:
+                self.assertEqual(reads, 0, 'successful closure must not reopen a foreign roster content read')
+
+    def test_final_foreign_metadata_performs_no_directory_or_file_content_reads(self):
+        self.native()
+        roster = json.loads(self.saved_files['foreign-original.json'])['foreign_lima_roster']
+        with patch.object(self.tool, 'capture_roster', wraps=self.tool.capture_roster) as roster_reads, \
+             patch.object(self.tool, '_read', wraps=self.tool._read) as content_reads, \
+             patch.object(self.tool, 'read_regular', wraps=self.tool.read_regular) as file_reads, \
+             patch.object(os, 'scandir', wraps=os.scandir) as listings, \
+             patch.object(os, 'listdir', wraps=os.listdir) as names:
+            self.tool._foreign_metadata(roster)
+        for call in (roster_reads, content_reads, file_reads, listings, names): call.assert_not_called()
+
+    def last_foreign_roster_mutation(self, mutate):
+        from kil import v3b2_profile_state as profile_state
+        native = self.native()
+        actual_read, reads, changed = profile_state._read, 0, False
+        def read_then_change(path, **kwargs):
+            nonlocal reads, changed
+            value = actual_read(path, **kwargs)
+            # The second _read closes the final roster after the second global
+            # list command. Mutation is real and precedes only later checks.
+            if path == self.home / '.colima/_lima' and len(self.dispatches) == 6:
+                reads += 1
+                if reads == 2:
+                    changed = True
+                    mutate()
+            return value
+        with patch.object(profile_state, '_read', side_effect=read_then_change):
+            with self.assertRaises(ValueError): self.preflight(native)
+        self.assertTrue(changed)
+
+    def test_last_remaining_foreign_roster_content_read_cannot_replace_private_disk(self):
+        def replace():
+            data = self.paths.disk / 'datadisk'
+            size, mode = data.stat().st_size, stat.S_IMODE(data.stat().st_mode)
+            data.rename(self.registry / 'late-roster-disk')
+            with data.open('wb') as stream: stream.truncate(size)
+            data.chmod(mode)
+        self.last_foreign_roster_mutation(replace)
+
+    def test_last_remaining_foreign_roster_content_read_cannot_add_private_namespace_entry(self):
+        self.last_foreign_roster_mutation(lambda: (self.runtime / 'late-namespace').write_bytes(b'changed\n'))
+
+    def test_last_native_read_cannot_create_previously_absent_global_kubeconfig(self):
+        native = self.native()
+        self.last_auth_mutation(native, lambda: (self.home / '.kube/config').write_bytes(b'late config\n'))
+
+    def test_last_native_read_cannot_replace_known_global_roster_child(self):
+        native = self.native()
+        child = self.home / '.colima/_lima/colima-kil-v3-lab'
+        def replace():
+            child.rename(self.home / 'old-global-child'); child.mkdir(mode=0o700)
+        self.last_auth_mutation(native, replace)
+
+    def test_last_native_read_cannot_add_unknown_global_roster_child(self):
+        native = self.native()
+        self.last_auth_mutation(native, lambda: (self.home / '.colima/_lima/colima-unknown').mkdir(mode=0o700))
+
+    def test_foreign_context_parser_rejects_empty_decoded_line(self):
+        native = self.native()
+        for payload in (b'\n', b' \n', b'\t\n'):
+            self.context_payload = payload
+            with self.subTest(payload=payload), self.assertRaises(ValueError): self.tool._foreign(native)
+
+    def test_final_foreign_metadata_requires_bounded_valid_original_roster(self):
+        self.native()
+        roster = json.loads(self.saved_files['foreign-original.json'])['foreign_lima_roster']
+        roster['directory']['entries'][1] = 'unrecognized'
+        roster['children'][1]['name'] = 'unrecognized'
+        with self.assertRaises(ValueError): self.tool._foreign_metadata(roster)
+
+    def test_global_empty_inventory_is_valid_only_when_actual_roster_is_empty(self):
+        native = self.native()
+        self.foreign_payload = b''
+        with self.assertRaises(ValueError): self.tool._foreign(native)
+        (self.home / '.colima/_lima/colima-kil-v3-lab').rmdir()
+        observed = self.tool._foreign(native)
+        self.assertEqual(observed['foreign_profiles'], [])
+        self.assertEqual(observed['foreign_lima_roster']['directory']['entries'], ['_config'])
+        with self.assertRaisesRegex(ValueError, 'recovery_foreign_state_changed'): self.preflight(native)
+        self.assert_receipt_unchanged()
+
+    def test_global_empty_inventory_is_valid_when_actual_roster_is_absent(self):
+        native = self.native()
+        self.foreign_payload = b'[]\n'
+        lima = self.home / '.colima/_lima'
+        (lima / 'colima-kil-v3-lab').rmdir()
+        (lima / '_config/networks.yaml').unlink()
+        (lima / '_config').rmdir(); lima.rmdir()
+        observed = self.tool._foreign(native)
+        self.assertEqual(observed['foreign_profiles'], [])
+        self.assertIsNone(observed['foreign_lima_roster'])
+        self.assertFalse(lima.exists())
+        self.assert_receipt_unchanged()
+
+    def test_foreign_context_requires_bounded_utf8_single_lf_without_cr(self):
+        native = self.native()
+        for payload in (b'', b'default', b'default\r\n', b'default\nother\n', b'\xff\n', b'x' * 4096 + b'\n'):
+            self.context_payload = payload
+            with self.subTest(payload=payload[:32]), self.assertRaises(ValueError): self.tool._foreign(native)
+
+    def test_stopped_preflight_accepts_all_permitted_control_removals_without_ps(self):
+        for parent, names in ((self.paths.profile, ('docker.sock', 'containerd.sock')),
+                              (self.paths.instance, ('ha.pid', 'ha.sock', 'ssh.sock', 'vz.pid'))):
+            for name in names: (parent / name).unlink()
+        (self.paths.disk / 'in_use_by').unlink(); (self.paths.colima / 'ssh_config').unlink()
+        self.private_row['status'] = 'Stopped'
+        native = self.native()
+        preflight, payloads = self.preflight(native)
+        self.assertEqual(preflight['status'], 'Stopped')
+        for label in ('colima-ssh.config', 'ha.pid', 'vz.pid'): self.assertIsNone(payloads[label])
+        self.assertEqual(len(self.dispatches), 6)
+        self.assert_receipt_unchanged()
+
+    def test_final_native_read_cannot_change_real_uid(self):
+        native = self.native()
+        uid, changed = os.getuid(), False
+        def change():
+            nonlocal changed
+            changed = True
+        with patch.object(self.tool.os, 'getuid', side_effect=lambda: uid + 1 if changed else uid):
+            self.last_auth_mutation(native, change)
 
 
 if __name__ == '__main__':

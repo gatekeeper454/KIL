@@ -1348,3 +1348,26 @@ supplemental defects. Only the fixed tool/test and append-only plan/lineage read
 changed; no native command, actual runtime/receipt access or recovery reservation.
 Next is Task3 under the same preparation approval. Tasks3–5 are not yet complete;
 Task6 and the live HF test remain unapproved.
+
+Task3 is VERIFIED at the subsequent engineering checkpoint. Component work was
+split from remaining composed coverage after the first implementer's explicit
+DONE_WITH_CONCERNS/NEEDS_CONTEXT handoff; a fresh-context continuation completed
+the same approved scope. Full fixtures authenticate all46 sealed files through
+_retained, then real _Native/_preflight, rather than bypassing receipt proof.
+The closed read grammar records exact effective executable argv/environment,
+bounds/cwd, raw stdout/stderr and returned-versus-uncertain terminal evidence.
+Cross-proof, locator/PATH-choice, original foreign-state, control-copy identity
+and accepted-prefix late-addition defects received genuine RED tests/minimum
+fixes. Final metadata helpers do not reopen directory/content reads. SSH
+relaxation depends only on internal after-stop state, never skip-rebinding.
+Final implementer125/45.228s, independent spec PASS125/45.101s, independent quality
+PASS125/41.377s; root fresh four-module regression328/220.432s OK with bytecode
+disabled/ResourceWarning fatal. Quality found no Critical/Important issue; its
+nonblocking repeated-manifest descriptor observation is recorded for bounded
+Task4 review, not concealed. Running/Stopped fixture preflights used seven/six
+simulated reads; actual Colima/Lima/Docker acquisitions zero. Generic IO fixture
+child Python processes are not represented as live native VM activity.
+No actual runtime/receipt access, recovery reservation or native stop. Next is
+Task4 under the same preparation approval; Tasks4–5 are not yet complete and
+Task6 remains separately unapproved. Accepted local Envoy is unchanged; platform
+image provenance stays unverified and full Kind/Calico acceptance false.

@@ -23356,3 +23356,86 @@ a fresh implementer and ordered independent reviews under existing preparation
 approval. No actual live preflight, evidence reservation, stop or new rehearsal.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T426 — 2026-09-17, closed native-observation and original-state Task3 verified
+
+**Input:** Continue confirmed subagent-driven fixture preparation from Task2
+checkpoint1b0a670092af00544ad6fc7ad284fd778ec27663, with independent reviews.
+
+**Interpretation:** CONFIRMED Task3 engineering under approved Tasks1–5, not live
+VM observation/recovery. The first component implementer explicitly handed off
+DONE_WITH_CONCERNS/NEEDS_CONTEXT; root split remaining composed coverage into a
+fresh-context specialist continuation without widening approved file/authority
+boundaries. Root owns shared-index commits and append-only records.
+
+**Decision status:** CONFIRMED Task3 complete after spec-then-quality review and
+fresh root regressions. Task4 orchestration and Task5 final acceptance remain
+unverified; Task6 actual preflight/reservation/stop remains UNAPPROVED.
+
+**Rationale/evidence:** Component REDs preceded missing final-proof/inventory/
+fingerprint/control/native/foreign/preflight behavior. An actual delegated late
+runtime read replacing earlier receipt bytes demonstrated the cross-proof RED;
+final metadata closes BOTH proofs after all content IO. Full integration now
+seals independently constructed original foreign rows/files/roster and Kind into
+exact46 fixture files BEFORE auth, then authenticates _retained->_Native->_preflight.
+Raw unguarded receipt dictionaries and partial reports are not acceptance proof.
+
+Genuine defect REDs/minimum fixes include a literal ACCEPTED_RUN default-path
+placeholder hidden by selector patches; authenticate=False prematurely relaxing
+SSH; missing retained Lima descriptor; higher-priority PATH locator appearing
+during later auth; foreign-file drift during final Lima read; unknown original
+roster validation and nonempty context parser; control fingerprint/copy inode
+continuity, including replacement after observation before target FD open;
+durable cwd and honest terminal certainty. Adding a final foreign capture_roster
+moved another ordering hole: final foreign metadata now stats only bounded known
+children/parents/files, with no late directory listing. Separate tests prove the
+removed-read invariant and actual last remaining roster mutation rejection.
+
+Independent spec review then confirmed P1: an unaccepted fourth TOOLS/limactl
+added during SECOND final Lima auth survived the early three-tool roster check
+and reached one mocked dispatch. This was a fixed-adapter acceptance defect,
+not observed live VM exploitation. Permanent genuine RED1/0.058s preceded final
+accepted-directory fullfid8 retained-FD/name validation after ALL auth IO; GREEN
+1/0.042s and independent reproduction both prove zero mocked capture. Neither
+fix rereads directory contents at the final boundary nor freezes unrelated
+ancestor/registry-child epochs or guest disk timestamps/content.
+
+Final implementer125 tests/45.228s OK; independent spec PASS125/45.101s, including
+late-prefix refusal; fresh independent quality PASS125/41.377s, no Critical or
+Important findings. Root fresh local+IO/native/Colima-inventory regression328
+tests/220.432s OK, bytecode disabled/ResourceWarning fatal. Earlier327 combined
+runs225.719s and220.992s are superseded intermediate observations, not final
+candidate proof. Quality's Minor is disclosed: _manifest repeatedly retains the
+same immutable manifest; real fixture counts1,2,3 across constructor/two guards.
+Nonblocking for this finite one-shot workflow; carry it into bounded Task4 review.
+
+**Affected artifacts:** Only tools/hf_compact_residual_recovery.py and
+tests/test_hf_compact_residual_recovery.py executable changes; factual plan/reader
+and actual-EOF lineage/reader append. Logical read aliases/CommandResult returns
+are justified internal adaptations: effective argv is fixed pinned absolute,
+minimal environments and exact bounds/cwd are durably recorded. Controls use
+independent transient proofs; absent payloads are None and later persistence
+must skip them. Native.after_stop starts False; Task3 never changes it. Store
+FD/name/lock and tool/locator/account cross-IO checks remain scoped and no-follow.
+
+Successful fixture preflights dispatch seven Running/six Stopped simulated reads
+(fourteen for repeated preflights); actual Colima/Lima/Docker activity ZERO.
+Existing generic IO tests can run child Python processes; no all-subprocess-zero
+claim. Production sources/old tests/tools/strict contracts/accepted artifacts/
+historical receipts/runtime/disks/citation policy remain unchanged. Root static
+read-only accepted-manifest check confirmed existing SHAfa39212f…541cd0/11071B,
+UID501/mode0644; this is not a platform-image provenance audit. No HF request,
+live preflight/stop/delete/force/retry/reservation, Ollama operation or new rehearsal.
+
+**Unresolved questions:** Tasks4–5 remain to engineer/verify. Current VM status
+is still unobserved; historical Running is not refreshed by fixtures. Accepted
+local Envoy remains unchanged, image provenance unverified/full Kind-Calico
+acceptance false. Four historical immutable citation omissions remain disclosed.
+
+**Next gate:** Preserve the entire1b0a670 predecessor lineage prefix1,377,851B;
+render/check94 readers, protected paths/exact diffs, then commit only tool/test
+plus plan/lineage Markdown-reader pairs. Execute Task4 with a fresh implementer,
+genuine REDs and ordered independent reviews under existing engineering approval.
+No actual VM preflight/evidence reservation/stop until separate execution approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

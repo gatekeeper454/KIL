@@ -6,7 +6,7 @@
 <title>Compact residual HF VM recovery preparation implementation plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-17-hf-compact-residual-vm-recovery.md">
-<meta name="source-sha256" content="03258b4f7ca830146151a29ea5e942445a7732cf8a48ef094a7f941fafa93ce0">
+<meta name="source-sha256" content="81e4b3117c40f75e9763b45eff8117923384a6cfa8adf5278304f4c5d511d431">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-compact-residual-vm-recovery.md</code> (<code>03258b4f7ca830146151a29ea5e942445a7732cf8a48ef094a7f941fafa93ce0</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-compact-residual-vm-recovery.md</code> (<code>81e4b3117c40f75e9763b45eff8117923384a6cfa8adf5278304f4c5d511d431</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Compact residual HF VM recovery preparation implementation plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-compact-residual-vm-recovery.md</code> (<code>03258b4f7ca830146151a29ea5e942445a7732cf8a48ef094a7f941fafa93ce0</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-compact-residual-vm-recovery.md</code> (<code>81e4b3117c40f75e9763b45eff8117923384a6cfa8adf5278304f4c5d511d431</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#compact-residual-hf-vm-recovery-preparation-implementation-plan">Compact residual HF VM recovery preparation implementation plan</a></li><li class="level-2"><a href="#approval-workspace-and-file-boundary">Approval, workspace and file boundary</a></li><li class="level-2"><a href="#common-test-command-and-baseline">Common test command and baseline</a></li><li class="level-2"><a href="#task-1-real-file-ancestry-proof-with-a-fixed-target">Task 1: Real file/ancestry proof with a fixed target</a></li><li class="level-2"><a href="#task-2-authenticated-receipt-and-exact-saved-footprint">Task 2: Authenticated receipt and exact saved footprint</a></li><li class="level-2"><a href="#task-3-closed-native-observations-original-foreign-baseline-and-control-copies">Task 3: Closed native observations, original foreign baseline and control copies</a></li><li class="level-2"><a href="#task-4-durable-one-stop-transaction-and-honest-post-observation">Task 4: Durable one-stop transaction and honest post-observation</a></li><li class="level-2"><a href="#task-5-independent-engineering-review-and-preparation-handoff">Task 5: Independent engineering review and preparation handoff</a></li><li class="level-2"><a href="#task-6-later-native-attempt-blocked-until-explicit-execution-approval">Task 6: Later native attempt — blocked until explicit execution approval</a></li><li class="level-2"><a href="#plan-self-review-and-coverage">Plan self-review and coverage</a></li><li class="level-2"><a href="#engineering-execution-record-2026-09-17">Engineering execution record — 2026-09-17</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="compact-residual-hf-vm-recovery-preparation-implementation-plan" href="#compact-residual-hf-vm-recovery-preparation-implementation-plan">Compact residual HF VM recovery preparation implementation plan</a></li><li class="level-2"><a data-section-id="approval-workspace-and-file-boundary" href="#approval-workspace-and-file-boundary">Approval, workspace and file boundary</a></li><li class="level-2"><a data-section-id="common-test-command-and-baseline" href="#common-test-command-and-baseline">Common test command and baseline</a></li><li class="level-2"><a data-section-id="task-1-real-file-ancestry-proof-with-a-fixed-target" href="#task-1-real-file-ancestry-proof-with-a-fixed-target">Task 1: Real file/ancestry proof with a fixed target</a></li><li class="level-2"><a data-section-id="task-2-authenticated-receipt-and-exact-saved-footprint" href="#task-2-authenticated-receipt-and-exact-saved-footprint">Task 2: Authenticated receipt and exact saved footprint</a></li><li class="level-2"><a data-section-id="task-3-closed-native-observations-original-foreign-baseline-and-control-copies" href="#task-3-closed-native-observations-original-foreign-baseline-and-control-copies">Task 3: Closed native observations, original foreign baseline and control copies</a></li><li class="level-2"><a data-section-id="task-4-durable-one-stop-transaction-and-honest-post-observation" href="#task-4-durable-one-stop-transaction-and-honest-post-observation">Task 4: Durable one-stop transaction and honest post-observation</a></li><li class="level-2"><a data-section-id="task-5-independent-engineering-review-and-preparation-handoff" href="#task-5-independent-engineering-review-and-preparation-handoff">Task 5: Independent engineering review and preparation handoff</a></li><li class="level-2"><a data-section-id="task-6-later-native-attempt-blocked-until-explicit-execution-approval" href="#task-6-later-native-attempt-blocked-until-explicit-execution-approval">Task 6: Later native attempt — blocked until explicit execution approval</a></li><li class="level-2"><a data-section-id="plan-self-review-and-coverage" href="#plan-self-review-and-coverage">Plan self-review and coverage</a></li><li class="level-2"><a data-section-id="engineering-execution-record-2026-09-17" href="#engineering-execution-record-2026-09-17">Engineering execution record — 2026-09-17</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -1372,6 +1372,28 @@ supplemental defects. Only the fixed tool/test and append-only plan/lineage read
 changed; no native command, actual runtime/receipt access or recovery reservation.
 Next is Task3 under the same preparation approval. Tasks3–5 are not yet complete;
 Task6 and the live HF test remain unapproved.</p>
+<p>Task3 is VERIFIED at the subsequent engineering checkpoint. Component work was
+split from remaining composed coverage after the first implementer's explicit
+DONE_WITH_CONCERNS/NEEDS_CONTEXT handoff; a fresh-context continuation completed
+the same approved scope. Full fixtures authenticate all46 sealed files through
+_retained, then real _Native/_preflight, rather than bypassing receipt proof.
+The closed read grammar records exact effective executable argv/environment,
+bounds/cwd, raw stdout/stderr and returned-versus-uncertain terminal evidence.
+Cross-proof, locator/PATH-choice, original foreign-state, control-copy identity
+and accepted-prefix late-addition defects received genuine RED tests/minimum
+fixes. Final metadata helpers do not reopen directory/content reads. SSH
+relaxation depends only on internal after-stop state, never skip-rebinding.
+Final implementer125/45.228s, independent spec PASS125/45.101s, independent quality
+PASS125/41.377s; root fresh four-module regression328/220.432s OK with bytecode
+disabled/ResourceWarning fatal. Quality found no Critical/Important issue; its
+nonblocking repeated-manifest descriptor observation is recorded for bounded
+Task4 review, not concealed. Running/Stopped fixture preflights used seven/six
+simulated reads; actual Colima/Lima/Docker acquisitions zero. Generic IO fixture
+child Python processes are not represented as live native VM activity.
+No actual runtime/receipt access, recovery reservation or native stop. Next is
+Task4 under the same preparation approval; Tasks4–5 are not yet complete and
+Task6 remains separately unapproved. Accepted local Envoy is unchanged; platform
+image provenance stays unverified and full Kind/Calico acceptance false.</p>
 </article></main>
 </div></div>
 <script>(() => {

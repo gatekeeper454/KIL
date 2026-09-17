@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import stat
 import sys
 
@@ -19,9 +20,15 @@ for _location in (REPOSITORY, REPOSITORY / 'src'):
         sys.path.insert(0, str(_location))
 
 from kil.hf_exploratory_inputs import read_regular, verify_bytes
+from kil.hf_exploratory_inputs import ACCEPTED_RUN, TOOL_VERSION_ARGUMENTS
+from kil.hf_exploratory_io import PrivateStore, _dependency_snapshot, capture_process
 from kil.hf_exploratory_profile import ProfilePaths, capture, creation_binding, unchanged
 from kil import hf_exploratory_runtime as runtime_module
-from kil.v3b2_profile_state import _read, passwd_home
+from kil.v3b2_profile_state import ProfilePaths as DefaultProfilePaths
+from kil.v3b2_profile_state import _parent, _read, passwd_home
+from kil.v3b2_colima_inventory import capture_roster, decode_inventory, require_complete, _roster_names
+from kil.v3b2_accepted_images import ACCEPTED_MANIFEST_SHA256
+from kil.v3b2_controller import CommandResult
 from kil.v3b2_proofs import canonical
 
 
@@ -33,6 +40,7 @@ RECEIPT = REPOSITORY / '.tools/hf-exploratory-private' / ('hf-exploratory-' + DI
 RECOVERY = REPOSITORY / '.tools/hf-recovery-private/2026-09-17' / ('manual-stop-' + DIGEST)
 TOOLS = Path('/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.tools/bin')
 COLIMA = HOME / '.local/bin/colima'
+ACCEPTED_MANIFEST = REPOSITORY / 'artifacts/generated/v3b1-local-envoy' / ACCEPTED_RUN / 'manifest.json'
 ROOT_ID = (16777232, 615011851, 16832, 501)
 MANIFEST_PIN = ('d128fd99fcc32391db27804da8be86c0e62b238343b71c7f44009785cba38ad0', 3979)
 SSH_PIN = ('0788dfecc6e2e6d6301a2eca6d9bebe153de450cac6d4657b053f2676a9564e9', 767)
@@ -304,6 +312,567 @@ def _fid(row):
     return (*_id(row), row.st_nlink, row.st_size, row.st_mtime_ns, row.st_ctime_ns)
 
 
+def _final_files(receipt, runtime, after_stop=False):
+    """Close both retained proofs after every later authentication read."""
+    if type(receipt) is not _Files or type(runtime) is not _Files or type(after_stop) is not bool:
+        raise ValueError('recovery_final_proof_arguments_are_invalid')
+    receipt.guard()
+    mutable = (RUNTIME / '.colima' / 'ssh_config',) if after_stop else ()
+    runtime.guard(mutable)
+    # Content authentication above is complete.  The final closure deliberately
+    # performs metadata-only checks so one proof cannot be replaced while the
+    # other's retained descriptors are reread.
+    receipt.metadata_guard()
+    runtime.metadata_guard(mutable)
+
+
+def _result_bytes(result):
+    if type(result) is bytes:
+        return result, 0, b''
+    if type(result) is not CommandResult:
+        raise ValueError('recovery_inventory_acquisition_is_invalid')
+    return result.stdout_bytes, result.returncode, result.stderr_bytes
+
+
+def _inventory(paths, acquire):
+    """Bracket one Colima list read with a complete no-follow Lima roster."""
+    if type(paths) is not ProfilePaths or not callable(acquire):
+        raise ValueError('recovery_inventory_arguments_are_invalid')
+    before = capture_roster(paths)
+    payload, returncode, stderr = _result_bytes(acquire())
+    after = capture_roster(paths)
+    try:
+        rows = require_complete(decode_inventory(payload, returncode=returncode, stderr=stderr), before, after)
+    except (ValueError, TypeError) as error:
+        raise ValueError('recovery_inventory_is_incomplete') from error
+    return rows
+
+
+def _fingerprint(path):
+    """Commit an existing foreign regular file, or a stably absent pathname."""
+    if not isinstance(path, Path) or not path.is_absolute() or '..' in path.parts:
+        raise ValueError('recovery_foreign_path_is_invalid')
+    try:
+        with _parent(path) as parent:
+            if parent is None:
+                return {'path': str(path), 'present': False, 'identity': None,
+                        'byte_count': None, 'sha256': None}
+            try:
+                before = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+            except FileNotFoundError:
+                return {'path': str(path), 'present': False, 'identity': None,
+                        'byte_count': None, 'sha256': None}
+            if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                    or before.st_size > MAXIMUM):
+                raise ValueError('recovery_foreign_file_is_not_bounded_regular')
+            payload = read_regular(path, MAXIMUM)
+            after = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+            full_identity = _fid(before)
+            if full_identity != _fid(after):
+                raise ValueError('recovery_foreign_file_changed_during_read')
+    except (OSError, RuntimeError, ValueError) as error:
+        if isinstance(error, ValueError) and str(error).startswith('recovery_'):
+            raise
+        raise ValueError('recovery_foreign_path_is_unavailable') from error
+    return {'path': str(path), 'present': True,
+            'identity': dict(zip(('st_dev', 'st_ino', 'st_mode', 'st_size', 'st_mtime_ns', 'st_ctime_ns'),
+                                 (before.st_dev, before.st_ino, before.st_mode, before.st_size,
+                                  before.st_mtime_ns, before.st_ctime_ns))),
+            'byte_count': len(payload), 'sha256': hashlib.sha256(payload).hexdigest()}
+
+
+def _control_paths(paths):
+    if type(paths) is not ProfilePaths:
+        raise ValueError('recovery_control_paths_are_invalid')
+    docker_meta = paths.runtime / 'docker-config' / 'contexts' / 'meta' / hashlib.sha256(
+        b'colima-kil-v3-lab').hexdigest() / 'meta.json'
+    return (
+        ('profile.yaml', paths.profile / 'colima.yaml'),
+        ('instance.yaml', paths.instance / 'colima.yaml'),
+        ('lima.yaml', paths.instance / 'lima.yaml'),
+        ('colima-ssh.config', paths.colima / 'ssh_config'),
+        ('instance-ssh.config', paths.instance / 'ssh.config'),
+        ('ha.pid', paths.instance / 'ha.pid'), ('vz.pid', paths.instance / 'vz.pid'),
+        ('kind.yaml', paths.runtime / 'kind-config.yaml'), ('docker-meta.json', docker_meta),
+        ('ha.stdout.log', paths.instance / 'ha.stdout.log'),
+        ('ha.stderr.log', paths.instance / 'ha.stderr.log'),
+        ('serialv.log', paths.instance / 'serialv.log'),
+    )
+
+
+def _foreign_metadata(roster):
+    """Close only the known default namespace and files, without content reads."""
+    _roster_names(roster)
+    defaults = DefaultProfilePaths(HOME, RUNTIME)
+    targets = (defaults.colima, defaults.lima, defaults.lima / '_config',
+               defaults.lima / '_config/networks.yaml', HOME / '.docker',
+               HOME / '.docker/config.json', HOME / '.kube', HOME / '.kube/config')
+    # Child names come from an earlier bounded complete roster; final closure
+    # must not reopen scandir/_read after another scope's metadata check.
+    if roster is not None:
+        targets += tuple(defaults.lima / child['name'] for child in roster['children'])
+    rows = []
+    for path in targets:
+        with _parent(path) as parent:
+            if parent is None:
+                rows.append(None)
+                continue
+            try:
+                rows.append(_fid(os.stat(path.name, dir_fd=parent, follow_symlinks=False)))
+            except FileNotFoundError:
+                rows.append(None)
+    return tuple(rows)
+
+
+def _foreign(native):
+    """Re-observe only the inherited default Colima/Docker state, never adopt it."""
+    if os.environ.get('KUBECONFIG') is not None:
+        raise ValueError('recovery_inherited_kubeconfig_is_not_default')
+    if not hasattr(native, 'observe'):
+        raise ValueError('recovery_foreign_native_is_invalid')
+    defaults = DefaultProfilePaths(HOME, RUNTIME)
+    def files():
+        networks = _read(defaults.lima / '_config' / 'networks.yaml')
+        if networks is not None and 'hex' not in networks:
+            raise ValueError('recovery_default_networks_is_not_regular')
+        docker = HOME / '.docker'
+        return {'default_networks': networks, 'global_docker_config': str(docker),
+                'global_docker_directory': _read(docker, directory_only=True),
+                'global_docker_file': _fingerprint(docker / 'config.json'),
+                'kubeconfig': {'inherited': None, 'files': [_fingerprint(HOME / '.kube' / 'config')]}}
+    before = capture_roster(defaults)
+    metadata = _foreign_metadata(before)
+    first_files = files()
+    first = native.observe(('colima', 'list', '--json'), 'global')
+    after = capture_roster(defaults)
+    try:
+        rows = require_complete(decode_inventory(first.stdout_bytes, returncode=first.returncode,
+                                                  stderr=first.stderr_bytes), before, after)
+    except (AttributeError, TypeError, ValueError) as error:
+        raise ValueError('recovery_foreign_inventory_is_incomplete') from error
+    context = native.observe(('docker', 'context', 'show'), 'global').stdout_bytes
+    if (not context or len(context) > 4096 or b'\r' in context or not context.endswith(b'\n')
+            or context.count(b'\n') != 1):
+        raise ValueError('recovery_global_docker_context_is_invalid')
+    context_name = context.decode('utf-8', 'strict').strip()
+    if not context_name:
+        raise ValueError('recovery_global_docker_context_is_invalid')
+    final = native.observe(('colima', 'list', '--json'), 'global')
+    end = capture_roster(defaults)
+    try:
+        final_rows = require_complete(decode_inventory(final.stdout_bytes, returncode=final.returncode,
+                                                        stderr=final.stderr_bytes), after, end)
+    except (AttributeError, TypeError, ValueError) as error:
+        raise ValueError('recovery_foreign_inventory_is_incomplete') from error
+    final_files = files()
+    if (before != end or rows != final_rows or first_files != final_files
+            or _foreign_metadata(before) != metadata):
+        raise ValueError('recovery_foreign_state_changed_during_observation')
+    return {'foreign_profiles': rows, 'foreign_lima_roster': before,
+            'global_docker_context': context_name, **first_files}
+
+
+def _controls(paths, proof):
+    """Retain the finite local controls without treating absence as creation authority."""
+    if type(paths) is not ProfilePaths or type(proof) is not _Files:
+        raise ValueError('recovery_controls_arguments_are_invalid')
+    observed, payloads = {}, {}
+    absent = []
+    for label, path in _control_paths(paths):
+        fingerprint = _fingerprint(path)
+        if not fingerprint['present']:
+            observed[label], payloads[label] = fingerprint, None
+            absent.append((label, path, fingerprint))
+            continue
+        try:
+            row = os.lstat(path)
+            if row.st_uid != UID or row.st_size > MAXIMUM:
+                raise ValueError('recovery_control_is_not_private_bounded_file')
+            if any(getattr(row, key) != value for key, value in fingerprint['identity'].items()):
+                raise ValueError('recovery_control_changed_during_authentication')
+            payload = proof.read(path, MAXIMUM, stat.S_IMODE(row.st_mode), UID)
+            if _fid(os.lstat(path)) != _fid(row) or proof.files[-1][2] != _fid(row):
+                raise ValueError('recovery_control_changed_during_authentication')
+        except (OSError, RuntimeError, ValueError) as error:
+            if isinstance(error, ValueError) and str(error).startswith('recovery_'):
+                raise
+            raise ValueError('recovery_control_is_unavailable') from error
+        if (len(payload) != fingerprint['byte_count']
+                or hashlib.sha256(payload).hexdigest() != fingerprint['sha256']):
+            raise ValueError('recovery_control_changed_during_authentication')
+        observed[label], payloads[label] = fingerprint, bytes(payload)
+    proof.guard()
+    # Recheck every retained absence after all later control content reads.
+    for label, path, original in absent:
+        if _fingerprint(path) != original:
+            raise ValueError('recovery_absent_control_changed_during_authentication')
+    _controls_metadata(paths, observed, proof)
+    return observed, payloads
+
+
+def _controls_metadata(paths, observed, proof):
+    """Final no-content closure for transient controls after unrelated reads."""
+    proof.metadata_guard()
+    for label, path in _control_paths(paths):
+        row = observed[label]
+        try:
+            with _parent(path) as parent:
+                current = None
+                if parent is not None:
+                    try:
+                        current = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+                    except FileNotFoundError:
+                        pass
+                if row['present']:
+                    if current is None or any(getattr(current, key) != value
+                                              for key, value in row['identity'].items()):
+                        raise ValueError('recovery_control_changed_during_authentication')
+                elif current is not None:
+                    raise ValueError('recovery_absent_control_changed_during_authentication')
+        except (OSError, RuntimeError) as error:
+            raise ValueError('recovery_control_parent_changed_during_authentication') from error
+
+
+def _locator_snapshot(locator):
+    """Commit PATH's locator spelling separately from its resolved executable."""
+    if not isinstance(locator, Path) or not locator.is_absolute() or '..' in locator.parts:
+        raise ValueError('recovery_original_lima_locator_is_invalid')
+    try:
+        before = locator.lstat()
+        resolved = locator.resolve(strict=True)
+        row = resolved.lstat()
+        if (not stat.S_ISREG(row.st_mode) or row.st_uid != UID or row.st_nlink != 1
+                or not row.st_mode & stat.S_IXUSR or row.st_size > 128 * 1024**2):
+            raise ValueError('recovery_original_lima_is_not_owner_executable')
+        payload = read_regular(resolved, 128 * 1024**2)
+        if _fid(locator.lstat()) != _fid(before) or _fid(resolved.lstat()) != _fid(row):
+            raise ValueError('recovery_original_lima_changed_during_read')
+    except (OSError, RuntimeError, ValueError) as error:
+        if isinstance(error, ValueError) and str(error).startswith('recovery_'):
+            raise
+        raise ValueError('recovery_original_lima_locator_is_unavailable') from error
+    return {'locator': str(locator), 'locator_identity': _fid(before),
+            'resolved': str(resolved), 'resolved_identity': _fid(row),
+            'sha256': hashlib.sha256(payload).hexdigest(), 'byte_count': len(payload)}
+
+
+class _Native:
+    """Read-only, fixture-testable native adapter; it has no lifecycle grammar."""
+    def __init__(self, receipt, runtime, paths, store):
+        if (type(receipt) is not _Files or type(runtime) is not _Files
+                or type(paths) is not ProfilePaths or type(store) is not PrivateStore):
+            raise ValueError('recovery_native_arguments_are_invalid')
+        self.receipt, self.runtime, self.paths, self.store = receipt, runtime, paths, store
+        self.after_stop = False
+        self._account()
+        original = os.environ.get('PATH')
+        if type(original) is not str or not original:
+            raise ValueError('recovery_original_path_is_invalid')
+        self.original_path = original
+        self._path_components = tuple(original.split(os.pathsep))
+        if (not self._path_components or any(not part or not Path(part).is_absolute() or '..' in Path(part).parts
+                                            for part in self._path_components)):
+            raise ValueError('recovery_original_path_is_invalid')
+        self.original_path_sha256 = hashlib.sha256(original.encode('utf-8')).hexdigest()
+        manifest = receipt.read(ACCEPTED_MANIFEST, 1024 * 1024, 0o644, UID)
+        verify_bytes(manifest, ACCEPTED_MANIFEST_SHA256, len(manifest))
+        try:
+            accepted = _json_exact(manifest, 1024 * 1024)['verified_tool_identities']
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError('recovery_accepted_manifest_is_invalid') from error
+        if type(accepted) is not dict or set(accepted) != set(TOOL_VERSION_ARGUMENTS):
+            raise ValueError('recovery_accepted_manifest_tools_are_invalid')
+        self.accepted_manifest = manifest
+        self.accepted = accepted
+        self.dependencies = _dependency_snapshot(TOOLS, accepted)
+        self.accepted_files = []
+        for name in sorted(TOOL_VERSION_ARGUMENTS):
+            payload = runtime.read(TOOLS / name, 128 * 1024**2, 0o755, UID)
+            row = accepted[name]
+            verify_bytes(payload, row['executable_sha256'], row['byte_size'])
+            self.accepted_files.append((name, hashlib.sha256(payload).hexdigest(), len(payload)))
+        self.accepted_files = tuple(self.accepted_files)
+        self.colima = runtime.read(COLIMA, 128 * 1024**2, 0o755, UID, COLIMA_PIN)
+        locator = shutil.which('limactl', path=original)
+        if locator is None:
+            raise ValueError('recovery_original_lima_is_unavailable')
+        self.lima = _locator_snapshot(Path(locator))
+        runtime.read(Path(self.lima['resolved']), 128 * 1024**2,
+                     stat.S_IMODE(self.lima['resolved_identity'][2]), UID,
+                     (self.lima['sha256'], self.lima['byte_count']))
+        self._store = self._store_snapshot()
+        self._final_guard()
+        self._locator_metadata()
+        self._dependency_metadata()
+        self._account()
+        self.receipt.metadata_guard(); self.runtime.metadata_guard(); self._check_store()
+        self.sequence = 0
+
+    def _account(self):
+        if os.getuid() != UID or os.geteuid() != UID or passwd_home() != HOME:
+            raise ValueError('recovery_identity_or_home_changed')
+
+    def _store_snapshot(self):
+        self.store._bound(b'', 1)
+        if self.store._directory is None or self.store._lock is None:
+            raise ValueError('recovery_private_store_is_closed')
+        directory, lock = os.fstat(self.store._directory), os.fstat(self.store._lock)
+        named_directory = os.lstat(self.store.path)
+        named_lock = os.stat('lock', dir_fd=self.store._directory, follow_symlinks=False)
+        if (not stat.S_ISDIR(directory.st_mode) or stat.S_IMODE(directory.st_mode) != 0o700
+                or directory.st_uid != UID or _id(directory) != _id(named_directory)
+                or not stat.S_ISREG(lock.st_mode) or stat.S_IMODE(lock.st_mode) != 0o600
+                or lock.st_uid != UID or lock.st_nlink != 1 or lock.st_size != 0
+                or _fid(lock) != _fid(named_lock)):
+            raise ValueError('recovery_private_store_changed')
+        # Retain the path ancestry/name as well as PrivateStore's own descriptor.
+        self.runtime.directory(self.store.path, private=True)
+        return (_id(directory), _fid(lock))
+
+    def _check_store(self):
+        if self._store_snapshot() != self._store:
+            raise ValueError('recovery_private_store_changed')
+
+    def _manifest(self):
+        payload = self.receipt.read(ACCEPTED_MANIFEST, 1024 * 1024, 0o644, UID)
+        verify_bytes(payload, ACCEPTED_MANIFEST_SHA256, len(payload))
+        if payload != self.accepted_manifest:
+            raise ValueError('recovery_accepted_manifest_changed')
+        return payload
+
+    def _refresh_lima(self):
+        locator = shutil.which('limactl', path=self.original_path)
+        if locator is None or _locator_snapshot(Path(locator)) != self.lima:
+            raise ValueError('recovery_original_lima_changed')
+
+    def _locator_metadata(self):
+        locator = Path(self.lima['locator'])
+        resolved = Path(self.lima['resolved'])
+        try:
+            if (shutil.which('limactl', path=self.original_path) != str(locator)
+                    or locator.resolve(strict=True) != resolved
+                    or _fid(locator.lstat()) != self.lima['locator_identity']
+                    or _fid(resolved.lstat()) != self.lima['resolved_identity']):
+                raise ValueError('recovery_original_lima_changed')
+        except OSError as error:
+            raise ValueError('recovery_original_lima_changed') from error
+
+    def _dependency_metadata(self):
+        """Close the exact accepted PATH directory after every content read."""
+        try:
+            descriptor, _ = self.runtime.directories[TOOLS]
+            if (_fid(os.fstat(descriptor)) != self.dependencies[0]
+                    or _fid(os.lstat(TOOLS)) != self.dependencies[0]):
+                raise ValueError('recovery_accepted_dependency_directory_changed')
+        except (OSError, KeyError) as error:
+            raise ValueError('recovery_accepted_dependency_directory_changed') from error
+
+    def _final_guard(self, after_stop=False):
+        _final_files(self.receipt, self.runtime, after_stop)
+        self._check_store()
+
+    def guard(self):
+        if type(self.after_stop) is not bool:
+            raise ValueError('recovery_native_after_stop_is_invalid')
+        after_stop = self.after_stop
+        self._account()
+        self._check_store()
+        self._manifest()
+        if _dependency_snapshot(TOOLS, self.accepted) != self.dependencies:
+            raise ValueError('recovery_accepted_dependencies_changed')
+        # Close all proof content before the final locator content read; the
+        # subsequent checks are metadata-only and cannot move that boundary.
+        self._final_guard(after_stop)
+        self._refresh_lima()
+        self._account()
+        self.receipt.metadata_guard()
+        self.runtime.metadata_guard((RUNTIME / '.colima' / 'ssh_config',) if after_stop else ())
+        self._locator_metadata()
+        self._check_store()
+        self._dependency_metadata()
+
+    @property
+    def endpoint(self):
+        return 'unix://' + str(self.paths.profile / 'docker.sock')
+
+    def environment_for(self, namespace):
+        if namespace not in {'private', 'docker', 'global'}:
+            raise ValueError('recovery_native_namespace_is_invalid')
+        result = {'HOME': str(HOME), 'PATH': str(TOOLS) + os.pathsep + self.original_path}
+        for name in ('LANG', 'LC_ALL'):
+            value = os.environ.get(name)
+            if value is not None:
+                result[name] = value
+        if namespace == 'private':
+            result.update(COLIMA_HOME=str(self.paths.colima), LIMA_HOME=str(self.paths.lima),
+                          DOCKER_CONFIG=str(self.paths.runtime / 'docker-config'), TMPDIR=str(self.paths.tmp))
+        elif namespace == 'docker':
+            result.update(DOCKER_CONFIG=str(self.paths.runtime / 'docker-config'), TMPDIR=str(self.paths.tmp))
+        else:
+            result['DOCKER_CONFIG'] = str(HOME / '.docker')
+        return result
+
+    def allowed(self, argv, namespace):
+        if type(argv) is not tuple or any(type(part) is not str for part in argv):
+            return False
+        allowed = {
+            ('colima', 'version'): {'private', 'global'},
+            ('colima', 'list', '--json'): {'private', 'global'},
+            ('limactl', '--version'): {'global'},
+            ('docker', 'context', 'show'): {'global'},
+            ('docker', '--host', self.endpoint, 'ps', '--all', '--quiet', '--no-trunc'): {'docker'},
+        }
+        return namespace in allowed.get(argv, set())
+
+    def _dispatch(self, argv):
+        if argv[0] == 'colima':
+            return (str(COLIMA), *argv[1:])
+        if argv[0] == 'limactl':
+            return (self.lima['resolved'], *argv[1:])
+        if argv[0] == 'docker':
+            return (str(TOOLS / 'docker'), *argv[1:])
+        raise ValueError('recovery_native_argv_is_invalid')
+
+    def acquire(self, argv, namespace, timeout=10):
+        if not self.allowed(argv, namespace):
+            raise ValueError('recovery_native_argv_is_not_allowed')
+        if type(timeout) is not int or timeout != 10:
+            raise ValueError('recovery_native_timeout_is_not_allowed')
+        self.guard()
+        effective = self._dispatch(argv)
+        environment = self.environment_for(namespace)
+        self.sequence += 1
+        sequence = self.sequence
+        self.store.record('command_intent', {'sequence': sequence, 'argv': list(effective),
+                           'logical_argv': list(argv), 'namespace': namespace, 'environment': environment,
+                           'timeout_s': timeout, 'stdin_sha256': None, 'maximum': 8 * 1024**2,
+                           'cwd': str(REPOSITORY)})
+        # record() fsyncs both the journal descriptor and private store directory.
+        self.guard()
+        result, out, err = None, None, None
+        try:
+            result = capture_process(effective, environment, None, timeout, 8 * 1024**2, REPOSITORY)
+            out = self.store.write('command-%04d.stdout' % sequence, result.stdout_bytes)
+            err = self.store.write('command-%04d.stderr' % sequence, result.stderr_bytes)
+            self.store.record('command_terminal', {'sequence': sequence, 'returncode': result.returncode,
+                              'stdout_sha256': out, 'stderr_sha256': err,
+                              'certainty': 'returned' if result.returncode >= 0 else 'uncertain'})
+        except BaseException as error:
+            try:
+                self.store.record('command_terminal', {'sequence': sequence,
+                                  'returncode': None if result is None else result.returncode,
+                                  'stdout_sha256': out, 'stderr_sha256': err,
+                                  'certainty': 'uncertain', 'error_type': type(error).__name__[:128]})
+            except BaseException:
+                pass  # A failed journal cannot promise durability or replace the first error.
+            raise
+        return result
+
+    def observe(self, argv, namespace):
+        result = self.acquire(argv, namespace)
+        if result.returncode != 0 or result.stderr_bytes:
+            raise ValueError('recovery_native_observation_failed')
+        return result
+
+
+def _sealed_json(files, name):
+    if type(files) is not dict or type(files.get(name)) is not bytes:
+        raise ValueError('recovery_sealed_receipt_input_is_invalid')
+    return _json_exact(files[name], 1024 * 1024)
+
+
+def _control_exact(observed, label, mode, *, required=True):
+    row = observed.get(label)
+    if type(row) is not dict or type(row.get('present')) is not bool:
+        raise ValueError('recovery_control_observation_is_invalid')
+    if not row['present']:
+        if required:
+            raise ValueError('recovery_required_control_is_missing')
+        return
+    identity = row.get('identity')
+    if (type(identity) is not dict or identity.get('st_mode') != (stat.S_IFREG | mode)):
+        raise ValueError('recovery_control_mode_is_invalid')
+
+
+def _preflight(native, paths, report, original, files, authenticate=True):
+    """Read-only fixed-profile validation; it creates and stops nothing."""
+    if type(authenticate) is not bool:
+        raise ValueError('recovery_preflight_authentication_is_invalid')
+    colima = native.observe(('colima', 'version'), 'private').stdout_bytes
+    if colima != COLIMA_VERSION:
+        raise ValueError('recovery_colima_version_is_invalid')
+    lima = native.observe(('limactl', '--version'), 'global').stdout_bytes
+    if lima != b'limactl version 2.2.0\n':
+        raise ValueError('recovery_lima_version_is_invalid')
+    if type(paths) is not ProfilePaths or type(report) is not dict or type(original) is not dict:
+        raise ValueError('recovery_preflight_arguments_are_invalid')
+    inventory = _inventory(paths, lambda: native.observe(('colima', 'list', '--json'), 'private'))
+    if len(inventory) != 1:
+        raise ValueError('recovery_private_inventory_is_not_singleton')
+    private = inventory[0]
+    if (private.get('name') != 'kil-v3-lab' or private.get('status') not in {'Running', 'Stopped'}
+            or private.get('arch') != 'aarch64' or private.get('runtime') != 'docker'
+            or private.get('cpus') != 4 or private.get('memory') != 8 * 1024**3
+            or private.get('disk') != 60 * 1024**3):
+        raise ValueError('recovery_private_inventory_is_not_pinned')
+    status = private['status']
+    footprint = _footprint(paths, report, original, status)
+    footprint_metadata = _footprint_metadata(paths)
+    foreign_original = _sealed_json(files, 'foreign-original.json')
+    foreign_metadata = _foreign_metadata(foreign_original['foreign_lima_roster'])
+    foreign = _foreign(native)
+    if foreign != foreign_original:
+        raise ValueError('recovery_foreign_state_changed')
+    # These copies are deliberately transient: PID/log controls may disappear
+    # during the separately approved stop stage and never become stop authority.
+    control_proof = _Files()
+    controls, payloads = {}, {}
+    try:
+        controls, payloads = _controls(paths, control_proof)
+        for label in ('profile.yaml', 'instance.yaml', 'lima.yaml'):
+            _control_exact(controls, label, 0o644)
+        _control_exact(controls, 'kind.yaml', 0o600)
+        if payloads['kind.yaml'] != files.get('runtime-kind-config.yaml'):
+            raise ValueError('recovery_kind_control_changed')
+        _control_exact(controls, 'colima-ssh.config', 0o644, required=status == 'Running')
+        if controls['colima-ssh.config']['present']:
+            verify_bytes(payloads['colima-ssh.config'], *SSH_PIN)
+        if authenticate:
+            # These long-lived proof records are the exact immutable controls
+            # that remain relevant through a later stopped-state revalidation.
+            for label, mode in (('profile.yaml', 0o644), ('instance.yaml', 0o644),
+                                ('lima.yaml', 0o644), ('kind.yaml', 0o600)):
+                native.runtime.read(dict(_control_paths(paths))[label], MAXIMUM, mode, UID)
+            if payloads['kind.yaml'] != files['runtime-kind-config.yaml']:
+                raise ValueError('recovery_kind_control_changed')
+            ssh = dict(_control_paths(paths))['colima-ssh.config']
+            if status == 'Running':
+                native.runtime.read(ssh, MAXIMUM, 0o644, UID, SSH_PIN)
+            elif controls['colima-ssh.config']['present']:
+                native.runtime.read(ssh, MAXIMUM, 0o644, UID, SSH_PIN)
+        if status == 'Running':
+            endpoint = 'unix://' + str(paths.profile / 'docker.sock')
+            docker = native.observe(('docker', '--host', endpoint, 'ps', '--all', '--quiet', '--no-trunc'), 'docker')
+            if docker.stdout_bytes != b'':
+                raise ValueError('recovery_private_docker_is_not_empty')
+        # _footprint itself ends with metadata-only closure of the full saved scope;
+        # its second capture never becomes a baseline or lifecycle authority.
+        # Every native proof content read follows the footprint/control captures.
+        # Close it, then use metadata-only scope checks to avoid reopening a
+        # guest/disk-content authentication window.
+        native.guard()
+        if _footprint_metadata(paths) != footprint_metadata:
+            raise ValueError('recovery_footprint_changed_during_preflight')
+        _controls_metadata(paths, controls, control_proof)
+        if _foreign_metadata(foreign_original['foreign_lima_roster']) != foreign_metadata:
+            raise ValueError('recovery_foreign_state_changed_during_preflight')
+        native.runtime.metadata_guard((RUNTIME / '.colima' / 'ssh_config',) if native.after_stop else ())
+        return ({'status': status, 'private_inventory': inventory, 'footprint': footprint,
+                 'foreign': foreign, 'controls': controls}, payloads)
+    finally:
+        control_proof.close()
+
+
 def _canonical(path):
     if not isinstance(path, Path) or not path.is_absolute() or '..' in path.parts:
         raise ValueError('recovery_path_is_not_absolute_canonical')
@@ -445,6 +1014,20 @@ class _Files:
                     retained.append(record)
             for record in retained:
                 self._check_file(record)
+            self._check_directories()
+        except (OSError, RuntimeError) as error:
+            raise ValueError('recovery_file_proof_unavailable') from error
+
+    def metadata_guard(self, mutable=()):
+        """Close names/descriptors after all retained content reads."""
+        try:
+            if self.closed:
+                raise ValueError('recovery_file_proof_is_closed')
+            mutable_paths = frozenset(mutable)
+            self._check_directories()
+            for record in self.files:
+                if record[0] not in mutable_paths:
+                    self._check_file(record)
             self._check_directories()
         except (OSError, RuntimeError) as error:
             raise ValueError('recovery_file_proof_unavailable') from error
