@@ -22233,3 +22233,47 @@ written spec for user approval. Only then invoke writing-plans for test-first
 implementation/HF preparation. Do not start another native attempt now.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T408 — 2026-09-16, written compact-runtime approval and test-first execution plan
+
+**Input:** User: "yes. Approve this spec—including one conditional request-free
+rehearsal after engineering checks—so I can begin test-first HF preparation".
+
+**Interpretation:** Written-spec review is now CONFIRMED, including exactly one
+new conditional root-only fresh request-free rehearsal after engineering, review,
+input and exact clean-source gates. This does not approve live HF action, CLI
+fallthrough, retry, old-runtime adoption/cleanup or platform-image audit.
+
+**Decision status:** CONFIRMED approval is appended to the spec without rewriting
+earlier pending history. Create a concrete test-first plan and execute same-session
+using fresh implementer, SPEC, QUALITY and final review, serial writer grants.
+The existing externally managed detached linked worktree is confirmed; no second
+workspace or branch move. Existing dependencies suffice, no installation.
+
+**Rationale:** Shorten only fresh whole-runtime state while receipts/full digest
+remain durable authority. Marker/binding, two retained ancestry chains, exclusive
+prefix collision refusal and pinned byte budget keep the narrow native repair
+fail-closed. Real compact temporary fixtures prevent engineering allocation in
+actual home. Fresh pre-change runtime/profile/IO baseline: 110 tests in 3.209s,
+OK with ResourceWarning fatal. This is not changed-code or native success evidence.
+
+**Affected artifacts:** Append spec approval, add implementation plan and generated
+readers; append this actual-EOF lineage entry/reader. Source/tests, old receipt and
+runtime bytes, accepted artifacts/Envoy, strict/IO/Native/CLI behavior, citation
+policy and defaults unchanged. No .kil-hf allocation, native/VM/HF/HTTP/Ollama,
+image audit, install, relocation, deletion, merge, push or worktree cleanup.
+
+**Unresolved questions:** Changed-code correctness and native compatibility remain
+unverified until their gates. Prior broader discovery has the disclosed single
+citation failure for four immutable ignored historical Markdown omissions and
+sixteen intentional skips; do not alter them to claim all-green discovery.
+Platform-image provenance/full Kind-Calico acceptance remain unverified/false.
+
+**Next gate:** Self-review plan against approved spec, stage new Markdown for
+renderer indexing, verify all 92 readers, unchanged entire 08d56b6 lineage prefix
+(1,302,760 bytes) and strict diff. Commit exact six document paths, clean source;
+then fresh implementer starts observed RED before production changes. Root alone
+may perform the one conditional rehearsal only after independent reviews and
+fresh committed engineering evidence. Later live action needs separate approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

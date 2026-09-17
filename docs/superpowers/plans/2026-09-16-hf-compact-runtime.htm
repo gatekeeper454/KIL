@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compact private HF runtime implementation plan</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/plans/2026-09-16-hf-compact-runtime.md">
+<meta name="source-sha256" content="463ec6cb5c8fd8bc5731f2a29b47bae3f61ecefc8f4f049583bb31ba41a83bac">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-compact-runtime.md</code> (<code>463ec6cb5c8fd8bc5731f2a29b47bae3f61ecefc8f4f049583bb31ba41a83bac</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">Compact private HF runtime implementation plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-16-hf-compact-runtime.md</code> (<code>463ec6cb5c8fd8bc5731f2a29b47bae3f61ecefc8f4f049583bb31ba41a83bac</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#compact-private-hf-runtime-implementation-plan">Compact private HF runtime implementation plan</a></li><li class="level-2"><a href="#scope-and-commands">Scope and commands</a></li><li class="level-2"><a href="#task-1-compact-authority-pure-paths-and-real-short-fixtures">Task 1: Compact authority, pure paths and real short fixtures</a></li><li class="level-3"><a href="#contract-to-implement">Contract to implement</a></li><li class="level-2"><a href="#review-and-root-engineering-gates">Review and root engineering gates</a></li><li class="level-2"><a href="#one-conditional-root-only-request-free-rehearsal">One conditional root-only request-free rehearsal</a></li><li class="level-2"><a href="#plan-self-review-and-execution-selection">Plan self-review and execution selection</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="compact-private-hf-runtime-implementation-plan" href="#compact-private-hf-runtime-implementation-plan">Compact private HF runtime implementation plan</a></li><li class="level-2"><a data-section-id="scope-and-commands" href="#scope-and-commands">Scope and commands</a></li><li class="level-2"><a data-section-id="task-1-compact-authority-pure-paths-and-real-short-fixtures" href="#task-1-compact-authority-pure-paths-and-real-short-fixtures">Task 1: Compact authority, pure paths and real short fixtures</a></li><li class="level-3"><a data-section-id="contract-to-implement" href="#contract-to-implement">Contract to implement</a></li><li class="level-2"><a data-section-id="review-and-root-engineering-gates" href="#review-and-root-engineering-gates">Review and root engineering gates</a></li><li class="level-2"><a data-section-id="one-conditional-root-only-request-free-rehearsal" href="#one-conditional-root-only-request-free-rehearsal">One conditional root-only request-free rehearsal</a></li><li class="level-2"><a data-section-id="plan-self-review-and-execution-selection" href="#plan-self-review-and-execution-selection">Plan self-review and execution selection</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="compact-private-hf-runtime-implementation-plan">Compact private HF runtime implementation plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Prepare a fresh exploratory HF runtime whose native sockets fit the pinned Lima pathname cap, without relocating receipts or weakening full-identity ownership.</p>
+<p><strong>Architecture:</strong> Keep receipt authority and compact native runtime authority as two independently retained no-follow ancestry chains. Authenticate a private registry marker and a durable full-digest receipt binding, then preserve unchanged runner/lifecycle contracts. The tightly coupled authority, pure-path compatibility and consumer fixtures constitute one engineering task; independent reviews and the single conditionally approved rehearsal follow it.</p>
+<p><strong>Tech Stack:</strong> Python 3.12.13 standard library, unittest, POSIX retained directory/file descriptors, existing PrivateStore and canonical JSON, pinned macOS/Colima/Lima tooling only for the later root rehearsal.</p>
+<hr />
+<h2 id="scope-and-commands">Scope and commands</h2>
+<p>Approved design: docs/superpowers/specs/2026-09-16-hf-compact-runtime-design.md.
+Working directory: /Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL.
+Interpreter: /Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python.
+Existing externally managed detached linked worktree is retained. No install, new
+worktree, branch move, merge, push, image audit, old-runtime adoption/cleanup or
+Ollama operation is part of this plan. No live HF requests are approved.</p>
+<p>Production files:</p>
+<ul>
+<li>src/kil/hf_exploratory_runtime.py: private location selection, namespace creation, retained authority, marker/binding authentication and Kind control FD.</li>
+<li>src/kil/hf_exploratory_profile.py: pure compact-shape validation and existing exact live-authority bind.</li>
+</ul>
+<p>Tests allowed to change: tests/test_hf_exploratory_runtime.py,
+tests/test_hf_exploratory_profile.py, tests/test_hf_exploratory_io.py,
+tests/test_hf_exploratory_evidence.py, tests/test_hf_exploratory_native.py.
+IO, evidence, Native and CLI production, strict modules, accepted inputs,
+historical receipts, citation policy and .gitattributes remain unchanged.
+Lineage and generated readers are updated append-only at each substantive gate.</p>
+<p>Full required engineering command (actual test count must be recorded):</p>
+<pre><code class="language-sh">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_exploratory_runtime tests.test_hf_exploratory_profile tests.test_hf_exploratory_evidence tests.test_hf_exploratory_case tests.test_hf_exploratory_inputs tests.test_hf_exploratory_io tests.test_hf_exploratory_native tests.test_v3b2_profile_state tests.test_v3b2_journal tests.test_v4_future_controller_gate tests.test_v3b2_inventory tests.test_v3b2_colima_inventory tests.test_v3b2_runtime_inventory_ownership tests.test_v3b2_bootstrap_inventory tests.test_v3b2_runtime_image_inventory
+</code></pre>
+<p>Expected: OK, no errors/failures/ResourceWarning. The previous 425-test result is
+not a prediction for the changed suite. Pre-change focused runtime/profile/IO
+baseline is 110 tests, OK. The earlier broader discovery citation failure for
+four immutable ignored historical Markdown files remains a disclosed limitation;
+neither receipts nor exemptions will be rewritten to claim all-green discovery.</p>
+<h2 id="task-1-compact-authority-pure-paths-and-real-short-fixtures">Task 1: Compact authority, pure paths and real short fixtures</h2>
+<h3 id="contract-to-implement">Contract to implement</h3>
+<p>Keep exact RuntimeAuthority.create(store, run_digest), closed frozen/slotted
+constructor and exact adapter checks. Derive production registry privately from
+actual passwd home, not environment, as home/.kil-hf. Require real UID equals
+effective UID at create and every guard; validate actual home canonical route.
+Run root is registry/('r'+full_digest[:16]); full digest and v3b2-full-digest remain
+identity. Do not expose caller path/home/binary/environment/CLI overrides.</p>
+<p>Before any registry/run allocation and every guard require fsencoded lengths of
+runtime/.colima/_lima/colima-kil-v3-lab/ssh.sock.1234567890123456 and the derived
+Docker socket each &lt;104. No alias, temp fallback, second label or retry.</p>
+<p>Retain complete receipt and runtime ancestry independently from /. Validate exact
+store object, canonical .tools/hf-exploratory-private receipt name/full digest,
+retained store directory and private parent, store lock UID/0600/regular/single
+link. Retain explicit verified store/root handles and a complete expected topology,
+not a positional store-sibling root assumption. Named and FD directory identities
+are dev/inode/mode/UID; ordinary ancestor timestamps are not immutable. Registry,
+run and existing four native homes are owner-0700, created exclusively and fsynced.</p>
+<p>Absent registry: exclusive mkdir through retained actual-home parent FD, verify
+0700/UID, fsync parent, exclusive 0600 single-link bounded regular registry.json,
+complete write and file/directory fsync. Existing registry: reuse only canonical
+owner-0700 parent with exact marker; never mark/repair an existing unmarked,
+partial, foreign or unsafe directory. No scanning/adoption of old child roots.</p>
+<p>Marker exact canonical fields: schema='kil.hf-exploratory-runtime-registry.v1',
+uid=int(effective UID), runtime_parent=str(canonical registry). Marker is a closed
+namespace form, not attestation or exclusion of arbitrary same-UID code.</p>
+<p>One exclusive fresh run mkdir and .colima/_lima, docker-config, runtime-tmp mkdirs;
+any preexisting label refuses, including same full digest or different full digest
+sharing first 16 hex. No adoption, alternate label, repair, truncation or retry.</p>
+<p>Persist runtime-binding.json through exclusive PrivateStore.write before usable
+authority. Exact canonical fields: schema='kil.hf-exploratory-runtime-binding.v1',
+uid=int(UID), run_digest=full64, run_id='v3b2-'+full64, receipt_path=str(store.path),
+registry_path=str(registry), runtime_path=str(root), runtime_identity=dict(device,
+inode, mode, uid), four integer stat values from retained root FD. Both files &lt;=8192
+bytes. Retain expected bytes and read-only no-follow/nonblocking file handles plus
+eight-field file identities (dev/inode/mode/UID/nlink/size/mtime_ns/ctime_ns).</p>
+<p>Guard: validate exact type, bool-live state, digest, store, derived paths, full
+topology and all named/retained identities; read both marker and binding exactly,
+before/after identity checks, owner-0600/regular/single link and exact canonical
+expected field types/bytes. After BOTH reads recheck BOTH named/retained file
+identities and all directory/store/lock identities. Known OS/shape failures become
+ValueError before dispatch. Failure and idempotent close release every acquired FD
+once, erase no files/native state and retain partial bootstrap/write state.
+Kind-control grammar/bound/exclusivity/fsync/before-after guard remain unchanged,
+using explicit verified root FD. Existing properties/environment semantics remain.</p>
+<p>Pure ProfilePaths accepts compact r[0-9a-f]{16} whose parent equals private
+registry selector; caller home does not choose registry. Preserve legacy offline
+saved-evidence shape only; no live legacy constructor/adoption. Bind remains exact
+live guarded authority and actual passwd home. Existing two-field documents,
+capture/binding schemas, seven-file snapshots and five directory rosters unchanged.
+No production consumer changes or new IO after final runner consistency block.</p>
+<ul>
+<li>[ ] <strong>Step 1: Add real short fixture selection and first failing behavior assertions.</strong></li>
+</ul>
+<p>Use this fixture setup in the existing runtime tests and equivalent existing
+setUp methods for every consumer that creates RuntimeAuthority. Cleanup registration
+order must leave the patch active until retained authorities close. Existing
+receipt fixture remains independent; pure offline legacy tests may stay legacy.</p>
+<pre><code class="language-python">self.compact_temp = tempfile.TemporaryDirectory(prefix='k', dir='/private/tmp')
+self.addCleanup(self.compact_temp.cleanup)
+self.registry = Path(self.compact_temp.name).resolve() / 'k'
+self.registry_patch = patch.object(self.runtime, '_registry_parent',
+                                  return_value=self.registry, create=True)
+self.registry_patch.start()
+self.addCleanup(self.registry_patch.stop)
+</code></pre>
+<p>First assertion, placed in existing RuntimeTests:</p>
+<pre><code class="language-python">def test_compact_locator_has_full_receipt_identity_and_durable_binding(self):
+    import json
+    authority = self.authority()
+    self.assertEqual(authority.path, self.registry / ('r' + self.digest[:16]))
+    self.assertLess(len(os.fsencode(authority.lima / 'colima-kil-v3-lab' /
+                                    'ssh.sock.1234567890123456')), 104)
+    marker = json.loads((self.registry / 'registry.json').read_bytes())
+    self.assertEqual(marker, {
+        'schema': 'kil.hf-exploratory-runtime-registry.v1',
+        'uid': os.geteuid(), 'runtime_parent': str(self.registry)})
+    binding = json.loads((self.store.path / 'runtime-binding.json').read_bytes())
+    row = authority.path.stat()
+    self.assertEqual(binding, {
+        'schema': 'kil.hf-exploratory-runtime-binding.v1', 'uid': os.geteuid(),
+        'run_digest': self.digest, 'run_id': 'v3b2-' + self.digest,
+        'receipt_path': str(self.store.path), 'registry_path': str(self.registry),
+        'runtime_path': str(authority.path), 'runtime_identity': {
+            'device': row.st_dev, 'inode': row.st_ino,
+            'mode': row.st_mode, 'uid': row.st_uid}})
+    authority.guard()
+</code></pre>
+<p>Additional first-cycle assertions use actual filesystem state:</p>
+<pre><code class="language-python">def test_existing_unmarked_registry_is_not_repaired(self):
+    self.registry.mkdir(mode=0o700)
+    with self.assertRaises(ValueError):
+        self.runtime.RuntimeAuthority.create(self.store, self.digest)
+    self.assertEqual(list(self.registry.iterdir()), [])
+
+def test_marker_drift_refuses_before_adapter(self):
+    authority = self.authority()
+    marker = self.registry / 'registry.json'
+    marker.write_bytes(marker.read_bytes().replace(b'&quot;uid&quot;:', b'&quot;foreign_uid&quot;:'))
+    with self.assertRaises(ValueError):
+        self.runtime.ExploratoryColimaCommand(
+            Command(('colima', 'version'), 1), authority)
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run and observe RED before editing production.</strong></li>
+</ul>
+<pre><code class="language-sh">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_exploratory_runtime.RuntimeTests.test_compact_locator_has_full_receipt_identity_and_durable_binding tests.test_hf_exploratory_runtime.RuntimeTests.test_existing_unmarked_registry_is_not_repaired
+</code></pre>
+<p>Expected actual assertion failures: old sibling path differs from short locator;
+existing unmarked fixture is silently ignored by old implementation instead of
+refused. Import/setup/typo errors are not accepted RED. Record exact observations.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement private derivation and retained file authentication.</strong></li>
+</ul>
+<p>The following complete helper code defines the private selector, byte budget and
+bounded retained authentication. Integrate these with the existing authority in
+the next step; do not weaken filesystem checks to accommodate fixture paths.</p>
+<pre><code class="language-python">from kil.v3b2_profile_state import passwd_home
+from kil.v3b2_proofs import canonical
+
+def _registry_parent():
+    home = passwd_home()
+    if home.resolve(strict=True) != home:
+        raise ValueError('runtime_home_not_canonical')
+    return home / '.kil-hf'
+
+def _path_budget(path):
+    for endpoint in (
+            path / '.colima/_lima/colima-kil-v3-lab/ssh.sock.1234567890123456',
+            path / '.colima/kil-v3-lab/docker.sock'):
+        if len(os.fsencode(endpoint)) &gt;= 104:
+            raise ValueError('runtime_socket_path_too_long')
+
+def _file_identity(row):
+    return (row.st_dev, row.st_ino, row.st_mode, row.st_uid, row.st_nlink,
+            row.st_size, row.st_mtime_ns, row.st_ctime_ns)
+
+def _file_check(parent, name, fd, identity, expected):
+    row = os.fstat(fd)
+    named = os.stat(name, dir_fd=parent, follow_symlinks=False)
+    if (not stat.S_ISREG(row.st_mode) or row.st_uid != os.geteuid()
+            or stat.S_IMODE(row.st_mode) != 0o600 or row.st_nlink != 1
+            or not 0 &lt;= row.st_size &lt;= 8192
+            or _file_identity(row) != identity
+            or _file_identity(named) != identity
+            or type(expected) is not bytes or len(expected) &gt; 8192):
+        raise ValueError('runtime_file_identity_changed')
+
+def _file_auth(parent, name, fd, identity, expected):
+    _file_check(parent, name, fd, identity, expected)
+    os.lseek(fd, 0, os.SEEK_SET)
+    chunks = []
+    remaining = 8193
+    while remaining:
+        chunk = os.read(fd, remaining)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    if b''.join(chunks) != expected:
+        raise ValueError('runtime_file_bytes_changed')
+    _file_check(parent, name, fd, identity, expected)
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Implement complete two-chain creation and guard integration.</strong></li>
+</ul>
+<p>Use the complete integration below as the planned authority implementation. Keep
+the existing property getters and exact ExploratoryColimaCommand adapter unchanged.
+Keep write_control unchanged except replacing its root lookup with self._root_fd.
+Tests, not this proposed code, decide whether further minimal corrections are
+needed. Any important correction must have observed failing behavior first.</p>
+<pre><code class="language-python">def _layout(store_path, registry, digest):
+    result = [(None, '/', False)]
+    for part in store_path.parts[1:]:
+        result.append((len(result) - 1, part, False))
+    store_index = len(result) - 1
+    result[store_index - 1] = (*result[store_index - 1][:2], True)
+    result[store_index] = (*result[store_index][:2], True)
+    result.append((None, '/', False))
+    for part in registry.parts[1:]:
+        result.append((len(result) - 1, part, False))
+    registry_index = len(result) - 1
+    result[registry_index] = (*result[registry_index][:2], True)
+    result.extend(((registry_index, 'r' + digest[:16], True),
+                   (registry_index + 1, '.colima', True),
+                   (registry_index + 2, '_lima', True),
+                   (registry_index + 1, 'docker-config', True),
+                   (registry_index + 1, 'runtime-tmp', True)))
+    return tuple(result), store_index, registry_index, registry_index + 1
+
+@dataclass(frozen=True, slots=True, init=False)
+class RuntimeAuthority:
+    path: Path
+    _store: PrivateStore
+    _digest: str
+    _registry: Path
+    _anchors: tuple
+    _store_fd: int
+    _root_fd: int
+    _lock_identity: tuple
+    _files: tuple
+    _closed: bool
+
+    def __init__(self):
+        raise ValueError('runtime_authority_requires_create')
+
+    @classmethod
+    def create(cls, store, run_digest):
+        from kil.hf_exploratory_io import PrivateStore
+        anchors, files = [], []
+        def retain(parent, name):
+            fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                         dir_fd=parent)
+            try:
+                identity = _identity(os.fstat(fd))
+            except BaseException:
+                os.close(fd)
+                raise
+            anchors.append((parent, name, fd, identity))
+            return fd
+        def fresh(parent, name):
+            os.mkdir(name, mode=0o700, dir_fd=parent)
+            os.fsync(parent)
+            fd = retain(parent, name)
+            row = os.fstat(fd)
+            if row.st_uid != os.geteuid() or stat.S_IMODE(row.st_mode) != 0o700:
+                raise ValueError('runtime_directory_not_private')
+            return fd
+        def retain_file(parent, name, expected):
+            fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                         dir_fd=parent)
+            try:
+                identity = _file_identity(os.fstat(fd))
+            except BaseException:
+                os.close(fd)
+                raise
+            files.append((parent, name, fd, identity, expected))
+            _file_auth(*files[-1])
+        try:
+            if (cls is not RuntimeAuthority or os.getuid() != os.geteuid()
+                    or type(store) is not PrivateStore or type(run_digest) is not str
+                    or re.fullmatch(r'[0-9a-f]{64}', run_digest) is None
+                    or not isinstance(store.path, Path) or not store.path.is_absolute()
+                    or '..' in store.path.parts
+                    or store.path.resolve(strict=True) != store.path
+                    or store.path.name != 'hf-exploratory-' + run_digest
+                    or store.path.parent.parts[-2:] != ('.tools', 'hf-exploratory-private')
+                    or store._directory is None or store._lock is None):
+                raise ValueError('invalid_runtime_store_authority')
+            home = passwd_home()
+            if home.resolve(strict=True) != home:
+                raise ValueError('runtime_home_not_canonical')
+            registry = _registry_parent()
+            if (not isinstance(registry, Path) or not registry.is_absolute()
+                    or '..' in registry.parts or registry == Path('/')
+                    or registry.parent.resolve(strict=True) != registry.parent):
+                raise ValueError('invalid_runtime_registry')
+            path = registry / ('r' + run_digest[:16])
+            _path_budget(path)
+            layout, store_index, registry_index, root_index = _layout(
+                store.path, registry, run_digest)
+            for parent_index, name, private in layout[:store_index + 1]:
+                parent = None if parent_index is None else anchors[parent_index][2]
+                fd = retain(parent, name)
+                row = os.fstat(fd)
+                if private and (row.st_uid != os.geteuid()
+                                or stat.S_IMODE(row.st_mode) != 0o700):
+                    raise ValueError('runtime_store_not_private')
+            store_fd = anchors[store_index][2]
+            if _identity(os.fstat(store._directory)) != anchors[store_index][3]:
+                raise ValueError('runtime_store_reanchored')
+            lock_identity = _identity(os.fstat(store._lock))
+            for row in (os.fstat(store._lock),
+                        os.stat('lock', dir_fd=store_fd, follow_symlinks=False)):
+                if (_identity(row) != lock_identity or not stat.S_ISREG(row.st_mode)
+                        or row.st_uid != os.geteuid() or row.st_nlink != 1
+                        or stat.S_IMODE(row.st_mode) != 0o600):
+                    raise ValueError('runtime_store_lock_reanchored')
+            for parent_index, name, private in layout[store_index + 1:registry_index]:
+                parent = None if parent_index is None else anchors[parent_index][2]
+                retain(parent, name)
+            parent_fd = anchors[registry_index - 1][2]
+            try:
+                os.stat(registry.name, dir_fd=parent_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                registry_fd = fresh(parent_fd, registry.name)
+                marker = canonical({'schema': 'kil.hf-exploratory-runtime-registry.v1',
+                                    'uid': os.geteuid(), 'runtime_parent': str(registry)})
+                fd = os.open('registry.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                             os.O_NOFOLLOW, 0o600, dir_fd=registry_fd)
+                try:
+                    row = os.fstat(fd)
+                    if (not stat.S_ISREG(row.st_mode) or row.st_uid != os.geteuid()
+                            or row.st_nlink != 1 or stat.S_IMODE(row.st_mode) != 0o600):
+                        raise ValueError('runtime_marker_not_private')
+                    view = memoryview(marker)
+                    while view:
+                        count = os.write(fd, view)
+                        if count &lt;= 0:
+                            raise OSError('short_runtime_marker_write')
+                        view = view[count:]
+                    os.fsync(fd)
+                finally:
+                    os.close(fd)
+                os.fsync(registry_fd)
+            else:
+                registry_fd = retain(parent_fd, registry.name)
+                row = os.fstat(registry_fd)
+                if row.st_uid != os.geteuid() or stat.S_IMODE(row.st_mode) != 0o700:
+                    raise ValueError('runtime_registry_not_private')
+                marker = canonical({'schema': 'kil.hf-exploratory-runtime-registry.v1',
+                                    'uid': os.geteuid(), 'runtime_parent': str(registry)})
+            retain_file(registry_fd, 'registry.json', marker)
+            for parent_index, name, private in layout[root_index:]:
+                fresh(anchors[parent_index][2], name)
+            root_fd = anchors[root_index][2]
+            row = os.fstat(root_fd)
+            binding = canonical({
+                'schema': 'kil.hf-exploratory-runtime-binding.v1',
+                'uid': os.geteuid(), 'run_digest': run_digest,
+                'run_id': 'v3b2-' + run_digest, 'receipt_path': str(store.path),
+                'registry_path': str(registry), 'runtime_path': str(path),
+                'runtime_identity': {'device': row.st_dev, 'inode': row.st_ino,
+                                     'mode': row.st_mode, 'uid': row.st_uid}})
+            store.write('runtime-binding.json', binding)
+            retain_file(store_fd, 'runtime-binding.json', binding)
+            authority = object.__new__(cls)
+            for name, value in (
+                    ('path', path), ('_store', store), ('_digest', run_digest),
+                    ('_registry', registry), ('_anchors', tuple(anchors)),
+                    ('_store_fd', store_fd), ('_root_fd', root_fd),
+                    ('_lock_identity', lock_identity), ('_files', tuple(files)),
+                    ('_closed', False)):
+                object.__setattr__(authority, name, value)
+            authority.guard()
+            return authority
+        except BaseException as error:
+            for parent, name, fd, identity, expected in reversed(files):
+                os.close(fd)
+            for parent, name, fd, identity in reversed(anchors):
+                os.close(fd)
+            if isinstance(error, (OSError, AttributeError, KeyError, TypeError, IndexError)):
+                raise ValueError('runtime_authority_unavailable') from error
+            raise
+
+    def _guard_directories(self):
+        from kil.hf_exploratory_io import PrivateStore
+        store = self._store
+        if (type(self) is not RuntimeAuthority or self._closed is not False
+                or os.getuid() != os.geteuid() or type(store) is not PrivateStore
+                or type(self._digest) is not str
+                or re.fullmatch(r'[0-9a-f]{64}', self._digest) is None
+                or not isinstance(store.path, Path) or not store.path.is_absolute()
+                or '..' in store.path.parts
+                or store.path.name != 'hf-exploratory-' + self._digest
+                or store.path.parent.parts[-2:] != ('.tools', 'hf-exploratory-private')
+                or self._registry != _registry_parent()
+                or self.path != self._registry / ('r' + self._digest[:16])
+                or store._directory is None or store._lock is None):
+            raise ValueError('invalid_or_closed_runtime_authority')
+        home = passwd_home()
+        if home.resolve(strict=True) != home:
+            raise ValueError('runtime_home_not_canonical')
+        _path_budget(self.path)
+        layout, store_index, registry_index, root_index = _layout(
+            store.path, self._registry, self._digest)
+        if (type(self._anchors) is not tuple or len(self._anchors) != len(layout)
+                or self._store_fd != self._anchors[store_index][2]
+                or self._root_fd != self._anchors[root_index][2]):
+            raise ValueError('substituted_runtime_anchors')
+        for anchor, (parent_index, name, private) in zip(self._anchors, layout):
+            parent, actual_name, fd, identity = anchor
+            expected_parent = None if parent_index is None else self._anchors[parent_index][2]
+            if (actual_name != name or parent != expected_parent
+                    or _identity(os.fstat(fd)) != identity
+                    or _identity(os.stat(name, dir_fd=parent, follow_symlinks=False)) != identity
+                    or not stat.S_ISDIR(identity[2])
+                    or (private and (identity[3] != os.geteuid()
+                                     or stat.S_IMODE(identity[2]) != 0o700))):
+                raise ValueError('runtime_namespace_changed')
+        if _identity(os.fstat(store._directory)) != self._anchors[store_index][3]:
+            raise ValueError('runtime_store_reanchored')
+        for row in (os.fstat(store._lock),
+                    os.stat('lock', dir_fd=self._store_fd, follow_symlinks=False)):
+            if (_identity(row) != self._lock_identity or not stat.S_ISREG(row.st_mode)
+                    or row.st_uid != os.geteuid() or row.st_nlink != 1
+                    or stat.S_IMODE(row.st_mode) != 0o600):
+                raise ValueError('runtime_store_lock_reanchored')
+        return registry_index, root_index
+
+    def guard(self):
+        try:
+            registry_index, root_index = self._guard_directories()
+            identity = self._anchors[root_index][3]
+            expected = (
+                (self._anchors[registry_index][2], 'registry.json', canonical({
+                    'schema': 'kil.hf-exploratory-runtime-registry.v1',
+                    'uid': os.geteuid(), 'runtime_parent': str(self._registry)})),
+                (self._store_fd, 'runtime-binding.json', canonical({
+                    'schema': 'kil.hf-exploratory-runtime-binding.v1',
+                    'uid': os.geteuid(), 'run_digest': self._digest,
+                    'run_id': 'v3b2-' + self._digest, 'receipt_path': str(self._store.path),
+                    'registry_path': str(self._registry), 'runtime_path': str(self.path),
+                    'runtime_identity': dict(zip(('device', 'inode', 'mode', 'uid'), identity))})))
+            if type(self._files) is not tuple or len(self._files) != 2:
+                raise ValueError('substituted_runtime_files')
+            for record, (parent, name, payload) in zip(self._files, expected):
+                if (type(record) is not tuple or len(record) != 5
+                        or record[0] != parent or record[1] != name or record[4] != payload):
+                    raise ValueError('substituted_runtime_files')
+                _file_auth(*record)
+            for record in self._files:
+                _file_check(*record)
+            self._guard_directories()
+        except (OSError, AttributeError, KeyError, TypeError, IndexError) as error:
+            raise ValueError('runtime_authority_unavailable') from error
+
+    def close(self):
+        if not self._closed:
+            object.__setattr__(self, '_closed', True)
+            for parent, name, fd, identity, expected in reversed(self._files):
+                os.close(fd)
+            for parent, name, fd, identity in reversed(self._anchors):
+                os.close(fd)
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 5: Add failing pure compact-path compatibility assertion, then implement that predicate.</strong></li>
+</ul>
+<p>Existing profile test with private selector patched to self.registry:</p>
+<pre><code class="language-python">def test_compact_paths_round_trip_without_live_authority(self):
+    runtime = self.registry / ('r' + 'a' * 16)
+    paths = self.module.ProfilePaths(strict.passwd_home(), runtime)
+    self.assertEqual(self.module._paths(paths.document()), paths)
+    with self.assertRaises(ValueError):
+        self.module.ProfilePaths(self.root, self.root / runtime.name)
+</code></pre>
+<p>Observe RED: existing legacy-only predicate refuses compact shape. Then import
+the runtime module as runtime_namespace and replace only the legacy-only
+namespace predicate with:</p>
+<pre><code class="language-python">compact = (re.fullmatch(r'r[0-9a-f]{16}', self.runtime.name) is not None
+           and self.runtime.parent == runtime_namespace._registry_parent())
+legacy = (re.fullmatch(r'hf-exploratory-runtime-[0-9a-f]{64}', self.runtime.name)
+          is not None and self.runtime.parent.parts[-2:] ==
+          ('.tools', 'hf-exploratory-private'))
+if not (compact or legacy):
+    raise ProfileStateError('exploratory runtime namespace is invalid')
+</code></pre>
+<ul>
+<li>[ ] <strong>Step 6: Extend real regression coverage in small observed RED/GREEN cycles.</strong></li>
+</ul>
+<p>Concrete collision/safe-registry-reuse tests in RuntimeTests:</p>
+<pre><code class="language-python">def test_safe_registry_reuse_does_not_adopt_previous_run(self):
+    first = self.authority()
+    marker = (self.registry / 'registry.json').read_bytes()
+    digest = 'b' * 64
+    store = PrivateStore(self.parent / ('hf-exploratory-' + digest))
+    self.addCleanup(store.close)
+    second = self.runtime.RuntimeAuthority.create(store, digest)
+    self.addCleanup(second.close)
+    self.assertNotEqual(first.path, second.path)
+    self.assertEqual((self.registry / 'registry.json').read_bytes(), marker)
+    first.guard()
+    second.guard()
+
+def test_different_full_digest_prefix_collision_refuses_without_second_label(self):
+    first = self.authority()
+    digest = self.digest[:16] + 'b' * 48
+    store = PrivateStore(self.parent / ('hf-exploratory-' + digest))
+    self.addCleanup(store.close)
+    before = sorted(path.name for path in self.registry.iterdir())
+    with self.assertRaises(ValueError):
+        self.runtime.RuntimeAuthority.create(store, digest)
+    self.assertEqual(sorted(path.name for path in self.registry.iterdir()), before)
+    self.assertFalse((store.path / 'runtime-binding.json').exists())
+    first.guard()
+</code></pre>
+<p>Add finite table-driven variants, with real files/metadata, to existing tests:
+unsafe registry directory/marker type, symlink/hardlink/mode/bytes/canonical field
+types; binding exact fields/types/bytes/replacement/link/mode; both ancestry
+replacement; digest/store/root/retained-handle substitution; UID mismatch and
+103/104-byte budget boundaries; failed bootstrap/binding/close descriptor counts;
+Kind control explicit-root placement; IO known marker/binding drift produces
+ValueError with zero capture; real compact snapshots/full-roster consumers.
+Use the existing guard-drift/control/adaptor tests as the concrete table pattern,
+not production-only test hooks. Every new fix must be preceded by its failing
+assertion. Do not bypass guard/authentication or allocate the real home registry.</p>
+<ul>
+<li>[ ] <strong>Step 7: Verify focused and all 15 required modules, self-review, log and commit exact paths.</strong></li>
+</ul>
+<p>Run the full command above, then renderer/check and git diff --check. Compare the
+entire predecessor lineage byte prefix before staging. Record actual RED/GREEN
+counts, failures/corrections and limitations in the next dated actual-EOF entry.
+The implementer has exclusive source/test/lineage/render/commit writer authority
+only until explicitly reporting RELEASED. Stage only actually changed allowed
+source/test paths and lineage Markdown/reader; commit and report exact HEAD,
+clean status, tests, self-review and concerns. Do not touch plan/spec or native state.</p>
+<h2 id="review-and-root-engineering-gates">Review and root engineering gates</h2>
+<ul>
+<li>[ ] Fresh SPEC reviewer independently inspects code against the complete approved contract, with no production edits and a separate append-only review log.</li>
+<li>[ ] Only after SPEC PASS, fresh QUALITY reviewer checks bounded FD lifecycle, maintainability, real tests and consumer integration. Important findings return to implementer for observed RED/GREEN correction and re-review.</li>
+<li>[ ] Fresh final reviewer checks the composed whole change and unchanged protected paths.</li>
+<li>[ ] Root runs fresh 15-module regression, reader check, predecessor-prefix proof, protected source hashes and strict diff check. Checkpoint all engineering and plan/log documents, then require exact clean HEAD before native preparation.</li>
+</ul>
+<h2 id="one-conditional-root-only-request-free-rehearsal">One conditional root-only request-free rehearsal</h2>
+<ul>
+<li>[ ] With all engineering gates PASS, root checks reviewed source and accepted inputs using unchanged APIs and outside-sandbox source gate. No filtered Git warnings, runtime gate bypass or new image audit.</li>
+<li>[ ] Root uses LabLock, verify_inputs, PrivateStore, BoundedRunner and ExploratoryLifecycle with constant mode='rehearsal', fresh nonce and exact clean HEAD. Never call CLI main, whose successful rehearsal falls through into action.</li>
+<li>[ ] Allocate only one fresh derived compact private runtime. Preserve every failed earlier receipt/runtime/disk. No retry, adoption or unbound stop/delete if inconclusive.</li>
+<li>[ ] Verify actual report, zero HF intents AND attempts, all receipt checksums, bracketed protected default/global state and bounded runtime leftovers. Successful readiness requires complete retained rehearsal AND verified owned teardown; persistent registry/control leftovers are not filesystem_fully_removed.</li>
+<li>[ ] Append actual outcome and remaining gate, render/check readers, checkpoint clean source and report result. Live HF three-track action requires separate explicit approval even if rehearsal completes. Platform provenance/full Kind-Calico acceptance remain unverified/false and accepted local Envoy unchanged.</li>
+</ul>
+<h2 id="plan-self-review-and-execution-selection">Plan self-review and execution selection</h2>
+<p>Root checked every spec section against Task 1, reviews and native gates: selected
+location/full identity, bootstrap/reuse/collision, exact marker/binding, two-chain
+FD and byte auth, path cap, compatibility, limited file scope, real fixture safety,
+single rehearsal and claim exclusions are mapped. Helper/type names match their
+uses; complete proposed integration retains existing unchanged property/control/
+adapter code. No unresolved implementation placeholders or dynamic fallbacks.
+Same-session subagent-driven execution is selected for the already requested
+test-first workflow; no additional design approval is required by this plan.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical CITATION.cff</a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>

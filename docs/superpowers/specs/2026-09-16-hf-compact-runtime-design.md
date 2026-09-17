@@ -245,4 +245,13 @@ performed preparation is distinguished from successful readiness/acceptance.
 Request written-spec approval before invoking writing-plans. Production code and
 native runtimes are unchanged at this document checkpoint.
 
+## Written-spec approval, 2026-09-16
+
+The user explicitly approved this written specification: "yes. Approve this
+spec—including one conditional request-free rehearsal after engineering checks—so
+I can begin test-first HF preparation". Written review is now CONFIRMED, superseding
+the earlier pending gate without rewriting its historical account. Engineering
+may proceed, followed by exactly one fresh root-only request-free rehearsal if
+all listed gates pass. Live HF action remains separately unapproved.
+
 KTP citation: [canonical CITATION.cff](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
