@@ -117,3 +117,115 @@ class AncestryTests(Fixture):
             self.assertEqual(captured, {path: record[2] for path, record in dirs.records.items()})
         finally:
             dirs.close()
+
+class ProofTests(Fixture):
+    def proof(self):
+        proof = self.tool._Proof()
+        self.addCleanup(proof.close)
+        proof.bind()
+        return proof
+    def test_existing_lock_and_equal_observations_without_child_reads(self):
+        original_pread = os.pread
+        reads = []
+        def read(fd, maximum, offset):
+            reads.append(os.fstat(fd).st_ino)
+            return original_pread(fd, maximum, offset)
+        with patch.object(self.tool.os, 'pread', side_effect=read):
+            proof = self.proof()
+            proof.observe()
+            proof.metadata()
+        self.assertTrue(reads)
+        self.assertEqual(set(reads), {self.lock.stat().st_ino})
+        self.assertEqual(len(proof.children), 1)
+        self.unchanged_receipts()
+    def test_missing_lock_refuses_and_does_not_create_it(self):
+        self.lock.unlink()
+        proof = self.tool._Proof()
+        self.addCleanup(proof.close)
+        with self.assertRaises(FileNotFoundError): proof.bind()
+        self.assertFalse(self.lock.exists())
+    def test_busy_lock_refuses_using_real_flock(self):
+        import fcntl
+        fd = os.open(self.lock, os.O_RDONLY | os.O_NOFOLLOW)
+        self.addCleanup(os.close, fd)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        proof = self.tool._Proof()
+        self.addCleanup(proof.close)
+        with self.assertRaises(BlockingIOError): proof.bind()
+    def test_wrong_pins_owner_and_initial_modes_refuse(self):
+        cases = [dict(TARGET_PIN=(0, 0)), dict(TOOLS_PIN=(0, 0)), dict(UID=os.geteuid() + 1)]
+        for changes in cases:
+            with self.subTest(changes=changes), ExitStack() as stack:
+                for name, value in changes.items(): stack.enter_context(patch.object(self.tool, name, value))
+                proof = self.tool._Proof()
+                try:
+                    with self.assertRaises(ValueError): proof.bind()
+                finally: proof.close()
+        for mode in (0o700, 0o750, 0o777, 0o1755):
+            with self.subTest(mode=mode):
+                self.target.chmod(mode)
+                proof = self.tool._Proof()
+                try:
+                    with self.assertRaises(ValueError): proof.bind()
+                finally: proof.close()
+    def test_lock_metadata_bytes_and_replacement_are_not_adopted(self):
+        proof = self.proof()
+        self.lock.write_bytes(b'changed cooperating lock\n')
+        with self.assertRaises(ValueError): proof.observe()
+        self.lock.rename(self.lock_parent / 'old-lock')
+        self.lock.write_bytes(b'cooperating fixture lock\n')
+        self.lock.chmod(0o600)
+        with self.assertRaises(ValueError): proof.metadata()
+    def test_children_drift_refuses_without_descendant_interpretation(self):
+        proof = self.proof()
+        self.receipt.chmod(0o755)
+        with self.assertRaises(ValueError): proof.observe()
+        other = self.tools / 'outside'
+        other.write_bytes(b'never opened by proof')
+        (self.target / 'pointer').symlink_to(other)
+        with self.assertRaises(ValueError): proof.observe()
+    def test_256_names_pass_and_257_or_oversized_name_refuse(self):
+        for index in range(255): (self.target / ('n' + str(index))).mkdir(mode=0o700)
+        proof = self.tool._Proof()
+        try:
+            proof.bind()
+            self.assertEqual(len(proof.children), 256)
+        finally:
+            proof.close()
+        (self.target / 'n255').mkdir(mode=0o700)
+        fresh = self.tool._Proof()
+        try:
+            with self.assertRaisesRegex(ValueError, 'permission_children_bound_or_name'):
+                fresh.bind()
+        finally:
+            fresh.close()
+        (self.target / 'n255').rmdir()
+        for index in range(255): (self.target / ('n' + str(index))).rmdir()
+        (self.target / ('x' * 129)).mkdir(mode=0o700)
+        fresh = self.tool._Proof()
+        try:
+            with self.assertRaisesRegex(ValueError, 'permission_children_bound_or_name'):
+                fresh.bind()
+        finally:
+            fresh.close()
+
+    def test_post_metadata_requires_validated_baseline(self):
+        proof = self.proof()
+        os.fchmod(proof.target, 0o700)
+        os.utime(self.target, ns=(self.target.stat().st_atime_ns, proof.before[7] + 1000000000))
+        for method in ('metadata', 'observe'):
+            with self.subTest(method=method):
+                with self.assertRaisesRegex(ValueError, 'permission_post_baseline_unavailable'):
+                    getattr(proof, method)(after=True)
+
+    def test_validated_post_transition_preserves_commitments(self):
+        proof = self.proof()
+        try:
+            os.fchmod(proof.target, 0o700)
+            proof.bind_post()
+            proof.metadata(after=True)
+            proof.observe(after=True)
+            self.assertEqual(len(proof.children), 1)
+            self.unchanged_receipts()
+        finally:
+            proof.close()

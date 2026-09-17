@@ -6,7 +6,7 @@
 <title>Fixed HF recovery parent permission preparation implementation plan</title>
 <meta name="generator" content="KIL Markdown Reader 1">
 <meta name="source-path" content="docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md">
-<meta name="source-sha256" content="64e2032b7bc82eec44843bf3b348cc9f8cd52b76e524363261fc0544f07171dd">
+<meta name="source-sha256" content="04801726420202a1cb864abf0643aca1cc4a45b300431863630cd5da1068aa14">
 <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
 <style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
 :root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
@@ -55,12 +55,12 @@ mark.reader-match { background: #ffe58a; color: #201c10; }
 <body>
 <header class="reader-chrome">
 <div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
-<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md</code> (<code>64e2032b7bc82eec44843bf3b348cc9f8cd52b76e524363261fc0544f07171dd</code>); edit the Markdown source, not this reader.</p>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md</code> (<code>04801726420202a1cb864abf0643aca1cc4a45b300431863630cd5da1068aa14</code>); edit the Markdown source, not this reader.</p>
 </header>
 <header class="reader-mobile-header">
 <strong class="reader-mobile-title">Fixed HF recovery parent permission preparation implementation plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
 </header>
-<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md</code> (<code>64e2032b7bc82eec44843bf3b348cc9f8cd52b76e524363261fc0544f07171dd</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-recovery-parent-permissions.md</code> (<code>04801726420202a1cb864abf0643aca1cc4a45b300431863630cd5da1068aa14</code>); edit the Markdown source, not this reader.</p></div>
 <div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#fixed-hf-recovery-parent-permission-preparation-implementation-plan">Fixed HF recovery parent permission preparation implementation plan</a></li><li class="level-2"><a href="#approval-worktree-and-file-map">Approval, worktree and file map</a></li><li class="level-2"><a href="#common-commands-and-baseline">Common commands and baseline</a></li><li class="level-2"><a href="#task-1-retained-read-only-ancestry-and-exact-pins">Task 1: Retained read-only ancestry and exact pins</a></li><li class="level-2"><a href="#task-2-existing-lock-and-bounded-direct-child-commitment">Task 2: Existing lock and bounded direct-child commitment</a></li><li class="level-2"><a href="#task-3-entry-consumed-syscall-slot-and-bounded-honest-errors">Task 3: Entry-consumed syscall slot and bounded honest errors</a></li><li class="level-2"><a href="#task-4-complete-closure-truthful-outcomes-and-strict-non-action-cli">Task 4: Complete closure, truthful outcomes and strict non-action CLI</a></li><li class="level-2"><a href="#task-5-adversarial-coverage-independent-whole-review-and-root-verification">Task 5: Adversarial coverage, independent whole review and root verification</a></li><li class="level-2"><a href="#spec-coverage-and-plan-self-review">Spec coverage and plan self-review</a></li><li class="level-2"><a href="#execution-handoff-and-live-gates-do-not-execute-now">Execution handoff and live gates — do not execute now</a></li><li class="level-2"><a href="#engineering-execution-record-2026-09-17">Engineering execution record — 2026-09-17</a></li></ol></nav></details><div class="reader-layout">
 <nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="fixed-hf-recovery-parent-permission-preparation-implementation-plan" href="#fixed-hf-recovery-parent-permission-preparation-implementation-plan">Fixed HF recovery parent permission preparation implementation plan</a></li><li class="level-2"><a data-section-id="approval-worktree-and-file-map" href="#approval-worktree-and-file-map">Approval, worktree and file map</a></li><li class="level-2"><a data-section-id="common-commands-and-baseline" href="#common-commands-and-baseline">Common commands and baseline</a></li><li class="level-2"><a data-section-id="task-1-retained-read-only-ancestry-and-exact-pins" href="#task-1-retained-read-only-ancestry-and-exact-pins">Task 1: Retained read-only ancestry and exact pins</a></li><li class="level-2"><a data-section-id="task-2-existing-lock-and-bounded-direct-child-commitment" href="#task-2-existing-lock-and-bounded-direct-child-commitment">Task 2: Existing lock and bounded direct-child commitment</a></li><li class="level-2"><a data-section-id="task-3-entry-consumed-syscall-slot-and-bounded-honest-errors" href="#task-3-entry-consumed-syscall-slot-and-bounded-honest-errors">Task 3: Entry-consumed syscall slot and bounded honest errors</a></li><li class="level-2"><a data-section-id="task-4-complete-closure-truthful-outcomes-and-strict-non-action-cli" href="#task-4-complete-closure-truthful-outcomes-and-strict-non-action-cli">Task 4: Complete closure, truthful outcomes and strict non-action CLI</a></li><li class="level-2"><a data-section-id="task-5-adversarial-coverage-independent-whole-review-and-root-verification" href="#task-5-adversarial-coverage-independent-whole-review-and-root-verification">Task 5: Adversarial coverage, independent whole review and root verification</a></li><li class="level-2"><a data-section-id="spec-coverage-and-plan-self-review" href="#spec-coverage-and-plan-self-review">Spec coverage and plan self-review</a></li><li class="level-2"><a data-section-id="execution-handoff-and-live-gates-do-not-execute-now" href="#execution-handoff-and-live-gates-do-not-execute-now">Execution handoff and live gates — do not execute now</a></li><li class="level-2"><a data-section-id="engineering-execution-record-2026-09-17" href="#engineering-execution-record-2026-09-17">Engineering execution record — 2026-09-17</a></li></ol></nav>
 <main class="reader-main reader-paper"><article id="reader-article">
@@ -385,7 +385,7 @@ git commit -m 'feat: retain fixed permission ancestry without mutation'
 <code>tools/hf_exploratory_kind.py:23</code> and its flock protocol without calling
 create-capable LabLock.<strong>enter</strong> or changing it.</p>
 <ul>
-<li>[ ] Append these tests before adding <code>_Proof</code>.</li>
+<li>[x] Append these tests before adding <code>_Proof</code>.</li>
 </ul>
 <p>&lt;!-- permission-tests --&gt;</p>
 <pre><code class="language-python">class ProofTests(Fixture):
@@ -479,21 +479,54 @@ create-capable LabLock.<strong>enter</strong> or changing it.</p>
             (self.target / ('n' + str(index))).mkdir(mode=0o700)
         proof = self.proof()
         self.assertEqual(len(proof.children), 256)
+        proof.close()
         (self.target / 'n255').mkdir(mode=0o700)
-        with self.assertRaises(ValueError):
-            proof.observe()
+        fresh = self.tool._Proof()
+        try:
+            with self.assertRaisesRegex(ValueError, 'permission_children_bound_or_name'):
+                fresh.bind()
+        finally:
+            fresh.close()
         (self.target / 'n255').rmdir()
+        for index in range(255):
+            (self.target / ('n' + str(index))).rmdir()
         (self.target / ('x' * 129)).mkdir(mode=0o700)
-        with self.assertRaises(ValueError):
-            proof.observe()
+        fresh = self.tool._Proof()
+        try:
+            with self.assertRaisesRegex(ValueError, 'permission_children_bound_or_name'):
+                fresh.bind()
+        finally:
+            fresh.close()
+
+    def test_post_metadata_requires_validated_baseline(self):
+        proof = self.proof()
+        os.fchmod(proof.target, 0o700)
+        os.utime(self.target, ns=(self.target.stat().st_atime_ns,
+                                 proof.before[7] + 1000000000))
+        for method in ('metadata', 'observe'):
+            with self.subTest(method=method):
+                with self.assertRaisesRegex(ValueError, 'permission_post_baseline_unavailable'):
+                    getattr(proof, method)(after=True)
+
+    def test_validated_post_baseline_preserves_other_commitments(self):
+        proof = self.proof()
+        ancestors = {path: record[2] for path, record in proof.dirs.records.items()}
+        children = list(proof.children)
+        os.fchmod(proof.target, 0o700)
+        proof.bind_post()
+        proof.metadata(after=True)
+        proof.observe(after=True)
+        self.assertEqual(ancestors, {path: record[2] for path, record in proof.dirs.records.items()})
+        self.assertEqual(children, proof.children)
+        self.unchanged_receipts()
 </code></pre>
 <ul>
-<li>[ ] Run RED (expected <code>_Proof</code> missing, nonzero):</li>
+<li>[x] Run RED (expected <code>_Proof</code> missing, nonzero):</li>
 </ul>
 <pre><code class="language-sh">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_recovery_parent_permissions.ProofTests
 </code></pre>
 <ul>
-<li>[ ] Append the complete existing-only lock/metadata implementation.</li>
+<li>[x] Append the complete existing-only lock/metadata implementation.</li>
 </ul>
 <p>&lt;!-- permission-tool --&gt;</p>
 <pre><code class="language-python">class _Proof:
@@ -539,6 +572,8 @@ create-capable LabLock.<strong>enter</strong> or changing it.</p>
     def metadata(self, *, after=False):
         if self.closed:
             raise ValueError('permission_proof_closed')
+        if after and self.post is None:
+            raise ValueError('permission_post_baseline_unavailable')
         self.dirs.guard(after=after)
         expected = self.post if after else self.before
         if self.target is not None and expected is not None:
@@ -614,7 +649,7 @@ create-capable LabLock.<strong>enter</strong> or changing it.</p>
         return errors
 </code></pre>
 <ul>
-<li>[ ] Repeat Task2 command and whole new module; require actual OK. Independently
+<li>[x] Repeat Task2 command and whole new module; require actual OK. Independently
 review no-create lock, full stat9 including GID, held/named closure, finite
 enumeration and no child open/traversal. Record actual results; commit exact
 engineering/doc paths using Task1's staging command and message
@@ -1456,6 +1491,29 @@ PASS, minor closed. ToolSHA256b2911e161a5d501d94c2a4191d5a4e1e766fde9d1785f013ba
 testSHA256fedf1e824e0fea7cd49efc0705217ff004eb9d4d34e1bf910b581d9beb9967aa.
 Updated plan examples syntax-check only: tool360 lines/tests723 lines/41 methods.
 Task1 engineering acceptance confirmed; fresh Task2 follows the scoped checkpoint.</p>
+<p>Task2 fresh permission_task2_impl reported genuine missing_Proof RED7 before
+adding its read-only lock/child proof; focused7/whole12 GREEN. Root whole12/0.200s
+OK. Independent SPEC12/0.178s plus4 owned-temp probes/0.255s found masked bound
+tests, not a code defect: late target metadata drift prevented enumeration.
+Root tightened exact bound-error expectations and reproduced RED1/0.114s.
+Minimal TEST-ONLY correction uses independent initial binds for257 and129B
+rosters after the256-positive proof is closed. Root12/0.189s and SPEC12/0.357s
+PASS. Target/lock/child commitments remain original, no receipt traversal.</p>
+<p>Independent QUALITY found missing-post-baseline state accepted by metadata/
+observe(after=True). Root corrected an unrelated selector typo, then reproduced
+genuine RED1test/2subfailures/0.009s. Minimal implementation guard refuses after
+checks until a validated post baseline exists. Added negative premature-post
+and positive real-owned-FD0755→0700 binding coverage. Root14/0.190s, SPEC14/0.161s
+and QUALITY14/0.170s PASS; original altered-mtime reproducer now refuses without
+capturing a baseline. No remaining Critical/Important review findings.
+Current toolSHA25643e1e0490f2f4cbd7a1f0797a97e5176cad09b6f43e0b6c4054dbdecb2a5ac76;
+testsSHA25631da0753d31d6737757bc3aaa3937dba198aec7ea66666d845a5a415ea62542d.
+Plan examples compile only:362 tool lines/756 test lines/43 methods. Final root
+verification and scoped checkpoint follow. Syscall/orchestration/CLI tasks remain
+pending; no actual private-target/VM observation or permission attempt consumed.</p>
+<p>Final Task2 root whole14/0.196s OK and actual tool/test hashes match the reviewed
+values above; Task2 engineering acceptance confirmed. Scoped checkpoint/readers
+precede fresh Task3. Live permission and recovery remain separately unapproved.</p>
 </article></main>
 </div></div>
 <script>(() => {

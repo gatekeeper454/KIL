@@ -24086,3 +24086,83 @@ SPEC then QUALITY/root verification. No new human preparation approval needed.
 Live one-mode-change and later one-stop each still require NEW separate approval.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T435 — 2026-09-17, existing-only permission lock and child-proof Task2 accepted
+
+**Input:** Approved fixture preparation; fresh permission_task2_impl reports,
+independent Task2 SPEC/QUALITY reviews by permission_task1_spec/quality, root
+actual-code and regression verification after clean Task1c502617 checkpoint.
+
+**Interpretation:** Continuous requested subagent-driven engineering, not a
+live lock/private evidence inspection or permission/VM recovery attempt. Root
+owns all docs/lineage/git. Reused independent reviewers receive curated Task2
+requirements and inspect actual bytes; Task2 implementer is fresh.
+
+**Decision status:** CONFIRMED Task2 code/real-fixture regressions and independent
+SPEC/QUALITY gates passed. Tasks3–5 pending; no live fchmod/stop/HF approval.
+
+**Rationale/evidence:** Implementer reported intended missing_Proof RED7 before
+code, focused7/whole12 GREEN. Root read actual two-file diff, whole12/0.200s OK.
+New _Proof retains pinned private tools/0755 target/full stat9, existing UID501
+0700 lock ancestry and existing-only O_RDONLY|NOFOLLOW|NONBLOCK regular0600
+single-link bounded profile.lock. Same nonblocking exclusive flock protocol;
+no create-capable LabLock entry/authority factory. Bounded pread authentication,
+two equal complete finite direct-child metadata observations, unchanged original
+commitments, metadata-only named/FD/known-child closure and all-handle cleanup.
+
+Independent SPEC12/0.178s and4 real-owned-temp probes/0.255s showed existing257/
+129B tests stopped at target metadata drift, masking required enumeration bounds.
+Fresh initial binds correctly rejected both; no implementation defect there.
+Root reproduced tightened error expectation RED1/0.114s (bound error expected,
+target_metadata_changed actual). Minimum TEST-ONLY setup correction closes the
+256-positive proof, then independently binds fresh257 and129B fixtures with exact
+children_bound_or_name expectations/always-close. Root12/0.189s and SPEC12/0.357s
+PASS; no production/tool behavior change for that coverage fix.
+
+Independent QUALITY12/0.194s plus bounded owned-temp lifecycle/bounds/post-state
+probes found Important post-state gap: metadata/observe(after=True) skipped full
+target checks when post baseline absent, allowing altered target mtime that
+bind_post correctly refused. Root traced expectedNone branch; initial wrong
+selector produced unrelated loader error, corrected selector independently
+reproduced genuine RED1test/2subfailures/0.009s (ValueError not raised). Do not
+count the selector error as feature evidence. Minimal guard now refuses after
+checks without validated post baseline; positive755→700 held-FD post binding
+preserves existing commitments/fixture receipt bytes and modes. No rebaseline.
+
+Root14/0.190s, SPEC14/0.161s, QUALITY14/0.170s PASS. Original real-filesystem
+altered-mtime reproducer now refuses metadata/observe and never captures invalid
+post baseline. Lifecycle probes covered dangling direct symlink/no-follow,
+exact1MiB acceptance/oversized refusal, partial-bind cleanup and simultaneous
+unlock/close failures while all remaining FDs release. No remaining Critical/
+Important findings. Final root14/0.196s exit0 OK, ResourceWarning fatal.
+
+Final toolSHA25643e1e0490f2f4cbd7a1f0797a97e5176cad09b6f43e0b6c4054dbdecb2a5ac76;
+testsSHA25631da0753d31d6737757bc3aaa3937dba198aec7ea66666d845a5a415ea62542d.
+Root's actual hash corrects one extra trailing character in implementer report;
+reviews verify actual64-hex bytes. Updated plan examples AST-compile only:
+362 tool lines/756 test lines/43 methods. Fixture verification is not actual
+permission change, descendant-content attestation, arbitrary external exclusion
+or atomicity. Source contains no fchmod/once/_run/main implementation yet.
+
+**Affected artifacts:** Only new permission tool/tests, Task2 plan checks/results/
+reader and this actual-EOF lineage/reader. Approved spec/accepted recovery/
+production/deploy/artifacts unchanged by our work. Actual private target/lock/
+receipts/runtime not inspected or modified. No actual private stat/content/
+runtime/status/VM native operations, HF/Ollama/
+rehearsal/image/SSH audit, evidence creation/repair, retry/rollback/force/delete/
+restart. Real post-change syscalls above target owned temporary fixtures only.
+
+**Unresolved questions:** Tasks3–5 genuine failing syscall/outcome tests and
+independent reviews/root verification. Historical live mode/VM status unrefreshed,
+0755 origin unestablished, later recovery/HF readiness unproved. Accepted local
+Envoy unchanged/platform provenance unverified/full Kind-Calico acceptance false;
+four immutable historical citation omissions remain disclosed and untouched.
+
+**Next gate:** Preserve fullc502617 predecessor lineage prefix1,425,826B;
+verify96 readers/canonical citations/exact protected scope/clean scoped local
+checkpoint. Fresh Task3 implementer adds entry-consumed syscall/error primitives
+test-first on owned fixtures, then SPEC followed by QUALITY/root verification.
+No new preparation approval needed. Root-only actual mode-change and separate
+native one-stop attempt each still require NEW explicit execution approval.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

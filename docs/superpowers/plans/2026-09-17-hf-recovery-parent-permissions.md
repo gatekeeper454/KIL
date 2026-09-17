@@ -342,7 +342,7 @@ git commit -m 'feat: retain fixed permission ancestry without mutation'
 `tools/hf_exploratory_kind.py:23` and its flock protocol without calling
 create-capable LabLock.__enter__ or changing it.
 
-- [ ] Append these tests before adding `_Proof`.
+- [x] Append these tests before adding `_Proof`.
 
 <!-- permission-tests -->
 ```python
@@ -437,22 +437,55 @@ class ProofTests(Fixture):
             (self.target / ('n' + str(index))).mkdir(mode=0o700)
         proof = self.proof()
         self.assertEqual(len(proof.children), 256)
+        proof.close()
         (self.target / 'n255').mkdir(mode=0o700)
-        with self.assertRaises(ValueError):
-            proof.observe()
+        fresh = self.tool._Proof()
+        try:
+            with self.assertRaisesRegex(ValueError, 'permission_children_bound_or_name'):
+                fresh.bind()
+        finally:
+            fresh.close()
         (self.target / 'n255').rmdir()
+        for index in range(255):
+            (self.target / ('n' + str(index))).rmdir()
         (self.target / ('x' * 129)).mkdir(mode=0o700)
-        with self.assertRaises(ValueError):
-            proof.observe()
+        fresh = self.tool._Proof()
+        try:
+            with self.assertRaisesRegex(ValueError, 'permission_children_bound_or_name'):
+                fresh.bind()
+        finally:
+            fresh.close()
+
+    def test_post_metadata_requires_validated_baseline(self):
+        proof = self.proof()
+        os.fchmod(proof.target, 0o700)
+        os.utime(self.target, ns=(self.target.stat().st_atime_ns,
+                                 proof.before[7] + 1000000000))
+        for method in ('metadata', 'observe'):
+            with self.subTest(method=method):
+                with self.assertRaisesRegex(ValueError, 'permission_post_baseline_unavailable'):
+                    getattr(proof, method)(after=True)
+
+    def test_validated_post_baseline_preserves_other_commitments(self):
+        proof = self.proof()
+        ancestors = {path: record[2] for path, record in proof.dirs.records.items()}
+        children = list(proof.children)
+        os.fchmod(proof.target, 0o700)
+        proof.bind_post()
+        proof.metadata(after=True)
+        proof.observe(after=True)
+        self.assertEqual(ancestors, {path: record[2] for path, record in proof.dirs.records.items()})
+        self.assertEqual(children, proof.children)
+        self.unchanged_receipts()
 ```
 
-- [ ] Run RED (expected `_Proof` missing, nonzero):
+- [x] Run RED (expected `_Proof` missing, nonzero):
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_recovery_parent_permissions.ProofTests
 ```
 
-- [ ] Append the complete existing-only lock/metadata implementation.
+- [x] Append the complete existing-only lock/metadata implementation.
 
 <!-- permission-tool -->
 ```python
@@ -499,6 +532,8 @@ class _Proof:
     def metadata(self, *, after=False):
         if self.closed:
             raise ValueError('permission_proof_closed')
+        if after and self.post is None:
+            raise ValueError('permission_post_baseline_unavailable')
         self.dirs.guard(after=after)
         expected = self.post if after else self.before
         if self.target is not None and expected is not None:
@@ -574,7 +609,7 @@ class _Proof:
         return errors
 ```
 
-- [ ] Repeat Task2 command and whole new module; require actual OK. Independently
+- [x] Repeat Task2 command and whole new module; require actual OK. Independently
   review no-create lock, full stat9 including GID, held/named closure, finite
   enumeration and no child open/traversal. Record actual results; commit exact
   engineering/doc paths using Task1's staging command and message
@@ -1449,3 +1484,29 @@ PASS, minor closed. ToolSHA256b2911e161a5d501d94c2a4191d5a4e1e766fde9d1785f013ba
 testSHA256fedf1e824e0fea7cd49efc0705217ff004eb9d4d34e1bf910b581d9beb9967aa.
 Updated plan examples syntax-check only: tool360 lines/tests723 lines/41 methods.
 Task1 engineering acceptance confirmed; fresh Task2 follows the scoped checkpoint.
+
+Task2 fresh permission_task2_impl reported genuine missing_Proof RED7 before
+adding its read-only lock/child proof; focused7/whole12 GREEN. Root whole12/0.200s
+OK. Independent SPEC12/0.178s plus4 owned-temp probes/0.255s found masked bound
+tests, not a code defect: late target metadata drift prevented enumeration.
+Root tightened exact bound-error expectations and reproduced RED1/0.114s.
+Minimal TEST-ONLY correction uses independent initial binds for257 and129B
+rosters after the256-positive proof is closed. Root12/0.189s and SPEC12/0.357s
+PASS. Target/lock/child commitments remain original, no receipt traversal.
+
+Independent QUALITY found missing-post-baseline state accepted by metadata/
+observe(after=True). Root corrected an unrelated selector typo, then reproduced
+genuine RED1test/2subfailures/0.009s. Minimal implementation guard refuses after
+checks until a validated post baseline exists. Added negative premature-post
+and positive real-owned-FD0755→0700 binding coverage. Root14/0.190s, SPEC14/0.161s
+and QUALITY14/0.170s PASS; original altered-mtime reproducer now refuses without
+capturing a baseline. No remaining Critical/Important review findings.
+Current toolSHA25643e1e0490f2f4cbd7a1f0797a97e5176cad09b6f43e0b6c4054dbdecb2a5ac76;
+testsSHA25631da0753d31d6737757bc3aaa3937dba198aec7ea66666d845a5a415ea62542d.
+Plan examples compile only:362 tool lines/756 test lines/43 methods. Final root
+verification and scoped checkpoint follow. Syscall/orchestration/CLI tasks remain
+pending; no actual private-target/VM observation or permission attempt consumed.
+
+Final Task2 root whole14/0.196s OK and actual tool/test hashes match the reviewed
+values above; Task2 engineering acceptance confirmed. Scoped checkpoint/readers
+precede fresh Task3. Live permission and recovery remain separately unapproved.
