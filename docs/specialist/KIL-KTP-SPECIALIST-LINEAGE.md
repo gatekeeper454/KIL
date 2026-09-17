@@ -22438,3 +22438,68 @@ later execute the one conditional request-free rehearsal after all gates; live
 HF action remains separately unapproved.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T412 — 2026-09-16, independent compact-runtime SPEC review requests one correction
+
+**Input:** Root dispatched a fresh independent SPEC review of approved
+docs/superpowers/specs/2026-09-16-hf-compact-runtime-design.md and frozen engineering
+HEAD d2b75090d268582d903d6299930052fbc8d6bfcd against baseline 84e8e4f. Exclusive
+writer grant permits only this appended lineage checkpoint and generated reader;
+production, tests, specification and plan remain frozen. The reviewer did not
+read the implementation plan or rely on implementer success claims.
+
+**Interpretation:** Read the complete approved specification, actual two-file
+production change, affected test changes and relevant unchanged final-runner and
+finite evidence consumers. Verify contract behavior with bounded real temporary
+filesystem unit checks; this is engineering review, not native preparation.
+
+**Decision status:** CONFIRMED independent SPEC review requires one Important
+correction before PASS. Fresh designated-interpreter runtime/profile/IO suite
+ran 140 tests in 3.852s, OK, with bytecode off, PYTHONPATH=src and ResourceWarning
+fatal. A separate real self-symlink home fixture under /private/tmp on designated
+Python 3.12.13 caused both RuntimeAuthority.create and a live guard to emit
+RuntimeError, not ValueError. Path.resolve(strict=True) at runtime.py:31 raises
+the known symlink-loop filesystem/shape failure; create/guard normalization at
+runtime.py:273/383 excludes RuntimeError. Root independently reproduced and
+accepted this required correction. The failing route refuses, but its exception
+type does not meet the approved known-failure normalization contract.
+
+**Rationale:** The reviewed change otherwise implements private actual-passwd
+selection, exclusive byte-cap checks, marked registry-only reuse, fresh compact
+prefix collision refusal, durable full-ID canonical binding, complete independent
+retained ancestry walks, bounded readonly nonblocking authentication and final
+two-file/directory/store/lock identity rechecks. Exact authority/adapter checks,
+four derived environment keys, explicit root control handle and legacy offline
+parsing distinction are retained. Fixed seven-file snapshots/five-directory
+leftover observations and final runner consistency remain unchanged. Existing
+finite tests cover real bytes/types/modes/links, substitutions, failure cleanup
+and zero mocked process capture for known authentication drift; they omit the
+real Path.resolve symlink-loop normalization case. No arbitrary in-process or
+zero-TOCTOU assurance is inferred from these checks.
+
+**Affected artifacts:** Reviewer changes only this lineage Markdown/reader pair.
+Frozen engineering diff has exactly two authorized source files, five existing
+authorized tests and lineage pair, with no other paths. Frozen git diff --check
+passed; complete baseline lineage prefix of 1,305,598 bytes is preserved. Root
+separately reports fresh required15 PASS: 455 tests in 99.551s and unchanged five
+protected-source SHA commitments. Root's citation check retains the exact known
+one failure for four immutable historical omissions; it is not all-green discovery.
+No actual-home registry allocation, native/VM/HF/HTTP/Ollama dispatch, image audit,
+installation, old receipt/runtime/disk mutation, adoption/deletion, global PATH,
+branch/worktree move, merge or push occurred in this review.
+
+**Unresolved questions:** SPEC PASS awaits the finite resolution-loop correction
+and fresh independent review; QUALITY/final composition remain pending. Native
+compatibility/HF preparation readiness is not established. Platform-image
+provenance remains unverified, full Kind-Calico acceptance false and accepted
+local Envoy intact. Live HF action is separately unapproved.
+
+**Next gate:** Render/check all 92 readers, preserve the entire 1,315,893-byte
+starting engineering lineage prefix, commit only this pair and release the writer
+grant at clean exact HEAD. Original implementer alone receives the next writer
+grant for test-first selector/create/guard resolution-loop normalization, without
+unrelated edits. Independently re-review that exact correction before QUALITY
+and fresh composed verification. Root alone retains any later conditional one
+request-free rehearsal authority after every engineering/review/input gate.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
