@@ -111,3 +111,12 @@ details as silently confirmed decisions. User review of this written design is
 the brainstorming gate before the concrete implementation plan and TDD.
 
 KTP citation: [canonical CITATION.cff](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## Written design approval — 2026-09-16
+
+The user replied “yes approved” to review of this exact written PATH design.
+The proposed-status text above remains the preceding design record; the contract
+is now approved for test-first implementation. The earlier conditional permission
+for one fresh request-free rehearsal remains valid after engineering readiness
+gates succeed. Action mode, adoption of failed state and further automatic
+attempts remain unauthorized.

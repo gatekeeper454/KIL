@@ -21613,3 +21613,45 @@ request-free private rehearsal. Stop on any uncertainty; no automatic second
 attempt or action-mode continuation is authorized.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T399 — 2026-09-16 — Written PATH design approved; scoped TDD plan
+
+**Input:** The user replied “yes approved” to the exact written scoped Colima
+dependency PATH design. Conditional single fresh request-free rehearsal permission
+from T398 remains active after verified engineering readiness.
+
+**Interpretation:** Implement the approved mutation-only runner repair test-first,
+with independent SPEC/QUALITY/final review. Preserve failed state and strict
+authority; no action mode, image audit, installation or global PATH modification.
+
+**Decision status:** Written design CONFIRMED approved. Append approval without
+silently replacing its proposed historical status; create the complete single-unit
+implementation plan. Existing isolated detached worktree is clean and preserved.
+Fresh baseline passed 77 IO/runtime tests in 2.554s with ResourceWarning fatal.
+
+**Rationale:** Exact three-tool directory/file authentication and original Colima
+selection prevent PATH priority from becoming arbitrary executable authority.
+Repeat identity/roster/full-byte checks across authentication IO before unchanged
+final guards/consistency. SDD supplies fresh implementer and sequential independent
+reviews; root alone can later use conditional native permission if all repair
+readiness gates pass. Known historical citation failure is not hidden or fixed
+through receipt edits/exemption changes.
+
+**Affected artifacts:** Append design approval; add
+docs/superpowers/plans/2026-09-16-hf-colima-dependency-path.md and generated reader;
+append this dated actual-EOF lineage entry/reader. Source/tests remain unchanged
+at this planning checkpoint, as do Native/CLI, strict contracts, accepted local
+Envoy/inputs, sixteen deferrals, failed runtime and all historical evidence.
+No native/VM/HF/Ollama/image audit, install, retry, deletion, branch move or push.
+
+**Unresolved questions:** Implementation/regression and review gates are pending.
+Later native compatibility remains untested; conditional rehearsal permission is
+not evidence that its readiness condition or successful teardown is established.
+
+**Next gate:** Index/render/check the document set and verify exact prior Markdown
+prefix, then checkpoint the approved design/plan/lineage. Dispatch one fresh TDD
+implementer, followed by SPEC then QUALITY and final review. On verified clean
+engineering readiness, execute one fresh request-free private rehearsal using the
+existing permission, with no action-loop fallthrough or further automatic attempt.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
