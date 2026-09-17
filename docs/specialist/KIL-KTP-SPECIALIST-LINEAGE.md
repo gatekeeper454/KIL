@@ -22662,3 +22662,87 @@ passes. Retained complete request-free rehearsal plus verified owned teardown,
 not this SPEC PASS or unit tests, is required before HF-test readiness.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T416 — 2026-09-16, independent compact-runtime QUALITY review PASS
+
+**Input:** Fresh independent QUALITY reviewer received clean frozen HEAD
+579fc7bc11541b8e4a631162d59f3f9fcbe2b067, engineering base
+84e8e4f87726212b496448ba77fb03d9fe857cd0, the approved compact-runtime contract
+and complete written specification. The source correction at 2b2d891 and T415
+SPEC PASS are context, not substitutes for independent code inspection. Exclusive
+writer grant covers only this lineage Markdown/reader pair; root's required15
+regression work remains read-only against the frozen source.
+
+**Interpretation:** Read the complete approved specification, actual production
+diff and complete runtime/profile code, changed consumer tests, real filesystem
+runtime tests and unchanged runner/evidence/native integration boundaries. Do
+not read the plan, reopen platform-image provenance, widen to arbitrary hostile
+in-process callbacks, change production/tests or consume native rehearsal authority.
+Use the requesting-code-review template and fresh verification evidence.
+
+**Decision status:** CONFIRMED independent QUALITY PASS for this bounded change.
+Critical: none found. Important: none found. Minor: no concrete finding observed.
+Fresh designated interpreter runtime/profile/IO suite ran 145 tests in 3.801s,
+OK; an additional evidence suite ran 12 tests in 1.148s, OK. Both used
+PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and -W error::ResourceWarning. These
+are this reviewer's actual executions, not earlier 455/460-test reports or
+independent observation of the implementer's historical RED phase.
+
+**Rationale:** Explicit store/root FDs and independently reconstructed expected
+receipt and registry/home/run/native-home chains avoid the former sibling-root
+index assumption. Directory identities omit ordinary roster/timestamp changes
+while preserving device/inode/type-mode/UID and private owner-0700 enforcement.
+Full digest, exact store/path/lock and real/effective UID agreement precede
+allocation; exclusive registry bootstrap and prefix-root creation refuse unsafe
+reuse, unmarked/partial markers and all preexisting same-prefix entries without
+repair, adoption, fallback or retry. Canonical marker/full-ID binding bytes are
+bounded, read-only/no-follow/nonblocking and retain eight-field file identities;
+both named/retained files and directory/store/lock identities are rechecked after
+both reads. Failure ownership records a just-opened FD before identity reads,
+closes acquired handles on refused construction and preserves partial bootstrap/
+binding state. Idempotent close releases descriptors only. Actual resolution-loop
+normalization and finite before-dispatch refusal tests remain present.
+
+The adapter/getters, exclusive bounded Kind control, four derived environment
+keys and actual HOME remain compatible. The unchanged runner's final exact
+manifest/tool-metadata consistency block follows all guard/authentication IO,
+with no authentication IO afterward. Pure compact parent/leaf validation does
+not let a caller home select production location; legacy saved evidence remains
+offline shape parsing, not live creation/adoption. Seven snapshot files, five
+bounded leftover rosters, durable receipt checksums and snapshot-before-owned-
+teardown behavior remain derived consumers without broader native disk traversal.
+Runtime source growth from 247 to 467 lines (+220) is proportionate to bounded
+authentication, exclusive bootstrap and two complete expected chains; profile
+growth is five net lines. No new module or unrelated architectural rewrite is
+needed to pass this quality gate. Recommendation: preserve these finite invariants
+and existing real filesystem fixtures through final composition.
+
+**Affected artifacts:** Reviewer appends only this entry and its generated reader.
+The actual base-to-frozen-HEAD diff contains exactly the authorized nine paths:
+runtime/profile production, five existing test modules and lineage pair. Other
+production, strict modules, accepted inputs/artifacts, .gitattributes, specification,
+plan, citation policy and historical receipts remain unchanged. Frozen diff
+--check passed; complete starting lineage prefix of 1,330,742 bytes was compared
+exactly before this append and will be compared again before commit. No native/
+VM/HF/HTTP/Ollama/network, install/image audit, actual-home registry allocation,
+old receipt/runtime/disk adoption/mutation/deletion, global PATH/default mutation,
+branch move/merge/push or worktree operation occurred.
+
+**Unresolved questions:** Root required15 fresh regression and final composed
+review remain gates. Native compatibility and HF-test readiness remain unverified.
+The one conditional fresh root-only request-free rehearsal remains unconsumed;
+live HF action remains separately unapproved. Accepted local Envoy is intact,
+platform-image provenance unverified and full Kind-Calico acceptance false.
+Historical broader discovery's one citation failure for four immutable omissions
+and sixteen intentional skips remains outside this narrow green result. No
+arbitrary same-UID exclusion, zero-TOCTOU, transaction, filesystem removal, exploit,
+full-HF/no-bypass/performance or broader acceptance claim is made.
+
+**Next gate:** Regenerate/check all 92 readers, recompare the complete starting
+lineage byte prefix, verify exact lineage-only diff/staging and clean committed
+HEAD, then release the reviewer grant. Root must complete final composition and
+all engineering/clean-source/input gates before any single conditional rehearsal.
+Complete retained request-free evidence and verified owned teardown are required
+before HF-test readiness; unit tests and this QUALITY PASS do not establish it.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
