@@ -25309,3 +25309,19 @@ KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob
 **Next action:** Fresh clean-source full request-free readiness then automatic approved three-track actual HF. Preserve separate nonces/runtimes/sealed receipts and no uncertain instruction replay. Platform provenance remains unverified/full Kind-Calico acceptance false; previous local Envoy evidence unchanged.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T461 — 2026-09-18, omitted native startup container ID without relaxing identity binding
+
+**Input and interpretation:** Continue explicit authorization to fix issues and automatically reach actual HF execution without further routine approval/planning stops. Root retains exact existing worktree and only owned native operations.
+
+**Confirmed native evidence:** Rehearsal14 sourceb8880fe77ea714e446c9c7e60f9fa87d1c5cee8b runfc9a61144a61f633fd1720e98f93298a6110ac3a5206944d3f0ce99b06af8ca3 passed actual VM/image/registry/Calico/service readiness and the corrected variable-length ownership parser. Driver apply succeeded; initial full runtime List360 reached the known Pending/ContainerCreating branch but refused `pending_container_not_known_startup`. Exact retained driver container statuses have empty imageID, requested image, ready false, restart0, state waiting reason ContainerCreating and omitted containerID. Parser required an explicitly present empty string. All three observed drivers were initial Pending, no HF instruction/attempt/outcome. Complete owned teardown/profile deletion/cluster removal true, manual recovery false, final wrapper closure/foreign preservation true. Root independently verified807 files/3364665 bytes/seal00c9c3c22a1f989da79f7ea70a3b386e53a67f2f4cad0f7b3fea6e8c3816d7d4. Final `/private/tmp/kil-hf-rehearsal-14-final.json`; receipt `.tools/hf-exploratory-private/hf-exploratory-fc9a61144a61f633fd1720e98f93298a6110ac3a5206944d3f0ce99b06af8ca3`.
+
+**Confirmed correction and rationale:** Pinned [Kubernetes0.36.1 ContainerStatus API source](https://github.com/kubernetes/api/blob/v0.36.1/core/v1/types.go) declares containerID optional with JSON omitempty, while imageID is always present. Exactly one guard operand now accepts absent containerID as unallocated only in the existing strictly validated initial Pending/ContainerCreating branch. Explicit null/nonempty IDs refuse, as do changed metadata/config/restarts/image/unsafeplacement/unknownstate or already bound roles. No retained bytes are normalized, no synthetic identity is adopted, and only later exact actual running container IDs can bind. Original Pod UID latch still requires continuity and existing shared setup deadline/budget still bounds pending reads.
+
+**Validation:** New omitted-ID full fixture genuine RED, explicit-null immediate refusal control passed:2 tests4.662s/one failure. Final omitted-ID complete request-free rehearsal with owned teardown, explicit-null refusal and later Ready UID replacement refusal tests passed, bytecode disabled and fatal ResourceWarning. Root reviewed the single-operand source diff; diff check clean. Pure fixtures do not establish actual HF completion.
+
+**Affected artifacts:** One exploratory native Pending guard operand and focused regressions, exact lineage append/scoped reader. Original identity/image/ownership joins, historical evidence, profile/SSH/IO/recovery and Calico bytes preserved. No install, new worktree, merge, push or provenance audit.
+
+**Next action:** Fresh clean-source request-free readiness then automatically approved fixed three-track HF action with separate nonce/runtime and immutable receipt. No uncertain instruction replay. Platform provenance remains unverified/full Kind-Calico acceptance false; prior local Envoy evidence unchanged.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

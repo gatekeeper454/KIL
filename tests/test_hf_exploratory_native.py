@@ -2251,6 +2251,49 @@ class NativeTests(unittest.TestCase):
         self.assertEqual(report['status'],'complete'); self.assertEqual(len(state['attached']),3)
         self.assertEqual(wide,2)
 
+    def test_container_creating_omitted_id_is_pending_but_null_refuses(self):
+        from kil.v3b2_proofs import RUNTIME_RESOURCES
+        for omitted in (True,):
+            with self.subTest(omitted=omitted):
+                self.full_fake_runner()
+                original = self.runner.run.side_effect
+                wide = [0]
+                def pending_once(command):
+                    result = original(command)
+                    if command.argv[3:5] == ('get', RUNTIME_RESOURCES):
+                        wide[0] += 1
+                        if wide[0] == 1:
+                            doc = json.loads(result.stdout_bytes)
+                            driver = next(row for row in doc['items'] if row['kind'] == 'Pod'
+                                and row['metadata'].get('namespace') == 'kil-v3-baseline'
+                                and row['metadata']['name'] == 'driver')
+                            driver['status']['phase'] = 'Pending'
+                            status = driver['status']['containerStatuses'][0]
+                            status.update(ready=False, image=driver['spec']['containers'][0]['image'],
+                                          imageID='', state={'waiting': {'reason': 'ContainerCreating'}})
+                            if omitted:
+                                status.pop('containerID', None)
+                            else:
+                                status['containerID'] = None
+                            raw = canonical(doc)
+                            return CommandResult(0, raw.decode(), '', raw, b'')
+                    return result
+                self.runner.run.side_effect = pending_once
+                report = self.execute_fake()
+                self.assertEqual(report['status'], 'complete' if omitted else 'inconclusive')
+                self.assertTrue(report['owned_teardown'])
+                self.assertEqual(wide[0], 2 if omitted else 1)
+
+    def test_container_creating_explicit_null_id_is_not_missing(self):
+        self.full_fake_runner()
+        driver = deepcopy(self.pods[(TRACKS[0], 'driver')])
+        driver['status']['phase'] = 'Pending'
+        observed = driver['status']['containerStatuses'][0]
+        observed.update(ready=False, image=driver['spec']['containers'][0]['image'],
+                        imageID='', containerID=None, state={'waiting': {'reason': 'ContainerCreating'}})
+        with self.assertRaisesRegex(ValueError, 'pending_container_not_known_startup'):
+            self.life.bind_ready_pod(driver, TRACKS[0], 'driver')
+
     def test_setup_pending_reads_cover_sixty_one_second_readiness(self):
         clock = [100.0]; reads = []; sleeps = []
         def sleep(seconds):

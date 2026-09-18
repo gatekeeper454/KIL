@@ -1330,7 +1330,7 @@ class ExploratoryLifecycle:
             waiting = observed.get('state',{}).get('waiting')
             if (observed.get('name')!=role or observed.get('ready') is not False
                     or type(observed.get('restartCount')) is not int or observed['restartCount']!=0
-                    or observed.get('containerID')!='' or observed.get('imageID')!=''
+                    or observed.get('containerID','')!='' or observed.get('imageID')!=''
                     or observed.get('image')!=requested or set(observed['state'])!={'waiting'}
                     or type(waiting) is not dict or waiting.get('reason')!='ContainerCreating'
                     or set(waiting)-{'reason','message'}
