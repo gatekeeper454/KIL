@@ -24902,3 +24902,85 @@ read-only sealed receipt verification before the separately authorized ONE fresh
 fixed three-track HF action. No extra routine permission question is required.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T447 — 2026-09-17, SSH gate passed; fresh rehearsal refused at Kind child PATH
+
+**Input:** T445 authorized one conditional fresh request-free rehearsal after
+verified SSH engineering, with current HF action authorization conditional on
+complete rehearsal readiness and owned teardown.
+
+**Interpretation:** Run the exact reviewed clean local source once in explicitly
+selected rehearsal mode. No automatic action continuation, retry or recovery.
+
+**Decision status:** CONFIRMED source601a3f9c722cf484d6d7abb06b449ab28a44cc5c
+clean checkpoint; root executed ONE fresh rehearsal. Accepted SSH compatibility
+gate passed against actual new native generated files and exact Running inventory;
+Kind creation failed at its child Docker executable lookup. Overall rehearsal
+INCONCLUSIVE, not readiness acceptance; HF action NOT executed. Live rehearsal
+permission spent. New private profile/runtime retained for explicit recovery.
+
+**Rationale/evidence:** Complete filtered read-only process observation showed no
+competing harness/native client before dispatch (not atomic external exclusion).
+Private receipt parent and runtime registry parent were0700. Reviewed one-mode
+wrapperSHA333a246261c05e1323500b20585010d80f46be7470a16aff45cdd8659075a443;
+verifierSHA3744bb1ec0b5f3bce0e94b761785f808b4d6fc5c81715debe510894c7660358c.
+Root invoked the existing venv/fatal ResourceWarning with PYTHONDONTWRITEBYTECODE=1
+and PYTHONPATH=src, reviewed-source601a3f9c722cf484d6d7abb06b449ab28a44cc5c,
+mode rehearsal and exact user fix/do-necessary instruction as approval. New run:
+`v3b2-04b449f10783d619849e4ff938accf10681ea041b55c29283c65f0fe22fe2032`.
+New private runtime `/Users/mistorm/.kil-hf/r04b449f10783d619`; receipt
+`.tools/hf-exploratory-private/hf-exploratory-04b449f10783d619849e4ff938accf10681ea041b55c29283c65f0fe22fe2032`.
+
+Native start returned0; running SSH pair proof/raw files were retained and passed
+before first endpoint/Kind work. Kind create command22 returned1:
+`failed to get docker info ... exec: "docker": executable file not found in $PATH`.
+Command23 Docker inspect returned1, `no such object: kil-v3-lab-control-plane`.
+Harness refused `cluster_create_unbound` at `inconclusive_at_cluster_create_attempted`;
+cleanup retained manual_recovery=true, cluster_removed=false,
+profile_delete_completed=false and owned_teardown=false. No Colima stop/delete
+or HF action was dispatched. This absence-of-node observation is not permission
+to bypass the cluster binding or automatically mutate/delete the private runtime.
+
+Actual final wrapper returned after lifecycle/store/lock/source closure with
+final_closure_complete=true; independent three-command read-only global
+preservation matches_original=true. Root bounded read-only sealed receipt verifier
+confirmed65 files/535233 bytes, SHA256SUMS digest
+`d3695b0caa9b4188e614f88b725e977a89cf222b2b753852b9e8413f60eb74dc`,
+exact complete roster, returned report/run/source/mode and journal. HF request
+intents0, attempts0, joined results empty. Verifier native dispatches0.
+
+Read-only launch preparation authenticated the existing pinned finite tool
+directory (docker/kind/kubectl) before and after child lookup. Inherited Docker
+lookup is absent; prepending
+`/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.tools/bin`
+resolves the pinned Docker and preserves original Colima selection
+`/Users/mistorm/.local/bin/colima`. Existing BoundedRunner deliberately preserves
+inherited PATH for Kind; this is a launch configuration prerequisite, not a reason
+to weaken accepted runner authority or install software. Preparation changed no
+environment/source and dispatched zero native commands. Script:
+`/private/tmp/kil-hf-path-preflight.py`. Any future launch must freshly authenticate
+this directory and keep the original PATH tail without empty search entries.
+
+**Affected artifacts:** Final actual stdout
+`/private/tmp/kil-hf-rehearsal-final.json`, new independently verified immutable
+receipt and new retained private runtime; temporary read-only progress/launch
+preflight tools; this exact lineage append and deterministic reader. Previous
+recovered runtime r254877dc1b1462c4 and all historical receipts remain untouched.
+No origin synchronization, provenance audit, automatic retry/recovery or completed
+engineering rerun. Accepted local Envoy evidence unchanged; platform provenance
+unverified/full Kind-Calico acceptance false.
+
+**Unresolved questions:** One separately authorized stop-only recovery of the
+new private residual runtime, fresh approval for another request-free readiness
+attempt using the authenticated tool PATH, actual Kind/Calico/HF readiness. No
+claim of a running current cluster, complete teardown or HF result is established.
+
+**Next gate:** User approval for ONE graceful stop-only recovery of private
+profile kil-v3-lab strictly under /Users/mistorm/.kil-hf/r04b449f10783d619,
+with fresh sealed receipt/profile/runtime/inventory/foreign preservation gates
+and reviewed target-bound authority. No force/delete/Kind/HF/retry or alteration
+of the old stopped runtime. Subsequent fresh rehearsal needs separate live
+approval and must pass complete owned teardown before current HF authorization
+can proceed to its one fixed three-track action.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
