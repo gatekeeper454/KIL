@@ -514,6 +514,30 @@ class NativeTests(unittest.TestCase):
             with self.assertRaises(ValueError): self.life.require_complete_driver(TRACKS[0])
         self.assertEqual(read.call_count, 1)
 
+    def test_finishing_driver_requires_actual_succeeded_within_bounded_reads(self):
+        self.install_pods()
+        driver = deepcopy(self.pods[(TRACKS[0], 'driver')])
+        driver['status']['containerStatuses'][0].update(ready=False, state={'terminated': {'exitCode': 0}})
+        before = deepcopy(driver)
+        with patch.object(self.life, 'read_pod', return_value=driver) as read, \
+                patch.object(self.native.time, 'sleep'), patch.object(self.native.time, 'monotonic', return_value=100):
+            with self.assertRaisesRegex(ValueError, 'bounded_readiness_inconclusive'):
+                self.life.require_complete_driver(TRACKS[0])
+        self.assertEqual(read.call_count, 20)
+        self.assertEqual(driver, before)
+        self.assertEqual(self.store.attempts, [])
+
+    def test_finishing_driver_changed_incarnation_is_immediate_refusal(self):
+        self.install_pods()
+        driver = deepcopy(self.pods[(TRACKS[0], 'driver')])
+        driver['status']['containerStatuses'][0].update(ready=False, state={'terminated': {'exitCode': 0}})
+        driver['metadata']['uid'] = 'changed-finishing-driver'
+        with patch.object(self.life, 'read_pod', return_value=driver) as read, patch.object(self.native.time, 'sleep'):
+            with self.assertRaises(ValueError):
+                self.life.require_complete_driver(TRACKS[0])
+        self.assertEqual(read.call_count, 1)
+        self.assertEqual(self.store.attempts, [])
+
     def test_drain_true_must_not_accept_integer_one(self):
         self.install_pods()
         with patch.object(self.life, 'current_pod', return_value=self.life.anchors[(TRACKS[0],'envoy')]), patch.object(self.life, 'observe', return_value=CommandResult(0,'{"drain_requested":1}\n','',b'{"drain_requested":1}\n',b'')) as observed, patch.object(self.native.time,'sleep'):
@@ -747,6 +771,42 @@ class NativeTests(unittest.TestCase):
         for phrase in ['pod_ip','requested_image','runtime_image','image_ref','Input commitments','Requested profile resources','Actual creation-bound profile']:
             self.assertIn(phrase,synopsis)
         self.assertIn('requested',report['profile_resources'])
+
+    def _driver_finishing_fixture(self, exit_code):
+        state = self.full_fake_runner()
+        original = self.runner.run.side_effect
+        finishing = []
+        def once(command):
+            result = original(command)
+            if (len(state['attached']) == 3 and not finishing
+                    and command.argv[3:] == ('get', 'pod', 'driver', '--namespace',
+                                             'kil-v3-local-reduce', '--output', 'json')):
+                pod = json.loads(result.stdout_bytes)
+                self.assertEqual(pod['status']['phase'], 'Succeeded')
+                pod['status']['phase'] = 'Running'
+                pod['status']['containerStatuses'][0]['state']['terminated']['exitCode'] = exit_code
+                raw = canonical(pod)
+                finishing.append(raw)
+                return CommandResult(0, raw.decode(), '', raw, b'')
+            return result
+        self.runner.run.side_effect = once
+        report = self.execute_fake()
+        self.assertEqual(len(finishing), 1)
+        self.assertEqual(json.loads(finishing[0])['status']['phase'], 'Running')
+        self.assertTrue(report['owned_teardown'])
+        self.assertEqual(report['request_intent_count'], 0)
+        return report
+
+    def test_same_driver_zero_exit_waits_for_succeeded_pod_phase(self):
+        report = self._driver_finishing_fixture(0)
+        self.assertEqual(report['status'], 'complete')
+        self.assertEqual(len(report['joined_results']), 3)
+
+    def test_finishing_driver_nonzero_exit_never_becomes_read_pending(self):
+        report = self._driver_finishing_fixture(1)
+        self.assertEqual(report['status'], 'inconclusive')
+        self.assertIn('driver completion is invalid', report['error'])
+        self.assertEqual(report['joined_results'], [])
 
     def test_fake_full_action_records_observed_join_then_next_track(self):
         self.life.mode='action'; state=self.full_fake_runner()

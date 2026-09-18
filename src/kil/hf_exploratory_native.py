@@ -1439,7 +1439,19 @@ class ExploratoryLifecycle:
         def read(deadline):
             raw = self.read_pod(track, 'driver')
             completed = raw['status']['phase'] == 'Succeeded'
-            bound = self.bind_application_pod(raw, track, 'driver', completed=completed, require_ready=False)
+            rows = raw['status'].get('containerStatuses')
+            finishing = (raw['status']['phase'] == 'Running' and type(rows) is list
+                         and len(rows) == 1 and type(rows[0]) is dict
+                         and rows[0].get('state', {}).keys() == {'terminated'})
+            if finishing:
+                # Eligibility probe only: raw bytes remain retained unchanged.
+                # Require exact successful termination and original incarnation;
+                # only a later actual Succeeded Pod can complete this poll.
+                probe = deepcopy(raw)
+                probe['status']['phase'] = 'Succeeded'
+                bound = self.bind_application_pod(probe, track, 'driver', completed=True, require_ready=False)
+            else:
+                bound = self.bind_application_pod(raw, track, 'driver', completed=completed, require_ready=False)
             same_incarnation(self.anchors[(track, 'driver')], bound)
             if not completed:
                 raise ReadPending('bound_driver_still_running')
