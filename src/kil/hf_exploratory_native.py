@@ -386,6 +386,9 @@ class ExploratoryLifecycle:
             if (command.authority is not self.runtime or command.identity is not self.identity
                     or self.node_alias_states is None or not command.mutating):
                 raise ValueError('node_alias_mutation_requires_initial_owned_config_proof')
+            if command.operation == 'mirror' and (self.reached_gate != 'application_node_aliases_bound'
+                    or set(self.aliases) != {'kil','envoy'}):
+                raise ValueError('node_registry_mirror_requires_strict_aliases_before_calico')
             if command.operation == 'restart' and not self.node_alias_removals:
                 raise ValueError('node_alias_restart_without_successful_removals')
             if command.operation == 'remove' and command.import_ref not in {
@@ -787,6 +790,8 @@ class ExploratoryLifecycle:
         self.reached_gate = 'application_images_imported'
         self.prove_node_application_aliases()
         self.reached_gate = 'application_node_aliases_bound'
+        self.observe(ExploratoryNodeAliasCommand(self.runtime,self.identity,'envoy','mirror'))
+        self.reached_gate = 'node_registry_mirror_configured'
         calico_path = self.store.path / 'calico-v3.32.0.yaml'
         calico = read_regular(calico_path, 8 * 1024 * 1024)
         verify_bytes(calico, self.inputs.profile.calico_manifest_sha256, len(calico))
@@ -1148,6 +1153,16 @@ class ExploratoryLifecycle:
         if self.node_alias_states is None:
             raise ValueError('node_alias_initial_config_proof_unavailable')
         self.guard_cluster()
+        if command.operation == 'mirror':
+            if self.reached_gate != 'application_node_aliases_bound' or set(self.aliases) != {'kil','envoy'}:
+                raise ValueError('node_registry_mirror_requires_strict_aliases_before_calico')
+            original = tuple(self.aliases[role] for role in ('kil','envoy'))
+            for _ in range(2):
+                if self.capture_strict_node_application_aliases().bindings != original:
+                    raise ValueError('node_registry_mirror_strict_aliases_changed')
+            if tuple(self.aliases[role] for role in ('kil','envoy')) != original:
+                raise ValueError('node_registry_mirror_alias_binding_changed')
+            return
         if command.operation == 'restart':
             expected = {(role,row) for role,initial in self.node_alias_states.items() for row in initial.import_rows}
             if set(self.require_node_alias_removal_receipts()) != expected or not expected:
@@ -1178,6 +1193,19 @@ class ExploratoryLifecycle:
                 raise ValueError('node_alias_import_association_changed_or_canonical_unproved')
 
     def prove_node_application_aliases(self):
+        from kil.v3b2_proofs import node_images_argv
+        command = Command(node_images_argv(self.identity.node_container_id), 10, env=self.docker_env)
+        result = self.observe(command)
+        if len(result.stdout_bytes)+len(result.stderr_bytes)>262144 or result.stderr_bytes:
+            raise ValueError('node_images_bound_or_stderr')
+        self.repair_node_application_aliases(result.stdout_bytes)
+        proof = self.capture_strict_node_application_aliases()
+        self.aliases = {binding.expected.role:binding for binding in proof.bindings}
+        self.store.write('node-application-image-proof.json', canonical({'bindings':[asdict(row) for row in proof.bindings],
+            'observation_sha256':list(proof.observation_sha256), 'runtime_contract_complete':False,
+            'platform_image_provenance_verified':False}))
+
+    def capture_strict_node_application_aliases(self):
         from kil.v3b2_node_image_references import ExpectedNodeImage, node_image_inspect_argv, validate_node_image_references
         from kil.v3b2_proofs import RawObservation, node_images_argv
         expected = tuple(ExpectedNodeImage(row.role, row.requested_image, row.config_digest, row.target_digest,
@@ -1185,11 +1213,6 @@ class ExploratoryLifecycle:
             (row.requested_image,) if row.role=='kil' else (),
             ('kil.local/kil-v3b2@'+row.target_digest,) if row.role=='kil' else (row.requested_image,),
             row.config_digest) for row in ACCEPTED_IMAGES)
-        command = Command(node_images_argv(self.identity.node_container_id), 10, env=self.docker_env)
-        result = self.observe(command)
-        if len(result.stdout_bytes)+len(result.stderr_bytes)>262144 or result.stderr_bytes:
-            raise ValueError('node_images_bound_or_stderr')
-        self.repair_node_application_aliases(result.stdout_bytes)
         command = Command(node_images_argv(self.identity.node_container_id),10,env=self.docker_env)
         result = self.observe(command)
         if len(result.stdout_bytes)+len(result.stderr_bytes)>262144 or result.stderr_bytes:
@@ -1207,10 +1230,7 @@ class ExploratoryLifecycle:
                                              result.returncode, result.stdout_bytes, result.stderr_bytes))
         proof = validate_node_image_references(identity=self.identity, docker_config=dict(self.docker_env)['DOCKER_CONFIG'],
             expected_images=expected, inspections=tuple(inspections), node_images=observation)
-        self.aliases = {binding.expected.role:binding for binding in proof.bindings}
-        self.store.write('node-application-image-proof.json', canonical({'bindings':[asdict(row) for row in proof.bindings],
-            'observation_sha256':list(proof.observation_sha256), 'runtime_contract_complete':False,
-            'platform_image_provenance_verified':False}))
+        return proof
 
     def bind_runtime_inventory(self, deadline):
         from kil.v3b2_proofs import RUNTIME_RESOURCES

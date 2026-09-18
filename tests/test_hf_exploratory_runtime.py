@@ -89,6 +89,46 @@ class RuntimeTests(unittest.TestCase):
         for fault in [{'role':'kil'},{'import_ref':'import-2026-09-18@sha256:'+'a'*64}]:
             with self.assertRaises(ValueError): replace(command,**fault)
 
+    def test_owned_quay_mirror_has_fixed_script_and_node_route(self):
+        from dataclasses import replace
+        from kil.v3b2_journal import OwnedIdentity
+        authority = self.authority()
+        identity = OwnedIdentity('kil-v3-lab','unix://'+str(authority.colima/'kil-v3-lab/docker.sock'),
+                                 'kil-v3-lab',str(authority.kubeconfig),'cluster-uid','b'*64)
+        command = self.runtime.ExploratoryNodeAliasCommand(authority,identity,'envoy','mirror')
+        self.assertEqual(command.argv,('docker','exec','b'*64,'/bin/sh','-c',self.runtime.OWNED_QUAY_MIRROR_SCRIPT))
+        self.assertTrue(command.mutating); self.assertEqual(command.timeout_s,30); self.assertIsNone(command.stdin)
+        for fault in [{'role':'kil'},{'import_ref':'import-2026-09-18@sha256:'+'a'*64}]:
+            with self.assertRaises(ValueError): replace(command,**fault)
+
+    def test_fixed_mirror_script_regular_config_backup_and_existing_route_refusal(self):
+        import subprocess
+        script = getattr(self.runtime,'OWNED_QUAY_MIRROR_SCRIPT',None)
+        self.assertIsNotNone(script,'fixed owned mirror script missing')
+        for fault in ('none','registry','hosts','backup','config-link'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary); directory = root/'containerd'; directory.mkdir()
+                config = directory/'config.toml'; original = b'version = 2\n[plugins."io.containerd.grpc.v1.cri"]\n'
+                config.write_bytes(original)
+                restart = root/'systemctl'; restart.write_text('#!/bin/sh\ntest "$*" = "restart containerd" || exit 19\nprintf restarted > "'+str(root/'restarted')+'"\n'); restart.chmod(0o700)
+                if fault == 'registry': config.write_bytes(original+b'[plugins."io.containerd.grpc.v1.cri".registry]\n')
+                if fault == 'hosts':
+                    (directory/'certs.d/quay.io').mkdir(parents=True); (directory/'certs.d/quay.io/hosts.toml').write_bytes(b'foreign')
+                if fault == 'backup': (directory/'config.toml.kil-hf-before-quay-mirror').write_bytes(b'foreign')
+                if fault == 'config-link':
+                    config.rename(directory/'foreign'); config.symlink_to(directory/'foreign')
+                before = config.read_bytes()
+                result = subprocess.run(['/bin/sh','-c',script.replace('/etc/containerd',str(directory)).replace('/bin/systemctl',str(restart))],capture_output=True)
+                if fault == 'none':
+                    self.assertEqual(result.returncode,0,result.stderr)
+                    self.assertEqual((directory/'config.toml.kil-hf-before-quay-mirror').read_bytes(),original)
+                    self.assertEqual(config.read_bytes(),original+b'\n[plugins."io.containerd.grpc.v1.cri".registry]\n  config_path = "/etc/containerd/certs.d"\n'.replace(b'/etc/containerd',str(directory).encode()))
+                    self.assertEqual((directory/'certs.d/quay.io/hosts.toml').read_bytes(),b'server = "https://quay.io"\n[host."https://registry-1.docker.io"]\n  capabilities = ["pull", "resolve"]\n')
+                    self.assertTrue((root/'restarted').exists())
+                else:
+                    self.assertNotEqual(result.returncode,0); self.assertEqual(config.read_bytes(),before)
+                    self.assertFalse((root/'restarted').exists())
+
     def test_fresh_derived_private_runtime(self):
         authority = self.authority()
         self.assertEqual(authority.path, self.registry / ('r' + self.digest[:16]))

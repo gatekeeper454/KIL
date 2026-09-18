@@ -498,6 +498,41 @@ class ExploratoryEnvoyPlatformCommand:
                 ('DOCKER_HOST','unix://'+str(self.authority.colima/'kil-v3-lab/docker.sock')))
 
 
+OWNED_QUAY_MIRROR_SCRIPT = r"""set -eu
+set -C
+umask 077
+config=/etc/containerd/config.toml
+backup=/etc/containerd/config.toml.kil-hf-before-quay-mirror
+test -d /etc/containerd && test ! -L /etc/containerd
+test -f "$config" && test ! -L "$config"
+test ! -e "$backup" && test ! -L "$backup"
+grep -qx 'version = 2' "$config"
+if grep -Eq '^[[:space:]]*\[.*registry|^[[:space:]]*config_path[[:space:]]*=' "$config"; then
+  exit 1
+else
+  test "$?" -eq 1
+fi
+if test -e /etc/containerd/certs.d || test -L /etc/containerd/certs.d; then
+  test -d /etc/containerd/certs.d && test ! -L /etc/containerd/certs.d
+fi
+test ! -e /etc/containerd/certs.d/quay.io && test ! -L /etc/containerd/certs.d/quay.io
+cat "$config" > "$backup"
+mkdir -p /etc/containerd/certs.d
+mkdir /etc/containerd/certs.d/quay.io
+cat > /etc/containerd/certs.d/quay.io/hosts.toml <<'HOSTS'
+server = "https://quay.io"
+[host."https://registry-1.docker.io"]
+  capabilities = ["pull", "resolve"]
+HOSTS
+cat >> "$config" <<'CONFIG'
+
+[plugins."io.containerd.grpc.v1.cri".registry]
+  config_path = "/etc/containerd/certs.d"
+CONFIG
+/bin/systemctl restart containerd
+"""
+
+
 @dataclass(frozen=True, slots=True)
 class ExploratoryNodeAliasCommand:
     """Finite accepted-config reads and canonical aliases in the owned node."""
@@ -518,9 +553,9 @@ class ExploratoryNodeAliasCommand:
                 or self.identity.colima_profile != 'kil-v3-lab' or self.identity.kind_cluster != 'kil-v3-lab'
                 or self.identity.kubeconfig != str(self.authority.kubeconfig)
                 or self.identity.docker_host != 'unix://'+str(self.authority.colima/'kil-v3-lab/docker.sock')
-                or type(self.operation) is not str or self.operation not in ('inspect','tag','remove','restart')):
+                or type(self.operation) is not str or self.operation not in ('inspect','tag','remove','restart','mirror')):
             raise ValueError('node_alias_command_not_current_owned_node')
-        if self.operation == 'restart' and self.role != 'envoy':
+        if self.operation in ('restart','mirror') and self.role != 'envoy':
             raise ValueError('node_alias_restart_role_not_exact')
         if self.operation == 'remove': validate_import_ref(self.import_ref)
         elif self.import_ref is not None: raise ValueError('node_alias_command_has_unexpected_reference')
@@ -532,6 +567,7 @@ class ExploratoryNodeAliasCommand:
         image = accepted_image(self.role)
         base = ('docker','exec',self.identity.node_container_id)
         if self.operation == 'restart': return (*base,'/bin/systemctl','restart','containerd')
+        if self.operation == 'mirror': return (*base,'/bin/sh','-c',OWNED_QUAY_MIRROR_SCRIPT)
         if self.operation == 'inspect':
             return (*base,'/usr/local/bin/crictl','--runtime-endpoint','unix:///run/containerd/containerd.sock',
                     '--image-endpoint','unix:///run/containerd/containerd.sock','--timeout','10s',
@@ -540,7 +576,7 @@ class ExploratoryNodeAliasCommand:
         return (*ctr,'tag',image.config_digest,canonical_alias(image)) if self.operation == 'tag' else (*ctr,'rm',self.import_ref)
 
     @property
-    def timeout_s(self): return 10
+    def timeout_s(self): return 30 if self.operation == 'mirror' else 10
 
     @property
     def mutating(self): return self.operation != 'inspect'

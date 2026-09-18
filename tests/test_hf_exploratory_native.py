@@ -644,7 +644,7 @@ class NativeTests(unittest.TestCase):
                 return result(canonical({'status':{'id':image.config_digest,'repoTags':[image.requested_image] if image.role=='kil' else [],
                     'repoDigests':['kil.local/kil-v3b2@'+image.target_digest] if image.role=='kil' else [image.requested_image],
                     'size':'1048576','username':'','pinned':False}}))
-            if getattr(command,'operation',None) == 'restart': return result()
+            if getattr(command,'operation',None) in ('restart','mirror'): return result()
             if executable=='docker' and 'ctr' in argv[3]:
                 generated = getattr(self,'generated_node_aliases',None)
                 if len(argv)>9 and argv[9] == 'tag':
@@ -991,6 +991,33 @@ class NativeTests(unittest.TestCase):
                     else:
                         with self.assertRaises(ValueError): self.life.import_application_images()
                         self.assertFalse(any(row.argv[:2] == ('kind','load') for row in calls))
+
+    def test_owned_quay_mirror_precedes_calico_with_strict_image_bindings(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect; mirrors = []
+        def dispatch(command):
+            if getattr(command,'operation',None) == 'mirror':
+                self.assertEqual(set(self.life.aliases),{'kil','envoy'})
+                self.assertEqual(self.life.reached_gate,'application_node_aliases_bound')
+                mirrors.append(command); return CommandResult(0,'','',b'',b'')
+            return original(command)
+        self.runner.run.side_effect = dispatch
+        report = self.execute_ssh_double()
+        self.assertEqual(report['status'],'complete',report['error']); self.assertTrue(report['owned_teardown'])
+        self.assertEqual(len(mirrors),1); self.assertEqual(report['request_intent_count'],0)
+        calls = [call.args[0] for call in self.runner.run.call_args_list]
+        self.assertLess(calls.index(mirrors[0]),next(index for index,row in enumerate(calls) if row.argv[3:] == ('apply','-f',str(self.store.path/'calico-v3.32.0.yaml'))))
+
+    def test_owned_quay_mirror_failure_blocks_calico_and_hf(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect; mirrors = []
+        def dispatch(command):
+            if getattr(command,'operation',None) == 'mirror':
+                mirrors.append(command); return CommandResult(1,'','mirror precondition refused',b'',b'mirror precondition refused')
+            return original(command)
+        self.runner.run.side_effect = dispatch
+        report = self.execute_ssh_double()
+        self.assertEqual(report['status'],'inconclusive'); self.assertTrue(report['owned_teardown'],report['error'])
+        self.assertEqual(len(mirrors),1); self.assertEqual(report['request_intent_count'],0)
+        self.assertFalse(any(call.args[0].argv[3:] == ('apply','-f',str(self.store.path/'calico-v3.32.0.yaml')) for call in self.runner.run.call_args_list))
 
     def generated_alias_fixture(self):
         images = {row.role:row for row in self.native.ACCEPTED_IMAGES}
