@@ -189,6 +189,7 @@ class ExploratoryLifecycle:
         self.anchors, self.endpoints, self.results, self.source_metadata = {}, {}, {}, {}
         self.selected_pods, self.endpoint_bindings = {}, {}
         self.deployment_bindings = {}
+        self.service_bindings = None
         self.calico_bindings = {}
         self.command_checksums, self.aliases, self.environment = {}, {}, {}
         self.foreign_observations, self.placements, self.platform_images = [], [], []
@@ -848,6 +849,7 @@ class ExploratoryLifecycle:
         self.require_deployment_continuity(applied)
         self.store.write('applied-objects.json', applied)
         self.store.write('service-allocations.json', bindings)
+        self.service_bindings = bindings
         self.reached_gate = 'application_configuration_and_allocations_verified'
         self.observe(kubectl_apply_command(self.identity, self.object_list(self.groups[3])))
         self.reached_gate = 'driver_apply_attempted'
@@ -1393,7 +1395,22 @@ class ExploratoryLifecycle:
         self.endpoint_bindings.setdefault(key,bound)
         return bound
 
+    def require_target_service_host(self, track):
+        from kil.v3b2_service_bindings import validate_service_allocations
+        if self.service_bindings is None:
+            raise ValueError('service_allocations_not_bound')
+        desired = [row for group in self.groups for row in group if row['kind']=='Service']
+        observed = decode(self.applied_read(desired))['items']
+        validated = validate_service_allocations(observed, profile=self.inputs.profile,
+            workload=self.inputs.workload, prior_bindings=decode(self.service_bindings))
+        rows = [row for row in decode(validated.bindings)
+                if row['namespace']==NAMESPACES[track] and row['name']=='target']
+        if len(rows)!=1:
+            raise ValueError('target_service_not_exact')
+        return rows[0]['cluster_ip'] + ':8080'
+
     def require_current_track(self, track):
+        self.require_target_service_host(track)
         for role in ROLES:
             raw = self.read_pod(track, role)
             bound = self.bind_application_pod(raw, track, role)
@@ -1563,10 +1580,18 @@ class ExploratoryLifecycle:
             self.store.write(filename, payload)
             metadata[source_role] = {**bound, 'file': filename}
             self.store.record('source_capture', {'track':track, 'role':source_role, **metadata[source_role]})
+        service_upstream = None
+        if final and self.mode == 'action':
+            service_upstream = self.require_target_service_host(track)
+            endpoint = self.read_endpoint(track, 'target')
+            if (endpoint != self.endpoints[(track, 'target')]
+                    or endpoint['target_uid'] != self.anchors[(track, 'target')]['uid']):
+                raise ValueError('captured_target_endpoint_changed')
         joined = case.join(sources, track=track, run_id=self.inputs.workload.run_id,
-                           request_free=self.mode == 'rehearsal' or not final)
+                           request_free=self.mode == 'rehearsal' or not final,
+                           service_upstream_host=service_upstream)
         if final and self.mode == 'action' and joined['observed'][0] == 'permit':
-            expected_upstream = self.endpoints[(track, 'target')]['addresses'][0] + ':8080'
+            expected_upstream = service_upstream
             if len(sources['envoy']) != 1 or sources['envoy'][0]['upstream_host'] != expected_upstream:
                 raise ValueError('permit_upstream_not_exact_ready_target')
         self.source_metadata[track + ('-final' if final else '-ready')] = metadata

@@ -775,7 +775,7 @@ class NativeTests(unittest.TestCase):
                 namespace=arguments[3]; name=arguments[1][4:]
                 track,role=next(key for key,pod in pods.items() if pod['metadata']['namespace']==namespace and pod['metadata']['name']==name)
                 sources=producer_records(track,self.inputs.workload.run_id,request_free=not self.state['requests'].get(track))
-                if self.state['requests'].get(track) and sources['envoy'][0]['response_code']=='200': sources['envoy'][0]['upstream_host']=pods[(track,'target')]['status']['podIP']+':8080'
+                if self.state['requests'].get(track) and sources['envoy'][0]['response_code']=='200': sources['envoy'][0]['upstream_host']=service_map[(namespace,'target')]['spec']['clusterIP']+':8080'
                 return result(b''.join(canonical(row) for row in sources['decision' if role=='authz' else role]))
             raise AssertionError('unexpected fake native command: '+repr(argv))
         self.life.runner.run.side_effect=dispatch
@@ -851,6 +851,29 @@ class NativeTests(unittest.TestCase):
         first_final_target=next(index for index,row in enumerate(rows) if row['event']=='source_capture' and row['details']['track']==TRACKS[0] and row['details']['role']=='target' and 'final' in row['details']['file'])
         second_request=next(index for index,row in enumerate(rows) if row['event']=='request_intent' and row['details']['track']==TRACKS[1])
         self.assertLess(first_final_target,second_request)
+
+    def test_changed_target_service_ip_refused_before_first_instruction(self):
+        self.life.mode='action';state=self.full_fake_runner()
+        original=self.runner.run.side_effect
+        changed=[]
+        def dispatch(command):
+            result=original(command)
+            if command.argv[3:]==('get','--filename','-','--output','json'):
+                desired=json.loads(command.stdin)['items']
+                if len(desired)==9 and all(row['kind']=='Service' for row in desired):
+                    document=json.loads(result.stdout_bytes)
+                    target=next(row for row in document['items'] if row['metadata']['namespace']=='kil-v3-baseline' and row['metadata']['name']=='target')
+                    target['spec'].update(clusterIP='10.96.250.250',clusterIPs=['10.96.250.250'])
+                    payload=canonical(document);changed.append(True)
+                    return CommandResult(0,payload.decode(),'',payload,b'')
+            return result
+        self.runner.run.side_effect=dispatch
+        report=self.execute_fake()
+        self.assertEqual(len(changed),1)
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertIn('differs from established allocation bindings',report['error'])
+        self.assertEqual(report['request_intent_count'],0)
+        self.assertTrue(report['owned_teardown'])
 
     def execute_ssh_double(self):
         with patch.object(self.native,'check_source'), patch.object(self.native.platform,'system',return_value='Darwin'), patch.object(self.native.platform,'machine',return_value='arm64'), patch.object(self.native.time,'sleep'):

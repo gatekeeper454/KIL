@@ -67,11 +67,11 @@ def frozen_source(before, after, payload, second):
     return {'identity': dict(before), 'byte_count': len(payload), 'sha256': sha256(payload).hexdigest(), 'records': parsed}
 
 
-def join(sources, *, track, run_id, request_free):
+def join(sources, *, track, run_id, request_free, service_upstream_host=None):
     """Report observed tuples; equality is not a causal or acceptance proof."""
     if type(request_free) is not bool:
         raise ValueError('request_free must be a boolean')
-    reduced = adapt_producer_sources(sources, track=track, run_id=run_id)
+    reduced = adapt_producer_sources(sources, track=track, run_id=run_id, service_upstream_host=service_upstream_host)
     if request_free:
         if any(reduced.values()):
             raise ValueError('rehearsal contains application records')

@@ -125,6 +125,19 @@ class PureCaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.case.bind_pod(pod, **args, completed=0)
 
+    def test_exact_service_upstream_join_requires_explicit_binding(self):
+        from tests.test_v3b2_evidence import producer_records
+        run='v3b2-'+'a'*64
+        sources=producer_records(TRACKS[0],run)
+        sources['envoy'][0]['upstream_host']='10.96.61.43:8080'
+        before=deepcopy(sources)
+        result=self.case.join(sources,track=TRACKS[0],run_id=run,request_free=False,service_upstream_host='10.96.61.43:8080')
+        self.assertEqual(result['observed'],['permit',200,1])
+        self.assertEqual(sources,before)
+        for bound in (None,'10.96.61.44:8080','10.244.0.8:8080','127.0.0.1:8080','10.96.61.43:80','10.96.0.0:8080','10.96.0.1:8080','10.96.0.10:8080','10.96.255.255:8080',True):
+            with self.subTest(bound=bound),self.assertRaises(ValueError):
+                self.case.join(sources,track=TRACKS[0],run_id=run,request_free=False,service_upstream_host=bound)
+
     def test_join(self):
         self.assertTrue(hasattr(self.case, 'join'))
         from tests.test_v3b2_evidence import producer_records

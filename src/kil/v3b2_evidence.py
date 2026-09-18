@@ -402,7 +402,7 @@ _TARGET_PRODUCER_FIELDS = frozenset({
 
 
 def adapt_producer_sources(
-    sources: object, *, track: str, run_id: str,
+    sources: object, *, track: str, run_id: str, service_upstream_host: str | None = None,
 ) -> dict[str, list[dict[str, object]]]:
     """Validate complete producer records before deriving the public join rows.
 
@@ -415,6 +415,20 @@ def adapt_producer_sources(
     from kil.ext_authz_http import LiveTrack
     from ipaddress import IPv4Address, IPv4Network
 
+    if service_upstream_host is not None:
+        try:
+            if type(service_upstream_host) is not str:
+                raise ValueError()
+            service_host, service_port = service_upstream_host.rsplit(":", 1)
+            service_address = IPv4Address(service_host)
+            service_network = IPv4Network("10.96.0.0/16")
+            if (service_port != "8080" or str(service_address) != service_host
+                    or service_address not in service_network
+                    or service_address in {service_network.network_address, service_network.broadcast_address,
+                                           service_network[1], service_network[10]}):
+                raise ValueError()
+        except (ValueError, TypeError, AttributeError):
+            raise EvidenceError("bound Service upstream is invalid") from None
     raw = _closed_record("producer source set", sources, frozenset({"driver", "decision", "envoy", "target"}))
     if track not in TRACKS or _V3B2_RUN.fullmatch(run_id) is None:
         raise EvidenceError("producer binding is invalid")
@@ -468,7 +482,12 @@ def adapt_producer_sources(
     if permitted:
         try:
             host, port = envoy["upstream_host"].rsplit(":", 1)
-            if port != "8080" or IPv4Address(host) not in IPv4Network("10.244.0.0/16"):
+            if port != "8080" or str(IPv4Address(host)) != host:
+                raise ValueError()
+            if service_upstream_host is None:
+                if IPv4Address(host) not in IPv4Network("10.244.0.0/16"):
+                    raise ValueError()
+            elif envoy["upstream_host"] != service_upstream_host:
                 raise ValueError()
             duration = envoy["upstream_service_time"]
             if type(duration) is not str or re.fullmatch(r"[0-9]+", duration) is None:
