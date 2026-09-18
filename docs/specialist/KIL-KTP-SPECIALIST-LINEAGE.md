@@ -25125,3 +25125,19 @@ three-track action, retaining one durable instruction per track and verifying
 actual outcomes/owned teardown. No new planning or permission loop.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T450 — 2026-09-17, live image tagging and owned teardown verified; exact Envoy reference compatibility
+
+**Input and interpretation:** Continue the user's T448 authorization to fix concrete issues and restart until the selected HF test is complete, preserving per-attempt evidence.
+
+**Decision status:** CONFIRMED fresh rehearsal at source f684666ae100e4e790194727fbd5bfcad8de7bfb, run v3b2-87862940e592425f3243e449ca7b73d297cba36eef175d59cd6fff4e162448b1. Kind creation, successful accepted manifest-ID Docker load/tag and Envoy pull passed live. Native owned teardown passed: cluster_removed=true/profile_delete_completed=true/owned_teardown=true/manual_recovery=false; final wrapper closure complete and independent foreign state matches original. HF intents/attempts0, no joined outcomes. Immutable receipt `.tools/hf-exploratory-private/hf-exploratory-87862940e592425f3243e449ca7b73d297cba36eef175d59cd6fff4e162448b1`; root read-only verifier passed177 files/658601 bytes/SHA256SUMS seal d1a879201f926491750a52cd5d8c84a7df4259b64869a1fafbf56cd3ce38019f. Actual final output `/private/tmp/kil-hf-rehearsal-3-final.json`, status inconclusive_at_cluster_bound due host references check.
+
+**Rationale and confirmed correction:** Actual command0051 Docker inspection reports accepted Envoy target/index ID and OCI index descriptor, with the exact familiar digest reference in both RepoTags and RepoDigests. The previous host check required no Envoy tags. Permit only empty or singleton exact accepted familiar/canonical digest-reference RepoTags, retaining the accepted target/descriptor/config and closed RepoDigests checks. No arbitrary tag, image repin, node-proof change or provenance audit. Same-inode empty SSH timestamp rewrite compatibility was verified live by complete held-descriptor owned teardown.
+
+**Validation:** Actual producer singleton formats reproduced RED1 test/0.459s/failures2; worker final4 focused tests/4.179s PASS. Root independently inspected the three-line production change and tested actualformat/foreign-reference refusal plus descriptor cases: 2 tests/1.057s PASS. Fatal ResourceWarning/bytecode off; diff check clean. Native SHA256 c0a8e3816ab269fa2bce829dc9388e1d61b31f1477a85a6f80e012bec5ae5ed2; test bf4def85c2734eaf18803ae1bd01579e74ad63d97d29556f23fe578fd27a8c80.
+
+**Affected artifacts:** Only exploratory native helper and its tests, exact lineage append and scoped reader. Previous IO/SSH fixes and accepted strict controller/recovery/archives unchanged. Old receipts preserved. No install, new worktree, merge or push.
+
+**Unresolved questions and next gate:** Continue fresh clean-source request-free readiness, then fixed three-track HF action under existing authorization; retain distinct attempts and one durable instruction per track. Platform image provenance remains unverified and full Kind/Calico acceptance false. Prior local Envoy evidence unchanged.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

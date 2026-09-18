@@ -942,6 +942,26 @@ class NativeTests(unittest.TestCase):
                     with patch.object(self.life,'observe',side_effect=observer): self.life.import_application_images()
                 except ValueError as error: self.fail('pinned target with valid index representation must import: '+str(error))
 
+    def test_modern_envoy_digest_reference_tag_is_exact_singleton_or_empty(self):
+        image = next(row for row in self.native.ACCEPTED_IMAGES if row.role == 'envoy')
+        familiar = image.requested_image.removeprefix('docker.io/')
+        for tags in [[],[image.requested_image],[familiar],['envoyproxy/envoy:latest'],
+                     [familiar,familiar],[familiar,image.requested_image],['envoyproxy/envoy@sha256:'+'a'*64]]:
+            with self.subTest(tags=tags):
+                def mutate(value,row):
+                    if row.role == 'envoy':
+                        value['Descriptor']['mediaType'] = 'application/vnd.oci.image.index.v1+json'
+                        value['RepoTags'] = tags; value['RepoDigests'] = [familiar]
+                calls, observer = self.image_import_double(True,mutate=mutate)
+                with patch.object(self.life,'observe',side_effect=observer):
+                    if tags in ([],[image.requested_image],[familiar]):
+                        try: self.life.import_application_images()
+                        except ValueError as error: self.fail('exact accepted digest-reference tag must import: '+str(error))
+                        self.assertEqual(len([row for row in calls if row.argv[:2] == ('kind','load')]),2)
+                    else:
+                        with self.assertRaises(ValueError): self.life.import_application_images()
+                        self.assertFalse(any(row.argv[:2] == ('kind','load') for row in calls))
+
     def test_foreign_or_ambiguous_loaded_ids_grant_no_tag_or_kind_load(self):
         kil, envoy = self.native.ACCEPTED_IMAGES
         for payload in [b'',b'Loaded image ID: sha256:'+b'a'*64+b'\n',

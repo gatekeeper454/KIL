@@ -1003,7 +1003,8 @@ class ExploratoryLifecycle:
             if (type(tags) is not list or type(digests) is not list
                     or any(type(row) is not str for row in tags+digests)
                     or len(set(digests)) != len(digests) or not set(digests) <= expected_digests
-                    or (tags != [image.requested_image] if image.role == 'kil' else tags != [] or not digests)):
+                    or (tags != [image.requested_image] if image.role == 'kil' else
+                        tags not in ([],[image.requested_image],[image.requested_image.removeprefix('docker.io/')]) or not digests)):
                 raise ValueError('native_application_image_references_not_accepted')
         for image in ACCEPTED_IMAGES:
             self.observe(kind_load_command(self.identity, image.requested_image))
