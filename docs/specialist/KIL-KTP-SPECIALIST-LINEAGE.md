@@ -25157,3 +25157,19 @@ KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob
 **Unresolved questions and next gate:** Fresh clean-source request-free readiness through actual node proofs and all three tracks, then fixed three-track action under existing authorization. Preserve distinct attempts and one durable instruction per track. Platform image provenance remains unverified/full Kind-Calico acceptance false; prior local Envoy evidence unchanged.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T452 — 2026-09-17, both node imports passed; retain complete native node-store observation before alias failure
+
+**Input and interpretation:** Continue T448 fix/restart authorization until selected HF completion. Preserve actual failed attempts and resolve native image naming without weakening accepted image proofs.
+
+**Decision status:** CONFIRMED fresh rehearsal at source c1c1ba29df8144410cf5cd93781691ce530278ba, run v3b2-81b1ecec9027bcb960e560816a353688f299dcb266dd7c562cbe80e9350ef015. Additional same-index AMD64 content fetch passed; both original Kind image imports returned0. Gate application_images_imported. KIL CRI inspection finds accepted config and tag but generated import-2026-09-18 wrapper-index RepoDigest c4d5b647318f959a6ada9ad84edd84e951d8af867cad7eb6a4ea4b285ed0bf49; Envoy CRI inspection cannot find canonical accepted digest reference. No HF requests/intents/attempts; outcomes empty. Full owned teardown/profile deletion/cluster removal true, manual recovery false, final wrapper closure complete, independent foreign state unchanged. Root read-only sealed-receipt verification passed231 files/719500 bytes/seal785ad206074ca1251836d3dfc7abd2f7b025fbcea7e808104a0961f8a90fe19f. Immutable receipt `.tools/hf-exploratory-private/hf-exploratory-81b1ecec9027bcb960e560816a353688f299dcb266dd7c562cbe80e9350ef015`; actual result `/private/tmp/kil-hf-rehearsal-5-final.json` inconclusive_at_application_images_imported.
+
+**Rationale and correction:** Docker export/Kind import rewrites or loses native store aliases. Merely adding aliases would leave foreign generated RepoDigests and fail the unchanged strict contract. Move the already admitted exact read-only ctr images check before CRI inspections, retaining complete native row targets/types even if a later CRI query fails. No new native command, mutation authority, accepted identity or validator relaxation. Actual rows are needed for a targeted owned-node repair rather than guessing a native name or target. This is a concrete diagnostic correction, not a provenance audit.
+
+**Validation:** Failure-retention regression reproduced RED1/2.660s; worker1/2.042s PASS; root 1/2.747s PASS. Diff check clean; fatal ResourceWarning/bytecode disabled. Native SHA256 e2cfd533ac4fe21b36771d620c71de3df9097b3153e9d83eff64347b905ec2da; test89f21d59f9a466c1ba1025a3df7291a0d5f850b5a2f4f98a2e5f62e98202ebef. Root inspected the exact relocation, unchanged argv/environment/bounds and strict validator; independent bounded review PASS with independent1/2.491s PASS.
+
+**Affected artifacts:** Only exploratory native helper and necessary test, exact lineage append/scoped reader. Shared strict journal/node validator and original accepted images/archive/recovery unchanged. No install, new worktree, merge or push.
+
+**Unresolved questions and next gate:** Immediately run fresh clean-source setup to retain actual node-store aliases and target types, then fix exact owned-native naming/content issue and continue readiness/HF under existing authorization. No extra permission/planning gate. Platform provenance unverified/full Kind-Calico acceptance false; prior local Envoy evidence unchanged.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

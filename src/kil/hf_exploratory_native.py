@@ -1034,6 +1034,12 @@ class ExploratoryLifecycle:
             (row.requested_image,) if row.role=='kil' else (),
             ('kil.local/kil-v3b2@'+row.target_digest,) if row.role=='kil' else (row.requested_image,),
             row.config_digest) for row in ACCEPTED_IMAGES)
+        command = Command(node_images_argv(self.identity.node_container_id), 10, env=self.docker_env)
+        result = self.observe(command)
+        if len(result.stdout_bytes)+len(result.stderr_bytes)>262144:
+            raise ValueError('node_images_bound')
+        observation = RawObservation('node_images', command.argv, command.env, result.returncode,
+                                     result.stdout_bytes, result.stderr_bytes)
         inspections = []
         for index, image in enumerate(expected):
             command = Command(node_image_inspect_argv(self.identity.node_container_id, image.query_reference),
@@ -1043,12 +1049,6 @@ class ExploratoryLifecycle:
                 raise ValueError('node_image_inspect_bound')
             inspections.append(RawObservation('cri_image_'+str(index), command.argv, command.env,
                                              result.returncode, result.stdout_bytes, result.stderr_bytes))
-        command = Command(node_images_argv(self.identity.node_container_id), 10, env=self.docker_env)
-        result = self.observe(command)
-        if len(result.stdout_bytes)+len(result.stderr_bytes)>262144:
-            raise ValueError('node_images_bound')
-        observation = RawObservation('node_images', command.argv, command.env, result.returncode,
-                                     result.stdout_bytes, result.stderr_bytes)
         proof = validate_node_image_references(identity=self.identity, docker_config=dict(self.docker_env)['DOCKER_CONFIG'],
             expected_images=expected, inspections=tuple(inspections), node_images=observation)
         self.aliases = {binding.expected.role:binding for binding in proof.bindings}

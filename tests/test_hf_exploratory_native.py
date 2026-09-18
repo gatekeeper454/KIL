@@ -963,6 +963,26 @@ class NativeTests(unittest.TestCase):
                         with self.assertRaises(ValueError): self.life.import_application_images()
                         self.assertFalse(any(row.argv[:2] == ('kind','load') for row in calls))
 
+    def test_node_roster_is_retained_before_cri_lookup_failure(self):
+        from kil.v3b2_proofs import node_images_argv
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        def failing(command):
+            if command.argv[:4] == ('docker','exec','b'*64,'/usr/local/bin/crictl'):
+                return CommandResult(1,'','no such image',b'',b'no such image')
+            return original(command)
+        self.runner.run.side_effect = failing
+        report = self.execute_ssh_double()
+        self.assertEqual(report['status'],'inconclusive'); self.assertTrue(report['owned_teardown'],report['error'])
+        rows = [json.loads(line) for line in self.store.journal.read_bytes().splitlines()]
+        intents = [row['details'] for row in rows if row['event'] == 'command_intent']
+        roster = [row for row in intents if row['argv'] == list(node_images_argv('b'*64))]
+        self.assertEqual(len(roster),1,'exact closed node roster was not captured before failed CRI lookup')
+        cri = next(row for row in intents if row['argv'][:4] == ['docker','exec','b'*64,'/usr/local/bin/crictl'])
+        self.assertLess(roster[0]['sequence'],cri['sequence'])
+        retained = self.life.private_read('command-%04d.stdout'%roster[0]['sequence'])
+        self.assertTrue(retained.startswith(b'REF TYPE DIGEST STATUS SIZE UNPACKED\n'))
+        self.assertEqual(report['request_intent_count'],0)
+
     def test_envoy_amd64_pull_only_after_initial_inspection_and_fresh_before_kind_load(self):
         calls, observer = self.image_import_double(True)
         with patch.object(self.life,'observe',side_effect=observer): self.life.import_application_images()
