@@ -106,6 +106,88 @@ class IOTests(unittest.TestCase):
         from kil.hf_exploratory_runtime import ExploratoryColimaCommand
         return ExploratoryColimaCommand(Command(argv, 1, mutating=True), authority)
 
+    def kind_mutations(self):
+        from kil.v3b2_journal import OwnedIdentity, kind_create_command, kind_delete_command, kind_load_command
+        from kil.v3b2_accepted_images import ACCEPTED_IMAGES
+        root = Path(self.temp.name).resolve()/'owned'
+        identity = OwnedIdentity('kil-v3-lab','unix://'+str(root/'.colima/kil-v3-lab/docker.sock'),
+                                 'kil-v3-lab',str(root/'kubeconfig'),None,None)
+        return (kind_create_command(identity),kind_delete_command(identity),
+                kind_load_command(identity,ACCEPTED_IMAGES[0].requested_image))
+
+    def test_mutating_kind_prioritizes_complete_accepted_tools_without_empty_path_entries(self):
+        for command in self.kind_mutations():
+            for tail in [None,'','/inert/bin',''+os.pathsep+'/inert/bin'+os.pathsep+os.pathsep]:
+                with self.subTest(argv=command.argv,tail=tail):
+                    inputs, _, verify = self.dependency_fixture()
+                    with patch.dict(os.environ,{},clear=True), patch.object(self.io,'verify_bytes',side_effect=verify), \
+                            patch.object(self.io.shutil,'which') as locator, patch.object(self.io,'capture_process') as capture:
+                        if tail is not None: os.environ['PATH'] = tail
+                        self.io.BoundedRunner(Path.cwd(),inputs).run(command)
+                        argv,env,*_ = capture.call_args.args
+                        expected = [str(inputs.tools)] + ([part for part in tail.split(os.pathsep) if part] if tail else [])
+                        self.assertIn('PATH',env,'accepted child dependency PATH is missing')
+                        self.assertEqual(env['PATH'].split(os.pathsep),expected)
+                        self.assertEqual(argv,(str(inputs.tools/'kind'),*command.argv[1:]))
+                        self.assertEqual({key:env[key] for key,_ in command.env},dict(command.env))
+                        locator.assert_not_called()
+                        self.assertEqual(os.environ.get('PATH'),tail)
+
+    def test_mutating_kind_rejects_missing_child_docker_and_unaccepted_roster(self):
+        for command in self.kind_mutations():
+            for fault in ['missing-docker','extra-entry']:
+                with self.subTest(argv=command.argv,fault=fault):
+                    fixture = self.dependency_fixture()
+                    if fault == 'missing-docker': (fixture[0].tools/'docker').unlink()
+                    else: (fixture[0].tools/'extra').write_bytes(b'unknown')
+                    self.assert_dependency_rejected(fixture,command)
+
+    def test_mutating_kind_recloses_dependencies_and_caller_authority_before_dispatch(self):
+        for command in self.kind_mutations():
+            for fault in ['docker-replacement','directory-replacement','tools-path','metadata','late-docker']:
+                with self.subTest(argv=command.argv,fault=fault):
+                    fixture = self.dependency_fixture(); inputs,_,fixture_verify = fixture
+                    manifests = executable_checks = 0
+                    def verify(data,digest,size):
+                        nonlocal manifests, executable_checks
+                        result = fixture_verify(data,digest,size)
+                        if digest == ACCEPTED_MANIFEST_SHA256: manifests += 1
+                        else: executable_checks += 1
+                        mutate = ((digest == ACCEPTED_MANIFEST_SHA256 and manifests == 2 and fault != 'late-docker')
+                                  or (fault == 'late-docker' and executable_checks == 8))
+                        if mutate:
+                            if fault in ['docker-replacement','late-docker']:
+                                path = inputs.tools/'docker'; payload = path.read_bytes()
+                                path.rename(path.parent.parent/'old-docker'); path.write_bytes(payload); path.chmod(0o755)
+                            elif fault == 'directory-replacement':
+                                old = inputs.tools.with_name('old-bin'); inputs.tools.rename(old); inputs.tools.mkdir()
+                                for name in ['docker','kind','kubectl']:
+                                    (inputs.tools/name).write_bytes((old/name).read_bytes()); (inputs.tools/name).chmod(0o755)
+                            elif fault == 'tools-path': object.__setattr__(inputs,'tools',inputs.tools.with_name('changed'))
+                            else: inputs.tool_records['docker']['byte_size'] += 1
+                        return result
+                    # The late case counts the two Kind reads plus six dependency reads.
+                    self.assert_dependency_rejected(fixture,command,verify)
+
+    def test_real_harmless_kind_standin_resolves_only_fixture_child_docker(self):
+        for command in self.kind_mutations():
+            with self.subTest(argv=command.argv):
+                inputs, colima, fixture_verify = self.dependency_fixture()
+                payloads = {'kind':b'#!/bin/sh\nexec docker\n',
+                            'docker':b'#!/bin/sh\nprintf "test-owned-child-docker\\n"\n'}
+                for name,payload in payloads.items():
+                    (inputs.tools/name).write_bytes(payload); (inputs.tools/name).chmod(0o755)
+                rows = inputs.tool_records
+                def verify(data,digest,size):
+                    for name,payload in payloads.items():
+                        if digest == rows[name]['executable_sha256'] and data == payload:
+                            self.assertEqual(size,rows[name]['byte_size']); return digest
+                    return fixture_verify(data,digest,size)
+                with patch.dict(os.environ,{'PATH':str(colima.parent)}), patch.object(self.io,'verify_bytes',side_effect=verify):
+                    result = self.io.BoundedRunner(Path.cwd(),inputs).run(command)
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertEqual(result.stdout_bytes,b'test-owned-child-docker\n')
+
     def test_marker_and_binding_drift_refuse_before_process_capture(self):
         from kil.hf_exploratory_runtime import ExploratoryColimaCommand
         for target in ('marker', 'binding'):

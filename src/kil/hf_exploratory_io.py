@@ -233,6 +233,7 @@ class BoundedRunner:
         argv = command.argv
         name = Path(argv[0]).name
         scoped_mutation = type(command) is ExploratoryColimaCommand and command.mutating
+        kind_mutation = type(command) is Command and name == 'kind' and command.mutating
         if scoped_mutation:
             try:
                 tools = self.inputs.tools
@@ -247,6 +248,14 @@ class BoundedRunner:
                 dependencies = _dependency_snapshot(tools, accepted)
                 environment['PATH'] = str(tools) + (os.pathsep + original_path if original_path else '')
                 argv = (str(original_colima), *argv[1:])
+            except (OSError, AttributeError, KeyError, TypeError, ValueError) as error:
+                raise ValueError('unavailable_or_substituted_accepted_tool_authority') from error
+        if kind_mutation:
+            try:
+                tools = self.inputs.tools
+                dependencies = _dependency_snapshot(tools, accepted)
+                inherited = environment.get('PATH', '')
+                environment['PATH'] = os.pathsep.join([str(tools), *[part for part in inherited.split(os.pathsep) if part]])
             except (OSError, AttributeError, KeyError, TypeError, ValueError) as error:
                 raise ValueError('unavailable_or_substituted_accepted_tool_authority') from error
         if name in TOOL_VERSION_ARGUMENTS:
@@ -267,17 +276,17 @@ class BoundedRunner:
                 raise ValueError('accepted_manifest_changed_during_verification')
             if (name in TOOL_VERSION_ARGUMENTS or scoped_mutation) and self.inputs.tools != tools:
                 raise ValueError('accepted_tools_path_changed_during_verification')
-            if scoped_mutation:
-                try:
-                    if _dependency_snapshot(tools, accepted) != dependencies:
-                        raise ValueError('accepted_dependencies_changed_during_verification')
-                    if _original_colima_identity(original_colima) != colima_identity:
-                        raise ValueError('original_colima_changed_during_verification')
-                except OSError as error:
-                    raise ValueError('accepted_dependency_unavailable_during_verification') from error
             if name in TOOL_VERSION_ARGUMENTS:
                 verify_bytes(read_regular(executable, 128 * 1024 * 1024),
                              row['executable_sha256'], row['byte_size'])
+            if scoped_mutation or kind_mutation:
+                try:
+                    if _dependency_snapshot(tools, accepted) != dependencies:
+                        raise ValueError('accepted_dependencies_changed_during_verification')
+                    if scoped_mutation and _original_colima_identity(original_colima) != colima_identity:
+                        raise ValueError('original_colima_changed_during_verification')
+                except OSError as error:
+                    raise ValueError('accepted_dependency_unavailable_during_verification') from error
             current_metadata = self.inputs.tool_records
             if type(current_metadata) is not dict or set(current_metadata) != set(accepted):
                 raise ValueError('accepted_tool_metadata_changed_during_verification')
