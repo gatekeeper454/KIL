@@ -1505,6 +1505,16 @@ class ExploratoryLifecycle:
                 raise ValueError('quiescence_not_confirmed')
             active = {}
             for row in raw['stats']:
+                # Envoy emits one separate histogram envelope in the same
+                # stats list. It supplies no active gauge and cannot satisfy
+                # or replace any of the four required exact gauge records.
+                if type(row) is dict and set(row) == {'histograms'}:
+                    histogram = row['histograms']
+                    if (type(histogram) is dict
+                            and set(histogram) == {'supported_quantiles', 'computed_quantiles'}
+                            and type(histogram['supported_quantiles']) is list
+                            and type(histogram['computed_quantiles']) is list):
+                        continue
                 if type(row) is not dict or type(row.get('name')) is not str:
                     raise ValueError('invalid_stats_record')
                 if row['name'] in ACTIVE_GAUGES:

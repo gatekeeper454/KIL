@@ -552,6 +552,29 @@ class NativeTests(unittest.TestCase):
             with self.assertRaises(ValueError): self.life.freeze_track(TRACKS[0])
         self.assertNotIn(TRACKS[0], self.life.frozen)
 
+    def test_quiescence_histogram_envelope_preserves_exact_active_gauges(self):
+        self.install_pods()
+        drain = canonical({'drain_requested':True})
+        rows = [{'name':name,'value':0} for name in self.native.ACTIVE_GAUGES]
+        rows.append({'histograms':{'supported_quantiles':[0,50,100], 'computed_quantiles':[]}})
+        stats = canonical({'listener_refused':True,'stats':rows})
+        with patch.object(self.life,'current_pod',return_value=self.life.anchors[(TRACKS[0],'envoy')]), patch.object(self.life,'observe',side_effect=[CommandResult(0,drain.decode(),'',drain,b''),CommandResult(0,stats.decode(),'',stats,b'')]):
+            self.life.freeze_track(TRACKS[0])
+        self.assertIn(TRACKS[0],self.life.frozen)
+        self.assertEqual(rows[-1],{'histograms':{'supported_quantiles':[0,50,100],'computed_quantiles':[]}})
+
+    def test_quiescence_unnamed_or_malformed_histogram_record_refused(self):
+        for extra in ({'unknown':{}},{'histograms':None},{'histograms':{'supported_quantiles':[],'computed_quantiles':[],'name':'extra'}}):
+            with self.subTest(extra=extra):
+                self.life.freeze_attempted.clear()
+                self.install_pods()
+                drain=canonical({'drain_requested':True})
+                stats=canonical({'listener_refused':True,'stats':[{'name':name,'value':0} for name in self.native.ACTIVE_GAUGES]+[extra]})
+                with patch.object(self.life,'current_pod',return_value=self.life.anchors[(TRACKS[0],'envoy')]), patch.object(self.life,'observe',side_effect=[CommandResult(0,drain.decode(),'',drain,b''),CommandResult(0,stats.decode(),'',stats,b'')]):
+                    with self.assertRaisesRegex(ValueError,'invalid_stats_record'):
+                        self.life.freeze_track(TRACKS[0])
+                self.assertNotIn(TRACKS[0],self.life.frozen)
+
     def test_retained_nested_files_are_bounded_and_checksummed_without_symlinks(self):
         self.assertTrue(hasattr(self.life,'retained_checksums'), 'recursive retained-file verifier missing')
         nested = self.store.path/'docker-config'; nested.mkdir(mode=0o700)
