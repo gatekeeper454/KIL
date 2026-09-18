@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exploratory HF Generated SSH Control Implementation Plan</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/superpowers/plans/2026-09-17-hf-generated-ssh-control.md">
+<meta name="source-sha256" content="139c9a72b0f5e1ff45c7573216b4bf57e97b834f610eecea41ab8337206908e4">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }</style>
+</head>
+<body>
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-generated-ssh-control.md</code> (<code>139c9a72b0f5e1ff45c7573216b4bf57e97b834f610eecea41ab8337206908e4</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">Exploratory HF Generated SSH Control Implementation Plan</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/superpowers/plans/2026-09-17-hf-generated-ssh-control.md</code> (<code>139c9a72b0f5e1ff45c7573216b4bf57e97b834f610eecea41ab8337206908e4</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#exploratory-hf-generated-ssh-control-implementation-plan">Exploratory HF Generated SSH Control Implementation Plan</a></li><li class="level-2"><a href="#execution-context-and-authorized-scope">Execution context and authorized scope</a></li><li class="level-2"><a href="#files-and-responsibilities">Files and responsibilities</a></li><li class="level-2"><a href="#exact-producer-grammar-implementation-contract">Exact producer grammar (implementation contract)</a></li><li class="level-2"><a href="#helper-interface-and-proof-state">Helper interface and proof state</a></li><li class="level-2"><a href="#task-1-failing-pure-grammar-and-owned-file-tests">Task 1: Failing pure grammar and owned-file tests</a></li><li class="level-2"><a href="#task-2-failing-descriptor-and-stable-closure-tests">Task 2: Failing descriptor and stable closure tests</a></li><li class="level-2"><a href="#task-3-failing-fresh-start-and-roster-integration-tests">Task 3: Failing fresh-start and roster integration tests</a></li><li class="level-2"><a href="#task-4-failing-intent-to-dispatch-and-request-closure-tests">Task 4: Failing intent-to-dispatch and request closure tests</a></li><li class="level-2"><a href="#task-5-failing-stopped-removed-transition-tests">Task 5: Failing stopped/removed transition tests</a></li><li class="level-2"><a href="#task-6-scoped-regressions-and-ordered-reviews">Task 6: Scoped regressions and ordered reviews</a></li><li class="level-2"><a href="#self-review">Self-review</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="exploratory-hf-generated-ssh-control-implementation-plan" href="#exploratory-hf-generated-ssh-control-implementation-plan">Exploratory HF Generated SSH Control Implementation Plan</a></li><li class="level-2"><a data-section-id="execution-context-and-authorized-scope" href="#execution-context-and-authorized-scope">Execution context and authorized scope</a></li><li class="level-2"><a data-section-id="files-and-responsibilities" href="#files-and-responsibilities">Files and responsibilities</a></li><li class="level-2"><a data-section-id="exact-producer-grammar-implementation-contract" href="#exact-producer-grammar-implementation-contract">Exact producer grammar (implementation contract)</a></li><li class="level-2"><a data-section-id="helper-interface-and-proof-state" href="#helper-interface-and-proof-state">Helper interface and proof state</a></li><li class="level-2"><a data-section-id="task-1-failing-pure-grammar-and-owned-file-tests" href="#task-1-failing-pure-grammar-and-owned-file-tests">Task 1: Failing pure grammar and owned-file tests</a></li><li class="level-2"><a data-section-id="task-2-failing-descriptor-and-stable-closure-tests" href="#task-2-failing-descriptor-and-stable-closure-tests">Task 2: Failing descriptor and stable closure tests</a></li><li class="level-2"><a data-section-id="task-3-failing-fresh-start-and-roster-integration-tests" href="#task-3-failing-fresh-start-and-roster-integration-tests">Task 3: Failing fresh-start and roster integration tests</a></li><li class="level-2"><a data-section-id="task-4-failing-intent-to-dispatch-and-request-closure-tests" href="#task-4-failing-intent-to-dispatch-and-request-closure-tests">Task 4: Failing intent-to-dispatch and request closure tests</a></li><li class="level-2"><a data-section-id="task-5-failing-stopped-removed-transition-tests" href="#task-5-failing-stopped-removed-transition-tests">Task 5: Failing stopped/removed transition tests</a></li><li class="level-2"><a data-section-id="task-6-scoped-regressions-and-ordered-reviews" href="#task-6-scoped-regressions-and-ordered-reviews">Task 6: Scoped regressions and ordered reviews</a></li><li class="level-2"><a data-section-id="self-review" href="#self-review">Self-review</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="exploratory-hf-generated-ssh-control-implementation-plan">Exploratory HF Generated SSH Control Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Tasks1–5 form one coupled bounded implementation unit; use test-first development and ordered independent SPEC, QUALITY and final composed reviews. Root coordinates local checkpoints and all native gates.</p>
+</blockquote>
+<p><strong>Goal:</strong> Permit exactly the pinned producer's fresh run-owned SSH controls without opening the exploratory lifecycle's closed roster or mutation authority.</p>
+<p><strong>Architecture:</strong> Add a focused descriptor-owning SSH-control proof helper, used only by <code>hf_exploratory_native.py</code>. Bind the producer pair after successful native start, profile creation binding, and exact Running inventory; authenticate both names, retained descriptors, metadata, and bytes at every private inventory and dispatch closure. Treat native stop/delete as explicit one-shot transition brackets, with exact post-state proof before adopting any stopped/removed binding.</p>
+<p><strong>Tech Stack:</strong> Existing Python standard library, unittest, real test-owned files, current PrivateStore/RuntimeAuthority APIs. No additional dependencies.</p>
+<hr />
+<h2 id="execution-context-and-authorized-scope">Execution context and authorized scope</h2>
+<ul>
+<li>Exact existing detached worktree: <code>/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL</code>. Preserve it and all retained prior runs.</li>
+<li>Read source at preparation HEAD <code>8736eeb46d7d7dc60d4f512324f74a35721e40b1</code>; parent performs clean source/input gates before any later native lifecycle.</li>
+<li>Interpreter: <code>/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python</code>, always <code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src</code>, with <code>-W error::ResourceWarning</code>.</li>
+<li>User instruction <code>fix the ssh issue so we can get past it. do what is necessary to make it work</code> authorizes this necessary bounded compatibility fix and preparation. No extra fix approval pause. Complete engineering/reviews before parent performs its separately controlled one fresh request-free rehearsal; only a complete accepted rehearsal can unlock the retained single conditional HF action authorization.</li>
+<li>Never edit strict launchers/controllers, accepted recovery/permission helpers, provenance materials, recovered runtime resources, or predecessor receipts. Root owns local scoped checkpoints. Implementer may edit only authorized helper/native/tests; no native execution.</li>
+</ul>
+<h2 id="files-and-responsibilities">Files and responsibilities</h2>
+<p>Create <code>/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/src/kil/hf_exploratory_ssh.py</code>: producer grammar plus paired generated-control proof, with no commands, writes to producer files, recovery, or external path selector.</p>
+<p>Create <code>/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/tests/test_hf_exploratory_ssh.py</code>: real files/descriptors and exact adversarial grammar/identity/transition coverage.</p>
+<p>Modify <code>/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/src/kil/hf_exploratory_native.py</code>: initialization/close, start binding, private roster/inventory closure, final intent-to-dispatch closure, native stop/delete transition proof, and new-run SSH evidence.</p>
+<p>Modify <code>/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/tests/test_hf_exploratory_native.py</code>: native producer fixtures/doubles and lifecycle/intent/cleanup regressions. Existing <code>create_native_profile</code> fixture should create producer SSH pair; double stop truncates Colima control and leaves instance unchanged; double delete removes instance as already modeled and leaves exact stopped Colima control or removes it in dedicated variants.</p>
+<p>No production runtime/profile modules need alteration. Reuse retained RuntimeAuthority root directory descriptor and <code>runtime.guard()</code>; helper creates/owns all additional directory/file descriptors it retains.</p>
+<h2 id="exact-producer-grammar-implementation-contract">Exact producer grammar (implementation contract)</h2>
+<p>The account observed in the pinned producer is literal <code>mistorm</code>. Use that exact fixed account for this selected environment; do not accept an environment variable, caller account, whitespace, or other user syntax. The only dynamic values are derived runtime paths and a producer-observed canonical decimal Port in 1..65535. Encode derived paths using UTF-8, and refuse ambiguous newline, CR, quote, backslash, NUL, noncanonical path, or control-character bytes rather than adding SSH escaping syntax.</p>
+<p>Expected Colima bytes are exactly this template including two final LF bytes:</p>
+<pre><code class="language-text"># This SSH config file can be passed to 'ssh -F'.
+# This file is created by Lima, but not used by Lima itself currently.
+# Modifications to this file will be lost on restarting the Lima instance.
+Host colima-kil-v3-lab
+  IdentityFile &quot;{runtime}/.colima/_lima/_config/user&quot;
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+  NoHostAuthenticationForLocalhost yes
+  PreferredAuthentications publickey
+  Compression no
+  BatchMode yes
+  IdentitiesOnly yes
+  GSSAPIAuthentication no
+  Ciphers &quot;^aes128-gcm@openssh.com,aes256-gcm@openssh.com&quot;
+  User mistorm
+  ControlMaster auto
+  ControlPath &quot;{runtime}/.colima/_lima/colima-kil-v3-lab/ssh.sock&quot;
+  ControlPersist yes
+  Hostname 127.0.0.1
+  Port {port}
+
+</code></pre>
+<p>Expected instance bytes are the exact same template with <code>Host lima-colima-kil-v3-lab</code> and exactly one final LF. Validate the full byte sequences, never a general SSH parser, split-token dictionary, unordered directive set, substring match, or broad whitespace normalization. Extract Port with a fixed-position anchored decimal expression; reject <code>0</code>, <code>65536</code>, leading zeros, signs, floats, trailing whitespace/bytes, and more than five digits. Construct exact expected sequences from derived paths plus the observed port, require both complete sequences to match, then compare the pair while normalizing only the single exact Host line and single exact extra trailing LF. Preserve raw producer bytes and hashes in evidence.</p>
+<p>Sealed recovery source used read-only: <code>.../.tools/hf-recovery-private/2026-09-17/manual-stop-254877dc1b1462c4e29c068e51ad7286fe430b075bc5044c8b3076d1887ad25d/{pre-colima-ssh.config,pre-instance-ssh.config,pre-observations.json,post-observations.json}</code>. Historical Colima length 767, instance length 771; hashes are observations, never future expected pins. Colima mode is exactly 0644; instance mode exactly 0600. Post-stop Colima remains present with same inode, 0644 and exact zero bytes; instance retains its identity and all bytes unchanged. Parent explicitly accepted zero-byte Colima as necessary pinned native stop compatibility, alongside absent or unchanged bound control; arbitrary stopped syntax remains forbidden.</p>
+<h2 id="helper-interface-and-proof-state">Helper interface and proof state</h2>
+<p>Keep this a small proof helper, not a new authority subsystem. Use <code>GeneratedSSHControls.capture(runtime)</code> requiring <code>type(runtime) is RuntimeAuthority</code>, derive all names internally, and expose only <code>guard()</code>, bounded transition snapshot checking, <code>document()</code>, and idempotent <code>close()</code>. Reuse RuntimeAuthority's established anchors/guard; retain only additional instance/file descriptors and proof bytes. Lifecycle holds <code>ssh_controls</code> and a narrow phase (<code>pristine</code>, <code>binding</code>, <code>running</code>, <code>stop_pending</code>, <code>stopped</code>, <code>delete_pending</code>, <code>removed</code>), plus <code>profile_start_succeeded</code>, <code>profile_stop_succeeded</code>, and <code>profile_delete_succeeded</code> flags. Set success only after exact runner command returned zero and observe has retained terminal output/receipt; attempted flags and profile_binding alone never grant transition. A transition snapshot is local captured data tied to this proof/runtime; the lifecycle adopts it only after its own successful command and exact state proofs. No caller flag or snapshot grants native authority.</p>
+<p><code>capture</code> opens <code>.colima</code>, <code>_lima</code>, and exact <code>colima-kil-v3-lab</code> directory components relative to RuntimeAuthority's retained root fd, with <code>O_DIRECTORY|O_NOFOLLOW</code>; retains their fd/identity plus parent/name edges. Require owner effective UID and exact private directory modes already proved by native profile/runtime contracts rather than inventing a mode incompatible with generated instance state. Cross-check instance directory device/inode/mode against existing creation binding. Bind two files relative to retained parent fds, <code>ssh_config</code> and <code>ssh.config</code>, with <code>O_RDONLY|O_NOFOLLOW|O_NONBLOCK</code>.</p>
+<p>Every file read is bounded to 16384 bytes, regular, owner effective UID, exact per-file mode, one link; read at most bound+1, and compare stat tuples <code>(dev,ino,mode,uid,nlink,size,mtime_ns,ctime_ns)</code> before/after read and against no-follow named stat. Require exact count and stable full bytes, then close the read with both earlier/later file identities and all directory edges rechecked. Keep retained descriptors, raw bytes, full metadata, endpoint port, and SHA256. Failure closes every partially opened owned fd, leaves no adopted proof, and never changes producer files.</p>
+<p><code>guard</code> authenticates runtime first and last, every retained directory edge, both current no-follow file names and retained file fds, all metadata, and full bytes; reread both and close both file proofs after the paired read. This detects same-size edits, replace-then-restore metadata, renames, owner/mode/link drift, ancestor replacement, missing files, fd substitution, and late replacement during second-file reading. Treat OSError/uncertain reads as refusal, not absence. Only FileNotFoundError on the exact anchored name is absence; absence is allowed solely in explicit native transition state.</p>
+<p>Stop observation permits Colima (a) unchanged original binding, (b) anchored absence, or (c) exactly zero-byte owned regular 0644 one-link file after the successful exact native stop return. For (c), permit original inode truncation or securely captured replacement only inside that native bracket, retain its new descriptor/metadata/bytes and close the observation across both controls. Instance must remain exact original identity/metadata/bytes. Stopped adoption occurs only after existing unchanged profile proof and exact complete Stopped inventory pass and candidate is freshly reauthenticated. Thereafter stopped closure is immutable; a second truncate/replacement/new disappearance is refused.</p>
+<p>Delete observation permits removal of exact owned instance directory/file after successful exact delete return and confirmed profile/resource absence; any surviving instance or unknown/replaced directory fails. Colima must be unchanged stopped binding or anchored absent; do not adopt new content or another empty inode at delete. Retained instance descriptors may have <code>nlink=0</code> due to native removal; do not mistake that expected transition for live owned control or dereference deleted paths. Close retained fds after evidence and removal proof. Original runtime <code>.colima</code>/<code>_lima</code> anchors must remain authenticated throughout.</p>
+<p>Evidence uses new-run top-level names <code>ssh-control-colima.running.config</code>, <code>ssh-control-instance.running.config</code>, <code>ssh-controls.running.json</code>; stopped/removal records use <code>ssh-controls.stopped.json</code> / <code>ssh-controls.removed.json</code> plus stopped Colima bytes only when present. Record present=false distinctly from present=true empty; schema <code>kil.hf-generated-ssh-controls.v1</code>, runtime binding digest, phase, exact paths, raw byte counts/hashes/full stat identities, and observed port. Evidence writes do not overwrite predecessor receipts. After writing evidence, reauthenticate control proof and read back new retained files via <code>private_read</code> before adopting/dispatching.</p>
+<h2 id="task-1-failing-pure-grammar-and-owned-file-tests">Task 1: Failing pure grammar and owned-file tests</h2>
+<ul>
+<li>[ ] Create test class using real TemporaryDirectory under <code>/private/tmp</code>, current NativeTests-style patched <code>_registry_parent</code>, genuine PrivateStore/RuntimeAuthority, derived paths, and minimal profile fixture. Each test cleans up helper before runtime before store; no native subprocesses.</li>
+<li>[ ] Add valid running pair fixture using the exact template above and modes 0644/0600. Assert capture retains raw bytes, matching port, distinct aliases, exact hashes/identities, and <code>guard()</code> succeeds.</li>
+<li>[ ] Add table rejection tests for wildcard/second Host, Include, ProxyCommand, ProxyJump, directives reordered/duplicated/removed/added, changed comments/options, User/root/other, nonloopback Hostname, all invalid port formats, mismatched paired port, another run's IdentityFile/ControlPath, extra blank line, CR/NUL/tab/invalid UTF-8, quote/backslash path injection. Assert no general normalization accepts them.</li>
+<li>[ ] Add pre-start presence tests for exact and malformed Colima file and symlink/directory/FIFO. Assert start refusal before durable command intent/runner.</li>
+<li>[ ] Run new grammar test module before production helper exists: expect ImportError/missing-helper FAIL; retain red test result as test-first evidence.</li>
+<li>[ ] Implement exact template validation and capture/guard/close only. Run new module: expect all grammar tests PASS.</li>
+</ul>
+<h2 id="task-2-failing-descriptor-and-stable-closure-tests">Task 2: Failing descriptor and stable closure tests</h2>
+<ul>
+<li>[ ] Add real files for Colima bad mode 0600/0664/0444, instance bad mode0644, hardlinks, directory, symlink, FIFO, oversized file, and file replacement. Check helper rejects quickly without blocking on FIFO.</li>
+<li>[ ] Add wrong UID tests using narrowly scoped mocked fstat/stat rows around real descriptor reads; do not chown, escalate, or claim mocks as native evidence. Add same-size byte mutation, mtime-restoration with changed ctime, parent replacement, retained descriptor closed/substituted, named fd mismatch, second-file-read mutation of first file, and capture exception after first file opens. Assert no leaked fds using patched close/open tracking or validated fd count where stable.</li>
+<li>[ ] Run each new test red before hardening implementation; expect specific ValueError/refusal and no native effects.</li>
+<li>[ ] Implement full metadata/byte/directory closure and partial-failure cleanup described above. Rerun helper module with ResourceWarning fatal: expect PASS.</li>
+</ul>
+<h2 id="task-3-failing-fresh-start-and-roster-integration-tests">Task 3: Failing fresh-start and roster integration tests</h2>
+<ul>
+<li>[ ] Upgrade <code>create_native_profile</code> to create paired controls, account/paths/port from test-owned exact fixture; update lifecycle doubles to emit exact native grammar, never historical private bytes. Existing profile-only fixtures used for strict assertions remain untouched.</li>
+<li>[ ] Add full request-free double lifecycle test that completes with valid generated controls and exact closed roster. Assert running pair evidence retained before Kind create; no HF request intent/attempt; preserved foreign files; final stopped/removal evidence.</li>
+<li>[ ] Add start unsuccessful return with valid controls: no running binding/Kind dispatch; unbound start: no running adoption. Add start successful but stopped/extra/wrong inventory rows: no running adoption. Add another roster name alongside ssh_config: refusal. Add SSH missing/malformed pair after successful start: no Kind/HF dispatch, manual recovery retained.</li>
+<li>[ ] Run tests red against existing <code>private_inventory</code> allowed roster. Implement lifecycle initialization and helper close, explicit <code>profile_start_succeeded</code> after retained zero-return terminal receipt, post-success-start binding bracket, and roster recognition only when complete generated proof is available. In <code>setup</code>, after successful creation binding and successful start return, require authenticated pair and exact Running private inventory before endpoint/Kind checks. Existing setup deliberately captures profile_binding before testing nonzero start; that binding alone must never authorize SSH adoption. Avoid accepting generated controls in a retained failed runtime.</li>
+<li>[ ] In <code>private_inventory</code>, require pre-read and post-read local roster checks, keep all existing roster names closed plus conditionally authenticated ssh_config, maintain require_complete before/after Lima roster, close SSH pair proof after native inventory read, and refuse before-start presence. Avoid recursive inventory: generated proof checks are local fd authentication only.</li>
+<li>[ ] Rerun native and helper modules; expect PASS or only explicitly diagnosed new integration failures. Do not weaken old ownership tests to silence failures.</li>
+</ul>
+<h2 id="task-4-failing-intent-to-dispatch-and-request-closure-tests">Task 4: Failing intent-to-dispatch and request closure tests</h2>
+<ul>
+<li>[ ] Add durable command_intent hook tests mutating/replacing/removing Colima and instance control between authorization and final dispatch; target Kind create, ordinary setup apply, Kind delete, Colima stop/delete, read command, and action attach. Assert runner not handed off, one-shot attempt flags remain false where not committed, intent remains truthful, cleanup refuses drift.</li>
+<li>[ ] Add mutation immediately before <code>store.send_once</code> request-intent write; assert no request intent on known pre-intent drift. Add drift during request intent writing; assert retained uncertain/request intent truthfully preserved, zero runner dispatch/target execution and no retry.</li>
+<li>[ ] Run newly added tests red. Implement local generated-control authentication in <code>require_dispatch_unchanged</code> before/after durable intent, without native observation or recursion. Apply pristine absence closure to exact fresh start. Only explicitly in-flight native stopped/delete inventory proof reads can inspect transition candidates; no mutation/attach dispatch while provisional phase exists.</li>
+<li>[ ] Add fresh proof recheck immediately before action <code>store.send_once</code>, after current track/driver checks. <code>observe</code> final closure remains the consuming attach authority after request-intent persistence.</li>
+<li>[ ] Rerun helper/native modules: expect PASS; preserve existing command-bytes substitution and no-premature-latch regressions.</li>
+</ul>
+<h2 id="task-5-failing-stopped-removed-transition-tests">Task 5: Failing stopped/removed transition tests</h2>
+<ul>
+<li>[ ] Model successful exact stop truncating original Colima fd to empty while retaining exact instance pair. Assert successful Stopped proof adopts exact empty bytes/identity once; stop absent and stop unchanged valid Colima variants also accepted. Distinguish empty and absent evidence.</li>
+<li>[ ] Reject empty Colima before start, while Running, before exact stop dispatch, during stop command-intent, after failed stop return, after runner exception, wrong Stopped inventory/profile, nonempty modified stopped grammar, mode/link/type/UID drift, changed instance bytes, and a late zero-byte inode substitution after adopted stopped proof. Native stop returning success alone never establishes stopped adoption.</li>
+<li>[ ] Model successful delete removing exact instance/profile/disk and unchanged stopped Colima or absent Colima. Reject unknown roster extras after delete, new empty replacement at delete, surviving instance control, foreign instance replacement, failed/uncertain delete, and late ancestor drift. Assert owned_teardown only after profile/resource absence, complete private inventory absence, local roster closure, stopped/removed SSH closure, reset store authorization, and foreign preservation.</li>
+<li>[ ] Run new transition tests red. Implement exact command success flags after <code>observe</code> returns (not merely attempted flags), provisional stop/delete candidate observation, accepted state adoption only after exact existing profile/inventory proof and fresh candidate closure. In <code>_cleanup_native</code>, establish stop proof before setting profile_stopped, and delete removal proof before profile_delete_completed/owned_teardown. Expand <code>private_inventory_absent</code> to close local roster plus SSH removed state before and after native list, preserving require_complete.</li>
+<li>[ ] Run full helper/native modules: expect PASS, including inconclusive/manual recovery behavior on any drift.</li>
+</ul>
+<h2 id="task-6-scoped-regressions-and-ordered-reviews">Task 6: Scoped regressions and ordered reviews</h2>
+<p>From the exact worktree run:</p>
+<pre><code class="language-bash">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src '/Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/.venv/bin/python' -W error::ResourceWarning -m unittest tests.test_hf_exploratory_ssh tests.test_hf_exploratory_native tests.test_hf_exploratory_runtime tests.test_hf_exploratory_profile tests.test_hf_exploratory_io tests.test_hf_exploratory_evidence tests.test_hf_compact_residual_recovery tests.test_hf_recovery_parent_permissions tests.test_v3b2_profile_state tests.test_v3b2_inventory tests.test_v3b2_journal tests.test_v3b2_controller
+</code></pre>
+<ul>
+<li>[ ] Expect exit0 and OK; if existing failures appear, diagnose and report precisely before next gate. Do not claim broader repository all-green or alter known citation omissions.</li>
+<li>[ ] Independent SPEC review compares patch/tests against exact grammar, owner/descriptor proof, lifecycle transition contracts, closed roster, and conditional execution scope. Address findings test first.</li>
+<li>[ ] Independent QUALITY review examines fd ownership/cleanup, race/recursion/dispatch closure, evidence ordering, mock realism, and minimal scope. Address findings test first.</li>
+<li>[ ] Final composed review joins implementation and ordered review resolution with scoped test evidence and retained source/artifact constraints. Parent records lineage and any authorized checkpoint; this preparation agent edits no repository lineage.</li>
+<li>[ ] Parent proceeds only after all engineering gates pass to the fresh request-free rehearsal, verifies full lifecycle, zero HF intents/attempts, exact owned teardown, retained checksums and foreign preservation. Failure/uncertainty stops with no automatic retry/recovery. Conditional action remains one instruction per fixed track, three total, fresh lifecycle, durable intent and final joined evidence, subject to retained authorization.</li>
+</ul>
+<h2 id="self-review">Self-review</h2>
+<p>Coverage: Tasks1/2 cover exact grammar, paired aliases/LF, distinct modes, bounded no-follow descriptors, stable closure, partial-failure cleanup and pristine presence; Task3 covers successful fresh ownership and closed native inventory; Task4 covers known pre-intent and late intent/dispatch/request drift; Task5 covers exact successful native stop empty/absent/unchanged and delete removal, no arbitrary content adoption; Task6 covers scope, regressions and ordered independent reviews. Keep helper minimal using existing RuntimeAuthority, with successful native start/stop/delete flags explicit after retained terminal receipts. No production implementation or native command has been performed during planning. The native stopped-empty behavior is explicitly incorporated with parent acceptance; additional producer differences remain refusal/blockers rather than fallback scope.</p>
+<p>KTP citation: <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">canonical <code>CITATION.cff</code></a>.</p>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>
