@@ -24826,3 +24826,79 @@ action. No automatic live retry or recovered-runtime adoption. Platform provenan
 unverified/full Kind-Calico acceptance false/local Envoy evidence unchanged.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T446 — 2026-09-17, bounded generated SSH repair and final engineering gates
+
+**Input:** User authorized the necessary SSH fix and requested HF execution;
+approved new generated-control design/plan and ordered test-first reviews.
+
+**Interpretation:** Repair only fresh exploratory lifecycle recognition of the
+exact Colima/Lima producer pair. Preserve the recovered stopped runtime, all
+historical evidence, accepted recovery/parent helper and strict controller gates.
+
+**Decision status:** CONFIRMED bounded repair engineering completed at the
+recorded source hashes after RED/GREEN reproduction and independent SPEC,
+QUALITY and final composed review. Engineering acceptance is not native readiness.
+
+**Rationale:** The original real-fixture closed-roster refusal reproduced before
+production edits. New helper validates the entire paired grammar, current private
+paths/loopback/port, account, modes0644/0600, effective owner, regular single-link
+bounded no-follow files and retained named/fd byte/metadata/ancestor closure.
+Fresh absence, successfully retained start/stop/delete receipts and exact owned
+Running/Stopped/absent inventories gate adoption. Only private read-only inventory
+may inspect provisional phases. Dispatch and request-intent boundaries recheck
+controls/evidence. Native stop may truncate the owned Colima control; deletion
+requires authentic held-file unlink and removed-directory proof, including APFS
+descriptor behavior. Failed proofs poison authority; closure attempts every fd.
+
+Independent SPEC findings corrected after focused RED regressions: initial
+binding rollback close-error poisoning, planned evidence schema/digest/path/count
+fields and names, and final removed-directory proof closure. QUALITY found a test
+coverage distinction: effective-UID drift did not isolate foreign-file ownership;
+a permanent real-fd targeted-stat regression now covers both controls. Final
+composed review found startup endpoint observation preceded initial SSH adoption;
+two RED regressions demonstrated it and one explicit guard_profile call now closes
+the pair/exact Running inventory before any endpoint/Kind check. Root disposable
+receipt verifier now repeats the full manifest/roster closure after final content
+reads; independently injected late drift was refused. No new native command
+grammar, SSH producer write, repair command or fallback authority was introduced.
+
+**Validation:** Root 16-module exploratory/runtime/strict-ownership matrix:
+499 tests in311.249s, OK at the earlier loaded native236abc9e revision, before
+the final one-line setup-order correction and test-only owner/order additions.
+Final-source affected lifecycle module:139 tests in251.333s, OK. Final-source
+helper module:19 tests in0.683s, OK. All used the existing repository venv,
+PYTHONDONTWRITEBYTECODE=1, PYTHONPATH=src and fatal ResourceWarning. Final focused
+implementer order/setup/rehearsal/action/failure checks:10 tests in24.140s, OK;
+independent SPEC order2PASS and QUALITY order2PASS. No full discovery-green claim
+or repeated accepted recovery/permission-helper engineering suite. Final diffcheck
+clean and exact four-source/test hashes/whitelisted scope independently checked.
+
+**Reviewed source SHA256:** Helper
+`1a32ee48af39e75e6f7e66bf4619337deaa038fdd35d5feb931c47fa97dc1146`;
+native `0a830412beb73cb3678501494c1ec5de4a6611fb97e86de307caf8d307e7d682`.
+Helper test `b268b589d733e5cee162dda1fa5743bebcce2ad0a970737c1f85c96e422b3978`;
+native test `6f19f2ef0413cfa76b580f182301f0273a0e7a9043e82324fdac35fc9bb5f43c`.
+Independent reports retained in `/private/tmp/kil-ssh-spec-review.md`,
+`/private/tmp/kil-ssh-quality-review.md`, `/private/tmp/kil-ssh-final-review.md`.
+
+**Affected artifacts:** Only src/kil/hf_exploratory_ssh.py,
+src/kil/hf_exploratory_native.py and their two tests, this append-only lineage and
+deterministic reader. Exact existing managed detached worktree retained. No branch
+switch, worktree creation, dependency install, merge/push, provenance audit,
+historical receipt mutation or completed recovery engineering repeated.
+
+**Unresolved questions:** Actual fresh native rehearsal readiness and HF result.
+Any unfamiliar producer behavior/refusal/uncertainty stops progression without
+automatic live retry, residual recovery or recovered-runtime adoption. Platform
+image provenance remains unverified/full Kind-Calico acceptance false; prior local
+Envoy acceptance unchanged.
+
+**Next gate:** Clean local checkpoint and fresh source/input/exclusion gates,
+then root-only ONE fresh request-free rehearsal under T445 authorization. Require
+complete result, zero HF intents/attempts, verified owned teardown, final descriptor/
+store/lock closure, independently matching foreign global state and bounded
+read-only sealed receipt verification before the separately authorized ONE fresh
+fixed three-track HF action. No extra routine permission question is required.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

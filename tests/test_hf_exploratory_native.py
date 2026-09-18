@@ -67,6 +67,8 @@ def node():
 def create_native_profile(paths):
     from tests.test_v3b2_profile_state import create_profile
     create_profile(paths)
+    from tests.test_hf_exploratory_ssh import write_pair
+    write_pair(SimpleNamespace(colima=paths.colima, lima=paths.lima, path=paths.runtime))
     fixtures = Path(__file__).parent / 'fixtures'
     for key, name in [('profile', 'profile'), ('instance', 'instance')]:
         (getattr(paths, key) / 'colima.yaml').write_bytes(
@@ -74,6 +76,15 @@ def create_native_profile(paths):
 
 
 class NativeTests(unittest.TestCase):
+    def test_real_generated_pair_is_compatible_with_complete_running_inventory(self):
+        create_native_profile(self.life.paths)
+        self.life.profile_binding = self.native.creation_binding(self.life.paths.document(), self.native.capture(self.life.paths))
+        self.life.profile_start_succeeded = True
+        row = {'name':'kil-v3-lab','status':'Running','arch':'aarch64','runtime':'docker','cpus':4,'memory':8*1024**3,'disk':60*1024**3}
+        payload = canonical(row)
+        self.runner.run.return_value = CommandResult(0,payload.decode(),'',payload,b'')
+        self.assertEqual(self.life.private_inventory(), [row])
+
     def setUp(self):
         self.assertIsNotNone(importlib.util.find_spec('kil.hf_exploratory_native'),
                              'native exploratory module is missing')
@@ -283,6 +294,8 @@ class NativeTests(unittest.TestCase):
         self.assertTrue(hasattr(self.life, 'instruction_phase'), 'instruction phase missing')
         self.life.mode = 'action'
         self.install_pods()
+        create_native_profile(self.life.paths)
+        self.life.ssh.bind_running()
         with patch.object(self.native, 'check_source'), patch.object(self.life, 'guard_cluster'), patch.object(self.life, 'require_current_track'), patch.object(self.life, 'require_current_driver'), patch.object(self.life, 'observe', side_effect=OSError('first uncertain attach')) as observed:
             with self.assertRaises(OSError):
                 self.life.instruction_phase()
@@ -597,7 +610,7 @@ class NativeTests(unittest.TestCase):
             if executable=='colima' and argv[1]=='start':
                 create_native_profile(self.life.paths); self.state['profile']=True; return result()
             if executable=='colima' and argv[1]=='stop':
-                (self.life.paths.disk/'in_use_by').unlink(); self.state['stopped']=True; return result()
+                (self.life.paths.disk/'in_use_by').unlink(); (self.life.paths.colima/'ssh_config').write_bytes(b''); self.state['stopped']=True; return result()
             if executable=='colima' and argv[1]=='delete':
                 for target in [self.life.paths.profile,self.life.paths.instance,self.life.paths.disk]: shutil.rmtree(target)
                 self.life.paths.store.parent.mkdir(parents=True,exist_ok=True)
@@ -725,6 +738,310 @@ class NativeTests(unittest.TestCase):
         first_final_target=next(index for index,row in enumerate(rows) if row['event']=='source_capture' and row['details']['track']==TRACKS[0] and row['details']['role']=='target' and 'final' in row['details']['file'])
         second_request=next(index for index,row in enumerate(rows) if row['event']=='request_intent' and row['details']['track']==TRACKS[1])
         self.assertLess(first_final_target,second_request)
+
+    def execute_ssh_double(self):
+        with patch.object(self.native,'check_source'), patch.object(self.native.platform,'system',return_value='Darwin'), patch.object(self.native.platform,'machine',return_value='arm64'), patch.object(self.native.time,'sleep'):
+            return self.life.execute()
+
+    def test_ssh_pair_is_never_bound_after_failed_start(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        def failed(command):
+            result = original(command)
+            if command.argv[:2] == ('colima','start'): return replace(result,returncode=1)
+            return result
+        self.runner.run.side_effect = failed
+        report = self.execute_ssh_double()
+        self.assertIsNone(self.life.ssh.proof())
+        self.assertTrue(report['manual_recovery'])
+        self.assertFalse(any(row.argv[:2] in [('colima','stop'),('colima','delete')] for row in self.state['calls']))
+
+    def test_ssh_pair_is_never_bound_after_unbound_start(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        def unbound(command):
+            result = original(command)
+            if command.argv[:2] == ('colima','start'):
+                (self.life.paths.instance/'colima.yaml').write_bytes(b'unknown')
+            return result
+        self.runner.run.side_effect = unbound
+        report = self.execute_ssh_double()
+        self.assertIsNone(self.life.ssh.proof()); self.assertIsNone(self.life.profile_binding)
+        self.assertTrue(report['manual_recovery']); self.assertFalse(self.life.profile_stop_attempted)
+
+    def test_ssh_failed_running_inventory_poisoned_binding_never_authorizes_stop(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        def inventory(command):
+            result = original(command)
+            if command.argv == ('colima','list','--json') and command.env and self.state['profile']:
+                return CommandResult(0,'','',b'',b'')
+            return result
+        self.runner.run.side_effect = inventory
+        report = self.execute_ssh_double()
+        self.assertIsNone(self.life.ssh.proof())
+        self.assertFalse(self.life.profile_stop_attempted)
+        self.assertFalse(self.life.cluster_attempted)
+        self.assertTrue(report['manual_recovery'])
+
+    def test_ssh_prestart_presence_refuses_no_intent_no_attempt(self):
+        self.full_fake_runner(); (self.life.paths.colima/'ssh_config').write_bytes(b'')
+        report = self.execute_ssh_double()
+        self.assertFalse(self.life.profile_attempted)
+        self.assertFalse(any(row.argv[:2] == ('colima','start') for row in self.state['calls']))
+        self.assertEqual(report['request_intent_count'],0)
+
+    def test_ssh_close_error_still_closes_runtime(self):
+        original = self.life.ssh.close
+        def closed(): original(); raise OSError('test-owned close failure')
+        with patch.object(self.life.ssh,'close',side_effect=closed), self.assertRaises(OSError): self.life.close()
+        self.assertTrue(self.life.runtime._closed)
+
+    def test_ssh_running_inventory_profile_mode_drift_refuses_binding(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        def drift(command):
+            result = original(command)
+            if command.argv == ('colima','list','--json') and command.env and self.state['profile']:
+                self.life.paths.instance.chmod(0o700)
+            return result
+        self.runner.run.side_effect = drift
+        report = self.execute_ssh_double()
+        self.assertIsNone(self.life.ssh.proof())
+        self.assertFalse(self.life.cluster_attempted)
+        self.assertFalse(self.life.profile_stop_attempted)
+        self.assertTrue(report['manual_recovery'])
+
+    def test_successful_start_malformed_ssh_dispatches_no_endpoint_or_kind_commands(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        def malformed(command):
+            result = original(command)
+            if command.argv[:2] == ('colima','start'):
+                path = self.life.paths.colima/'ssh_config'
+                path.write_bytes(path.read_bytes()+b'Include other\n')
+            return result
+        self.runner.run.side_effect = malformed
+        report = self.execute_ssh_double()
+        self.assertEqual(report['status'],'inconclusive')
+        start = next(index for index,row in enumerate(self.state['calls']) if row.argv[:2] == ('colima','start'))
+        following = self.state['calls'][start+1:]
+        self.assertFalse(any(row.argv == self.native.CLUSTER_INVENTORY_ARGV and row.env == self.life.docker_env
+                             for row in following),'malformed SSH reached private endpoint query')
+        self.assertFalse(any(row.argv[0] == 'kind' for row in following))
+        self.assertIsNone(self.life.ssh.proof())
+        self.assertTrue(report['manual_recovery'])
+
+    def test_running_ssh_is_evidenced_before_first_private_endpoint_query(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect; observations = []
+        def endpoint(command):
+            if command.argv == self.native.CLUSTER_INVENTORY_ARGV and command.env == self.life.docker_env:
+                proof = self.store.path/'ssh-controls.running.json'
+                observations.append((self.life.ssh.state, proof.exists(),
+                                     'ssh-controls.running.json' in self.life.ssh_evidence))
+            return original(command)
+        self.runner.run.side_effect = endpoint
+        report = self.execute_ssh_double()
+        self.assertEqual(report['status'],'complete',report['error'])
+        self.assertTrue(observations)
+        self.assertEqual(observations[0],('running',True,True))
+        self.assertTrue(report['owned_teardown'])
+
+    def test_ssh_evidence_schema_exact_names_runtime_and_raw_counts(self):
+        self.full_fake_runner(); report = self.execute_ssh_double()
+        self.assertTrue(report['owned_teardown'],report['error'])
+        from tests.test_hf_exploratory_ssh import generated_pair
+        colima, instance = generated_pair(self.life.runtime)
+        for phase in ['running','stopped','removed']:
+            target = self.store.path/('ssh-controls.'+phase+'.json')
+            self.assertTrue(target.exists(), 'planned SSH evidence name is missing')
+            proof = json.loads(target.read_bytes())
+            self.assertEqual(proof['schema'],'kil.hf-generated-ssh-controls.v1')
+            self.assertEqual(proof['phase'],phase)
+            self.assertEqual(proof['run_digest'],self.life.run_digest)
+            self.assertEqual(proof['runtime_binding_sha256'],sha256(self.life.runtime._binding[4]).hexdigest())
+            self.assertEqual(proof['colima']['path'],str(self.life.paths.colima/'ssh_config'))
+            self.assertEqual(proof['instance']['path'],str(self.life.paths.instance/'ssh.config'))
+        running = json.loads((self.store.path/'ssh-controls.running.json').read_bytes())
+        for label,payload in [('colima',colima),('instance',instance)]:
+            self.assertEqual((self.store.path/('ssh-control-'+label+'.running.config')).read_bytes(),payload)
+            self.assertEqual(running[label]['byte_count'],len(payload))
+            self.assertEqual(running[label]['sha256'],sha256(payload).hexdigest())
+        stopped = json.loads((self.store.path/'ssh-controls.stopped.json').read_bytes())
+        self.assertTrue(stopped['colima']['present']); self.assertEqual(stopped['colima']['byte_count'],0)
+        self.assertEqual((self.store.path/'ssh-control-colima.stopped.config').read_bytes(),b'')
+        removed = json.loads((self.store.path/'ssh-controls.removed.json').read_bytes())
+        self.assertFalse(removed['instance']['present']); self.assertIsNone(removed['instance']['byte_count'])
+
+    def test_ssh_unknown_sibling_created_during_inventory_refuses_binding(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        def sibling(command):
+            result = original(command)
+            if command.argv == ('colima','list','--json') and command.env and self.state['profile']:
+                (self.life.paths.colima/'unknown').write_bytes(b'')
+            return result
+        self.runner.run.side_effect = sibling
+        report = self.execute_ssh_double()
+        self.assertIsNone(self.life.ssh.proof())
+        self.assertFalse(self.life.cluster_attempted)
+        self.assertFalse(self.life.profile_stop_attempted)
+        self.assertIn('private_colima_profile_roster_unknown',report['error'])
+
+    def test_ssh_control_drift_during_retention_refuses_binding_and_cleanup(self):
+        self.full_fake_runner(); original = self.store.write
+        def writing(name,payload):
+            result = original(name,payload)
+            if name == 'ssh-controls.running.json':
+                path = self.life.paths.colima/'ssh_config'
+                path.write_bytes(path.read_bytes().replace(b'54321',b'54322'))
+            return result
+        with patch.object(self.store,'write',side_effect=writing): report = self.execute_ssh_double()
+        self.assertIsNone(self.life.ssh.proof())
+        self.assertFalse(self.life.cluster_attempted)
+        self.assertFalse(self.life.profile_stop_attempted)
+        self.assertTrue(report['manual_recovery'])
+
+    def test_ssh_retained_config_corruption_refuses_binding_and_cleanup(self):
+        self.full_fake_runner(); original = self.store.write
+        def writing(name,payload):
+            result = original(name,payload)
+            if name == 'ssh-control-colima.running.config': (self.store.path/name).write_bytes(b'corrupted')
+            return result
+        with patch.object(self.store,'write',side_effect=writing): report = self.execute_ssh_double()
+        self.assertIsNone(self.life.ssh.proof())
+        self.assertFalse(self.life.cluster_attempted)
+        self.assertFalse(self.life.profile_stop_attempted)
+        self.assertTrue(report['manual_recovery'])
+
+    def test_ssh_provisional_states_never_authorize_general_dispatch(self):
+        create_native_profile(self.life.paths); self.life.ssh.begin_running()
+        for state in ['binding','stopping','deleting']:
+            self.life.ssh.state = state
+            command = Command(('colima','version'),10)
+            dispatch = (command.argv,command.env,command.stdin,command.timeout_s,command.mutating)
+            with patch.object(self.life.ssh,'guard'), self.assertRaises(ValueError):
+                self.life.require_dispatch_unchanged(command,dispatch)
+        self.runner.run.assert_not_called()
+
+    def test_ssh_unknown_roster_refuses_after_valid_pair(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        def extra(command):
+            result = original(command)
+            if command.argv[:2] == ('colima','start'): (self.life.paths.colima/'unknown').write_bytes(b'')
+            return result
+        self.runner.run.side_effect = extra
+        report = self.execute_ssh_double()
+        self.assertIn('private_colima_profile_roster_unknown',report['error'])
+        self.assertIsNone(self.life.ssh.proof())
+        self.assertFalse(self.life.cluster_attempted)
+
+    def test_ssh_drift_before_command_intent_refuses_without_handoff_or_latch(self):
+        self.full_fake_runner()
+        with patch.object(self.native,'check_source'), patch.object(self.native.platform,'system',return_value='Darwin'), patch.object(self.native.platform,'machine',return_value='arm64'):
+            self.life.setup()
+        command = kind_delete_command(self.life.identity)
+        before = self.store.journal.read_bytes(); calls = len(self.state['calls'])
+        path = self.life.paths.colima/'ssh_config'
+        path.write_bytes(path.read_bytes().replace(b'54321',b'54322'))
+        with self.assertRaises(ValueError): self.life.observe(command)
+        self.assertEqual(before,self.store.journal.read_bytes())
+        self.assertEqual(calls,len(self.state['calls']))
+        self.assertFalse(self.life.cluster_delete_attempted)
+
+    def test_ssh_drift_during_command_intent_keeps_truthful_unlatched_refusal(self):
+        self.full_fake_runner()
+        with patch.object(self.native,'check_source'), patch.object(self.native.platform,'system',return_value='Darwin'), patch.object(self.native.platform,'machine',return_value='arm64'):
+            self.life.setup()
+        original = self.store.record; calls = len(self.state['calls'])
+        def recording(event,details):
+            original(event,details)
+            if event == 'command_intent' and details['argv'][:2] == ['kind','delete']:
+                path = self.life.paths.colima/'ssh_config'
+                path.unlink(); path.write_bytes(b''); path.chmod(0o644)
+        with patch.object(self.store,'record',side_effect=recording), self.assertRaises(ValueError):
+            self.life.observe(kind_delete_command(self.life.identity))
+        self.assertFalse(self.life.cluster_delete_attempted)
+        self.assertFalse(any(row.argv[:2] == ('kind','delete') for row in self.state['calls'][calls:]))
+
+    def test_ssh_pre_request_drift_creates_no_request_intent(self):
+        self.life.mode = 'action'; self.full_fake_runner()
+        with patch.object(self.native,'check_source'), patch.object(self.native.platform,'system',return_value='Darwin'), patch.object(self.native.platform,'machine',return_value='arm64'):
+            self.life.setup()
+        original = self.life.require_current_driver
+        def driver(track):
+            original(track)
+            path = self.life.paths.colima/'ssh_config'
+            path.write_bytes(path.read_bytes().replace(b'54321',b'54322'))
+        with patch.object(self.life,'require_current_driver',side_effect=driver), patch.object(self.native,'check_source'), self.assertRaises(ValueError):
+            self.life.instruction_phase()
+        self.assertEqual(self.store.attempts,[])
+        self.assertFalse(self.store.uncertain)
+        self.assertFalse(any(json.loads(line)['event']=='request_intent' for line in self.store.journal.read_bytes().splitlines()))
+
+    def test_ssh_stop_instance_drift_and_late_stopped_replacement_refuse_delete(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        def drift(command):
+            result = original(command)
+            if command.argv[:2] == ('colima','stop'):
+                path = self.life.paths.instance/'ssh.config'
+                path.write_bytes(path.read_bytes().replace(b'54321',b'54322'))
+            return result
+        self.runner.run.side_effect = drift
+        report = self.execute_ssh_double()
+        self.assertFalse(self.life.profile_stopped)
+        self.assertFalse(self.life.profile_delete_attempted)
+        self.assertTrue(report['manual_recovery'])
+
+    def test_ssh_stopped_inventory_late_replacement_is_never_adopted(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        def drift(command):
+            result = original(command)
+            if command.argv == ('colima','list','--json') and command.env and self.state['stopped']:
+                path = self.life.paths.colima/'ssh_config'
+                path.unlink(); path.write_bytes(b''); path.chmod(0o644)
+            return result
+        self.runner.run.side_effect = drift
+        report = self.execute_ssh_double()
+        self.assertFalse(self.life.profile_stopped)
+        self.assertFalse(self.life.profile_delete_attempted)
+        self.assertTrue(report['manual_recovery'])
+
+    def test_ssh_request_preintent_and_late_intent_drift_are_one_shot_truthful(self):
+        self.life.mode = 'action'; self.full_fake_runner()
+        with patch.object(self.native,'check_source'), patch.object(self.native.platform,'system',return_value='Darwin'), patch.object(self.native.platform,'machine',return_value='arm64'):
+            self.life.setup()
+        original = self.store.record
+        def recording(event,details):
+            original(event,details)
+            if event == 'request_intent':
+                path = self.life.paths.colima/'ssh_config'
+                path.write_bytes(path.read_bytes().replace(b'54321',b'54322'))
+        with patch.object(self.store,'record',side_effect=recording), patch.object(self.native,'check_source'), self.assertRaises(ValueError):
+            self.life.instruction_phase()
+        self.assertEqual(len(self.store.attempts),1)
+        self.assertTrue(self.store.uncertain)
+        self.assertEqual(self.state['attached'],[])
+        self.assertEqual(self.life.attach_attempted,set())
+
+    def test_ssh_failed_stop_or_instance_drift_grants_no_delete(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        def failed_stop(command):
+            result = original(command)
+            if command.argv[:2] == ('colima','stop'): return replace(result,returncode=1)
+            return result
+        self.runner.run.side_effect = failed_stop
+        report = self.execute_ssh_double()
+        self.assertTrue(self.life.profile_stop_attempted)
+        self.assertFalse(self.life.profile_stopped)
+        self.assertFalse(self.life.profile_delete_attempted)
+        self.assertTrue(report['manual_recovery'])
+
+    def test_ssh_delete_surviving_colima_replacement_refuses_owned_teardown(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        def replaced(command):
+            result = original(command)
+            if command.argv[:2] == ('colima','delete'):
+                path = self.life.paths.colima/'ssh_config'; path.unlink(); path.write_bytes(b''); path.chmod(0o644)
+            return result
+        self.runner.run.side_effect = replaced
+        report = self.execute_ssh_double()
+        self.assertFalse(report['owned_teardown'])
+        self.assertFalse(self.life.profile_delete_completed)
 
     def test_bound_kind_creation_failure_reports_reached_binding_gate(self):
         self.full_fake_runner(); original=self.life.runner.run.side_effect

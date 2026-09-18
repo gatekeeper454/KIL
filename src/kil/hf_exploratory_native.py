@@ -18,6 +18,7 @@ from kil import hf_exploratory_case as case
 from kil.hf_exploratory_inputs import read_regular, verify_bytes, TOOL_VERSION_ARGUMENTS
 from kil.hf_exploratory_io import capture_process
 from kil.hf_exploratory_runtime import RuntimeAuthority, ExploratoryColimaCommand
+from kil.hf_exploratory_ssh import SSHControls
 from kil.hf_exploratory_profile import ProfilePaths, creation_binding, unchanged, absent
 from kil.hf_exploratory_evidence import snapshot_runtime, observe_runtime_leftovers
 from kil.v3b2_accepted_images import ACCEPTED_IMAGES
@@ -145,9 +146,13 @@ class ExploratoryLifecycle:
             raise
 
     def close(self):
-        """Release retained runtime descriptors only, never native resources."""
-        if self.runtime is not None:
-            self.runtime.close()
+        """Release retained descriptors only, never native resources."""
+        try:
+            if getattr(self, 'ssh', None) is not None:
+                self.ssh.close()
+        finally:
+            if self.runtime is not None:
+                self.runtime.close()
 
     def _initialize(self, repository, inputs, store, runner, source_commit, mode):
         if (mode not in ('rehearsal', 'action') or type(mode) is not str
@@ -158,6 +163,10 @@ class ExploratoryLifecycle:
         self.source_commit, self.mode = source_commit, mode
         self.run_digest = inputs.workload.run_id[5:]
         self.runtime = RuntimeAuthority.create(store, self.run_digest)
+        self.ssh = SSHControls(self.runtime)
+        self._ssh_inventory_active = False
+        self.ssh_evidence = {}
+        self.profile_start_succeeded = self.profile_stop_succeeded = self.profile_delete_succeeded = False
         self.paths = ProfilePaths.bind(self.runtime)
         self.default_paths = StrictProfilePaths(self.paths.home, store.path)
         self.identity = OwnedIdentity('kil-v3-lab', 'unix://' + str(self.paths.profile / 'docker.sock'),
@@ -237,6 +246,10 @@ class ExploratoryLifecycle:
         self.command_checksums[name] = {'stdout': out_hash, 'stderr': err_hash}
         self.store.record('command_terminal', {'sequence': self.sequence, 'returncode': result.returncode,
                                                'stdout_sha256': out_hash, 'stderr_sha256': err_hash})
+        if result.returncode == 0 and command.mutating:
+            if command.argv == colima_start_command().argv: self.profile_start_succeeded = True
+            elif command.argv == ('colima','stop','--profile','kil-v3-lab'): self.profile_stop_succeeded = True
+            elif command.argv == ('colima','delete','--profile','kil-v3-lab','--force','--data'): self.profile_delete_succeeded = True
         if result.returncode != 0 and not allow_failure:
             raise ValueError('native_command_failed_%s' % result.returncode)
         return result
@@ -249,6 +262,15 @@ class ExploratoryLifecycle:
         if type(command) is ExploratoryColimaCommand and command.authority is not self.runtime:
             raise ValueError('foreign_colima_runtime_authority')
         self.runtime.guard()
+        if self.ssh.state in ('binding','stopping','deleting') and (
+                not self._ssh_inventory_active or command.mutating
+                or command.argv != ('colima','list','--json') or command.env != self.colima_env):
+            raise ValueError('ssh_provisional_state_only_private_inventory')
+        if self.ssh.state != 'unbound':
+            self.ssh.guard()
+            self.require_retained_ssh_controls()
+        elif not self.profile_attempted:
+            self.ssh.require_absent()
         if dispatch != (command.argv,command.env,command.stdin,command.timeout_s,command.mutating):
             raise ValueError('command_changed_during_native_authorization_or_intent')
 
@@ -385,18 +407,54 @@ class ExploratoryLifecycle:
         observed = capture(self.paths)
         if unchanged(self.paths.document(), observed, self.profile_binding, stopped=stopped) is not True:
             raise ValueError('owned_profile_changed')
+        if stopped and self.ssh.state == 'running':
+            if not self.profile_stop_succeeded:
+                raise ValueError('ssh_stop_transition_without_successful_native_stop')
+            self.ssh.begin_stopped()
         self.private_inventory(stopped=stopped)
+        if stopped and self.ssh.state == 'stopping':
+            self.retain_ssh_controls('stopped')
+            self.ssh.finish_stopped()
         return observed
 
     def private_inventory(self, *, empty=False, stopped=False):
+        if self.ssh.state == 'binding':
+            raise ValueError('ssh_running_binding_previous_closure_failed')
+        self._ssh_inventory_active = True
+        try:
+            return self._private_inventory(empty=empty, stopped=stopped)
+        except BaseException:
+            if self.ssh.state in ('binding','stopping','deleting'):
+                self.ssh.refuse()
+            raise
+        finally:
+            self._ssh_inventory_active = False
+
+    def _private_inventory(self, *, empty=False, stopped=False):
         self.runtime.guard()
         colima = _read(self.paths.colima,directory_only=True)
+        if empty:
+            self.ssh.require_absent()
+        binding = not empty and self.ssh.state == 'unbound'
+        if binding:
+            if stopped or not self.profile_start_succeeded or self.profile_binding is None:
+                raise ValueError('ssh_running_binding_without_successful_bound_start')
+            observed = capture(self.paths)
+            if unchanged(self.paths.document(), observed, self.profile_binding) is not True:
+                raise ValueError('owned_profile_changed')
+            self.ssh.begin_running()
+        if not empty:
+            self.ssh.guard()
         allowed = {'_lima','_store','_templates','kil-v3-lab'}
+        if not empty: allowed.add('ssh_config')
         if colima is None or not set(colima['entries']) <= allowed:
             raise ValueError('private_colima_profile_roster_unknown')
         before = capture_roster(self.paths)
         result = self.observe(Command(('colima','list','--json'),10))
         after = capture_roster(self.paths)
+        colima = _read(self.paths.colima,directory_only=True)
+        if colima is None or not set(colima['entries']) <= allowed:
+            raise ValueError('private_colima_profile_roster_unknown')
         rows = require_complete(decode_inventory(result.stdout_bytes,
             returncode=result.returncode,stderr=result.stderr_bytes),before,after)
         if before is None:
@@ -411,7 +469,54 @@ class ExploratoryLifecycle:
             if len(rows)!=1 or any(rows[0].get(key)!=value for key,value in expected.items()):
                 raise ValueError('private_profile_inventory_not_exact_owned')
         self.runtime.guard()
+        if empty:
+            self.ssh.require_absent()
+        else:
+            self.ssh.guard()
+            if unchanged(self.paths.document(), capture(self.paths), self.profile_binding, stopped=stopped) is not True:
+                raise ValueError('owned_profile_changed')
+            if binding:
+                self.retain_ssh_controls('running')
+                self.ssh.finish_running()
         return rows
+
+    def retain_ssh_controls(self, state):
+        """Retain and read back the provisional proof before state adoption."""
+        try:
+            self.ssh.guard()
+            phase = 'removed' if state == 'deleted' else state
+            proof = {'schema':'kil.hf-generated-ssh-controls.v1',
+                     'run_digest':self.run_digest,
+                     'runtime_binding_sha256':sha256(self.runtime._binding[4]).hexdigest(),
+                     'phase':phase, 'port':self.ssh.port,
+                     'colima':dict(self.ssh.colima.proof(), path=str(self.paths.colima/'ssh_config')),
+                     'instance':dict(self.ssh.instance.proof(), path=str(self.paths.instance/'ssh.config'))}
+            evidence = {'ssh-controls.'+phase+'.json': canonical(proof)}
+            for label, control in [('colima',self.ssh.colima),('instance',self.ssh.instance)]:
+                if control.data is not None and (phase == 'running' or (phase == 'stopped' and label == 'colima')):
+                    evidence['ssh-control-'+label+'.'+phase+'.config'] = control.data
+            for name, payload in evidence.items():
+                self.store.write(name, payload)
+            for name, payload in evidence.items():
+                if self.private_read(name) != payload:
+                    raise ValueError('ssh_retained_evidence_changed')
+            self.ssh.guard()
+            colima = _read(self.paths.colima,directory_only=True)
+            allowed = {'_lima','_store','_templates','ssh_config'}
+            if state != 'deleted': allowed.add('kil-v3-lab')
+            if colima is None or not set(colima['entries']) <= allowed:
+                raise ValueError('private_colima_profile_roster_unknown')
+            self.ssh_evidence.update(evidence)
+        except BaseException:
+            self.ssh.refuse()
+            raise
+
+    def require_retained_ssh_controls(self):
+        for name, payload in self.ssh_evidence.items():
+            if self.private_read(name) != payload:
+                self.ssh.refuse()
+                raise ValueError('ssh_retained_evidence_changed')
+        self.ssh.guard()
 
     def require_kind_control(self):
         self.runtime.guard()
@@ -615,6 +720,7 @@ class ExploratoryLifecycle:
             raise ValueError('profile_start_unbound') from None
         if result.returncode != 0:
             raise ValueError('profile_start_failed')
+        self.guard_profile()
         if self.endpoint_rows():
             raise ValueError('fresh_private_docker_endpoint_not_empty')
         self.reached_gate = 'private_endpoint_empty'
@@ -1059,6 +1165,8 @@ class ExploratoryLifecycle:
             else:
                 payload = case.instruction(track, self.run_digest, int(time.time()))
                 self.reached_gate = track + '_request_attempt'
+                self.ssh.guard()
+                self.require_retained_ssh_controls()
                 self.store.send_once(track, payload,
                     lambda: self.observe(kubectl_attach_command(self.identity, NAMESPACES[track], payload)).stdout_bytes)
                 self.require_complete_driver(track)
@@ -1233,9 +1341,19 @@ class ExploratoryLifecycle:
             self.observe(Command(('colima','delete','--profile','kil-v3-lab','--force','--data'),
                                  300, mutating=True))
             post_delete = capture(self.paths)
+            if absent(self.paths.document(), post_delete) is not True:
+                raise ValueError('profile_absence_not_confirmed')
+            if not self.profile_delete_succeeded:
+                raise ValueError('ssh_delete_transition_without_successful_native_delete')
+            self.ssh.begin_deleted()
             self.private_inventory_absent()
             if absent(self.paths.document(), post_delete) is not True:
                 raise ValueError('profile_absence_not_confirmed')
+            self.retain_ssh_controls('deleted')
+            if absent(self.paths.document(), capture(self.paths)) is not True:
+                self.ssh.refuse()
+                raise ValueError('profile_absence_not_confirmed')
+            self.ssh.finish_deleted()
             self.profile_delete_completed = True
             self.clear_owned_reset_store(post_delete)
             self.require_foreign_preserved()
@@ -1245,13 +1363,31 @@ class ExploratoryLifecycle:
             self.error = ('%s; cleanup: %s' % (self.error or '', error))[:4096]
 
     def private_inventory_absent(self):
+        self._ssh_inventory_active = True
+        try:
+            self._private_inventory_absent()
+        except BaseException:
+            self.ssh.refuse()
+            raise
+        finally:
+            self._ssh_inventory_active = False
+
+    def _private_inventory_absent(self):
         self.runtime.guard()
+        self.ssh.guard()
+        colima = _read(self.paths.colima,directory_only=True)
+        if colima is None or not set(colima['entries']) <= {'_lima','_store','_templates','ssh_config'}:
+            raise ValueError('private_colima_profile_roster_unknown')
         before = capture_roster(self.paths)
         result = self.observe(Command(('colima','list','--json'),10))
         after = capture_roster(self.paths)
         if require_complete(decode_inventory(result.stdout_bytes,
                 returncode=result.returncode,stderr=result.stderr_bytes),before,after):
             raise ValueError('private_profile_absence_not_confirmed')
+        colima = _read(self.paths.colima,directory_only=True)
+        if colima is None or not set(colima['entries']) <= {'_lima','_store','_templates','ssh_config'}:
+            raise ValueError('private_colima_profile_roster_unknown')
+        self.ssh.guard()
 
     def private_read(self, name):
         """Read an unchanged bounded regular top-level run file by retained fd."""
