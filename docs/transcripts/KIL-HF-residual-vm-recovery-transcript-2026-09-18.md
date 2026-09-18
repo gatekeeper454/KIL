@@ -2,11 +2,11 @@
 
 - **Codex task ID:** `01a0b164-771a-7b82-a023-e6b55795ff8b`
 - **Session began:** 2026-09-17T22:02:26.505Z
-- **Exported:** 2026-09-18T13:09:35.349Z
-- **Recorded snapshot through:** 2026-09-18T13:09:28.283Z
-- **Included entries:** 168 user/assistant messages
+- **Exported:** 2026-09-18T13:16:18.587Z
+- **Recorded snapshot through:** 2026-09-18T13:16:14.224Z
+- **Included entries:** 174 user/assistant messages
 - **Scope:** Recorded user-authored messages and visible assistant commentary/final responses in original order through the snapshot cutoff. System/developer instructions, reasoning, agent communications, token accounting and raw tool payloads are excluded. Automatically injected plugin, repository-instruction and environment context is excluded. Text is preserved; image binaries are represented by markers. This is a transcript export, not a reconstruction from compacted summaries. Later messages are outside this snapshot.
-- **Source snapshot SHA256:** `eeb6a02603437a1f9198e20c81c8c1ebda10e6119199c9aa3dc2ece06b87ba7c`
+- **Source snapshot SHA256:** `edaf142c4352d94a9dcfe8ede38d9ebdeb45b0c43487f7756caaf2bb4f1a6a7b`
 
 ---
 
@@ -1393,5 +1393,53 @@ I’ll check the existing worktree’s commits and push destination, save a tran
 **Timestamp:** 2026-09-18T13:08:36.903Z
 
 I’m using the finishing-a-development-branch skill to verify and publish the work. The recovery fixes are already committed, and the worktree is clean but detached. I’ll push its complete history on a dedicated `codex/` branch and export the recorded conversation to `docs/transcripts`.
+
+---
+
+## 0169 · Assistant · commentary
+
+**Timestamp:** 2026-09-18T13:09:42.899Z
+
+The transcript is saved and verified: 168 recorded user/assistant messages, with an HTML reader. Internal reasoning and raw tool payloads are excluded. I’m committing the transcript and lineage entry, then pushing the recovery history.
+
+---
+
+## 0170 · User
+
+**Timestamp:** 2026-09-18T13:10:28.033Z
+
+create a final publishing paper that highlights the results. make sure it has  HTM version
+
+---
+
+## 0171 · Assistant · commentary
+
+**Timestamp:** 2026-09-18T13:10:31.101Z
+
+I’ll also create a publication paper with an HTM version, centered on the verified live HF results and their limits. I’ll add both versions to the same branch and push them with the saved transcript.
+
+---
+
+## 0172 · Assistant · commentary
+
+**Timestamp:** 2026-09-18T13:11:52.212Z
+
+The transcript and recovery history are pushed. The paper will lead with the 200/200/403 results and verified target counts, explain the local-reduction behavior, and disclose the earlier partial attempt and the study’s limits. I’m also adding a machine-readable results extract so the paper’s central table can be checked against the sealed run.
+
+---
+
+## 0173 · Assistant · commentary
+
+**Timestamp:** 2026-09-18T13:14:18.897Z
+
+The paper, HTM edition, and results extract are created. The extract reproduces all three joins from the 12 original final source captures. The rendered results table and local links also check out. Independent review is checking the claims against the sealed evidence; I’m now reviewing the HTM layout.
+
+---
+
+## 0174 · Assistant · commentary
+
+**Timestamp:** 2026-09-18T13:16:06.524Z
+
+Independent review passed. The HTM layout now shows every results column without horizontal scrolling. I’m refreshing the transcript to include your paper request, recording the publication artifacts, and pushing the final commit.
 
 ---

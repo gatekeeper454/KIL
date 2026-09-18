@@ -1,0 +1,698 @@
+{
+  "claim_exclusions": [
+    "full HF prevention",
+    "all eight HF phases",
+    "original HF exploit",
+    "performance",
+    "NetworkPolicy enforcement",
+    "no bypass",
+    "V3B2 acceptance",
+    "V4",
+    "V3C"
+  ],
+  "completion": {
+    "cluster_removed": true,
+    "error": null,
+    "final_closure_complete": true,
+    "full_kind_calico_acceptance": false,
+    "independent_global_preservation": {
+      "matches_original": true,
+      "read_only_global_commands": 3
+    },
+    "manual_recovery": false,
+    "owned_teardown": true,
+    "platform_image_provenance_verified": false,
+    "profile_delete_completed": true,
+    "reached_gate": "complete_capture",
+    "request_attempt_count": 3,
+    "request_intent_count": 3,
+    "retained_files_error": null,
+    "runtime_leftovers_error": null,
+    "status": "complete"
+  },
+  "description": "Evidence extract for the results paper; not the complete private receipt, an accepted publication-verifier bundle, or a platform provenance attestation.",
+  "earlier_partial_action": {
+    "error": "EvidenceError: Envoy producer upstream proof is invalid",
+    "request_attempts": 1,
+    "request_intents": 1,
+    "role": "Disclosed development history; not combined with the primary three-track result.",
+    "run_id": "v3b2-85c7059e5c74c37423fa0be923ff7843011df6a6e34665e521479e12ed7d1ee3",
+    "status": "inconclusive"
+  },
+  "full_receipt_verification": {
+    "manifest_sha256": "9914e920cc2796218e4392725f8777dc83f17a86d8b715a127426e10f8227968",
+    "native_dispatches_by_this_verifier": 0,
+    "total_bytes": 6786556,
+    "verified_files": 1354
+  },
+  "joined_results": [
+    {
+      "adapter_reasons": [
+        "baseline_permitted"
+      ],
+      "classification": "expected",
+      "decision_digest": "80f0ac0b7a8a8b9331579ddf681c1a5e1ee9e1198a6a7c9bfb24358a31a8dbea",
+      "engine_reasons": [],
+      "expected": [
+        "permit",
+        200,
+        1
+      ],
+      "observed": [
+        "permit",
+        200,
+        1
+      ],
+      "semantic_join": {
+        "decision": [
+          {
+            "decision": "permit",
+            "decision_digest": "80f0ac0b7a8a8b9331579ddf681c1a5e1ee9e1198a6a7c9bfb24358a31a8dbea",
+            "request_id": "v3b1-central-request",
+            "track": "credential_policy_baseline"
+          }
+        ],
+        "driver": [
+          {
+            "attempt": 1,
+            "decision": "permit",
+            "decision_digest": "80f0ac0b7a8a8b9331579ddf681c1a5e1ee9e1198a6a7c9bfb24358a31a8dbea",
+            "http_status": 200,
+            "request_id": "v3b1-central-request",
+            "track": "credential_policy_baseline"
+          }
+        ],
+        "envoy": [
+          {
+            "decision_digest": "80f0ac0b7a8a8b9331579ddf681c1a5e1ee9e1198a6a7c9bfb24358a31a8dbea",
+            "request_id": "v3b1-central-request",
+            "track": "credential_policy_baseline",
+            "upstream_attempted": true,
+            "upstream_status": 200
+          }
+        ],
+        "target": [
+          {
+            "marker": 1,
+            "request_id": "v3b1-central-request",
+            "track": "credential_policy_baseline"
+          }
+        ]
+      },
+      "track": "credential_policy_baseline",
+      "untrusted_header_names": []
+    },
+    {
+      "adapter_reasons": [],
+      "classification": "expected",
+      "decision_digest": "906b624c770a5e966a21268f46a5f9cceb8fd0cbd01cf89700cd304ac44e4533",
+      "engine_reasons": [
+        "permitted"
+      ],
+      "expected": [
+        "permit",
+        200,
+        1
+      ],
+      "observed": [
+        "permit",
+        200,
+        1
+      ],
+      "semantic_join": {
+        "decision": [
+          {
+            "decision": "permit",
+            "decision_digest": "906b624c770a5e966a21268f46a5f9cceb8fd0cbd01cf89700cd304ac44e4533",
+            "request_id": "v3b1-central-request",
+            "track": "signed_state_only"
+          }
+        ],
+        "driver": [
+          {
+            "attempt": 1,
+            "decision": "permit",
+            "decision_digest": "906b624c770a5e966a21268f46a5f9cceb8fd0cbd01cf89700cd304ac44e4533",
+            "http_status": 200,
+            "request_id": "v3b1-central-request",
+            "track": "signed_state_only"
+          }
+        ],
+        "envoy": [
+          {
+            "decision_digest": "906b624c770a5e966a21268f46a5f9cceb8fd0cbd01cf89700cd304ac44e4533",
+            "request_id": "v3b1-central-request",
+            "track": "signed_state_only",
+            "upstream_attempted": true,
+            "upstream_status": 200
+          }
+        ],
+        "target": [
+          {
+            "marker": 1,
+            "request_id": "v3b1-central-request",
+            "track": "signed_state_only"
+          }
+        ]
+      },
+      "track": "signed_state_only",
+      "untrusted_header_names": []
+    },
+    {
+      "adapter_reasons": [],
+      "classification": "expected",
+      "decision_digest": "c132a2bc550a6cb54ee906d39a9a2c686f62122e9fee1a1d19668220391abdc2",
+      "engine_reasons": [
+        "insufficient_charge"
+      ],
+      "expected": [
+        "deny",
+        403,
+        0
+      ],
+      "observed": [
+        "deny",
+        403,
+        0
+      ],
+      "semantic_join": {
+        "decision": [
+          {
+            "decision": "deny",
+            "decision_digest": "c132a2bc550a6cb54ee906d39a9a2c686f62122e9fee1a1d19668220391abdc2",
+            "request_id": "v3b1-central-request",
+            "track": "signed_plus_local_reduce"
+          }
+        ],
+        "driver": [
+          {
+            "attempt": 1,
+            "decision": "deny",
+            "decision_digest": "c132a2bc550a6cb54ee906d39a9a2c686f62122e9fee1a1d19668220391abdc2",
+            "http_status": 403,
+            "request_id": "v3b1-central-request",
+            "track": "signed_plus_local_reduce"
+          }
+        ],
+        "envoy": [
+          {
+            "decision_digest": "c132a2bc550a6cb54ee906d39a9a2c686f62122e9fee1a1d19668220391abdc2",
+            "request_id": "v3b1-central-request",
+            "track": "signed_plus_local_reduce",
+            "upstream_attempted": false,
+            "upstream_status": null
+          }
+        ],
+        "target": []
+      },
+      "track": "signed_plus_local_reduce",
+      "untrusted_header_names": []
+    }
+  ],
+  "label": "Exploratory local Kind/Calico result; platform-image provenance unverified; full Kind/Calico acceptance not established.",
+  "native_receipt_relative_path": ".tools/hf-exploratory-private/hf-exploratory-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127",
+  "observed_environment": {
+    "docker_daemon_version": "UNOBSERVED",
+    "host_arch": "arm64",
+    "host_kernel": "25.6.0",
+    "host_os": "Darwin",
+    "host_os_version": "26.6.2",
+    "observed_node_info": {
+      "architecture": "arm64",
+      "bootID": "2d9ff654-2810-4607-95dd-16878cef317b",
+      "containerRuntimeVersion": "containerd://2.3.1",
+      "kernelVersion": "6.8.0-117-generic",
+      "kubeProxyVersion": "",
+      "kubeletVersion": "v1.36.1",
+      "machineID": "b456d6e738a14098b398706c24f7f5ed",
+      "operatingSystem": "linux",
+      "osImage": "Debian GNU/Linux 13 (trixie)",
+      "systemUUID": "84b9fb51-4816-47f6-88d0-01732b6d5a82"
+    },
+    "observed_tool_versions": {
+      "colima": "colima version v0.10.3\ngit commit: 00f6c297e92a82c04a4ab507db0a61435650d7e8",
+      "docker": "Docker version 29.7.2, build a7dcaa6",
+      "kind": "kind v0.32.0 go1.26.3 darwin/arm64",
+      "kubectl": "{\n  \"clientVersion\": {\n    \"major\": \"1\",\n    \"minor\": \"36\",\n    \"gitVersion\": \"v1.36.3\",\n    \"gitCommit\": \"0f29094e5b73085e3802ecc1298ecae13866bfe6\",\n    \"gitTreeState\": \"clean\",\n    \"buildDate\": \"2026-07-22T18:10:35Z\",\n    \"goVersion\": \"go1.26.5\",\n    \"compiler\": \"gc\",\n    \"platform\": \"darwin/arm64\"\n  },\n  \"kustomizeVersion\": \"v5.8.1\"\n}",
+      "lima": "limactl version 2.2.0"
+    }
+  },
+  "raw_final_sources": {
+    "credential_policy_baseline": {
+      "decision": {
+        "byte_count": 403,
+        "file": "credential_policy_baseline-authz-final.jsonl",
+        "identity": {
+          "container_id": "containerd://3108997b0c51dba17f0b6e82ec78ffe6477c6e459bc4d6109b8ead1e60a76d4d",
+          "image_ref": "kil.local/kil-v3b2@sha256:45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "namespace": "kil-v3-baseline",
+          "pod": "authz-66b89c4b7-zj4cz",
+          "requested_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "resource_version": "1066",
+          "role": "authz",
+          "runtime_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "uid": "dea1028e-7c87-4dd9-85ec-cfea92744253"
+        },
+        "raw_jsonl": "{\"adapter_reasons\":[\"baseline_permitted\"],\"decision_digest\":\"80f0ac0b7a8a8b9331579ddf681c1a5e1ee9e1198a6a7c9bfb24358a31a8dbea\",\"engine_reasons\":[],\"http_status\":200,\"method\":\"POST\",\"monotonic_ns\":157499775112,\"outcome\":\"permit\",\"path\":\"/consequential/admin\",\"request_id\":\"v3b1-central-request\",\"schema_version\":\"kil.v3b-authz-record.v1\",\"track\":\"credential_policy_baseline\",\"untrusted_header_names\":[]}\n",
+        "records": [
+          {
+            "adapter_reasons": [
+              "baseline_permitted"
+            ],
+            "decision_digest": "80f0ac0b7a8a8b9331579ddf681c1a5e1ee9e1198a6a7c9bfb24358a31a8dbea",
+            "engine_reasons": [],
+            "http_status": 200,
+            "method": "POST",
+            "monotonic_ns": 157499775112,
+            "outcome": "permit",
+            "path": "/consequential/admin",
+            "request_id": "v3b1-central-request",
+            "schema_version": "kil.v3b-authz-record.v1",
+            "track": "credential_policy_baseline",
+            "untrusted_header_names": []
+          }
+        ],
+        "sha256": "86b709f1e3a302c609371a0594bafd5d2c1ca12cf7bf60ead53ec9c1f04b3c42"
+      },
+      "driver": {
+        "byte_count": 532,
+        "file": "credential_policy_baseline-driver-final.jsonl",
+        "identity": {
+          "container_id": "containerd://581434460ced51ce8d3e96e7dbd4b9daec76af16b6fa9358fcdb5d465c5253a2",
+          "image_ref": "kil.local/kil-v3b2@sha256:45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "namespace": "kil-v3-baseline",
+          "pod": "driver",
+          "requested_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "resource_version": "1195",
+          "role": "driver",
+          "runtime_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "uid": "40508f20-a897-424f-8590-e5e3222d02c2"
+        },
+        "raw_jsonl": "{\"connect_monotonic_ns\":136349968182,\"ready_monotonic_ns\":136360030268,\"schema_version\":\"kil.v3b1-driver-readiness.v1\",\"status\":\"ready\",\"track\":\"credential_policy_baseline\"}\n{\"attempt_count\":1,\"connect_monotonic_ns\":136349968182,\"decision_digest\":\"80f0ac0b7a8a8b9331579ddf681c1a5e1ee9e1198a6a7c9bfb24358a31a8dbea\",\"receive_monotonic_ns\":157503528133,\"response_status\":200,\"retry_performed\":false,\"schema_version\":\"kil.v3b1-driver-result.v1\",\"send_monotonic_ns\":157496901480,\"status\":\"complete\",\"track\":\"credential_policy_baseline\"}\n",
+        "records": [
+          {
+            "connect_monotonic_ns": 136349968182,
+            "ready_monotonic_ns": 136360030268,
+            "schema_version": "kil.v3b1-driver-readiness.v1",
+            "status": "ready",
+            "track": "credential_policy_baseline"
+          },
+          {
+            "attempt_count": 1,
+            "connect_monotonic_ns": 136349968182,
+            "decision_digest": "80f0ac0b7a8a8b9331579ddf681c1a5e1ee9e1198a6a7c9bfb24358a31a8dbea",
+            "receive_monotonic_ns": 157503528133,
+            "response_status": 200,
+            "retry_performed": false,
+            "schema_version": "kil.v3b1-driver-result.v1",
+            "send_monotonic_ns": 157496901480,
+            "status": "complete",
+            "track": "credential_policy_baseline"
+          }
+        ],
+        "sha256": "0b3cd847a5ba53cf3d2e8e5222da9bb07e81b544cae476fe62685e5b4329e405"
+      },
+      "envoy": {
+        "byte_count": 328,
+        "file": "credential_policy_baseline-envoy-final.jsonl",
+        "identity": {
+          "container_id": "containerd://0e646a1336c9301f5b0ace9352aea890b30a997b47b34cc0890005f2e2cfb3dd",
+          "image_ref": "docker.io/envoyproxy/envoy@sha256:57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38c524401b4",
+          "namespace": "kil-v3-baseline",
+          "pod": "envoy-787d4d4c9f-wwmkb",
+          "requested_image": "docker.io/envoyproxy/envoy@sha256:57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38c524401b4",
+          "resource_version": "1101",
+          "role": "envoy",
+          "runtime_image": "sha256:ef846ec85aabf01a2ff7176a185260e476ca43d20478f57281d88f7a66d5671f",
+          "uid": "80da2565-4ab0-4f11-9d6b-7a933b6a3385"
+        },
+        "raw_jsonl": "{\"decision_digest\":\"80f0ac0b7a8a8b9331579ddf681c1a5e1ee9e1198a6a7c9bfb24358a31a8dbea\",\"request_id\":\"v3b1-central-request\",\"response_code\":\"200\",\"run_id\":\"v3b1-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127\",\"track\":\"credential_policy_baseline\",\"upstream_host\":\"10.96.216.165:8080\",\"upstream_service_time\":\"1\"}\n",
+        "records": [
+          {
+            "decision_digest": "80f0ac0b7a8a8b9331579ddf681c1a5e1ee9e1198a6a7c9bfb24358a31a8dbea",
+            "request_id": "v3b1-central-request",
+            "response_code": "200",
+            "run_id": "v3b1-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127",
+            "track": "credential_policy_baseline",
+            "upstream_host": "10.96.216.165:8080",
+            "upstream_service_time": "1"
+          }
+        ],
+        "sha256": "79ca1cecec3c586c5f91cda0c4ed6b65b1f5434bbd48301eda1472e7ae75829d"
+      },
+      "target": {
+        "byte_count": 389,
+        "file": "credential_policy_baseline-target-final.jsonl",
+        "identity": {
+          "container_id": "containerd://85fd27a5f781fa38a63bd9c29577bbeb363aee0d4ca48b7e8abaf83b3ca21b0d",
+          "image_ref": "kil.local/kil-v3b2@sha256:45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "namespace": "kil-v3-baseline",
+          "pod": "target-749f577f55-j6m5m",
+          "requested_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "resource_version": "1099",
+          "role": "target",
+          "runtime_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "uid": "5ab9d72f-44ce-4de3-90fb-0d85232ff8aa"
+        },
+        "raw_jsonl": "{\"decision_digest\":\"80f0ac0b7a8a8b9331579ddf681c1a5e1ee9e1198a6a7c9bfb24358a31a8dbea\",\"path\":\"/consequential/admin\",\"received_monotonic_ns\":157502036358,\"request_id\":\"v3b1-central-request\",\"response_monotonic_ns\":157502036525,\"run_id\":\"v3b2-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127\",\"schema_version\":\"kil.v3b-target-record.v1\",\"track\":\"credential_policy_baseline\"}\n",
+        "records": [
+          {
+            "decision_digest": "80f0ac0b7a8a8b9331579ddf681c1a5e1ee9e1198a6a7c9bfb24358a31a8dbea",
+            "path": "/consequential/admin",
+            "received_monotonic_ns": 157502036358,
+            "request_id": "v3b1-central-request",
+            "response_monotonic_ns": 157502036525,
+            "run_id": "v3b2-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127",
+            "schema_version": "kil.v3b-target-record.v1",
+            "track": "credential_policy_baseline"
+          }
+        ],
+        "sha256": "67852c9b0bfd4525c593ac0cbc7c8e40be824801c177509b3dcaf76a7c2ef33d"
+      }
+    },
+    "signed_plus_local_reduce": {
+      "decision": {
+        "byte_count": 400,
+        "file": "signed_plus_local_reduce-authz-final.jsonl",
+        "identity": {
+          "container_id": "containerd://8c474ccb3080c6049c7899315a0e63ececae0e89638a979349a470cb736d2cfe",
+          "image_ref": "kil.local/kil-v3b2@sha256:45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "namespace": "kil-v3-local-reduce",
+          "pod": "authz-588cf65685-dkqzx",
+          "requested_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "resource_version": "1108",
+          "role": "authz",
+          "runtime_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "uid": "03d08bc9-61bf-4cd1-b62d-adc8a55c9bf5"
+        },
+        "raw_jsonl": "{\"adapter_reasons\":[],\"decision_digest\":\"c132a2bc550a6cb54ee906d39a9a2c686f62122e9fee1a1d19668220391abdc2\",\"engine_reasons\":[\"insufficient_charge\"],\"http_status\":403,\"method\":\"POST\",\"monotonic_ns\":177535432080,\"outcome\":\"deny\",\"path\":\"/consequential/admin\",\"request_id\":\"v3b1-central-request\",\"schema_version\":\"kil.v3b-authz-record.v1\",\"track\":\"signed_plus_local_reduce\",\"untrusted_header_names\":[]}\n",
+        "records": [
+          {
+            "adapter_reasons": [],
+            "decision_digest": "c132a2bc550a6cb54ee906d39a9a2c686f62122e9fee1a1d19668220391abdc2",
+            "engine_reasons": [
+              "insufficient_charge"
+            ],
+            "http_status": 403,
+            "method": "POST",
+            "monotonic_ns": 177535432080,
+            "outcome": "deny",
+            "path": "/consequential/admin",
+            "request_id": "v3b1-central-request",
+            "schema_version": "kil.v3b-authz-record.v1",
+            "track": "signed_plus_local_reduce",
+            "untrusted_header_names": []
+          }
+        ],
+        "sha256": "478929ac46b1f4743a60f342a60abbc0c5be32714693a3b803fab912fd8f2715"
+      },
+      "driver": {
+        "byte_count": 528,
+        "file": "signed_plus_local_reduce-driver-final.jsonl",
+        "identity": {
+          "container_id": "containerd://79139b528c6a63bbee219073a86cfda9ad7a6a28b92a725e054613986c52fbce",
+          "image_ref": "kil.local/kil-v3b2@sha256:45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "namespace": "kil-v3-local-reduce",
+          "pod": "driver",
+          "requested_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "resource_version": "1266",
+          "role": "driver",
+          "runtime_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "uid": "70088ff3-187d-4044-a2e8-989dd890a1f9"
+        },
+        "raw_jsonl": "{\"connect_monotonic_ns\":136548612629,\"ready_monotonic_ns\":136551935921,\"schema_version\":\"kil.v3b1-driver-readiness.v1\",\"status\":\"ready\",\"track\":\"signed_plus_local_reduce\"}\n{\"attempt_count\":1,\"connect_monotonic_ns\":136548612629,\"decision_digest\":\"c132a2bc550a6cb54ee906d39a9a2c686f62122e9fee1a1d19668220391abdc2\",\"receive_monotonic_ns\":177543062469,\"response_status\":403,\"retry_performed\":false,\"schema_version\":\"kil.v3b1-driver-result.v1\",\"send_monotonic_ns\":177531160525,\"status\":\"complete\",\"track\":\"signed_plus_local_reduce\"}\n",
+        "records": [
+          {
+            "connect_monotonic_ns": 136548612629,
+            "ready_monotonic_ns": 136551935921,
+            "schema_version": "kil.v3b1-driver-readiness.v1",
+            "status": "ready",
+            "track": "signed_plus_local_reduce"
+          },
+          {
+            "attempt_count": 1,
+            "connect_monotonic_ns": 136548612629,
+            "decision_digest": "c132a2bc550a6cb54ee906d39a9a2c686f62122e9fee1a1d19668220391abdc2",
+            "receive_monotonic_ns": 177543062469,
+            "response_status": 403,
+            "retry_performed": false,
+            "schema_version": "kil.v3b1-driver-result.v1",
+            "send_monotonic_ns": 177531160525,
+            "status": "complete",
+            "track": "signed_plus_local_reduce"
+          }
+        ],
+        "sha256": "4164a68e196a6754f35eca4e56ab8fb9803a968d3ca528b2bf85d39419a0166b"
+      },
+      "envoy": {
+        "byte_count": 309,
+        "file": "signed_plus_local_reduce-envoy-final.jsonl",
+        "identity": {
+          "container_id": "containerd://e36e31fd6255b583546a427fc48bbb117ae4db81c49c9fc27bc3c4447cfbd63a",
+          "image_ref": "docker.io/envoyproxy/envoy@sha256:57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38c524401b4",
+          "namespace": "kil-v3-local-reduce",
+          "pod": "envoy-5f4456cfd5-fsnwf",
+          "requested_image": "docker.io/envoyproxy/envoy@sha256:57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38c524401b4",
+          "resource_version": "1107",
+          "role": "envoy",
+          "runtime_image": "sha256:ef846ec85aabf01a2ff7176a185260e476ca43d20478f57281d88f7a66d5671f",
+          "uid": "e984eff2-fe23-4007-be22-977166b17dbd"
+        },
+        "raw_jsonl": "{\"decision_digest\":\"c132a2bc550a6cb54ee906d39a9a2c686f62122e9fee1a1d19668220391abdc2\",\"request_id\":\"v3b1-central-request\",\"response_code\":\"403\",\"run_id\":\"v3b1-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127\",\"track\":\"signed_plus_local_reduce\",\"upstream_host\":\"-\",\"upstream_service_time\":\"-\"}\n",
+        "records": [
+          {
+            "decision_digest": "c132a2bc550a6cb54ee906d39a9a2c686f62122e9fee1a1d19668220391abdc2",
+            "request_id": "v3b1-central-request",
+            "response_code": "403",
+            "run_id": "v3b1-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127",
+            "track": "signed_plus_local_reduce",
+            "upstream_host": "-",
+            "upstream_service_time": "-"
+          }
+        ],
+        "sha256": "a814b10fb29423aa36499bd91b7999063ac1335918ff31e37d9914e4cdfccf7a"
+      },
+      "target": {
+        "byte_count": 0,
+        "file": "signed_plus_local_reduce-target-final.jsonl",
+        "identity": {
+          "container_id": "containerd://b1b8de4b9b886182283dfd57788e7631473b76f0c55ced397d9ce2167c4eb56f",
+          "image_ref": "kil.local/kil-v3b2@sha256:45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "namespace": "kil-v3-local-reduce",
+          "pod": "target-68576fc489-drmtj",
+          "requested_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "resource_version": "1102",
+          "role": "target",
+          "runtime_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "uid": "c5b8e5dd-9f36-4b84-b7f5-9e34f5b27ed5"
+        },
+        "raw_jsonl": "",
+        "records": [],
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "signed_state_only": {
+      "decision": {
+        "byte_count": 385,
+        "file": "signed_state_only-authz-final.jsonl",
+        "identity": {
+          "container_id": "containerd://495b2fa660c00b456ba748b0aab325abda37db447e29931a8fb9636965b9ccae",
+          "image_ref": "kil.local/kil-v3b2@sha256:45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "namespace": "kil-v3-signed",
+          "pod": "authz-6cbb45fcfd-tmtdz",
+          "requested_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "resource_version": "1098",
+          "role": "authz",
+          "runtime_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "uid": "fa4253bb-93b3-4127-992a-1e21ff349dd2"
+        },
+        "raw_jsonl": "{\"adapter_reasons\":[],\"decision_digest\":\"906b624c770a5e966a21268f46a5f9cceb8fd0cbd01cf89700cd304ac44e4533\",\"engine_reasons\":[\"permitted\"],\"http_status\":200,\"method\":\"POST\",\"monotonic_ns\":167885402710,\"outcome\":\"permit\",\"path\":\"/consequential/admin\",\"request_id\":\"v3b1-central-request\",\"schema_version\":\"kil.v3b-authz-record.v1\",\"track\":\"signed_state_only\",\"untrusted_header_names\":[]}\n",
+        "records": [
+          {
+            "adapter_reasons": [],
+            "decision_digest": "906b624c770a5e966a21268f46a5f9cceb8fd0cbd01cf89700cd304ac44e4533",
+            "engine_reasons": [
+              "permitted"
+            ],
+            "http_status": 200,
+            "method": "POST",
+            "monotonic_ns": 167885402710,
+            "outcome": "permit",
+            "path": "/consequential/admin",
+            "request_id": "v3b1-central-request",
+            "schema_version": "kil.v3b-authz-record.v1",
+            "track": "signed_state_only",
+            "untrusted_header_names": []
+          }
+        ],
+        "sha256": "4af4279129a118ba3fdbbe79b069fa754de5c7aa302cd8d00c4e07eab947e119"
+      },
+      "driver": {
+        "byte_count": 514,
+        "file": "signed_state_only-driver-final.jsonl",
+        "identity": {
+          "container_id": "containerd://8a8ecd1fd58c52aed3b509b1879b9092c8ca89ad2937c222a2a46788148c3c1b",
+          "image_ref": "kil.local/kil-v3b2@sha256:45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "namespace": "kil-v3-signed",
+          "pod": "driver",
+          "requested_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "resource_version": "1225",
+          "role": "driver",
+          "runtime_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "uid": "a723a727-efbc-477d-bfdf-f2a41bd697cf"
+        },
+        "raw_jsonl": "{\"connect_monotonic_ns\":136462993104,\"ready_monotonic_ns\":136467110541,\"schema_version\":\"kil.v3b1-driver-readiness.v1\",\"status\":\"ready\",\"track\":\"signed_state_only\"}\n{\"attempt_count\":1,\"connect_monotonic_ns\":136462993104,\"decision_digest\":\"906b624c770a5e966a21268f46a5f9cceb8fd0cbd01cf89700cd304ac44e4533\",\"receive_monotonic_ns\":167889909483,\"response_status\":200,\"retry_performed\":false,\"schema_version\":\"kil.v3b1-driver-result.v1\",\"send_monotonic_ns\":167881253234,\"status\":\"complete\",\"track\":\"signed_state_only\"}\n",
+        "records": [
+          {
+            "connect_monotonic_ns": 136462993104,
+            "ready_monotonic_ns": 136467110541,
+            "schema_version": "kil.v3b1-driver-readiness.v1",
+            "status": "ready",
+            "track": "signed_state_only"
+          },
+          {
+            "attempt_count": 1,
+            "connect_monotonic_ns": 136462993104,
+            "decision_digest": "906b624c770a5e966a21268f46a5f9cceb8fd0cbd01cf89700cd304ac44e4533",
+            "receive_monotonic_ns": 167889909483,
+            "response_status": 200,
+            "retry_performed": false,
+            "schema_version": "kil.v3b1-driver-result.v1",
+            "send_monotonic_ns": 167881253234,
+            "status": "complete",
+            "track": "signed_state_only"
+          }
+        ],
+        "sha256": "4011d6cd450fed2144101d4a12d89d59a432194ef157efead3bad9afca62f86d"
+      },
+      "envoy": {
+        "byte_count": 319,
+        "file": "signed_state_only-envoy-final.jsonl",
+        "identity": {
+          "container_id": "containerd://3643b5188961382f71cf47b003bb6823167aea5ea826e9d013e3f55756bc6667",
+          "image_ref": "docker.io/envoyproxy/envoy@sha256:57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38c524401b4",
+          "namespace": "kil-v3-signed",
+          "pod": "envoy-5bf949b5d6-8qfx4",
+          "requested_image": "docker.io/envoyproxy/envoy@sha256:57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38c524401b4",
+          "resource_version": "1103",
+          "role": "envoy",
+          "runtime_image": "sha256:ef846ec85aabf01a2ff7176a185260e476ca43d20478f57281d88f7a66d5671f",
+          "uid": "d96233f8-02cc-415b-822a-b7537dcfb992"
+        },
+        "raw_jsonl": "{\"decision_digest\":\"906b624c770a5e966a21268f46a5f9cceb8fd0cbd01cf89700cd304ac44e4533\",\"request_id\":\"v3b1-central-request\",\"response_code\":\"200\",\"run_id\":\"v3b1-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127\",\"track\":\"signed_state_only\",\"upstream_host\":\"10.96.253.229:8080\",\"upstream_service_time\":\"1\"}\n",
+        "records": [
+          {
+            "decision_digest": "906b624c770a5e966a21268f46a5f9cceb8fd0cbd01cf89700cd304ac44e4533",
+            "request_id": "v3b1-central-request",
+            "response_code": "200",
+            "run_id": "v3b1-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127",
+            "track": "signed_state_only",
+            "upstream_host": "10.96.253.229:8080",
+            "upstream_service_time": "1"
+          }
+        ],
+        "sha256": "574a25396ae56d81ba965262908e4cd4811352c2e6726f0502d0b5317434835a"
+      },
+      "target": {
+        "byte_count": 380,
+        "file": "signed_state_only-target-final.jsonl",
+        "identity": {
+          "container_id": "containerd://c20e083085be0bc0e71be3f9617d8fd15ebfc11ef24b1815ba41b4007de6e693",
+          "image_ref": "kil.local/kil-v3b2@sha256:45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "namespace": "kil-v3-signed",
+          "pod": "target-5c756548b8-9hpx9",
+          "requested_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "resource_version": "1106",
+          "role": "target",
+          "runtime_image": "kil.local/kil-v3b2:sha256-45a167d79b92f352af05a3e9cb8a9df8e972e38ab23d04ca692053e2eaf63649",
+          "uid": "e1ba8790-8152-4693-b660-74245e149410"
+        },
+        "raw_jsonl": "{\"decision_digest\":\"906b624c770a5e966a21268f46a5f9cceb8fd0cbd01cf89700cd304ac44e4533\",\"path\":\"/consequential/admin\",\"received_monotonic_ns\":167888173500,\"request_id\":\"v3b1-central-request\",\"response_monotonic_ns\":167888173708,\"run_id\":\"v3b2-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127\",\"schema_version\":\"kil.v3b-target-record.v1\",\"track\":\"signed_state_only\"}\n",
+        "records": [
+          {
+            "decision_digest": "906b624c770a5e966a21268f46a5f9cceb8fd0cbd01cf89700cd304ac44e4533",
+            "path": "/consequential/admin",
+            "received_monotonic_ns": 167888173500,
+            "request_id": "v3b1-central-request",
+            "response_monotonic_ns": 167888173708,
+            "run_id": "v3b2-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127",
+            "schema_version": "kil.v3b-target-record.v1",
+            "track": "signed_state_only"
+          }
+        ],
+        "sha256": "77b403b1c241ff5710839287bb1ccaab6b2f49eefbfe05c7cf48bb8e0e5bc7e2"
+      }
+    }
+  },
+  "receipt_manifest_sha256": "9914e920cc2796218e4392725f8777dc83f17a86d8b715a127426e10f8227968",
+  "report_sha256": "cc36f883d3dd5b85964f94f66098da76095cabc9e42a553673a884fbd3ffa5a5",
+  "requested_profile_resources": {
+    "application_published_ports": [],
+    "cpus": 4,
+    "data_disk_gib": 60,
+    "host_mounts": [],
+    "memory_gib": 8,
+    "root_disk_gib": 20,
+    "vm_type": "VZ"
+  },
+  "reviewed_execution_source": "b0d99415bde5ffdd3419b805a098b70555a53a7b",
+  "run_id": "v3b2-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127",
+  "schema": "kil.hf-publication-results-extract.v1",
+  "service_allocations_sha256": "ecb650249dc57268c02990bc678867e9028ddd3d3d7f5d078b70f737c46e0250",
+  "verified_service_allocations": [
+    {
+      "cluster_ip": "10.96.6.13",
+      "name": "authz",
+      "namespace": "kil-v3-baseline",
+      "uid": "2dbecf4d-e566-4a98-80c5-bb3d928e204e"
+    },
+    {
+      "cluster_ip": "10.96.57.57",
+      "name": "envoy",
+      "namespace": "kil-v3-baseline",
+      "uid": "ca99bc27-e41d-4700-a5d2-dd4b83fa32e5"
+    },
+    {
+      "cluster_ip": "10.96.216.165",
+      "name": "target",
+      "namespace": "kil-v3-baseline",
+      "uid": "52cb8720-6ef9-488c-8867-a43bb60bb30d"
+    },
+    {
+      "cluster_ip": "10.96.116.102",
+      "name": "authz",
+      "namespace": "kil-v3-local-reduce",
+      "uid": "2a39533d-d6c7-4b83-9701-d28f49c0e415"
+    },
+    {
+      "cluster_ip": "10.96.41.132",
+      "name": "envoy",
+      "namespace": "kil-v3-local-reduce",
+      "uid": "4d334a33-50b7-4860-913a-57ab15a53121"
+    },
+    {
+      "cluster_ip": "10.96.86.44",
+      "name": "target",
+      "namespace": "kil-v3-local-reduce",
+      "uid": "6c67ce08-90e0-46f9-b622-155f32d63117"
+    },
+    {
+      "cluster_ip": "10.96.125.20",
+      "name": "authz",
+      "namespace": "kil-v3-signed",
+      "uid": "0bffeb67-b51c-413f-8489-58d261a161fd"
+    },
+    {
+      "cluster_ip": "10.96.88.214",
+      "name": "envoy",
+      "namespace": "kil-v3-signed",
+      "uid": "6a4a5bbe-1c3c-4e5c-9630-c28b13ad70a4"
+    },
+    {
+      "cluster_ip": "10.96.253.229",
+      "name": "target",
+      "namespace": "kil-v3-signed",
+      "uid": "60a9414b-180c-4cc6-abf1-2ef19e9daa00"
+    }
+  ]
+}

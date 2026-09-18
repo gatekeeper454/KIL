@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local Trust Reduction at a Live Authorization Boundary</title>
+<meta name="generator" content="KIL Markdown Reader 1">
+<meta name="source-path" content="docs/paper/kil-hf-live-authorization-results-2026-09-18.md">
+<meta name="source-sha256" content="a80847a3f2af4b727216679f11c3ff0015dc315edc1e6b4360849f18654e5599">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src &#x27;self&#x27; data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;unsafe-inline&#x27;; font-src &#x27;none&#x27;; connect-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<style>:root { color-scheme: light dark; --canvas: #ebe7df; --paper: #fffdf8; --ink: #1d1b18; --muted: #6b665d; --line: #ded8cc; --accent: #8c3f1d; --code: #f3efe6; }
+:root[data-theme="dark"] { --canvas: #11100f; --paper: #191817; --ink: #eee9df; --muted: #b8b0a5; --line: #48433c; --accent: #ffad7b; --code: #272421; }
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); font-family: ui-serif, Georgia, serif; line-height: 1.65; }
+body { background: var(--canvas); margin: 0; min-height: 100vh; }
+a { color: var(--accent); text-underline-offset: .16em; }
+.reader-chrome { border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem clamp(1rem, 4vw, 3rem); }
+.reader-bar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
+.reader-notice { color: var(--muted); font-size: .82rem; margin: .7rem 0 0; }
+.reader-controls { display: flex; gap: .5rem; }
+.reader-mobile-header { display: none; }
+.reader-mobile-support, .reader-mobile-outline { display: none; }
+button, input { font: inherit; }
+button { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; cursor: pointer; padding: .32rem .55rem; }
+input { background: var(--paper); border: 1px solid var(--line); border-radius: .3rem; color: inherit; padding: .32rem .55rem; }
+.reader-search { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.reader-search-output { color: var(--muted); font-size: .85rem; }
+.reader-stage { min-height: 100vh; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.reader-layout { align-items: start; display: grid; gap: clamp(1.5rem, 5vw, 4rem); grid-template-columns: minmax(12rem, 15rem) minmax(0, 46rem); justify-content: center; margin: 0 auto; max-width: 70rem; }
+.reader-outline { align-self: stretch; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .88rem; height: 100vh; overflow-y: auto; padding: 1.25rem .75rem 1.25rem 0; position: sticky; top: 0; }
+.reader-outline h2 { font-size: .9rem; margin: 0 0 .65rem; }
+.reader-outline ol { border-left: 1px solid var(--line); list-style: none; margin: 0; padding-left: .7rem; }
+.reader-outline li { margin: .3rem 0; }
+.reader-outline a { color: var(--muted); text-decoration: none; }
+.reader-outline a[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.reader-outline .level-2 { margin-left: .65rem; }.reader-outline .level-3 { margin-left: 1.3rem; }
+.reader-main { min-width: 0; }
+.reader-paper { background: var(--paper); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 1rem 3rem rgb(40 34 25 / .12); padding: clamp(1.5rem, 5vw, 4rem); }
+#reader-article { font-size: clamp(1rem, .98rem + .12vw, 1.1rem); overflow-wrap: break-word; }
+#reader-article > :first-child { margin-top: 0; }
+#reader-article h1, #reader-article h2, #reader-article h3, #reader-article h4, #reader-article h5, #reader-article h6 { line-height: 1.18; scroll-margin-top: 1.5rem; }
+#reader-article h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: -.035em; }
+#reader-article h2 { margin-top: 2.5em; }
+#reader-article [data-reader-active] { border-left: .22rem solid var(--accent); padding-left: .5rem; }
+#reader-article img { height: auto; max-width: 100%; }
+#reader-article table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+#reader-article th, #reader-article td { border: 1px solid var(--line); padding: .4rem .65rem; text-align: left; }
+#reader-article pre { background: var(--code); overflow-x: auto; padding: 1rem; }
+#reader-article code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+#reader-article :not(pre) > code { background: var(--code); padding: .08em .25em; }
+mark.reader-match { background: #ffe58a; color: #201c10; }
+@media (max-width: 820px) { .reader-chrome { display: none; } .reader-mobile-header { display: flex; align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); font-family: ui-sans-serif, system-ui, sans-serif; gap: .75rem; justify-content: space-between; padding: .6rem 1rem; position: sticky; top: 0; z-index: 1; } .reader-mobile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .reader-mobile-controls { display: flex; flex: none; gap: .4rem; } .reader-mobile-support { display: block; font-family: ui-sans-serif, system-ui, sans-serif; padding: .75rem 1rem; } .reader-mobile-notice { color: var(--muted); font-size: .78rem; margin: .65rem 0 0; } .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } .reader-mobile-outline nav { padding: .7rem 0; } .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } .reader-outline { display: none; } .reader-stage { padding: 1rem; } .reader-layout { display: block; } .reader-paper { border-radius: .5rem; padding: clamp(1.25rem, 6vw, 2rem); } }
+@media print { :root { color-scheme: light; --canvas: white; --paper: white; --ink: black; } .reader-chrome, .reader-mobile-header, .reader-mobile-support, .reader-mobile-outline, .reader-outline { display: none !important; } .reader-stage, .reader-layout { display: block; max-width: none; padding: 0; } .reader-paper { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; } a { color: inherit; text-decoration: none; } #reader-article { font-size: 11pt; } #reader-article table { display: table; table-layout: fixed; width: 100%; } #reader-article th, #reader-article td, #reader-article pre, #reader-article code { overflow-wrap: anywhere; white-space: pre-wrap; } }
+body.reader-wide .reader-stage { padding-inline: clamp(1rem, 2.5vw, 2.5rem); }
+body.reader-wide .reader-layout { gap: clamp(1.5rem, 3vw, 2.5rem); grid-template-columns: minmax(12rem, 14rem) minmax(0, 68rem); max-width: 86rem; }
+body.reader-wide #reader-article table { width: 100%; }
+@media (max-width: 1120px) { body.reader-wide .reader-layout { display: block; max-width: 68rem; } body.reader-wide .reader-outline { display: none; } body.reader-wide .reader-mobile-outline { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 1rem; } body.reader-wide .reader-mobile-outline summary { cursor: pointer; font-weight: 700; } body.reader-wide .reader-mobile-outline nav { padding: .7rem 0; } body.reader-wide .reader-mobile-outline ol { margin: 0; padding-left: 1.25rem; } }</style>
+</head>
+<body class="reader-wide">
+<header class="reader-chrome">
+<div class="reader-bar"><div class="reader-search"><label for="reader-search">Search</label><input id="reader-search" data-reader-search type="search"><output id="reader-search-output" data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><div class="reader-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div></div>
+<p class="reader-notice">Generated from <code>docs/paper/kil-hf-live-authorization-results-2026-09-18.md</code> (<code>a80847a3f2af4b727216679f11c3ff0015dc315edc1e6b4360849f18654e5599</code>); edit the Markdown source, not this reader.</p>
+</header>
+<header class="reader-mobile-header">
+<strong class="reader-mobile-title">Local Trust Reduction at a Live Authorization Boundary</strong><div class="reader-mobile-controls"><button data-theme-toggle type="button" aria-pressed="false">Theme</button><button data-print type="button">Print</button></div>
+</header>
+<div class="reader-mobile-support"><div class="reader-search"><label for="reader-mobile-search">Search</label><input id="reader-mobile-search" data-reader-search type="search"><output data-reader-search-output class="reader-search-output" aria-live="polite"></output></div><p class="reader-mobile-notice">Generated from <code>docs/paper/kil-hf-live-authorization-results-2026-09-18.md</code> (<code>a80847a3f2af4b727216679f11c3ff0015dc315edc1e6b4360849f18654e5599</code>); edit the Markdown source, not this reader.</p></div>
+<div class="reader-stage"><details class="reader-mobile-outline"><summary>On this page</summary><nav aria-label="Document outline"><ol><li class="level-1"><a href="#local-trust-reduction-at-a-live-authorization-boundary">Local Trust Reduction at a Live Authorization Boundary</a></li><li class="level-2"><a href="#results-of-the-kil-hf-exploratory-test">Results of the KIL HF Exploratory Test</a></li><li class="level-2"><a href="#abstract">Abstract</a></li><li class="level-2"><a href="#1-research-question-and-contribution">1. Research question and contribution</a></li><li class="level-2"><a href="#2-system-and-decision-model">2. System and decision model</a></li><li class="level-3"><a href="#2-1-source-derived-explanation-of-the-denial">2.1 Source-derived explanation of the denial</a></li><li class="level-2"><a href="#3-experimental-method">3. Experimental method</a></li><li class="level-3"><a href="#3-1-laboratory-and-request-path">3.1 Laboratory and request path</a></li><li class="level-3"><a href="#3-2-fixed-action-and-controls">3.2 Fixed action and controls</a></li><li class="level-3"><a href="#3-3-evidence-capture-and-completion-rule">3.3 Evidence capture and completion rule</a></li><li class="level-3"><a href="#3-4-development-history-and-sample-accounting">3.4 Development history and sample accounting</a></li><li class="level-2"><a href="#4-results">4. Results</a></li><li class="level-2"><a href="#5-interpretation-and-limitations">5. Interpretation and limitations</a></li><li class="level-2"><a href="#6-evidence-availability-and-reproducibility">6. Evidence availability and reproducibility</a></li><li class="level-2"><a href="#7-conclusion">7. Conclusion</a></li><li class="level-2"><a href="#references">References</a></li></ol></nav></details><div class="reader-layout">
+<nav class="reader-outline" aria-label="Document outline"><h2>On this page</h2><ol><li class="level-1"><a data-section-id="local-trust-reduction-at-a-live-authorization-boundary" href="#local-trust-reduction-at-a-live-authorization-boundary">Local Trust Reduction at a Live Authorization Boundary</a></li><li class="level-2"><a data-section-id="results-of-the-kil-hf-exploratory-test" href="#results-of-the-kil-hf-exploratory-test">Results of the KIL HF Exploratory Test</a></li><li class="level-2"><a data-section-id="abstract" href="#abstract">Abstract</a></li><li class="level-2"><a data-section-id="1-research-question-and-contribution" href="#1-research-question-and-contribution">1. Research question and contribution</a></li><li class="level-2"><a data-section-id="2-system-and-decision-model" href="#2-system-and-decision-model">2. System and decision model</a></li><li class="level-3"><a data-section-id="2-1-source-derived-explanation-of-the-denial" href="#2-1-source-derived-explanation-of-the-denial">2.1 Source-derived explanation of the denial</a></li><li class="level-2"><a data-section-id="3-experimental-method" href="#3-experimental-method">3. Experimental method</a></li><li class="level-3"><a data-section-id="3-1-laboratory-and-request-path" href="#3-1-laboratory-and-request-path">3.1 Laboratory and request path</a></li><li class="level-3"><a data-section-id="3-2-fixed-action-and-controls" href="#3-2-fixed-action-and-controls">3.2 Fixed action and controls</a></li><li class="level-3"><a data-section-id="3-3-evidence-capture-and-completion-rule" href="#3-3-evidence-capture-and-completion-rule">3.3 Evidence capture and completion rule</a></li><li class="level-3"><a data-section-id="3-4-development-history-and-sample-accounting" href="#3-4-development-history-and-sample-accounting">3.4 Development history and sample accounting</a></li><li class="level-2"><a data-section-id="4-results" href="#4-results">4. Results</a></li><li class="level-2"><a data-section-id="5-interpretation-and-limitations" href="#5-interpretation-and-limitations">5. Interpretation and limitations</a></li><li class="level-2"><a data-section-id="6-evidence-availability-and-reproducibility" href="#6-evidence-availability-and-reproducibility">6. Evidence availability and reproducibility</a></li><li class="level-2"><a data-section-id="7-conclusion" href="#7-conclusion">7. Conclusion</a></li><li class="level-2"><a data-section-id="references" href="#references">References</a></li></ol></nav>
+<main class="reader-main reader-paper"><article id="reader-article">
+<h1 id="local-trust-reduction-at-a-live-authorization-boundary">Local Trust Reduction at a Live Authorization Boundary</h1>
+<h2 id="results-of-the-kil-hf-exploratory-test">Results of the KIL HF Exploratory Test</h2>
+<p><strong>Author and creator:</strong> Mike Storm, Distinguished Engineer<br />
+<strong>Date:</strong> September 18, 2026<br />
+<strong>Edition:</strong> Final results paper for the completed three-track exploratory experiment<br />
+<strong>Protocol baseline:</strong> Kinetic Trust Protocol v2.0.0<br />
+<strong>Evidence classification:</strong> Exploratory local Kind/Calico result; platform-image provenance unverified; full Kind/Calico acceptance not established.</p>
+<h2 id="abstract">Abstract</h2>
+<p>The Kinetic Infrastructure Layer (KIL) separates signed authority state from the local conditions encountered when an action executes. This paper reports a completed live experiment testing whether a fixed administrative-action example retains its expected behavior in an isolated Kubernetes laboratory using Kind, Calico, Envoy, and KIL authorization. Three tracks issued the same harmless administrative POST: a credential-policy baseline, signed state alone, and signed state with local reduction. The complete run produced permit/HTTP 200/one target record, permit/HTTP 200/one target record, and deny/HTTP 403/zero target records, respectively. The denial carried the reason <code>insufficient_charge</code>, and Envoy recorded no upstream attempt. Each result joined the driver, authorization, Envoy, and target sources with bound runtime identities; complete source captures preceded teardown. Independent verification checked the sealed receipt's 1,354 files and confirmed the expected results and owned-resource cleanup. These observations support a narrow conclusion: the configured local reduction produced the expected denial at the tested live authorization boundary while the other two tracks permitted the fixture. The study contains one complete three-request run, uses configured local evidence, and does not establish historical incident prevention, repeated reliability, NetworkPolicy enforcement, platform provenance, or production readiness.</p>
+<p><strong>Keywords:</strong> infrastructure authorization; signed authority state; local trust reduction; KIL; KTP; Envoy; exploratory validation.</p>
+<h2 id="1-research-question-and-contribution">1. Research question and contribution</h2>
+<p>An authentic credential and an otherwise permissive policy can coexist with conditions under which an administrative action should be withheld. KIL explores an infrastructure boundary that consumes signed authority state and can reduce the authority available to a specific action using local evidence. The architectural motivation and its relationship to KTP are developed in the <a href="kinetic-infrastructure.htm">KIL architecture manuscript</a>. This paper reports the new experimental result without changing that manuscript's earlier evidence record.</p>
+<p>The question was specified before the live result: <strong>does the accepted administrative-action fixture retain its permit/permit/deny behavior when placed in an isolated Kind/Calico laboratory?</strong> The <a href="../superpowers/specs/2026-09-16-hf-exploratory-kind-calico-design.htm">approved experimental design</a> fixed the three tracks, request, expected status codes, and target counts. It also explicitly separated exploratory execution from full platform acceptance.</p>
+<p>The contribution is a traceable live observation of that bounded comparison. It moves the example onto an actual Kubernetes substrate with an in-cluster driver and Envoy authorization path, rather than relying only on an offline decision or a simulated controller. “HF” retains the repository's name for the selected modeled incident cut point. This experiment does not replay the original incident or all its phases.</p>
+<h2 id="2-system-and-decision-model">2. System and decision model</h2>
+<p>KIL's proposed architecture has two timescales. An authoritative loop issues and refreshes signed state; an action-time loop consumes that state at an infrastructure boundary. Local reduction may withhold authority without creating authority beyond the signed state. The protocol lineage is KTP v2.0.0; its canonical attribution is <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">Chris Perkins, <em>Kinetic Trust Protocol (KTP): RFC Series</em>, v2.0.0, DOI 10.5281/zenodo.21938282</a>.</p>
+<p>This experiment exercises the action-time consumption example. Signed state is a laboratory fixture, and local evidence is supplied by the server's versioned configuration. An operating telemetry pipeline and a continuously refreshing authoritative loop were not evaluated.</p>
+<p>The three configured tracks were:</p>
+<table>
+<thead>
+<tr>
+<th>Track</th>
+<th>Authority input</th>
+<th>Local-reduction behavior</th>
+<th>Prespecified result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Credential-policy baseline</td>
+<td>Matching lab credential and permissive fixture policy</td>
+<td>Signed state is not required</td>
+<td>Permit; 200; target count 1</td>
+</tr>
+<tr>
+<td>Signed state only</td>
+<td>Matching credential and valid signed fixture state</td>
+<td>Local reduction is not applied</td>
+<td>Permit; 200; target count 1</td>
+</tr>
+<tr>
+<td>Signed state + local reduction</td>
+<td>Matching credential and equivalent signed fixture state</td>
+<td>Apply configured fresh local evidence</td>
+<td>Deny; 403; target count 0</td>
+</tr>
+</tbody>
+</table>
+<p>The baseline represents this fixture's limited credential-policy check. It is not a benchmark of every zero-trust product or authorization policy. The signed tracks use equivalent numerical authority inputs with track-specific state identifiers and audiences; they do not reuse an identical audience-bound token across namespaces.</p>
+<h3 id="2-1-source-derived-explanation-of-the-denial">2.1 Source-derived explanation of the denial</h3>
+<p>The <a href="../../src/kil/hf_exploratory_case.py">versioned instruction fixture</a> sets signed charge to 80, the action threshold to 40, passive decay rate to 0, and validity to ten seconds. The <a href="../../src/kil/v3b2_manifests.py">server configuration</a> supplies fresh local divergence of 0.9, a divergence threshold of 0.25, loss rate 25, exponent 3, and coupled loss 0.</p>
+<p>For this above-threshold fixture, the <a href="../../src/kil/decay.py">implemented arithmetic</a> gives:</p>
+<pre><code class="language-text">local_loss = 25 × (0.9 / 0.25)^3 = 1166.4
+effective_charge = clamp(80 − 1166.4 − 0, 0, 80) = 0
+effective_charge &lt; action_threshold: 0 &lt; 40
+</code></pre>
+<p>The <a href="../../src/kil/engine.py">decision engine</a> adds <code>insufficient_charge</code> when effective charge is below the action threshold. This calculation explains the configured expected behavior; effective charge was not independently measured as live telemetry in this experiment. The observed authorization reason was <code>insufficient_charge</code>. The study did not estimate or calibrate the divergence threshold, loss rate, or exponent.</p>
+<h2 id="3-experimental-method">3. Experimental method</h2>
+<h3 id="3-1-laboratory-and-request-path">3.1 Laboratory and request path</h3>
+<p>The experiment used a fresh, owned, single-node Kind cluster inside an isolated Colima VM. The requested VM allocation was four CPUs, 8 GiB memory, and a 60 GiB data disk. The host was Darwin/arm64. Each track ran in its own namespace with an in-cluster one-shot driver, Envoy, an authorization service, and a harmless target service.</p>
+<pre><code class="language-text">in-cluster driver → Envoy → authorization decision
+                         → target, only when permitted
+</code></pre>
+<p>Envoy's external authorization mechanism consults an authorization service before allowing a request to proceed. Its HTTP filter can reject an unauthorized request with HTTP 403. This is the transport mechanism used here, rather than a novel HTTP denial mechanism. <a href="https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/security/ext_authz_filter">Envoy external authorization documentation</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Recorded observation or requested input</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Colima / Lima</td>
+<td>Observed tool versions 0.10.3 / 2.2.0</td>
+</tr>
+<tr>
+<td>Docker CLI</td>
+<td>Observed version 29.7.2; Docker daemon version unobserved</td>
+</tr>
+<tr>
+<td>Kind</td>
+<td>Observed tool version 0.32.0</td>
+</tr>
+<tr>
+<td>Kubernetes</td>
+<td>Observed node kubelet version v1.36.1</td>
+</tr>
+<tr>
+<td>kubectl</td>
+<td>Observed client version 1.36.3</td>
+</tr>
+<tr>
+<td>Node container runtime</td>
+<td>Observed containerd version 2.3.1</td>
+</tr>
+<tr>
+<td>Envoy</td>
+<td>Content-pinned application image selected from the v1.39.1 input</td>
+</tr>
+<tr>
+<td>Calico</td>
+<td>Requested v3.32.0 with pinned, vendored manifest inputs</td>
+</tr>
+</tbody>
+</table>
+<p>Observed versions and reported image identifiers are not an independently admitted platform-image provenance proof. The precise profile is preserved in the <a href="../../deploy/kind/v3b2-profile.json">versioned laboratory configuration</a>.</p>
+<h3 id="3-2-fixed-action-and-controls">3.2 Fixed action and controls</h3>
+<p>The consequential action was a harmless <code>POST /consequential/admin</code> with an empty body. The same fixed method, path, lab credential, and request identifier were used across tracks. The driver had application retries disabled and sent one durable instruction per track. Signed-state inputs were generated immediately before their track's dispatch.</p>
+<p>The instructions also contained fixed attacker-shaped lab headers for claimed issuer, local evidence, mode, track, and subject. These were part of the configured case; the local divergence used by the authorization fixture came from server configuration. This input case does not constitute a comprehensive header-injection test.</p>
+<p>The applied configuration included default-deny policies and explicit same-track edges. Application readiness, object ownership, image bindings, selected Pod/container incarnations, Service allocations, and ready EndpointSlices were checked before dispatch. Merely applying NetworkPolicy objects does not prove their enforcement. No bypass matrix or direct-target adversarial probe was performed.</p>
+<h3 id="3-3-evidence-capture-and-completion-rule">3.3 Evidence capture and completion rule</h3>
+<p>Each track had four sources: driver readiness/result records, authorization decisions, Envoy access records, and the target ledger. Before instructions, complete request-free captures established that application-result sources were empty. After a driver completed, the harness drained the same Envoy process, required listener refusal and four exact zero activity gauges, and collected bounded final source bytes. Two source reads had to agree, with the same bound Pod/container identity across capture.</p>
+<p>A permit result required HTTP 200, a joined permit decision, and exactly one target record. A denial required HTTP 403, a joined deny decision, absent upstream execution in the Envoy record, and zero matching target records in the complete frozen target source. Missing, changing, truncated, or ambiguously joined evidence would be inconclusive rather than counted as a successful denial.</p>
+<p>Envoy resolved the configured target Service, so the logged upstream address was its ClusterIP. The primary run bound that address to the exact original target Service allocation and continuously checked the nine expected Services' UIDs, addresses, and configuration. It also required the original target EndpointSlice and target Pod/container identity. Kubernetes Services expose a stable Service IP separately from their backend endpoints; treating every upstream log address as a Pod IP would misdescribe this path. <a href="https://kubernetes.io/docs/concepts/services-networking/service/">Kubernetes Service documentation</a>.</p>
+<h3 id="3-4-development-history-and-sample-accounting">3.4 Development history and sample accounting</h3>
+<p>A complete request-free rehearsal preceded consequential testing. Recovery and harness compatibility work addressed actual SSH, Docker/image, registry-access, Kubernetes mount/readiness, and Envoy response-framing mismatches. These steps established execution and evidence readiness; they are not additional HF success observations.</p>
+<p>An earlier partial action attempt dispatched one baseline instruction. It returned HTTP 200 and produced one target record, but its overall report remained inconclusive because the evidence validator incorrectly required a Pod-subnet upstream address despite the configured Service route. That attempt was retained and cleaned up. The corrected validator requires the exact bound target Service address; it does not accept an arbitrary address in the Service subnet. The failed attempt was not rewritten as a complete run or silently combined with later tracks.</p>
+<p>The primary result below comes from a fresh run after that fix. Thus the documented action attempts comprise four consequential requests: one in the earlier partial attempt and three in the complete primary run. The partial attempt is disclosed as development history, not a reliability replicate. The final experiment remains one observation per track, performed sequentially in a shared single-node laboratory.</p>
+<h2 id="4-results">4. Results</h2>
+<p><strong>All three primary-run tracks matched the prespecified decision, HTTP response, and target count.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Track</th>
+<th>Observed decision</th>
+<th>HTTP status</th>
+<th>Target records</th>
+<th>Authorization reason</th>
+<th>Envoy upstream</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Credential-policy baseline</td>
+<td>Permit</td>
+<td>200</td>
+<td>1</td>
+<td><code>baseline_permitted</code></td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Signed state only</td>
+<td>Permit</td>
+<td>200</td>
+<td>1</td>
+<td><code>permitted</code></td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Signed state + local reduction</td>
+<td>Deny</td>
+<td>403</td>
+<td>0</td>
+<td><code>insufficient_charge</code></td>
+<td>No</td>
+</tr>
+</tbody>
+</table>
+<p>There were exactly three durable instruction intents and three attempts in the primary run. Each driver result reported attempt count 1. The run reached <code>complete_capture</code>, returned status <code>complete</code> with no error, and classified each track as <code>expected</code>.</p>
+<p>The denial's zero target count was supported by a complete frozen target source and a matching Envoy record with no upstream attempt. It was not inferred from HTTP 403 alone. In both permitted tracks, authorization, driver, Envoy, and target evidence joined by their expected decision identity, with one target record each.</p>
+<table>
+<thead>
+<tr>
+<th>Track</th>
+<th>Joined decision digest</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Credential-policy baseline</td>
+<td><code>80f0ac0b7a8a8b9331579ddf681c1a5e1ee9e1198a6a7c9bfb24358a31a8dbea</code></td>
+</tr>
+<tr>
+<td>Signed state only</td>
+<td><code>906b624c770a5e966a21268f46a5f9cceb8fd0cbd01cf89700cd304ac44e4533</code></td>
+</tr>
+<tr>
+<td>Signed state + local reduction</td>
+<td><code>c132a2bc550a6cb54ee906d39a9a2c686f62122e9fee1a1d19668220391abdc2</code></td>
+</tr>
+</tbody>
+</table>
+<p>Cluster removal, owned profile deletion, native-owned teardown, and final wrapper closure were verified. The read-only global-state comparison matched the original foreign state. No manual recovery was required for the primary run. Configuration and namespace directories remained explicitly recorded; native-owned teardown is not a claim that every associated filesystem directory was removed.</p>
+<h2 id="5-interpretation-and-limitations">5. Interpretation and limitations</h2>
+<p>The result supports the configured mechanism at the tested boundary: the baseline and signed-state-only fixtures permitted the action, while the local-reduction fixture denied it for insufficient charge and did not execute the target. This is evidence that the selected comparison can operate through the live in-cluster path with joined source records.</p>
+<p>The result does not establish that KIL would prevent the historical HF incident. It tests one modeled administrative-action cut point with a harmless target. No original exploit was executed, and no end-to-end incident sequence was reproduced.</p>
+<p>The main limits are:</p>
+<ol>
+<li><strong>Sample size and development selection.</strong> One complete run contains one request per track. Engineering evolved through failures before the complete run. No repeated-run reliability, confidence interval, false-positive rate, or statistical treatment effect is reported.</li>
+<li><strong>Configured evidence.</strong> Local divergence and freshness were server-side fixture inputs. The experiment does not show detection of malicious behavior from operational telemetry or resilience against a compromised evidence producer.</li>
+<li><strong>Scope of the comparison.</strong> Three namespaces and modes form a controlled implementation example, not a randomized or blinded study. The baseline is deliberately narrow; superiority over production authorization products is untested.</li>
+<li><strong>Platform acceptance.</strong> Independent platform-image provenance remains unverified, and full Kind/Calico acceptance remains false. This exploratory receipt is not an accepted V3B-2/V4 publication-verifier bundle and does not promote the earlier accepted local-Envoy result.</li>
+<li><strong>Enforcement coverage.</strong> The applied policies and observed request path do not establish NetworkPolicy enforcement, all-route mediation, or no-bypass behavior. No lateral-movement, direct-target, or failure-injection matrix was executed.</li>
+<li><strong>Performance and scale.</strong> No end-to-end latency, throughput, saturation, production scale, or long-running two-timescale behavior was measured. Driver timestamps are execution records, not a performance benchmark.</li>
+</ol>
+<p>These limits define the next research questions; they do not erase the observed three-track result. Repeated runs, independently validated telemetry, bypass probes, and admitted platform provenance would answer different questions and need their own experimental scope.</p>
+<h2 id="6-evidence-availability-and-reproducibility">6. Evidence availability and reproducibility</h2>
+<p>The <a href="kil-hf-live-authorization-results-2026-09-18.results.json">machine-readable results extract</a> accompanies this paper. It preserves the primary run's reported joined results, raw final source records and their hashes, source-capture bindings, completion fields, and receipt-manifest identity. It is an extract for checking this paper, not a substitute for the full private receipt or a platform acceptance attestation.</p>
+<table>
+<thead>
+<tr>
+<th>Evidence identity</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Primary run</td>
+<td><code>v3b2-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127</code></td>
+</tr>
+<tr>
+<td>Reviewed execution source</td>
+<td><code>b0d99415bde5ffdd3419b805a098b70555a53a7b</code></td>
+</tr>
+<tr>
+<td>Independently verified retained files</td>
+<td>1,354</td>
+</tr>
+<tr>
+<td>Independently verified retained bytes</td>
+<td>6,786,556</td>
+</tr>
+<tr>
+<td>SHA256 of canonical receipt manifest</td>
+<td><code>9914e920cc2796218e4392725f8777dc83f17a86d8b715a127426e10f8227968</code></td>
+</tr>
+</tbody>
+</table>
+<p>The private receipt is retained under <code>.tools/hf-exploratory-private/hf-exploratory-0e5499817224447843f17d437e9dda29d76be9f5f169281fa90245f194d79127</code>. Its <code>report.json</code>, <code>synopsis.md</code>, journal, raw captures, command records, and <code>SHA256SUMS</code> were independently checked after native execution closed. Verification included bounded file reads, ownership and mode checks, no-follow handling, complete roster equality, file identity closure, and the three expected joined results. A checksum records byte integrity; it is not a hardware attestation or proof of platform trustworthiness.</p>
+<p>The <a href="../specialist/KIL-KTP-SPECIALIST-LINEAGE.htm">specialist lineage</a> records preparation, actual failures, source corrections, complete rehearsal, partial action, and final action in entries T464–T466. The <a href="../transcripts/KIL-HF-residual-vm-recovery-transcript-2026-09-18.htm">recorded recovery/testing conversation</a> provides the saved task history through its stated export cutoff. The <a href="../superpowers/specs/2026-09-16-hf-exploratory-kind-calico-design.htm">approved design</a>, versioned fixture, manifest renderer, native lifecycle, and decision arithmetic provide the implementation context. Reproducing the native experiment requires a separately owned laboratory and authorization; this paper does not launch another run.</p>
+<h2 id="7-conclusion">7. Conclusion</h2>
+<p>The completed KIL HF exploratory experiment produced its specified permit/permit/deny behavior on a live Kind/Calico substrate. Baseline and signed-state-only requests each returned HTTP 200 and reached the harmless target once. Signed state with configured local reduction returned HTTP 403 for insufficient charge, recorded no Envoy upstream attempt, and left the complete target source empty.</p>
+<p>The result is a verified implementation milestone for the fixed action-time example. Its value lies in the live execution path, joined evidence, explicit treatment of inconclusive attempts, and confirmed resource closure. It supports further evaluation of local authority reduction while keeping historical prevention, broader enforcement coverage, and production acceptance as open questions.</p>
+<h2 id="references">References</h2>
+<ol>
+<li>Chris Perkins. <em>Kinetic Trust Protocol (KTP): RFC Series</em>. Version 2.0.0, August 14, 2026. DOI 10.5281/zenodo.21938282. <a href="https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff">Canonical <code>CITATION.cff</code></a>.</li>
+<li>Mike Storm. <a href="kinetic-infrastructure.htm"><em>Kinetic Infrastructure: Ambient Enforcement for Agent-Speed Cybersecurity</em></a>. KIL architecture manuscript and prior local-Envoy evidence record.</li>
+<li>KIL project. <a href="../superpowers/specs/2026-09-16-hf-exploratory-kind-calico-design.htm"><em>Exploratory HF action test in Kind/Calico</em></a>. Prespecified experimental question, hypotheses, and evidence limits, September 16, 2026.</li>
+<li>KIL project. <a href="kil-hf-live-authorization-results-2026-09-18.results.json">Primary-run results extract</a> and <a href="../specialist/KIL-KTP-SPECIALIST-LINEAGE.htm">specialist lineage</a>, T464–T466. Recorded native evidence and completion verification, September 18, 2026.</li>
+<li>Envoy project. <a href="https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/security/ext_authz_filter"><em>External Authorization</em></a>. Retrieved September 18, 2026; explanatory documentation, not a runtime-version observation.</li>
+<li>Kubernetes project. <a href="https://kubernetes.io/docs/concepts/services-networking/service/"><em>Service</em></a>. Retrieved September 18, 2026; explanatory documentation for Service and endpoint addressing.</li>
+</ol>
+</article></main>
+</div></div>
+<script>(() => {
+  const article = document.getElementById("reader-article");
+  const searches = [...document.querySelectorAll("[data-reader-search]")];
+  const outputs = [...document.querySelectorAll("[data-reader-search-output]")];
+  const themes = [...document.querySelectorAll("[data-theme-toggle]")];
+  const prints = [...document.querySelectorAll("[data-print]")];
+  const root = document.documentElement;
+  const clearMarks = () => article.querySelectorAll("mark.reader-match").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markMatches = (value) => {
+    clearMarks();
+    article.normalize();
+    const query = value.trim();
+    if (!query) { outputs.forEach((output) => { output.textContent = ""; }); return; }
+    const nodes = [];
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    let matches = 0;
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const found = [...text.matchAll(new RegExp(escapeRegex(query), "giu"))];
+      if (!found.length) { return; }
+      const fragment = document.createDocumentFragment();
+      let start = 0;
+      found.forEach((match) => {
+        const index = match.index;
+        fragment.append(document.createTextNode(text.slice(start, index)));
+        const mark = document.createElement("mark");
+        mark.className = "reader-match";
+        mark.textContent = match[0];
+        fragment.append(mark);
+        matches += 1;
+        start = index + match[0].length;
+      });
+      fragment.append(document.createTextNode(text.slice(start)));
+      node.replaceWith(fragment);
+    });
+    outputs.forEach((output) => { output.textContent = `${matches} match${matches === 1 ? "" : "es"}`; });
+  };
+  searches.forEach((search) => search.addEventListener("input", () => {
+    searches.forEach((peer) => { peer.value = search.value; });
+    markMatches(search.value);
+  }));
+  themes.forEach((theme) => theme.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    themes.forEach((control) => control.setAttribute("aria-pressed", String(root.dataset.theme === "dark")));
+  }));
+  prints.forEach((print) => print.addEventListener("click", () => window.print()));
+  const links = [...document.querySelectorAll(".reader-outline a[data-section-id]")];
+  if ("IntersectionObserver" in window && links.length) {
+    const byId = new Map(links.map((link) => [link.dataset.sectionId, link]));
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (!entry.isIntersecting) { return; }
+      links.forEach((link) => link.removeAttribute("aria-current"));
+      article.querySelectorAll("[data-reader-active]").forEach((section) => section.removeAttribute("data-reader-active"));
+      entry.target.setAttribute("data-reader-active", "true");
+      byId.get(entry.target.id)?.setAttribute("aria-current", "true");
+    }), { rootMargin: "-12% 0px -78% 0px" });
+    links.forEach((link) => {
+      const section = document.getElementById(link.dataset.sectionId);
+      if (section) { observer.observe(section); }
+    });
+  }
+})();</script>
+</body>
+</html>
