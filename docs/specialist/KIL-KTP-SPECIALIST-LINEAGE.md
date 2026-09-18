@@ -25405,3 +25405,15 @@ KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob
 **Scope and next gate:** Fixed harmless POST/consequential/admin case only. Platform image provenance remains unverified/full Kind-Calico acceptance false; Docker daemon version unobserved. This completed exploratory observation does not establish causal HF prevention, all eight phases, historical exploit reproduction, NetworkPolicy enforcement, no-bypass, performance or full V3B-2 acceptance. Prior original local Envoy evidence and provenance omissions remain unchanged. No remaining execution gate for the authorized fixed three-track HF run; future broader experiments/publication require their own defined scope and evidence.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T467 — 2026-09-18, clarification of completed HF experiment scope
+
+**Input:** User asks, "so that was it?"
+
+**Interpretation and confirmed decision:** Clarify completion without inflating its scope or starting another experiment. The authorized fixed exploratory native HF test comprised three actual requests, one per track: baseline permit200/target1, signed-state permit200/target1, signed-state-plus-local-reduction deny403/target0. All expected outcomes and sealed evidence/native-owned teardown were independently verified in T466. Recovery and compatibility debugging consumed substantially more work than those three requests.
+
+**Rationale, artifacts and unresolved scope:** Communicate directly that this completes the fixed three-track exploratory case. Original immutable action02 receipt/report and T466 unchanged; no additional execution or engineering. Broader HF/security acceptance, causal prevention, NetworkPolicy enforcement, no-bypass and platform provenance remain unestablished as previously recorded. Only this dated clarification/scoped reader is affected.
+
+**Next gate:** No remaining action for the completed fixed test; a broader experiment requires a separately specified scope. User's question does not authorize or require a new experiment.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
