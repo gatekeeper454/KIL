@@ -78,14 +78,48 @@ read_http_line() {
     done
 }
 
+
+read_chunked_body() {
+    local chunk_size=0 chunks=0 chunk='' framing='' extra='' read_status=0
+    body=''
+    while :; do
+        read_http_line
+        [[ "$line" =~ ^[0-9a-fA-F]{1,6}$ ]] || fail http_chunk_size
+        chunk_size=$((16#$line))
+        ((chunks += 1))
+        ((chunks <= 4096 && chunk_size <= 1048576 && ${#body} + chunk_size <= 1048576)) || fail http_body_oversized
+        if ((chunk_size == 0)); then
+            read_http_line
+            [[ -z "$line" ]] || fail http_chunk_trailers
+            break
+        fi
+        remaining
+        chunk=''
+        IFS= read -r -d '' -n "$chunk_size" -t "$remaining_seconds" chunk <&3 || fail http_chunk_incomplete
+        ((${#chunk} == chunk_size)) || fail http_chunk_incomplete
+        remaining
+        framing=''
+        IFS= read -r -d '' -n 2 -t "$remaining_seconds" framing <&3 || fail http_chunk_framing
+        [[ "$framing" == $'\r\n' ]] || fail http_chunk_framing
+        body+=$chunk
+    done
+    remaining
+    IFS= read -r -d '' -n 1 -t "$remaining_seconds" extra <&3 || read_status=$?
+    [[ "$read_status" == 1 && -z "$extra" ]] || fail http_chunk_extra
+    exec 3>&-
+}
+
 admin_response() {
-    local request=$1 content_length='' header_count=0 header_bytes=0 value=''
+    local request=$1 content_length='' transfer_encoding='' header_count=0 header_bytes=0 value=''
     admin_open || fail admin_connect
-    # HTTP/1.0 plus explicit close avoids reliance on a chunked-body decoder.
-    # The response may use 1.0 or 1.1, but transfer coding is never accepted.
+    # HTTP/1.1 is supported by the pinned admin listener. Explicit close
+    # bounds EOF; only one unambiguous bounded chunked or length body is admitted.
     printf '%s' "$request" >&3 || fail admin_write
     read_http_line
-    [[ "$line" == 'HTTP/1.0 200 OK' || "$line" == 'HTTP/1.1 200 OK' ]] || fail admin_status
+    if [[ "$line" != 'HTTP/1.0 200 OK' && "$line" != 'HTTP/1.1 200 OK' ]]; then
+        printf '%s\n' "$line" >&2
+        fail admin_status
+    fi
     while :; do
         read_http_line
         [[ -n "$line" ]] || break
@@ -103,9 +137,15 @@ admin_response() {
                 ((content_length <= 1048576)) || fail http_body_oversized
                 ;;
             [Tt][Rr][Aa][Nn][Ss][Ff][Ee][Rr]-[Ee][Nn][Cc][Oo][Dd][Ii][Nn][Gg]:*)
-                fail http_transfer_coding ;;
+                [[ -z "$transfer_encoding" && "${line#*: }" == 'chunked' ]] || fail http_transfer_coding
+                transfer_encoding=chunked ;;
         esac
     done
+    if [[ -n "$transfer_encoding" ]]; then
+        [[ -z "$content_length" ]] || fail http_ambiguous_length
+        read_chunked_body
+        return
+    fi
     remaining
     body=''
     local read_status=0 limit=1048576
@@ -120,7 +160,7 @@ admin_response() {
 ENVOY_DRAIN_SCRIPT = _COMMON + r'''
 main() {
     deadline=$((SECONDS + 10))
-    admin_response $'POST /drain_listeners HTTP/1.0\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+    admin_response $'POST /drain_listeners HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
     printf '{"drain_requested":true}\n'
 }
 main
@@ -130,7 +170,7 @@ ENVOY_STATS_SCRIPT = _COMMON + r'''
 main() {
     deadline=$((SECONDS + 10))
     require_refusal
-    admin_response $'GET /stats?format=json HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n'
+    admin_response $'GET /stats?format=json HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n'
     # Preserve the response's members verbatim. This is framing, not a JSON
     # parser: duplicate keys, malformed JSON and gauge semantics fail at the
     # shared proof boundary, which cannot emit a terminal for those bytes.

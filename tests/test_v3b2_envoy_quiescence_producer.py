@@ -124,6 +124,42 @@ class EnvoyQuiescenceProducerTest(unittest.TestCase):
         self.assertTrue(requests[0].startswith(b"POST /drain_listeners HTTP/1."))
         self.assertIn(b"Content-Length: 0\r\n", requests[0])
 
+    def test_admin_requests_use_supported_http11(self):
+        for drain in (False, True):
+            result, requests = self.run_producer(drain=drain)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(b' HTTP/1.1\r\n', requests[0])
+            self.assertNotIn(b'HTTP/1.0', requests[0])
+
+    def test_chunked_admin_body_preserves_exact_decoded_bytes(self):
+        header = b'HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\nconnection: close\r\n\r\n'
+        for drain, body in ((False, BODY), (True, b'OK\n')):
+            parts = [body[:1], body[1:17], body[17:]]
+            wire = header + b''.join(format(len(x), 'x').encode() + b'\r\n' + x + b'\r\n'
+                                     for x in parts if x) + b'0\r\n\r\n'
+            result, _ = self.run_producer(drain=drain, reply=wire)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            if drain:
+                self.assertEqual(result.stdout, b'{"drain_requested":true}\n')
+            else:
+                self.assertIn(BODY[1:], result.stdout)
+                self.assertEqual(json.loads(result.stdout)['stats'], json.loads(BODY)['stats'])
+
+    def test_malformed_or_ambiguous_chunked_responses_refuse(self):
+        header = b'HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n'
+        payloads = (b'g\r\n', b'100001\r\n', b'1;foo=bar\r\nx\r\n0\r\n\r\n',
+                    b'1\r\n', b'2\r\nx\r\n0\r\n\r\n', b'1\r\nxXX0\r\n\r\n',
+                    b'1\r\n\0\r\n0\r\n\r\n', b'0\r\ntrailer: x\r\n\r\n',
+                    b'0\r\n\r\nextra')
+        wires = [header + x for x in payloads]
+        wires += [b'HTTP/1.1 200 OK\r\ntransfer-encoding: gzip\r\n\r\n0\r\n\r\n',
+                  b'HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\ntransfer-encoding: chunked\r\n\r\n0\r\n\r\n']
+        for wire in wires:
+            with self.subTest(wire=wire[:100]):
+                result, _ = self.run_producer(reply=wire)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, b'')
+
     def test_refusal_requires_complete_exact_diagnostic_and_exit(self):
         fixtures = [dict(code=0), dict(code=2), dict(code=124), dict(code=143),
                     dict(stderr=b""), dict(stderr=REFUSED[:-1]),
