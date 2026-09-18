@@ -328,6 +328,25 @@ class V3B2ManifestTest(unittest.TestCase):
                 if config_mounts:
                     self.assertIs(config_mounts[0]["readOnly"], True)
 
+    def test_strict_service_configs_are_readonly_file_mounts(self) -> None:
+        # Whole ConfigMap directory projection exposes symlinks. Both fixed
+        # application loaders require a readonly regular file instead.
+        value = decoded()
+        for _, namespace in TRACK_NAMESPACES:
+            for role in ('authz', 'target'):
+                pod = object_named(value, namespace, 'Deployment', role)['spec']['template']['spec']
+                container = pod['containers'][0]
+                mount = [row for row in container['volumeMounts'] if row['name'] == 'config']
+                self.assertEqual(mount, [{'name': 'config', 'mountPath': '/config/' + role + '.json',
+                                         'subPath': role + '.json', 'readOnly': True}])
+                volume = [row for row in pod['volumes'] if row['name'] == 'config']
+                self.assertEqual(volume, [{'name': 'config', 'configMap':
+                    {'name': role + '-config', 'defaultMode': 292}}])
+                self.assertTrue(container['securityContext']['readOnlyRootFilesystem'])
+            envoy = object_named(value, namespace, 'Deployment', 'envoy')['spec']['template']['spec']['containers'][0]
+            self.assertEqual([row for row in envoy['volumeMounts'] if row['name'] == 'config'],
+                             [{'name': 'config', 'mountPath': '/config', 'readOnly': True}])
+
     def test_driver_has_exact_retained_stdin_contract(self) -> None:
         value = decoded()
         for _, namespace in TRACK_NAMESPACES:

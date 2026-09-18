@@ -292,7 +292,12 @@ def _pod_spec(role: str, track: str, image: str, command: list[str], config_name
         {"name": "tmp", "emptyDir": {"sizeLimit": "16Mi"}},
     ]
     if config_name is not None:
-        mounts.insert(0, {"name": "config", "mountPath": "/config", "readOnly": True})
+        mount = {"name": "config", "mountPath": "/config", "readOnly": True}
+        if role in {"authz", "target"}:
+            # Kubernetes resolves the projected ConfigMap symlink for this file
+            # bind mount; strict application loaders see a readonly regular file.
+            mount.update(mountPath="/config/" + role + ".json", subPath=role + ".json")
+        mounts.insert(0, mount)
         volumes.insert(0, {"name": "config", "configMap": {"name": config_name, "defaultMode": 292}})
     container: dict[str, object] = {
         "name": role,
