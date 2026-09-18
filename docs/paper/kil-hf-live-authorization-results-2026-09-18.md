@@ -1,7 +1,7 @@
 <!-- reader-layout: wide -->
 # Local Trust Reduction at a Live Authorization Boundary
 
-## Results of the KIL HF Exploratory Test
+## Results of the KIL HuggingFace Incident (HF) Exploratory Test
 
 **Author and creator:** Mike Storm, Distinguished Engineer\
 **Date:** September 18, 2026\
@@ -21,7 +21,7 @@ An authentic credential and an otherwise permissive policy can coexist with cond
 
 The question was specified before the live result: **does the accepted administrative-action fixture retain its permit/permit/deny behavior when placed in an isolated Kind/Calico laboratory?** The [approved experimental design](../superpowers/specs/2026-09-16-hf-exploratory-kind-calico-design.md) fixed the three tracks, request, expected status codes, and target counts. It also explicitly separated exploratory execution from full platform acceptance.
 
-The contribution is a traceable live observation of that bounded comparison. It moves the example onto an actual Kubernetes substrate with an in-cluster driver and Envoy authorization path, rather than relying only on an offline decision or a simulated controller. “HF” retains the repository's name for the selected modeled incident cut point. This experiment does not replay the original incident or all its phases.
+The contribution is a traceable live observation of that bounded comparison. It moves the example onto an actual Kubernetes substrate with an in-cluster driver and Envoy authorization path, rather than relying only on an offline decision or a simulated controller. **HF = HuggingFace Incident.** The repository uses this abbreviation for the selected modeled incident cut point. This experiment does not replay the original incident or all its phases.
 
 ## 2. System and decision model
 

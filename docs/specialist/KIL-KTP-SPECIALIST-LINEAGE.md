@@ -25457,3 +25457,15 @@ KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob
 **Decision status, rationale, artifacts and next gate:** Confirmed necessary publication-format correction preserving exact reviewed HTML article. Only paper metadata hard-break source and reader hash notice changed; no source/tests/native/HF or private receipt modification. T469 and this entry append in order with prior committed lineage bytes preserved. Re-stage exactly the nine documented artifacts, require staged check success, create commit, atomically fast-forward only the dedicated branch, ordinary push and independently verify live remote equals clean local HEAD. Final push success remains unasserted until tool completion; experimental scope and unresolved broader acceptance unchanged.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T471 — 2026-09-18, docs-folder paper copy and explicit HF expansion
+
+**Input and interpretation:** User requests copying the final HTM paper into the docs folder and making clear that HF means HuggingFace Incident. Continue in the exact existing worktree; apply the requested editorial clarification to the manuscript and canonical HTM, then provide the top-level docs copy.
+
+**Confirmed decision and rationale:** Subtitle now spells out HuggingFace Incident (HF), and the research-question section explicitly states “HF = HuggingFace Incident.” The modeled cut-point qualification and limits remain intact; this wording does not claim original-incident reproduction or prevention. Regenerated the canonical reader using the unchanged deterministic renderer. Copied its content to `docs/kil-hf-live-authorization-results-2026-09-18.htm`, adjusting only relative link paths for its new location so references remain usable.
+
+**Affected artifacts and verification:** Paper Markdown, canonical paper HTM, docs-folder HTM copy, this append and lineage HTM. Verified deterministic canonical rendering, written-copy equality, explicit acronym expansion in both readers, and existence of every relative link target in the relocated copy. Earlier committed lineage bytes preserved exactly. Runtime evidence, numerical results and results extract unchanged; no VM/HF execution or source engineering.
+
+**Decision status, unresolved questions and next gate:** Confirmed requested editorial change and copied reader. No remaining gate for this copy/clarification; broader experimental and platform acceptance limitations remain those stated in the paper. This turn does not claim an additional commit or push.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
