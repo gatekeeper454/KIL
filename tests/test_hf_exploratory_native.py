@@ -623,7 +623,8 @@ class NativeTests(unittest.TestCase):
             if executable=='kind' and argv[1]=='create': self.state['cluster']=True; return result()
             if executable=='kind' and argv[1]=='delete': self.state['cluster']=False; return result()
             if executable=='kind' and argv[1]=='load': return result()
-            if executable=='docker' and argv[1] in ['load','tag','pull']: return result()
+            if executable=='docker' and argv[1]=='load': return result(('Loaded image ID: '+accepted['kil'].config_digest+'\n').encode())
+            if executable=='docker' and argv[1] in ['tag','pull']: return result()
             if executable=='docker' and argv[1:3]==('image','inspect'):
                 image = next(row for row in accepted.values() if row.requested_image==argv[3])
                 return result(canonical([{'Id':image.config_digest,'RepoTags':[image.requested_image] if image.role=='kil' else [],
@@ -807,6 +808,209 @@ class NativeTests(unittest.TestCase):
         self.assertFalse(self.life.cluster_attempted)
         self.assertFalse(self.life.profile_stop_attempted)
         self.assertTrue(report['manual_recovery'])
+
+    def image_import_double(self, modern=False, load=None, mutate=None):
+        accepted = {row.role:row for row in self.native.ACCEPTED_IMAGES}; calls = []
+        def observe(command):
+            calls.append(command); self.life.sequence += 1
+            payload = b''
+            if command.argv[:2] == ('docker','load'):
+                source = accepted['kil'].target_digest if modern else accepted['kil'].config_digest
+                payload = load if load is not None else ('Loaded image ID: '+source+'\n').encode()
+            elif command.argv[:3] == ('docker','image','inspect'):
+                image = next(row for row in accepted.values() if row.requested_image == command.argv[3])
+                value = {'Id':image.target_digest if modern else image.config_digest,
+                         'RepoTags':[image.requested_image] if image.role == 'kil' else [],
+                         'RepoDigests':[image.requested_image.removeprefix('docker.io/')] if image.role == 'envoy' and modern else
+                            [image.requested_image] if image.role == 'envoy' else []}
+                if modern:
+                    value['Descriptor'] = {'digest':image.target_digest,'size':500,
+                        'mediaType':'application/vnd.oci.image.manifest.v1+json' if image.role == 'kil' else
+                                    'application/vnd.docker.distribution.manifest.list.v2+json'}
+                if mutate is not None: mutate(value,image)
+                payload = canonical([value])
+            name = 'command-%04d'%self.life.sequence
+            self.store.write(name+'.stdout',payload); self.store.write(name+'.stderr',b'')
+            self.life.command_checksums[name] = {'stdout':sha256(payload).hexdigest(),'stderr':sha256(b'').hexdigest()}
+            self.store.record('command_intent',{'sequence':self.life.sequence,'argv':list(command.argv),
+                'env':dict(command.env),'mutating':command.mutating,'timeout_s':command.timeout_s,
+                'stdin_sha256':None if command.stdin is None else sha256(command.stdin).hexdigest()})
+            self.store.record('command_terminal',{'sequence':self.life.sequence,'returncode':0,
+                'stdout_sha256':sha256(payload).hexdigest(),'stderr_sha256':sha256(b'').hexdigest()})
+            return CommandResult(0,payload.decode(),'',payload,b'')
+        return calls, observe
+
+    def test_legacy_and_modern_import_tag_exact_observed_accepted_id(self):
+        for modern in [False,True]:
+            with self.subTest(modern=modern):
+                calls, observer = self.image_import_double(modern)
+                try:
+                    with patch.object(self.life,'observe',side_effect=observer): self.life.import_application_images()
+                except ValueError as error:
+                    self.fail('exact accepted image-store pair must import: '+str(error))
+                self.assertIsNotNone(getattr(self.life,'loaded_kil_stdout_name',None),'successful load receipt was not bound')
+                image = next(row for row in self.native.ACCEPTED_IMAGES if row.role == 'kil')
+                tag = next(row for row in calls if row.argv[:2] == ('docker','tag'))
+                self.assertEqual(tag.argv[2],image.target_digest if modern else image.config_digest)
+                self.life.require_allowed_other_mutation(tag)
+                self.assertEqual(len([row for row in calls if row.argv[:2] == ('kind','load')]),2)
+                raw = self.life.private_read(self.life.loaded_kil_stdout_name)
+                self.store.path.joinpath(self.life.loaded_kil_stdout_name).write_bytes(raw.replace(b'Loaded',b'Other '))
+                with self.assertRaises(ValueError): self.life.require_allowed_other_mutation(tag)
+
+    def test_loaded_tag_consuming_guard_requires_zero_terminal_and_matching_checksum(self):
+        for fault in ['terminal','checksum','intent']:
+            with self.subTest(fault=fault):
+                calls, observer = self.image_import_double(True)
+                with patch.object(self.life,'observe',side_effect=observer): self.life.import_application_images()
+                tag = next(row for row in calls if row.argv[:2] == ('docker','tag'))
+                if fault == 'checksum':
+                    self.life.command_checksums[self.life.loaded_kil_stdout_name.removesuffix('.stdout')]['stdout'] = 'a'*64
+                else:
+                    rows = [json.loads(line) for line in self.store.journal.read_bytes().splitlines()]
+                    sequence = int(self.life.loaded_kil_stdout_name.removesuffix('.stdout').removeprefix('command-'))
+                    event = 'command_terminal' if fault == 'terminal' else 'command_intent'
+                    selected = next(row for row in rows if row['event'] == event and row['details']['sequence'] == sequence)
+                    if fault == 'terminal': selected['details']['returncode'] = 1
+                    else: selected['details']['argv'] = ['docker','pull','other']
+                    self.store.journal.write_bytes(b''.join(canonical(row) for row in rows))
+                dispatch = (tag.argv,tag.env,tag.stdin,tag.timeout_s,tag.mutating)
+                with self.assertRaises(ValueError): self.life.require_allowed_other_mutation(tag)
+                with self.assertRaises(ValueError): self.life.require_dispatch_unchanged(tag,dispatch)
+
+    def test_loaded_receipt_pair_drift_during_journal_read_refuses_final_guard(self):
+        for suffix in ['stdout','stderr']:
+            for replacement in [False,True]:
+                with self.subTest(suffix=suffix,replacement=replacement):
+                    calls, observer = self.image_import_double(True)
+                    with patch.object(self.life,'observe',side_effect=observer): self.life.import_application_images()
+                    tag = next(row for row in calls if row.argv[:2] == ('docker','tag'))
+                    original = self.life.private_read; changed = []
+                    def reading(name):
+                        raw = original(name)
+                        if name == 'journal.jsonl':
+                            target = self.store.path/self.life.loaded_kil_stdout_name.removesuffix('.stdout')
+                            target = target.with_suffix('.'+suffix)
+                            if replacement:
+                                payload = target.read_bytes(); target.unlink(); target.write_bytes(payload)
+                            else: target.write_bytes(b'changed during journal authentication\n')
+                            changed.append(True)
+                        return raw
+                    dispatch = (tag.argv,tag.env,tag.stdin,tag.timeout_s,tag.mutating)
+                    with patch.object(self.life,'private_read',side_effect=reading), self.assertRaises(ValueError):
+                        self.life.require_dispatch_unchanged(tag,dispatch)
+                    self.assertEqual(changed,[True])
+
+    def test_loaded_journal_terminal_drift_during_final_receipt_read_refuses(self):
+        calls, observer = self.image_import_double(True)
+        with patch.object(self.life,'observe',side_effect=observer): self.life.import_application_images()
+        tag = next(row for row in calls if row.argv[:2] == ('docker','tag'))
+        sequence = int(self.life.loaded_kil_stdout_name.removesuffix('.stdout').removeprefix('command-'))
+        original = os.pread; changed = []
+        def reading(fd,size,offset):
+            raw = original(fd,size,offset)
+            if not changed:
+                rows = [json.loads(line) for line in self.store.journal.read_bytes().splitlines()]
+                selected = next(row for row in rows if row['event'] == 'command_terminal' and row['details']['sequence'] == sequence)
+                selected['details']['returncode'] = 1
+                self.store.journal.write_bytes(b''.join(canonical(row) for row in rows)); changed.append(True)
+            return raw
+        dispatch = (tag.argv,tag.env,tag.stdin,tag.timeout_s,tag.mutating)
+        with patch.object(self.native.os,'pread',side_effect=reading), self.assertRaises(ValueError):
+            self.life.require_dispatch_unchanged(tag,dispatch)
+        self.assertEqual(changed,[True])
+
+    def test_loaded_receipt_set_requires_private_file_modes(self):
+        for suffix in ['stdout','stderr','journal']:
+            with self.subTest(suffix=suffix):
+                calls, observer = self.image_import_double(True)
+                with patch.object(self.life,'observe',side_effect=observer): self.life.import_application_images()
+                target = (self.store.journal if suffix == 'journal' else
+                          self.store.path/(self.life.loaded_kil_stdout_name.removesuffix('.stdout')+'.'+suffix))
+                target.chmod(0o644)
+                try:
+                    with self.assertRaises(ValueError): self.life.require_loaded_kil_source()
+                finally: target.chmod(0o600)
+
+    def test_modern_envoy_only_known_index_media_variants_are_accepted(self):
+        for media in ['application/vnd.oci.image.index.v1+json','application/vnd.docker.distribution.manifest.list.v2+json']:
+            with self.subTest(media=media):
+                def mutate(value,image):
+                    if image.role == 'envoy': value['Descriptor']['mediaType'] = media
+                _, observer = self.image_import_double(True,mutate=mutate)
+                try:
+                    with patch.object(self.life,'observe',side_effect=observer): self.life.import_application_images()
+                except ValueError as error: self.fail('pinned target with valid index representation must import: '+str(error))
+
+    def test_foreign_or_ambiguous_loaded_ids_grant_no_tag_or_kind_load(self):
+        kil, envoy = self.native.ACCEPTED_IMAGES
+        for payload in [b'',b'Loaded image ID: sha256:'+b'a'*64+b'\n',
+                        ('Loaded image ID: '+envoy.config_digest+'\n').encode(),
+                        ('Loaded image ID: '+kil.target_digest+'\nLoaded image ID: '+kil.config_digest+'\n').encode(),
+                        ('Loaded image ID: '+kil.target_digest+'\r\n').encode()]:
+            with self.subTest(payload=payload):
+                calls, observer = self.image_import_double(True,payload)
+                with patch.object(self.life,'observe',side_effect=observer), self.assertRaises(ValueError): self.life.import_application_images()
+                self.assertFalse(any(row.argv[:2] in [('docker','tag'),('kind','load')] for row in calls))
+
+    def test_modern_inspect_requires_exact_descriptor_identity_and_known_digests(self):
+        for fault in ['id','missing-descriptor','digest','media-type','size-bool','false-repo-digest','mismatched-id','envoy-manifest','envoy-false-digest']:
+            with self.subTest(fault=fault):
+                def mutate(value,image):
+                    if fault.startswith('envoy-'):
+                        if image.role == 'envoy':
+                            if fault == 'envoy-manifest': value['Descriptor']['mediaType'] = 'application/vnd.oci.image.manifest.v1+json'
+                            else: value['RepoDigests'] = ['envoyproxy/envoy@sha256:'+'a'*64]
+                        return
+                    if image.role != 'kil': return
+                    if fault == 'id': value['Id'] = 'sha256:'+'a'*64
+                    elif fault == 'missing-descriptor': del value['Descriptor']
+                    elif fault == 'digest': value['Descriptor']['digest'] = 'sha256:'+'a'*64
+                    elif fault == 'media-type': value['Descriptor']['mediaType'] = 'other'
+                    elif fault == 'size-bool': value['Descriptor']['size'] = True
+                    elif fault == 'false-repo-digest': value['RepoDigests'] = ['kil.local/kil-v3b2@sha256:'+'a'*64]
+                    else: value['Id'] = image.config_digest
+                calls, observer = self.image_import_double(True,mutate=mutate)
+                with patch.object(self.life,'observe',side_effect=observer), self.assertRaises(ValueError): self.life.import_application_images()
+                self.assertFalse(any(row.argv[:2] == ('kind','load') for row in calls))
+
+    def test_full_modern_host_store_preserves_strict_node_config_alias_proof(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        accepted = {row.role:row for row in self.native.ACCEPTED_IMAGES}
+        def modern(command):
+            result = original(command)
+            if command.argv[:2] == ('docker','load'):
+                raw = ('Loaded image ID: '+accepted['kil'].target_digest+'\n').encode()
+                return CommandResult(0,raw.decode(),'',raw,b'')
+            if command.argv[:3] == ('docker','image','inspect'):
+                image = next(row for row in accepted.values() if row.requested_image == command.argv[3])
+                value = json.loads(result.stdout_bytes)[0]; value['Id'] = image.target_digest
+                value['Descriptor'] = {'digest':image.target_digest,'size':500,
+                    'mediaType':'application/vnd.oci.image.manifest.v1+json' if image.role == 'kil' else
+                                'application/vnd.docker.distribution.manifest.list.v2+json'}
+                if image.role == 'envoy': value['RepoDigests'] = [image.requested_image.removeprefix('docker.io/')]
+                raw = canonical([value]); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect = modern
+        report = self.execute_ssh_double()
+        self.assertEqual(report['status'],'complete',report['error'])
+        self.assertTrue(report['owned_teardown']); self.assertEqual(report['request_intent_count'],0)
+        self.assertEqual(set(self.life.aliases),{'kil','envoy'})
+
+    def test_cleanup_refusal_retains_cause_chain_and_held_descriptor_diagnostics(self):
+        self.full_fake_runner()
+        def refusing():
+            try: raise ValueError('specific-test-owned-removed-directory-mismatch')
+            except ValueError as error: raise ValueError('ssh_delete_transition_refused') from error
+        with patch.object(self.life.ssh,'begin_deleted',side_effect=refusing): report = self.execute_ssh_double()
+        self.assertFalse(report['owned_teardown'])
+        target = self.store.path/'cleanup-refusal.json'
+        self.assertTrue(target.exists(),'cleanup refusal diagnostics were not retained')
+        value = json.loads(target.read_bytes())
+        self.assertIn('specific-test-owned-removed-directory-mismatch',str(value['exception_chain']))
+        self.assertEqual(value['instance_directory']['entries'],[])
+        self.assertEqual(value['instance_file']['identity']['nlink'],0)
+        self.assertEqual(value['instance_file']['sha256'],sha256(self.life.ssh.instance.data).hexdigest())
 
     def test_successful_start_malformed_ssh_dispatches_no_endpoint_or_kind_commands(self):
         self.full_fake_runner(); original = self.runner.run.side_effect

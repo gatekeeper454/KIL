@@ -280,6 +280,21 @@ class SSHTests(unittest.TestCase):
         self.colima.write_bytes(b''); self.instance.write_bytes(self.instance.read_bytes().replace(b'54321',b'54322'))
         with self.assertRaises(ValueError): controls.begin_stopped()
 
+    def test_native_delete_rewrites_same_stopped_empty_inode_inside_transition_only(self):
+        controls = self.bound(); self.colima.write_bytes(b''); controls.begin_stopped(); controls.finish_stopped()
+        original = controls.colima.identity
+        self.instance.unlink(); self.instance.parent.rmdir(); self.colima.write_bytes(b'')
+        try:
+            controls.begin_deleted(); controls.finish_deleted(); controls.guard()
+        except ValueError as error:
+            self.fail('native delete same-empty-inode rewrite must be freshly bound: '+str(error))
+        self.assertTrue(controls.proof()['colima']['present'])
+        self.assertEqual(controls.colima.identity[:6],original[:6])
+        self.assertEqual(controls.colima.data,b'')
+        self.assertEqual(controls.colima.identity[6:],(self.colima.stat().st_mtime_ns,self.colima.stat().st_ctime_ns))
+        self.colima.write_bytes(b'')
+        with self.assertRaises(ValueError): controls.guard()
+
     def test_deleted_native_colima_removal_requires_unchanged_unlinked_descriptor(self):
         controls = self.bound(); self.colima.write_bytes(b''); controls.begin_stopped(); controls.finish_stopped()
         self.instance.unlink(); self.instance.parent.rmdir(); self.colima.unlink()

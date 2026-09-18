@@ -25046,3 +25046,82 @@ No extra permission gate. Platform provenance remains unverified/full Kind-Calic
 acceptance false/prior local Envoy acceptance unchanged.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T449 — 2026-09-17, authorized recovery complete; Kind live; image/delete compatibility fixed
+
+**Input:** Continuing under T448's explicit fix/recover/restart authorization
+through completion of the existing selected HF test, without additional planning
+or per-operation approval questions.
+
+**Interpretation:** Recover only the latest owned residual, continue fresh
+request-free setup, repair concrete producer compatibility failures while preserving
+immutable failed evidence and accepted image/ownership/strict-controller contracts.
+
+**Decision status:** CONFIRMED private r04b449f10783d619 stopped with one dispatch,
+returncode0/certainty returned/observed Stopped/foreign_preserved=true/final closure
+complete. Root independent read-only verification passed36 recovery files and seal
+`71375b8e5da8cfb06d334aff2a38acb6efbd7e6c2cb6507e830eaef35b731fee`.
+Accepted recovery/helper source untouched; continuation wrapper was independently
+reviewed at SHA8d75242f922dad09bc85289aa639b64f7c0bfef611c8a4c77c800afb514171b5.
+Actual final result `/private/tmp/kil-hf-continue-stop-final.json`; sealed new evidence
+`.tools/hf-recovery-private/2026-09-17/continue-stop-04b449f10783d619849e4ff938accf10681ea041b55c29283c65f0fe22fe2032`.
+
+CONFIRMED fresh rehearsal at source0a4c6533241721eb91906878de0f69885d725c20:
+run v3b2-2b2837fc0cd5fba51e13c1de103102ba97bb257528c1d618e379ff1d594d1879,
+runtime /Users/mistorm/.kil-hf/r2b2837fc0cd5fba5. Docker PATH fix worked live and
+Kind cluster creation/incarnation binding passed. First failure command41 Docker
+tag used config f21285be… even though command33 Docker load returned the accepted
+target45a167d7…; server reported no such config-ID image. Receipt verified148 files/
+627144 bytes/seal0889b971c934bcfd4b25c2156ffa9781b678915283d9f99a82eb7b5345142476.
+Request intents/attempts0; foreign global state independently unchanged; final
+wrapper closure complete. Status inconclusive_at_cluster_bound. Native Kind delete,
+Colima stop and Colima delete returned0; harness cluster_removed=true but refused
+the SSH deletion transition, so its owned_teardown remains false. Root separately
+verified exact runtime root identity, profile/instance/disk absence and complete
+private inventory[] via one read-only native command; this does not retroactively
+accept the original held-descriptor teardown proof. No new stop was needed.
+
+**Rationale:** Docker containerd image store reports loaded manifest/index IDs
+rather than legacy config IDs. Exploratory import now selects only the exact
+accepted config/target ID from one successful retained Docker load, rechecks its
+durable zero terminal/checksum/bytes before the consuming tag dispatch, and binds
+inspection to the accepted descriptor digest and supported manifest/index media
+types. Closed accepted Envoy familiar/canonical RepoDigest spellings are normalized
+only for host Docker metadata; requested images and strict node CRI alias/config
+proof remain unchanged. No accepted image/archive/manifest repin or provenance
+audit. Moby official containerd image inspection implementation corroborated this
+format behavior; actual live loaded target is independently retained.
+
+The deletion refusal was isolated from sealed stopped SSH proof versus current
+native-deleted empty file: same dev16777232/inode617100477/mode33188/uid501/link1/
+size0/hash empty, timestamps1789700081776891642→1789700083568146042 during delete.
+Pinned native Lima delete on a newly owned stopped /private/tmp skeleton (no VM,
+PID/socket/disk ever existed) independently preserved the instance-file bytes/
+identity while unlinking it and left the held empty directory's original F_GETPATH.
+Probe `/private/tmp/kil-lima-delete-descriptor-probe.json`. Controlled successful
+native deletion can now freshly bind exactly the same owned empty Colima inode
+after this timestamp rewrite; nonempty/new inode/mode/type/symlink/outside-bracket
+drift still refuses. Removed-instance/unlinked-file/closed ancestor proofs remain
+strict. Optional bounded refusal diagnostics retain exception causes and held-fd
+observations without granting authority.
+
+**Validation:** Focused pre-closure-correction matrix worker29/30.820s and root29/33.785s PASS; full rehearsal/action doubles root2/19.315s PASS after tag ordering correction. Final complete three-file load proof correction reproduced late stdout/stderr/journal and mode drift RED, then worker8 affected tests/2.034s PASS; root final4 tests including full modern integration/8.122s PASS; independent final3/0.593s PASS and both original late-drift counterexamples refuse. Final bounded independent quality PASS; git diff --check clean. No final-revision broad-matrix pass is claimed. Frozen native SHA256 b68825c1df5c85cdd31bd6e0ab570225c2db0c7ed113be09b2d044067375ced9; SSH helper41a54e7c9b99e183acbc54d10c4c42d8cdfc8f894e1c68fd111f067cf2c0dda7; native tests e73f8a3129dd65c58a376c16f0fdc3793600dbedcb0e60de303b5fc99124639f; SSH tests1c990342ba8bab20bf7a70ca458ddaaab6a54c9fcb6acb6c1faa8f55a3ae9228. All tests bytecode disabled/fatal ResourceWarning. The final consuming tag guard checks complete held stdout/stderr/journal owned regular0600/single-link/bounded bytes and full named/fd metadata after all other dispatch guards; all descriptors close via ExitStack.
+
+**Affected artifacts:** Only exploratory native/SSH helpers and their two tests,
+this exact lineage append/reader, new immutable per-attempt receipts and temporary
+read-only recovery/probe verification outputs. IO PATH repair unchanged. No old
+runtime/receipt mutation, strict-controller/deploy/accepted recovery/helper change,
+install, worktree/branch switch, merge/push or broad audit.
+
+**Unresolved questions:** Actual subsequent request-free readiness/HF result and
+owned teardown. No HF has been executed in either prior live attempt. Platform
+provenance remains unverified/full Kind-Calico acceptance false; prior local Envoy
+evidence unchanged.
+
+**Next gate:** Root fresh source/input/exclusion checks and fresh request-free
+attempt at the corrected clean source. Continue resolving concrete failures under
+existing T448 authorization; on complete readiness/owned teardown run the fixed
+three-track action, retaining one durable instruction per track and verifying
+actual outcomes/owned teardown. No new planning or permission loop.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).

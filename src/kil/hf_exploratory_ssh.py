@@ -330,6 +330,7 @@ class SSHControls:
 
     def begin_deleted(self):
         if self.state != 'stopped': raise ValueError('ssh_delete_transition_not_stopped')
+        candidate = None
         try:
             self._anchors(removed=True)
             self._removed_instance = self._unlink_proof(self.instance)
@@ -342,12 +343,22 @@ class SSHControls:
                 _absent(self.colima_fd, 'ssh_config')
                 self.colima = _Control(self.colima_fd,'ssh_config',None,None,None)
             else:
-                self._check(self.colima)
+                if self.colima.fd is not None and self.colima.data == b'':
+                    candidate = self._read(self.colima_fd,'ssh_config',0o644)
+                    if (candidate.data != b'' or candidate.identity[:6] != self.colima.identity[:6]
+                            or _identity(os.fstat(self.colima.fd)) != candidate.identity):
+                        raise ValueError('ssh_delete_empty_control_not_same_owned_inode')
+                    self._check(candidate)
+                    self.colima = candidate
+                else:
+                    self._check(self.colima)
             self.instance = _Control(self.lima_fd,'colima-kil-v3-lab',None,None,None)
             self.state = 'deleting'
             self.guard()
         except (OSError, ValueError) as error:
             self.refuse()
+            if candidate is not None and candidate.fd is not None:
+                self._owned.remove(candidate.fd); os.close(candidate.fd)
             raise ValueError('ssh_delete_transition_refused') from error
 
     def finish_deleted(self):

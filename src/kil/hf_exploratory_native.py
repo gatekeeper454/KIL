@@ -4,6 +4,7 @@ Only closed commands are dispatched. Every mutation is a durable one-shot
 attempt, and deletion requires freshly rebound exact owned resources. Raw
 private observations are retained; no publication or strict controller is used.
 """
+from contextlib import ExitStack
 from dataclasses import asdict, replace
 from copy import deepcopy
 from hashlib import sha256
@@ -204,6 +205,7 @@ class ExploratoryLifecycle:
         self.runtime_leftovers_error = None
         self.kind_config_bytes = None
         self.kind_config_identity = None
+        self.loaded_kil_source = self.loaded_kil_stdout = self.loaded_kil_stdout_name = None
 
     def observe(self, command, allow_failure=False, *, _global_inventory=False):
         if type(command) not in (Command, ExploratoryColimaCommand):
@@ -273,6 +275,9 @@ class ExploratoryLifecycle:
             self.ssh.require_absent()
         if dispatch != (command.argv,command.env,command.stdin,command.timeout_s,command.mutating):
             raise ValueError('command_changed_during_native_authorization_or_intent')
+        if command.argv[:2] == ('docker','tag'):
+            if command.argv[2] != self.require_loaded_kil_source():
+                raise ValueError('docker_tag_not_exact_loaded_accepted_source')
 
     def authorize_mutation(self, command):
         """Validate dispatch eligibility without claiming a runner handoff."""
@@ -354,7 +359,8 @@ class ExploratoryLifecycle:
         argv = command.argv
         accepted = {row.role:row for row in ACCEPTED_IMAGES}
         if argv[0]=='docker':
-            allowed = docker_image_import_commands(self.identity,self.inputs.archive,accepted['kil'].config_digest,
+            source = self.require_loaded_kil_source() if argv[:2] == ('docker','tag') else accepted['kil'].config_digest
+            allowed = docker_image_import_commands(self.identity,self.inputs.archive,source,
                 accepted['kil'].requested_image,accepted['envoy'].requested_image)[:3]
             if not any((command.argv,command.env,command.stdin)==(row.argv,row.env,row.stdin) for row in allowed):
                 raise ValueError('docker_mutation_outside_exploratory_table')
@@ -891,21 +897,114 @@ class ExploratoryLifecycle:
         except (KeyError,TypeError,AttributeError,IndexError):
             raise ValueError('deployment_continuity_identity_malformed') from None
 
+    @staticmethod
+    def accepted_loaded_kil_source(raw):
+        kil = next(row for row in ACCEPTED_IMAGES if row.role == 'kil')
+        match = re.fullmatch(rb'Loaded image ID: (sha256:[0-9a-f]{64})\n',raw)
+        if match is None or match[1].decode() not in (kil.config_digest,kil.target_digest):
+            raise ValueError('native_loaded_kil_identity_not_exact_accepted')
+        return match[1].decode()
+
+    def require_loaded_kil_source(self):
+        if self.loaded_kil_stdout is None or self.loaded_kil_stdout_name is None:
+            raise ValueError('native_loaded_kil_binding_changed_or_unavailable')
+        name = self.loaded_kil_stdout_name.removesuffix('.stdout')
+        match = re.fullmatch(r'command-([0-9]{4,})',name)
+        if match is None:
+            raise ValueError('native_loaded_kil_receipt_name_invalid')
+        keys = ('st_dev','st_ino','st_mode','st_uid','st_nlink','st_size','st_mtime_ns','st_ctime_ns')
+        def identity(row):
+            if (row.st_mode != stat.S_IFREG|0o600 or row.st_uid != os.geteuid()
+                    or row.st_nlink != 1 or not 0 <= row.st_size <= 8*1024*1024):
+                raise ValueError('native_loaded_kil_receipt_not_owned_private_regular')
+            return tuple(getattr(row,key) for key in keys)
+        with ExitStack() as owned:
+            receipts = []
+            self.store._bound(b'',1)
+            for suffix in ('.stdout','.stderr'):
+                receipt_name = name+suffix
+                fd = os.open(receipt_name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=self.store._directory)
+                owned.callback(os.close,fd)
+                before = identity(os.fstat(fd))
+                raw = self.private_read(receipt_name)
+                receipts.append((receipt_name,fd,before,raw))
+            if (receipts[0][3] != self.loaded_kil_stdout
+                    or self.accepted_loaded_kil_source(receipts[0][3]) != self.loaded_kil_source):
+                raise ValueError('native_loaded_kil_binding_changed_or_unavailable')
+            sequence = int(match[1])
+            stdout_hash = sha256(self.loaded_kil_stdout).hexdigest()
+            stderr_hash = sha256(receipts[1][3]).hexdigest()
+            if self.command_checksums.get(name) != {'stdout':stdout_hash,'stderr':stderr_hash}:
+                raise ValueError('native_loaded_kil_receipt_checksum_changed')
+            journal_fd = os.open('journal.jsonl',os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=self.store._directory)
+            owned.callback(os.close,journal_fd)
+            journal_identity = identity(os.fstat(journal_fd))
+            journal_raw = self.private_read('journal.jsonl')
+            receipts.append(('journal.jsonl',journal_fd,journal_identity,journal_raw))
+            journal = [decode(line) for line in journal_raw.split(b'\n')[:-1]]
+            intents = [row['details'] for row in journal if row['event']=='command_intent'
+                       and row['details'].get('sequence') == sequence]
+            terminals = [row['details'] for row in journal if row['event']=='command_terminal'
+                         and row['details'].get('sequence') == sequence]
+            expected_intent = {'sequence':sequence,'argv':['docker','load'],'env':dict(self.docker_env),
+                               'mutating':True,'timeout_s':300,'stdin_sha256':sha256(self.inputs.archive).hexdigest()}
+            expected_terminal = {'sequence':sequence,'returncode':0,
+                                 'stdout_sha256':stdout_hash,'stderr_sha256':stderr_hash}
+            if (intents != [expected_intent] or terminals != [expected_terminal]
+                    or type(intents[0]['sequence']) is not int or type(intents[0]['mutating']) is not bool
+                    or type(terminals[0]['sequence']) is not int or type(terminals[0]['returncode']) is not int):
+                raise ValueError('native_loaded_kil_requires_exact_successful_receipt')
+            self.store._bound(b'',1)
+            for receipt_name,fd,before,raw in receipts:
+                if os.pread(fd,len(raw)+1,0) != raw:
+                    raise ValueError('native_loaded_kil_receipt_bytes_changed')
+            for receipt_name,fd,before,raw in receipts:
+                if (identity(os.fstat(fd)) != before
+                        or identity(os.stat(receipt_name,dir_fd=self.store._directory,follow_symlinks=False)) != before):
+                    raise ValueError('native_loaded_kil_receipt_identity_changed')
+            return self.loaded_kil_source
+
     def import_application_images(self):
         accepted = {row.role:row for row in ACCEPTED_IMAGES}
         commands = docker_image_import_commands(self.identity, self.inputs.archive,
             accepted['kil'].config_digest, accepted['kil'].requested_image, accepted['envoy'].requested_image)
-        for command in commands[:3]:
-            self.observe(command)
+        loaded = self.observe(commands[0])
+        source = self.accepted_loaded_kil_source(loaded.stdout_bytes)
+        name = 'command-%04d.stdout'%self.sequence
+        if self.private_read(name) != loaded.stdout_bytes:
+            raise ValueError('native_loaded_kil_receipt_changed')
+        self.loaded_kil_source, self.loaded_kil_stdout, self.loaded_kil_stdout_name = source, loaded.stdout_bytes, name
+        commands = docker_image_import_commands(self.identity, self.inputs.archive,
+            source, accepted['kil'].requested_image, accepted['envoy'].requested_image)
+        for command in commands[1:3]: self.observe(command)
         for command, image in zip(commands[3:], ACCEPTED_IMAGES, strict=True):
             raw = self.observe(command).stdout_bytes
             rows = decode(raw, maximum=1048576)
-            if (type(rows) is not list or len(rows)!=1 or type(rows[0]) is not dict
-                    or rows[0].get('Id') != image.config_digest
-                    or type(rows[0].get('RepoTags')) is not list or type(rows[0].get('RepoDigests')) is not list
-                    or (image.requested_image not in rows[0]['RepoTags'] if image.role=='kil'
-                        else image.requested_image not in rows[0]['RepoDigests'])):
-                raise ValueError('native_application_image_config_not_accepted')
+            if type(rows) is not list or len(rows)!=1 or type(rows[0]) is not dict:
+                raise ValueError('native_application_image_identity_not_accepted')
+            value = rows[0]
+            identifier = value.get('Id')
+            modern = identifier == image.target_digest
+            descriptor = value.get('Descriptor')
+            expected_types = (('application/vnd.oci.image.manifest.v1+json',) if image.role == 'kil'
+                              else ('application/vnd.oci.image.index.v1+json',
+                                    'application/vnd.docker.distribution.manifest.list.v2+json'))
+            if ((modern or descriptor is not None) and (type(descriptor) is not dict
+                    or descriptor.get('digest') != image.target_digest
+                    or descriptor.get('mediaType') not in expected_types
+                    or type(descriptor.get('size')) is not int or not 0 < descriptor['size'] <= 8*1024*1024)):
+                raise ValueError('native_application_image_descriptor_not_accepted')
+            if (identifier not in (image.config_digest,image.target_digest)
+                    or (image.role == 'kil' and identifier != self.require_loaded_kil_source())):
+                raise ValueError('native_application_image_identity_not_accepted')
+            tags, digests = value.get('RepoTags'), value.get('RepoDigests')
+            expected_digests = ({'kil.local/kil-v3b2@'+image.target_digest} if image.role == 'kil'
+                                else {image.requested_image,image.requested_image.removeprefix('docker.io/')})
+            if (type(tags) is not list or type(digests) is not list
+                    or any(type(row) is not str for row in tags+digests)
+                    or len(set(digests)) != len(digests) or not set(digests) <= expected_digests
+                    or (tags != [image.requested_image] if image.role == 'kil' else tags != [] or not digests)):
+                raise ValueError('native_application_image_references_not_accepted')
         for image in ACCEPTED_IMAGES:
             self.observe(kind_load_command(self.identity, image.requested_image))
 
@@ -1361,6 +1460,52 @@ class ExploratoryLifecycle:
         except Exception as error:
             self.manual_recovery = not self.profile_delete_completed
             self.error = ('%s; cleanup: %s' % (self.error or '', error))[:4096]
+            try:
+                chain = self.retain_cleanup_refusal(error)
+                self.error = (self.error+'; causes: '+' -> '.join(row['message'] for row in chain))[:4096]
+            except Exception as diagnostic_error:
+                self.error = (self.error+'; cleanup diagnostics: '+str(diagnostic_error))[:4096]
+
+    def retain_cleanup_refusal(self, error):
+        """Diagnostic observations grant no adoption or deletion authority."""
+        keys = ('device','inode','mode','uid','nlink','size','mtime_ns','ctime_ns')
+        def identity(row):
+            return dict(zip(keys,(row.st_dev,row.st_ino,row.st_mode,row.st_uid,row.st_nlink,
+                                  row.st_size,row.st_mtime_ns,row.st_ctime_ns)))
+        chain, current, seen = [], error, set()
+        while current is not None and len(chain)<8 and id(current) not in seen:
+            seen.add(id(current)); chain.append({'type':type(current).__name__,'message':str(current)[:1024]})
+            current = current.__cause__ if current.__cause__ is not None else current.__context__
+        result = {'schema':'kil.hf-cleanup-refusal.v1','run_digest':self.run_digest,
+                  'exception_chain':chain,'profile_stop_succeeded':self.profile_stop_succeeded,
+                  'profile_delete_succeeded':self.profile_delete_succeeded,
+                  'ssh_state':self.ssh.state,'instance_directory':{},'instance_file':{}}
+        try:
+            if self.ssh.instance_anchor is not None:
+                fd, expected = self.ssh.instance_anchor
+                result['instance_directory'] = {'identity':identity(os.fstat(fd)),
+                                               'bound_identity':list(expected),'entries':os.listdir(fd)}
+                if platform.system() == 'Darwin':
+                    import fcntl
+                    result['instance_directory']['retained_path'] = os.fsdecode(fcntl.fcntl(fd,50,bytes(1024)).split(b'\0',1)[0])
+        except Exception as observation_error:
+            result['instance_directory']['error'] = str(observation_error)[:1024]
+        try:
+            control = self.ssh.instance
+            if control is None or control.fd is None:
+                control = None if self.ssh._removed_instance is None else self.ssh._removed_instance[0]
+            if control is not None and control.fd in self.ssh._owned:
+                before = os.fstat(control.fd)
+                value = {'identity':identity(before),'bound_identity':dict(zip(keys,control.identity))}
+                result['instance_file'] = value
+                if stat.S_ISREG(before.st_mode) and 0 <= before.st_size <= 16*1024:
+                    raw = self.ssh._bytes(control.fd,before.st_size)
+                    value.update({'sha256':sha256(raw).hexdigest(),'byte_count':len(raw),
+                                  'identity_after':identity(os.fstat(control.fd))})
+        except Exception as observation_error:
+            result['instance_file']['error'] = str(observation_error)[:1024]
+        self.store.write('cleanup-refusal.json',canonical(result))
+        return chain
 
     def private_inventory_absent(self):
         self._ssh_inventory_active = True
