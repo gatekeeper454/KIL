@@ -18,7 +18,7 @@ import time
 from kil import hf_exploratory_case as case
 from kil.hf_exploratory_inputs import read_regular, verify_bytes, TOOL_VERSION_ARGUMENTS
 from kil.hf_exploratory_io import capture_process
-from kil.hf_exploratory_runtime import RuntimeAuthority, ExploratoryColimaCommand
+from kil.hf_exploratory_runtime import RuntimeAuthority, ExploratoryColimaCommand, ExploratoryEnvoyPlatformCommand
 from kil.hf_exploratory_ssh import SSHControls
 from kil.hf_exploratory_profile import ProfilePaths, creation_binding, unchanged, absent
 from kil.hf_exploratory_evidence import snapshot_runtime, observe_runtime_leftovers
@@ -206,13 +206,14 @@ class ExploratoryLifecycle:
         self.kind_config_bytes = None
         self.kind_config_identity = None
         self.loaded_kil_source = self.loaded_kil_stdout = self.loaded_kil_stdout_name = None
+        self.envoy_platform_pull_ready = False
 
     def observe(self, command, allow_failure=False, *, _global_inventory=False):
-        if type(command) not in (Command, ExploratoryColimaCommand):
+        if type(command) not in (Command, ExploratoryColimaCommand, ExploratoryEnvoyPlatformCommand):
             raise ValueError('closed_command_required')
         command.__post_init__()
         self.runtime.guard()
-        if type(command) is ExploratoryColimaCommand and command.authority is not self.runtime:
+        if type(command) in (ExploratoryColimaCommand,ExploratoryEnvoyPlatformCommand) and command.authority is not self.runtime:
             raise ValueError('foreign_colima_runtime_authority')
         if _global_inventory:
             if (type(command) is not Command or command.argv != ('colima','list','--json')
@@ -258,10 +259,10 @@ class ExploratoryLifecycle:
 
     def require_dispatch_unchanged(self, command, dispatch):
         """Join fresh grammar/authority to the authorized durable intent bytes."""
-        if type(command) not in (Command,ExploratoryColimaCommand):
+        if type(command) not in (Command,ExploratoryColimaCommand,ExploratoryEnvoyPlatformCommand):
             raise ValueError('closed_command_required')
         command.__post_init__()
-        if type(command) is ExploratoryColimaCommand and command.authority is not self.runtime:
+        if type(command) in (ExploratoryColimaCommand,ExploratoryEnvoyPlatformCommand) and command.authority is not self.runtime:
             raise ValueError('foreign_colima_runtime_authority')
         self.runtime.guard()
         if self.ssh.state in ('binding','stopping','deleting') and (
@@ -275,6 +276,8 @@ class ExploratoryLifecycle:
             self.ssh.require_absent()
         if dispatch != (command.argv,command.env,command.stdin,command.timeout_s,command.mutating):
             raise ValueError('command_changed_during_native_authorization_or_intent')
+        if type(command) is ExploratoryEnvoyPlatformCommand:
+            command.__post_init__()
         if command.argv[:2] == ('docker','tag'):
             if command.argv[2] != self.require_loaded_kil_source():
                 raise ValueError('docker_tag_not_exact_loaded_accepted_source')
@@ -358,7 +361,11 @@ class ExploratoryLifecycle:
         """The exploratory table is narrower than the reusable strict grammar."""
         argv = command.argv
         accepted = {row.role:row for row in ACCEPTED_IMAGES}
-        if argv[0]=='docker':
+        if type(command) is ExploratoryEnvoyPlatformCommand:
+            command.__post_init__()
+            if command.authority is not self.runtime or not self.envoy_platform_pull_ready:
+                raise ValueError('envoy_platform_pull_requires_initial_accepted_host_proof')
+        elif argv[0]=='docker':
             source = self.require_loaded_kil_source() if argv[:2] == ('docker','tag') else accepted['kil'].config_digest
             allowed = docker_image_import_commands(self.identity,self.inputs.archive,source,
                 accepted['kil'].requested_image,accepted['envoy'].requested_image)[:3]
@@ -977,37 +984,47 @@ class ExploratoryLifecycle:
         commands = docker_image_import_commands(self.identity, self.inputs.archive,
             source, accepted['kil'].requested_image, accepted['envoy'].requested_image)
         for command in commands[1:3]: self.observe(command)
+        envoy_modern = False
         for command, image in zip(commands[3:], ACCEPTED_IMAGES, strict=True):
-            raw = self.observe(command).stdout_bytes
-            rows = decode(raw, maximum=1048576)
-            if type(rows) is not list or len(rows)!=1 or type(rows[0]) is not dict:
-                raise ValueError('native_application_image_identity_not_accepted')
-            value = rows[0]
-            identifier = value.get('Id')
-            modern = identifier == image.target_digest
-            descriptor = value.get('Descriptor')
-            expected_types = (('application/vnd.oci.image.manifest.v1+json',) if image.role == 'kil'
-                              else ('application/vnd.oci.image.index.v1+json',
-                                    'application/vnd.docker.distribution.manifest.list.v2+json'))
-            if ((modern or descriptor is not None) and (type(descriptor) is not dict
-                    or descriptor.get('digest') != image.target_digest
-                    or descriptor.get('mediaType') not in expected_types
-                    or type(descriptor.get('size')) is not int or not 0 < descriptor['size'] <= 8*1024*1024)):
-                raise ValueError('native_application_image_descriptor_not_accepted')
-            if (identifier not in (image.config_digest,image.target_digest)
-                    or (image.role == 'kil' and identifier != self.require_loaded_kil_source())):
-                raise ValueError('native_application_image_identity_not_accepted')
-            tags, digests = value.get('RepoTags'), value.get('RepoDigests')
-            expected_digests = ({'kil.local/kil-v3b2@'+image.target_digest} if image.role == 'kil'
-                                else {image.requested_image,image.requested_image.removeprefix('docker.io/')})
-            if (type(tags) is not list or type(digests) is not list
-                    or any(type(row) is not str for row in tags+digests)
-                    or len(set(digests)) != len(digests) or not set(digests) <= expected_digests
-                    or (tags != [image.requested_image] if image.role == 'kil' else
-                        tags not in ([],[image.requested_image],[image.requested_image.removeprefix('docker.io/')]) or not digests)):
-                raise ValueError('native_application_image_references_not_accepted')
+            modern = self.require_host_application_image(self.observe(command).stdout_bytes,image)
+            if image.role == 'envoy': envoy_modern = modern
+        if envoy_modern:
+            self.envoy_platform_pull_ready = True
+            self.observe(ExploratoryEnvoyPlatformCommand(self.runtime))
+            if not self.require_host_application_image(self.observe(commands[4]).stdout_bytes,accepted['envoy']):
+                raise ValueError('envoy_platform_pull_changed_modern_index_identity')
         for image in ACCEPTED_IMAGES:
             self.observe(kind_load_command(self.identity, image.requested_image))
+
+    def require_host_application_image(self, raw, image):
+        rows = decode(raw, maximum=1048576)
+        if type(rows) is not list or len(rows)!=1 or type(rows[0]) is not dict:
+            raise ValueError('native_application_image_identity_not_accepted')
+        value = rows[0]
+        identifier = value.get('Id')
+        modern = identifier == image.target_digest
+        descriptor = value.get('Descriptor')
+        expected_types = (('application/vnd.oci.image.manifest.v1+json',) if image.role == 'kil'
+                          else ('application/vnd.oci.image.index.v1+json',
+                                'application/vnd.docker.distribution.manifest.list.v2+json'))
+        if ((modern or descriptor is not None) and (type(descriptor) is not dict
+                or descriptor.get('digest') != image.target_digest
+                or descriptor.get('mediaType') not in expected_types
+                or type(descriptor.get('size')) is not int or not 0 < descriptor['size'] <= 8*1024*1024)):
+            raise ValueError('native_application_image_descriptor_not_accepted')
+        if (identifier not in (image.config_digest,image.target_digest)
+                or (image.role == 'kil' and identifier != self.require_loaded_kil_source())):
+            raise ValueError('native_application_image_identity_not_accepted')
+        tags, digests = value.get('RepoTags'), value.get('RepoDigests')
+        expected_digests = ({'kil.local/kil-v3b2@'+image.target_digest} if image.role == 'kil'
+                            else {image.requested_image,image.requested_image.removeprefix('docker.io/')})
+        if (type(tags) is not list or type(digests) is not list
+                or any(type(row) is not str for row in tags+digests)
+                or len(set(digests)) != len(digests) or not set(digests) <= expected_digests
+                or (tags != [image.requested_image] if image.role == 'kil' else
+                    tags not in ([],[image.requested_image],[image.requested_image.removeprefix('docker.io/')]) or not digests)):
+            raise ValueError('native_application_image_references_not_accepted')
+        return modern
 
     def prove_node_application_aliases(self):
         from kil.v3b2_node_image_references import ExpectedNodeImage, node_image_inspect_argv, validate_node_image_references

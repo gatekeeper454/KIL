@@ -59,6 +59,32 @@ class IOTests(unittest.TestCase):
         self.addCleanup(authority.close)
         return authority
 
+    def test_envoy_platform_command_uses_authenticated_docker_and_owned_environment(self):
+        from kil import hf_exploratory_runtime as runtime
+        command_type = getattr(runtime,'ExploratoryEnvoyPlatformCommand',None)
+        self.assertIsNotNone(command_type,'finite platform pull type is missing')
+        authority = self.runtime_authority(); command = command_type(authority)
+        inputs, colima, verify = self.dependency_fixture()
+        with patch.dict(os.environ,{'PATH':str(colima.parent)}), patch.object(self.io,'verify_bytes',side_effect=verify), \
+                patch.object(self.io,'capture_process') as capture:
+            self.io.BoundedRunner(Path.cwd(),inputs).run(command)
+        argv,env,stdin,timeout,_,_ = capture.call_args.args
+        self.assertEqual(argv,(str(inputs.tools/'docker'),*command.argv[1:]))
+        self.assertEqual({key:env[key] for key,_ in command.env},dict(command.env))
+        self.assertEqual(env['PATH'],str(colima.parent)); self.assertIsNone(stdin); self.assertEqual(timeout,300)
+
+    def test_envoy_platform_command_recloses_runtime_after_docker_authentication(self):
+        from kil.hf_exploratory_runtime import ExploratoryEnvoyPlatformCommand
+        authority = self.runtime_authority(); command = ExploratoryEnvoyPlatformCommand(authority)
+        inputs, _, verify = self.dependency_fixture()
+        def changing(data,digest,size):
+            result = verify(data,digest,size)
+            if data == b'inert fixture: docker': object.__setattr__(authority,'_digest','b'*64)
+            return result
+        with patch.object(self.io,'verify_bytes',side_effect=changing), patch.object(self.io,'capture_process') as capture:
+            with self.assertRaises(ValueError): self.io.BoundedRunner(Path.cwd(),inputs).run(command)
+        capture.assert_not_called()
+
     def test_scoped_start_uses_accepted_dependency_path_and_original_colima(self):
         authority = self.runtime_authority()
         inputs, colima, verify = self.dependency_fixture()

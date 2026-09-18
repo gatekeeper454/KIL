@@ -853,6 +853,7 @@ class NativeTests(unittest.TestCase):
                 tag = next(row for row in calls if row.argv[:2] == ('docker','tag'))
                 self.assertEqual(tag.argv[2],image.target_digest if modern else image.config_digest)
                 self.life.require_allowed_other_mutation(tag)
+                self.assertEqual(len([row for row in calls if row.argv[:3] == ('docker','pull','--platform')]),int(modern))
                 self.assertEqual(len([row for row in calls if row.argv[:2] == ('kind','load')]),2)
                 raw = self.life.private_read(self.life.loaded_kil_stdout_name)
                 self.store.path.joinpath(self.life.loaded_kil_stdout_name).write_bytes(raw.replace(b'Loaded',b'Other '))
@@ -961,6 +962,65 @@ class NativeTests(unittest.TestCase):
                     else:
                         with self.assertRaises(ValueError): self.life.import_application_images()
                         self.assertFalse(any(row.argv[:2] == ('kind','load') for row in calls))
+
+    def test_envoy_amd64_pull_only_after_initial_inspection_and_fresh_before_kind_load(self):
+        calls, observer = self.image_import_double(True)
+        with patch.object(self.life,'observe',side_effect=observer): self.life.import_application_images()
+        image = next(row for row in self.native.ACCEPTED_IMAGES if row.role == 'envoy')
+        extra = ('docker','pull','--platform','linux/amd64',image.requested_image)
+        self.assertEqual(sum(row.argv == extra for row in calls),1,'missing finite second-platform pull')
+        pulled = next(index for index,row in enumerate(calls) if row.argv == extra)
+        inspections = [index for index,row in enumerate(calls) if row.argv == ('docker','image','inspect',image.requested_image)]
+        self.assertEqual(len(inspections),2)
+        self.assertLess(inspections[0],pulled); self.assertLess(pulled,inspections[1])
+        self.assertLess(inspections[1],next(index for index,row in enumerate(calls) if row.argv[:2] == ('kind','load')))
+
+    def test_envoy_second_platform_inspection_drift_refuses_kind_load(self):
+        inspected = []
+        def mutate(value,image):
+            if image.role == 'envoy':
+                inspected.append(True)
+                if len(inspected) == 2: value['Descriptor']['digest'] = 'sha256:'+'a'*64
+        calls, observer = self.image_import_double(True,mutate=mutate)
+        with patch.object(self.life,'observe',side_effect=observer), self.assertRaises(ValueError): self.life.import_application_images()
+        self.assertFalse(any(row.argv[:2] == ('kind','load') for row in calls))
+
+    def test_envoy_modern_index_cannot_fall_back_to_legacy_after_platform_pull(self):
+        inspected = []
+        def mutate(value,image):
+            if image.role == 'envoy':
+                inspected.append(True)
+                if len(inspected) == 2: value['Id'] = image.config_digest
+        calls, observer = self.image_import_double(True,mutate=mutate)
+        with patch.object(self.life,'observe',side_effect=observer), self.assertRaises(ValueError): self.life.import_application_images()
+        self.assertFalse(any(row.argv[:2] == ('kind','load') for row in calls))
+
+    def test_envoy_platform_pull_before_initial_host_proof_is_not_authorized(self):
+        runtime = importlib.import_module('kil.hf_exploratory_runtime')
+        command_type = getattr(runtime,'ExploratoryEnvoyPlatformCommand',None)
+        self.assertIsNotNone(command_type,'finite platform pull type is missing')
+        with self.assertRaises(ValueError): self.life.require_allowed_other_mutation(command_type(self.life.runtime))
+
+    def test_failed_envoy_platform_pull_dispatches_no_kind_load_and_owned_teardown(self):
+        self.full_fake_runner(); original = self.runner.run.side_effect
+        image = next(row for row in self.native.ACCEPTED_IMAGES if row.role == 'envoy')
+        extra = ('docker','pull','--platform','linux/amd64',image.requested_image)
+        def failing(command):
+            if command.argv == extra: return CommandResult(1,'','missing child',b'',b'missing child')
+            result = original(command)
+            if command.argv == ('docker','image','inspect',image.requested_image):
+                value = json.loads(result.stdout_bytes)[0]; value['Id'] = image.target_digest
+                value['Descriptor'] = {'digest':image.target_digest,'size':493,
+                                       'mediaType':'application/vnd.oci.image.index.v1+json'}
+                raw = canonical([value]); return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect = failing
+        report = self.execute_ssh_double()
+        self.assertEqual(report['status'],'inconclusive'); self.assertTrue(report['owned_teardown'],report['error'])
+        self.assertIn('native_command_failed_1',report['error'])
+        self.assertEqual(report['request_intent_count'],0)
+        self.assertFalse(any(call.args[0].argv[:2] == ('kind','load') for call in self.runner.run.call_args_list))
+        self.assertEqual(sum(call.args[0].argv == extra for call in self.runner.run.call_args_list),1)
 
     def test_foreign_or_ambiguous_loaded_ids_grant_no_tag_or_kind_load(self):
         kil, envoy = self.native.ACCEPTED_IMAGES

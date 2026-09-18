@@ -195,8 +195,8 @@ class BoundedRunner:
         self.global_docker_config = os.environ.get('DOCKER_CONFIG', str(passwd_home() / '.docker'))
 
     def run(self, command):
-        from kil.hf_exploratory_runtime import ExploratoryColimaCommand
-        if type(command) not in (Command, ExploratoryColimaCommand):
+        from kil.hf_exploratory_runtime import ExploratoryColimaCommand, ExploratoryEnvoyPlatformCommand
+        if type(command) not in (Command, ExploratoryColimaCommand, ExploratoryEnvoyPlatformCommand):
             raise ValueError('invalid_exploratory_command')
         command.__post_init__()
         dispatch = (command.argv, command.timeout_s, command.stdin, command.env, command.mutating)

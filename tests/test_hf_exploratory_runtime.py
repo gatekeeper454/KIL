@@ -37,6 +37,23 @@ class RuntimeTests(unittest.TestCase):
         self.addCleanup(authority.close)
         return authority
 
+    def test_envoy_platform_command_has_only_fixed_accepted_pull_and_owned_environment(self):
+        from kil.v3b2_accepted_images import ACCEPTED_IMAGES
+        command_type = getattr(self.runtime,'ExploratoryEnvoyPlatformCommand',None)
+        self.assertIsNotNone(command_type,'finite platform pull type is missing')
+        authority = self.authority(); command = command_type(authority)
+        image = next(row for row in ACCEPTED_IMAGES if row.role == 'envoy')
+        self.assertEqual(command.argv,('docker','pull','--platform','linux/amd64',image.requested_image))
+        self.assertEqual(command.env,(('DOCKER_CONFIG',str(authority.docker_config)),
+                                      ('DOCKER_HOST','unix://'+str(authority.colima/'kil-v3-lab/docker.sock'))))
+        self.assertEqual(command.timeout_s,300); self.assertTrue(command.mutating); self.assertIsNone(command.stdin)
+        with self.assertRaises(ValueError): command_type(object())
+        with self.assertRaises(TypeError): command_type(authority,argv=('docker','pull','other'))
+        class Subclass(command_type): pass
+        with self.assertRaises(ValueError): Subclass(authority)
+        authority.close()
+        with self.assertRaises(ValueError): command.__post_init__()
+
     def test_fresh_derived_private_runtime(self):
         authority = self.authority()
         self.assertEqual(authority.path, self.registry / ('r' + self.digest[:16]))

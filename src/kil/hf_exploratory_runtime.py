@@ -465,3 +465,34 @@ class ExploratoryColimaCommand:
                 ('LIMA_HOME', str(self.authority.lima)),
                 ('DOCKER_CONFIG', str(self.authority.docker_config)),
                 ('TMPDIR', str(self.authority.tmp)))
+
+
+@dataclass(frozen=True, slots=True)
+class ExploratoryEnvoyPlatformCommand:
+    """Fetch the missing AMD64 child of the unchanged accepted Envoy index."""
+    authority: RuntimeAuthority
+
+    def __post_init__(self):
+        if type(self) is not ExploratoryEnvoyPlatformCommand or type(self.authority) is not RuntimeAuthority:
+            raise ValueError('invalid_exploratory_envoy_platform_command')
+        self.authority.guard()
+
+    @property
+    def argv(self):
+        from kil.v3b2_accepted_images import ACCEPTED_IMAGES
+        image = next(row for row in ACCEPTED_IMAGES if row.role == 'envoy')
+        return ('docker','pull','--platform','linux/amd64',image.requested_image)
+
+    @property
+    def timeout_s(self): return 300
+
+    @property
+    def mutating(self): return True
+
+    @property
+    def stdin(self): return None
+
+    @property
+    def env(self):
+        return (('DOCKER_CONFIG',str(self.authority.docker_config)),
+                ('DOCKER_HOST','unix://'+str(self.authority.colima/'kil-v3-lab/docker.sock')))
