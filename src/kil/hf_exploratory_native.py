@@ -20,7 +20,7 @@ from kil.hf_exploratory_inputs import read_regular, verify_bytes, TOOL_VERSION_A
 from kil.hf_exploratory_io import capture_process
 from kil.hf_exploratory_runtime import RuntimeAuthority, ExploratoryColimaCommand, ExploratoryEnvoyPlatformCommand, ExploratoryNodeAliasCommand
 from kil.hf_exploratory_ssh import SSHControls
-from kil.hf_exploratory_profile import ProfilePaths, creation_binding, unchanged, absent
+from kil.hf_exploratory_profile import ProfilePaths, creation_binding, unchanged, absent, capture_for_guard
 from kil.hf_exploratory_evidence import snapshot_runtime, observe_runtime_leftovers
 from kil.v3b2_accepted_images import ACCEPTED_IMAGES
 from kil.v3b2_colima_inventory import capture_roster, decode_inventory, require_complete
@@ -450,7 +450,7 @@ class ExploratoryLifecycle:
     def guard_profile(self, stopped=False):
         if self.profile_binding is None:
             raise ValueError('profile_binding_unavailable')
-        observed = capture(self.paths)
+        observed = capture_for_guard(self.paths)
         if unchanged(self.paths.document(), observed, self.profile_binding, stopped=stopped) is not True:
             raise ValueError('owned_profile_changed')
         if stopped and self.ssh.state == 'running':

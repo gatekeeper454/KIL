@@ -2,6 +2,7 @@
 
 The strict no-follow collector and capture/binding schemas remain shared and
 unchanged. Only the instance serializer's single generated DNS alias differs.
+Guard observations can repeat an entire failed metadata read at most five times.
 No commands, recovery, or retained-byte normalization occur here.
 """
 from dataclasses import dataclass
@@ -17,6 +18,20 @@ from kil.v3b2_profile_state import (
     capture, parse_saved, passwd_home as actual_passwd_home, validate_binding,
     validate_capture,
 )
+
+
+def capture_for_guard(paths):
+    """Return only a complete strict capture, bounded against a read-time race.
+
+    No partial capture is retained. Identity, schema, footprint and other errors
+    remain immediate refusals; callers still compare the original binding.
+    """
+    for attempt in range(5):
+        try:
+            return capture(paths)
+        except ProfileStateError as error:
+            if str(error) != 'profile file changed during observation' or attempt == 4:
+                raise
 
 
 @dataclass(frozen=True)

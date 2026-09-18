@@ -63,6 +63,37 @@ class ExploratoryProfileTests(unittest.TestCase):
         self.assertIs(self.module.validate_capture, strict.validate_capture)
         self.assertIs(self.module.validate_binding, strict.validate_binding)
 
+    def test_guard_capture_restarts_entire_observation_after_metadata_race(self):
+        observed = self.create()
+        error = strict.ProfileStateError('profile file changed during observation')
+        with patch.object(self.module, 'capture', side_effect=[error] * 4 + [observed]) as read:
+            self.assertIs(self.module.capture_for_guard(self.paths), observed)
+        self.assertEqual(read.call_count, 5)
+        self.assertEqual(read.call_args_list, [((self.paths,), {})] * 5)
+
+    def test_guard_capture_exhausts_and_never_retries_other_errors(self):
+        error = strict.ProfileStateError('profile file changed during observation')
+        with patch.object(self.module, 'capture', side_effect=error) as read:
+            with self.assertRaisesRegex(strict.ProfileStateError, '^profile file changed during observation$'):
+                self.module.capture_for_guard(self.paths)
+        self.assertEqual(read.call_count, 5)
+        for message in ('profile footprint changed during observation', 'profile symlink is forbidden',
+                        'profile file entry changed during observation', 'profile file size changed'):
+            with patch.object(self.module, 'capture', side_effect=strict.ProfileStateError(message)) as read:
+                with self.assertRaisesRegex(strict.ProfileStateError, message):
+                    self.module.capture_for_guard(self.paths)
+            self.assertEqual(read.call_count, 1)
+
+    def test_guard_retry_does_not_adopt_changed_binding(self):
+        observed = self.create()
+        binding = self.binding(observed)
+        changed = copy.deepcopy(observed)
+        changed['lima_config']['hex'] += b'# changed configuration\n'.hex()
+        error = strict.ProfileStateError('profile file changed during observation')
+        with patch.object(self.module, 'capture', side_effect=[error, changed]):
+            latest = self.module.capture_for_guard(self.paths)
+        self.assertFalse(self.module.unchanged(self.paths.document(), latest, binding))
+
     def test_independent_full_native_fixtures_and_original_hashes(self):
         self.assertEqual(sha256(self.profile).hexdigest(), PROFILE_HASH)
         self.assertEqual(sha256(self.instance).hexdigest(), INSTANCE_HASH)
