@@ -2224,6 +2224,41 @@ class NativeTests(unittest.TestCase):
         self.assertEqual(report['status'],'complete'); self.assertEqual(len(state['attached']),3)
         self.assertEqual(wide,2)
 
+    def test_setup_pending_reads_cover_sixty_one_second_readiness(self):
+        clock = [100.0]; reads = []; sleeps = []
+        def sleep(seconds):
+            sleeps.append(seconds); clock[0] += seconds
+        def ready(deadline):
+            reads.append(clock[0])
+            self.assertEqual(deadline,400.0)
+            if clock[0] < 161.0: raise self.native.ReadPending('validated counts not ready')
+            return 'ready'
+        with patch.object(self.native.time,'monotonic',side_effect=lambda:clock[0]), patch.object(self.native.time,'sleep',side_effect=sleep):
+            budget = self.native.SetupReadinessBudget()
+            self.assertEqual(self.life.read_until(ready,budget=budget),'ready')
+        self.assertGreaterEqual(clock[0],161.0); self.assertLess(clock[0],400.0)
+        self.assertLessEqual(budget.attempts,60); self.assertEqual(len(reads),budget.attempts)
+        self.assertEqual(set(sleeps),{5}); self.assertIsNone(self.life._read_deadline)
+
+    def test_generic_driver_pending_retains_half_second_poll_interval(self):
+        clock = [100.0]; sleeps = []
+        def sleep(seconds): sleeps.append(seconds); clock[0] += seconds
+        def ready(deadline):
+            if clock[0] < 101.0: raise self.native.ReadPending('bound driver still running')
+            return True
+        with patch.object(self.native.time,'monotonic',side_effect=lambda:clock[0]), patch.object(self.native.time,'sleep',side_effect=sleep):
+            self.assertTrue(self.life.read_until(ready,seconds=10,attempts=20))
+        self.assertEqual(sleeps,[.5,.5]); self.assertIsNone(self.life._read_deadline)
+
+    def test_setup_budget_permanent_errors_do_not_sleep_or_retry(self):
+        for error_type in (ValueError,KeyError,TypeError):
+            with self.subTest(error_type=error_type):
+                operation = Mock(side_effect=[error_type('permanent'),True])
+                with patch.object(self.native.time,'sleep') as sleep, self.assertRaises(error_type):
+                    self.life.read_until(operation,budget=self.native.SetupReadinessBudget())
+                self.assertEqual(operation.call_count,1); sleep.assert_not_called()
+                self.assertIsNone(self.life._read_deadline)
+
     def test_setup_readiness_budget_deadline_survives_between_phases(self):
         self.assertTrue(hasattr(self.native,'SetupReadinessBudget'),'shared setup budget missing')
         clock=[100.0]

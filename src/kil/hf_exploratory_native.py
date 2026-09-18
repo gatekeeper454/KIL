@@ -1393,6 +1393,7 @@ class ExploratoryLifecycle:
             raise ValueError('only_explicit_read_pending_may_retry')
         deadline = time.monotonic() + seconds if budget is None else budget.deadline
         last_error = None
+        interval = 5 if budget is not None else .5
         previous_deadline = self._read_deadline
         self._read_deadline = deadline if previous_deadline is None else min(deadline,previous_deadline)
         try:
@@ -1408,8 +1409,8 @@ class ExploratoryLifecycle:
                     return value
                 except retry_errors as error:
                     last_error = error
-                if index + 1 < attempts and time.monotonic() + .5 < deadline:
-                    time.sleep(.5)
+                if index + 1 < attempts and time.monotonic() + interval < deadline:
+                    time.sleep(interval)
             raise ValueError('bounded_readiness_inconclusive: %s' % last_error)
         finally:
             self._read_deadline = previous_deadline
