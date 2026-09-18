@@ -141,6 +141,40 @@ class NodeImageReferencesTest(unittest.TestCase):
         self.assertFalse(validate_node_image_references(**{**args, "node_images":
             replace(args["node_images"], stdout=valid)}).runtime_contract_complete)
 
+    def test_native_dual_size_columns_preserve_exact_raw_commitments(self):
+        args = fixture()
+        legacy = validate_node_image_references(**args)
+        payload = args["node_images"].stdout.replace(b"1.0 MiB true", b"66.8 MiB/66.8 MiB true")
+        node = replace(args["node_images"], stdout=payload)
+        proof = validate_node_image_references(**{**args, "node_images": node})
+        self.assertIs(proof.node_images, node)
+        self.assertEqual(proof.node_images.stdout, payload)
+        self.assertEqual(proof.bindings, legacy.bindings)
+        self.assertNotEqual(proof.observation_sha256[-1], legacy.observation_sha256[-1])
+        committed = json.dumps([node.label, node.argv, node.env, node.returncode,
+                                payload.hex(), node.stderr.hex()], separators=(",", ":")).encode()
+        from hashlib import sha256
+        self.assertEqual(proof.observation_sha256[-1], sha256(committed).hexdigest())
+        for size in (b"0", b"0.0", b"1", b"258.8"):
+            for unit in (b"B", b"KiB", b"MiB", b"GiB", b"TiB", b"PiB", b"EiB"):
+                with self.subTest(size=size, unit=unit):
+                    sized = args["node_images"].stdout.replace(
+                        b"1.0 MiB true", size+b" "+unit+b"/"+size+b" "+unit+b" true")
+                    validate_node_image_references(**{**args, "node_images": replace(node, stdout=sized)})
+
+    def test_native_dual_size_columns_reject_malformed_unequal_or_foreign_units(self):
+        args = fixture()
+        faults = (b"66.8 MiB/66.9 MiB", b"66.8 MiB/66.8 KiB", b"66.8 MB/66.8 MB",
+                  b"66.8 MiB/066.8 MiB", b"066.8 MiB/066.8 MiB", b"+1 MiB/+1 MiB",
+                  b"-1 MiB/-1 MiB", b"1e3 MiB/1e3 MiB", b"NaN MiB/NaN MiB",
+                  b"Infinity MiB/Infinity MiB", b".8 MiB/.8 MiB", b"1. MiB/1. MiB",
+                  b"66.8 MiB/ MiB", b"66.8 MiB//66.8 MiB", b"66.8 MiB /66.8 MiB",
+                  b"66.8 MiB/66.8 MiB/extra", b"66.8 mib/66.8 mib")
+        for size in faults:
+            with self.subTest(size=size), self.assertRaises(NodeImageReferenceError):
+                payload = args["node_images"].stdout.replace(b"1.0 MiB true", size+b" true")
+                validate_node_image_references(**{**args, "node_images": replace(args["node_images"], stdout=payload)})
+
     def test_config_alias_query_and_target_chain_fail_independently(self):
         args = fixture(tagged=True)
         for index, key, value in ((0, "id", "sha256:" + "b" * 64),

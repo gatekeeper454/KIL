@@ -496,3 +496,55 @@ class ExploratoryEnvoyPlatformCommand:
     def env(self):
         return (('DOCKER_CONFIG',str(self.authority.docker_config)),
                 ('DOCKER_HOST','unix://'+str(self.authority.colima/'kil-v3-lab/docker.sock')))
+
+
+@dataclass(frozen=True, slots=True)
+class ExploratoryNodeAliasCommand:
+    """Finite accepted-config reads and canonical aliases in the owned node."""
+    authority: RuntimeAuthority
+    identity: object
+    role: str
+    operation: str
+    import_ref: str | None = None
+
+    def __post_init__(self):
+        from kil.v3b2_journal import OwnedIdentity
+        from kil.hf_exploratory_node_aliases import accepted_image, validate_import_ref
+        if (type(self) is not ExploratoryNodeAliasCommand or type(self.authority) is not RuntimeAuthority
+                or type(self.identity) is not OwnedIdentity):
+            raise ValueError('invalid_exploratory_node_alias_command')
+        self.identity.__post_init__(); accepted_image(self.role)
+        if (self.identity.node_container_id is None or self.identity.cluster_incarnation_uid is None
+                or self.identity.colima_profile != 'kil-v3-lab' or self.identity.kind_cluster != 'kil-v3-lab'
+                or self.identity.kubeconfig != str(self.authority.kubeconfig)
+                or self.identity.docker_host != 'unix://'+str(self.authority.colima/'kil-v3-lab/docker.sock')
+                or type(self.operation) is not str or self.operation not in ('inspect','tag','remove')):
+            raise ValueError('node_alias_command_not_current_owned_node')
+        if self.operation == 'remove': validate_import_ref(self.import_ref)
+        elif self.import_ref is not None: raise ValueError('node_alias_command_has_unexpected_reference')
+        self.authority.guard()
+
+    @property
+    def argv(self):
+        from kil.hf_exploratory_node_aliases import accepted_image, canonical_alias
+        image = accepted_image(self.role)
+        base = ('docker','exec',self.identity.node_container_id)
+        if self.operation == 'inspect':
+            return (*base,'/usr/local/bin/crictl','--runtime-endpoint','unix:///run/containerd/containerd.sock',
+                    '--image-endpoint','unix:///run/containerd/containerd.sock','--timeout','10s',
+                    'inspecti','--quiet','--output','json',image.config_digest)
+        ctr = (*base,'/usr/local/bin/ctr','--address','/run/containerd/containerd.sock','--namespace','k8s.io','images')
+        return (*ctr,'tag',image.config_digest,canonical_alias(image)) if self.operation == 'tag' else (*ctr,'rm',self.import_ref)
+
+    @property
+    def timeout_s(self): return 10
+
+    @property
+    def mutating(self): return self.operation != 'inspect'
+
+    @property
+    def stdin(self): return None
+
+    @property
+    def env(self):
+        return (('DOCKER_CONFIG',str(self.authority.docker_config)),('DOCKER_HOST',self.identity.docker_host))

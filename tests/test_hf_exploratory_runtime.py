@@ -54,6 +54,29 @@ class RuntimeTests(unittest.TestCase):
         authority.close()
         with self.assertRaises(ValueError): command.__post_init__()
 
+    def test_node_alias_command_is_finite_and_bound_to_current_owned_node(self):
+        from dataclasses import replace
+        from kil.v3b2_journal import OwnedIdentity
+        from kil.v3b2_accepted_images import ACCEPTED_IMAGES
+        command_type = getattr(self.runtime,'ExploratoryNodeAliasCommand',None)
+        self.assertIsNotNone(command_type,'finite node alias command is missing')
+        authority = self.authority()
+        identity = OwnedIdentity('kil-v3-lab','unix://'+str(authority.colima/'kil-v3-lab/docker.sock'),
+                                 'kil-v3-lab',str(authority.kubeconfig),'cluster-uid','b'*64)
+        image = next(row for row in ACCEPTED_IMAGES if row.role == 'kil')
+        inspect = command_type(authority,identity,'kil','inspect')
+        self.assertEqual(inspect.argv[-1],image.config_digest); self.assertFalse(inspect.mutating)
+        tag = command_type(authority,identity,'kil','tag')
+        self.assertEqual(tag.argv[-3:],('tag',image.config_digest,'kil.local/kil-v3b2@'+image.target_digest))
+        imported = 'import-2026-09-18@sha256:'+'a'*64
+        remove = command_type(authority,identity,'kil','remove',imported)
+        self.assertEqual(remove.argv[-2:],('rm',imported)); self.assertTrue(remove.mutating)
+        for role,operation,reference in [('other','tag',None),('kil','shell',None),('kil','tag',imported),
+                                          ('kil','remove','foreign/image:latest'),('kil','remove','import-2026-99-99@sha256:'+'a'*64)]:
+            with self.assertRaises(ValueError): command_type(authority,identity,role,operation,reference)
+        with self.assertRaises(ValueError): command_type(authority,replace(identity,node_container_id=None),'kil','tag')
+        with self.assertRaises(ValueError): command_type(authority,replace(identity,docker_host='unix:///tmp/foreign/docker.sock'),'kil','tag')
+
     def test_fresh_derived_private_runtime(self):
         authority = self.authority()
         self.assertEqual(authority.path, self.registry / ('r' + self.digest[:16]))

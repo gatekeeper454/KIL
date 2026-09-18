@@ -630,16 +630,44 @@ class NativeTests(unittest.TestCase):
                 return result(canonical([{'Id':image.config_digest,'RepoTags':[image.requested_image] if image.role=='kil' else [],
                                          'RepoDigests':[image.requested_image] if image.role=='envoy' else []}]))
             if executable=='docker' and 'crictl' in argv[3]:
-                image = next(row for row in accepted.values() if row.requested_image==argv[-1])
+                image = next(row for row in accepted.values() if argv[14] in (row.requested_image,row.config_digest))
+                generated = getattr(self,'generated_node_aliases',None)
+                if generated is not None:
+                    if image.role == 'envoy' and argv[14] == image.requested_image and not generated['canonical'][image.role]:
+                        return result(rc=1,stderr=b'no such image')
+                    digests = ['docker.io/library/'+name for name in generated['imports'][image.role]]
+                    if generated['canonical'][image.role]:
+                        digests.append('kil.local/kil-v3b2@'+image.target_digest if image.role == 'kil' else image.requested_image)
+                    return result(canonical({'status':{'id':image.config_digest,
+                        'repoTags':[image.requested_image] if image.role == 'kil' else [],'repoDigests':digests,
+                        'size':'1048576','username':'','pinned':False}}))
                 return result(canonical({'status':{'id':image.config_digest,'repoTags':[image.requested_image] if image.role=='kil' else [],
                     'repoDigests':['kil.local/kil-v3b2@'+image.target_digest] if image.role=='kil' else [image.requested_image],
                     'size':'1048576','username':'','pinned':False}}))
             if executable=='docker' and 'ctr' in argv[3]:
+                generated = getattr(self,'generated_node_aliases',None)
+                if len(argv)>9 and argv[9] == 'tag':
+                    image = next(row for row in accepted.values() if row.config_digest == argv[10])
+                    expected = 'kil.local/kil-v3b2@'+image.target_digest if image.role == 'kil' else image.requested_image
+                    self.assertEqual(argv[11],expected); generated['canonical'][image.role] = True; return result()
+                if len(argv)>9 and argv[9] == 'rm':
+                    role = next(role for role,names in generated['imports'].items() if argv[10] in names)
+                    generated['imports'][role].remove(argv[10]); return result()
                 lines = ['REF TYPE DIGEST STATUS SIZE UNPACKED']
                 for image in accepted.values():
-                    aliases = [image.requested_image] + (['kil.local/kil-v3b2@'+image.target_digest] if image.role=='kil' else [])
+                    aliases = ([image.requested_image] if image.role == 'kil' else []) if generated is not None else [image.requested_image]
+                    if generated is None or generated['canonical'][image.role]:
+                        aliases += ['kil.local/kil-v3b2@'+image.target_digest] if image.role == 'kil' else [image.requested_image]
+                    aliases += [image.config_digest]
                     media = 'application/vnd.oci.image.'+('manifest' if image.role=='kil' else 'index')+'.v1+json'
-                    lines.extend(f'{alias} {media} {image.target_digest} complete (4/4) 1.0 MiB true' for alias in aliases)
+                    lines.extend(f'{alias} {media} {image.target_digest} complete (4/4) 1.0 MiB true' for alias in dict.fromkeys(aliases))
+                    if generated is not None:
+                        for name in generated['imports'][image.role]:
+                            target = name.split('@')[1]
+                            imported_media = media if target == image.target_digest else 'application/vnd.oci.image.index.v1+json'
+                            lines.append(f'{name} {imported_media} {target} complete (4/4) 1.0 MiB true')
+                if generated is not None:
+                    lines.append('import-2026-06-02@sha256:'+('d'*64)+' application/vnd.oci.image.index.v1+json sha256:'+('d'*64)+' complete (4/4) 1.0 MiB true')
                 return result(('\n'.join(lines)+'\n').encode())
             arguments = argv[3:]
             if arguments==('get','namespace','kube-system','--output','json'):
@@ -962,6 +990,167 @@ class NativeTests(unittest.TestCase):
                     else:
                         with self.assertRaises(ValueError): self.life.import_application_images()
                         self.assertFalse(any(row.argv[:2] == ('kind','load') for row in calls))
+
+    def generated_alias_fixture(self):
+        images = {row.role:row for row in self.native.ACCEPTED_IMAGES}
+        self.generated_node_aliases = {'canonical':{'kil':False,'envoy':False},'imports':{
+            'kil':['import-2026-09-18@sha256:'+'a'*64],
+            'envoy':['import-2026-09-18@'+images['envoy'].target_digest,'import-2026-09-18@sha256:'+'b'*64]}}
+
+    def test_generated_node_aliases_repair_then_unchanged_strict_proof_and_owned_teardown(self):
+        self.full_fake_runner(); self.generated_alias_fixture()
+        report = self.execute_ssh_double()
+        self.assertEqual(report['status'],'complete',report['error']); self.assertTrue(report['owned_teardown'])
+        self.assertEqual(report['request_intent_count'],0); self.assertEqual(set(self.life.aliases),{'kil','envoy'})
+        mutations = [call.args[0] for call in self.runner.run.call_args_list if getattr(call.args[0],'operation',None) in ('tag','remove')]
+        self.assertEqual([row.operation for row in mutations],['tag','tag','remove','remove','remove'])
+        self.assertFalse(any(row.import_ref.startswith('import-2026-06-02') for row in mutations if row.operation == 'remove'))
+        rows = [json.loads(line) for line in self.store.journal.read_bytes().splitlines()]
+        for command in mutations:
+            intent = next(row['details'] for row in rows if row['event']=='command_intent' and row['details']['argv']==list(command.argv))
+            terminal = next(row['details'] for row in rows if row['event']=='command_terminal' and row['details']['sequence']==intent['sequence'])
+            self.assertEqual(terminal['returncode'],0)
+            self.assertEqual(terminal['stdout_sha256'],sha256(self.life.private_read('command-%04d.stdout'%intent['sequence'])).hexdigest())
+
+    def test_generated_import_association_drift_after_intent_refuses_runner_and_retry(self):
+        self.full_fake_runner(); self.generated_alias_fixture(); original = self.store.record
+        drifted = []
+        def recording(event,details):
+            result = original(event,details)
+            if event == 'command_intent' and details['argv'][0] == 'docker' and len(details['argv'])>9 and details['argv'][9] == 'rm' and not drifted:
+                role = next(role for role,names in self.generated_node_aliases['imports'].items() if details['argv'][10] in names)
+                self.generated_node_aliases['imports'][role].remove(details['argv'][10]); drifted.append(details['argv'])
+            return result
+        with patch.object(self.store,'record',side_effect=recording): report = self.execute_ssh_double()
+        self.assertTrue(drifted,'no durable alias removal intent was reached')
+        self.assertEqual(report['status'],'inconclusive'); self.assertTrue(report['owned_teardown'],report['error'])
+        self.assertFalse(any(list(call.args[0].argv)==drifted[0] for call in self.runner.run.call_args_list))
+        self.assertEqual(report['request_intent_count'],0)
+
+    def test_failed_generated_alias_remove_is_once_and_owned_teardown(self):
+        self.full_fake_runner(); self.generated_alias_fixture(); original = self.runner.run.side_effect
+        failed = []
+        def failing(command):
+            if getattr(command,'operation',None) == 'remove':
+                failed.append(command.argv); return CommandResult(1,'','failed alias removal',b'',b'failed alias removal')
+            return original(command)
+        self.runner.run.side_effect = failing
+        report = self.execute_ssh_double()
+        self.assertEqual(report['status'],'inconclusive'); self.assertTrue(report['owned_teardown'],report['error'])
+        self.assertEqual(len(failed),1); self.assertEqual(report['request_intent_count'],0)
+        self.assertIn((failed[0],self.life.docker_env,None),self.life.mutation_commitments)
+        rows = [json.loads(line) for line in self.store.journal.read_bytes().splitlines()]
+        intent = next(row['details'] for row in rows if row['event']=='command_intent' and row['details']['argv']==list(failed[0]))
+        terminal = next(row['details'] for row in rows if row['event']=='command_terminal' and row['details']['sequence']==intent['sequence'])
+        self.assertEqual(terminal['returncode'],1)
+
+    def test_node_alias_initial_roster_stderr_grants_no_mutation(self):
+        self.full_fake_runner(); self.generated_alias_fixture(); original = self.runner.run.side_effect
+        warnings = []
+        def warned(command):
+            result = original(command)
+            if not warnings and command.argv[:4] == ('docker','exec','b'*64,'/usr/local/bin/ctr') and command.argv[9] == 'check':
+                warnings.append(True)
+                return CommandResult(0,result.stdout,'warning',result.stdout_bytes,b'warning')
+            return result
+        self.runner.run.side_effect = warned
+        report = self.execute_ssh_double()
+        self.assertEqual(report['status'],'inconclusive'); self.assertTrue(report['owned_teardown'],report['error'])
+        self.assertFalse(any(getattr(call.args[0],'operation',None) in ('tag','remove') for call in self.runner.run.call_args_list))
+        self.assertEqual(report['request_intent_count'],0)
+
+    def test_node_replacement_during_alias_intent_refuses_alias_runner_and_owned_cleanup(self):
+        self.full_fake_runner(); self.generated_alias_fixture()
+        original_run, original_record = self.runner.run.side_effect, self.store.record
+        changed = []
+        def running(command):
+            if changed and command.argv == ('docker','inspect','kil-v3-lab-control-plane'):
+                rows = node(); rows[0]['Id'] = 'd'*64
+                raw = canonical(rows); return CommandResult(0,raw.decode(),'',raw,b'')
+            return original_run(command)
+        def recording(event,details):
+            result = original_record(event,details)
+            if event == 'command_intent' and len(details['argv'])>9 and details['argv'][0]=='docker' and details['argv'][9]=='tag':
+                changed.append(details['argv'])
+            return result
+        self.runner.run.side_effect = running
+        with patch.object(self.store,'record',side_effect=recording): report = self.execute_ssh_double()
+        self.assertEqual(len(changed),1)
+        self.assertFalse(any(list(call.args[0].argv)==changed[0] for call in self.runner.run.call_args_list))
+        self.assertFalse(report['owned_teardown']); self.assertTrue(report['manual_recovery'])
+        self.assertFalse(any(call.args[0].argv[:2] in [('kind','delete'),('colima','stop'),('colima','delete')] for call in self.runner.run.call_args_list))
+        self.assertEqual(report['request_intent_count'],0)
+
+    def test_alias_role_or_reference_drift_after_intent_never_replaces_approved_argv(self):
+        field = 'role'
+        self.full_fake_runner(); self.generated_alias_fixture()
+        original_check, original_record = self.life.require_node_alias_unchanged, self.store.record
+        intent = []; changed = []
+        def recording(event,details):
+            result = original_record(event,details)
+            wanted = 'tag' if field == 'role' else 'rm'
+            if event == 'command_intent' and len(details['argv'])>9 and details['argv'][0]=='docker' and details['argv'][9]==wanted and not intent:
+                intent.append(details['argv'])
+            return result
+        def checking(command):
+            result = original_check(command)
+            if intent and not changed:
+                if field == 'role': object.__setattr__(command,'role','envoy')
+                else:
+                    reference = self.generated_node_aliases['imports']['envoy'][0]
+                    object.__setattr__(command,'import_ref',reference)
+                changed.append(command)
+            return result
+        with patch.object(self.store,'record',side_effect=recording), patch.object(self.life,'require_node_alias_unchanged',side_effect=checking):
+            report = self.execute_ssh_double()
+        self.assertEqual(len(changed),1)
+        self.assertFalse(any(call.args[0] is changed[0] for call in self.runner.run.call_args_list))
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertTrue(report['owned_teardown'],report['error']); self.assertEqual(report['request_intent_count'],0)
+
+
+    def test_alias_reference_drift_after_intent_never_replaces_approved_argv(self):
+        field = 'reference'
+        self.full_fake_runner(); self.generated_alias_fixture()
+        original_check, original_record = self.life.require_node_alias_unchanged, self.store.record
+        intent = []; changed = []
+        def recording(event,details):
+            result = original_record(event,details)
+            wanted = 'tag' if field == 'role' else 'rm'
+            if event == 'command_intent' and len(details['argv'])>9 and details['argv'][0]=='docker' and details['argv'][9]==wanted and not intent:
+                intent.append(details['argv'])
+            return result
+        def checking(command):
+            result = original_check(command)
+            if intent and not changed:
+                if field == 'role': object.__setattr__(command,'role','envoy')
+                else:
+                    reference = self.generated_node_aliases['imports']['envoy'][0]
+                    object.__setattr__(command,'import_ref',reference)
+                changed.append(command)
+            return result
+        with patch.object(self.store,'record',side_effect=recording), patch.object(self.life,'require_node_alias_unchanged',side_effect=checking):
+            report = self.execute_ssh_double()
+        self.assertEqual(len(changed),1)
+        self.assertFalse(any(call.args[0] is changed[0] for call in self.runner.run.call_args_list))
+        self.assertEqual(report['status'],'inconclusive')
+        self.assertTrue(report['owned_teardown'],report['error']); self.assertEqual(report['request_intent_count'],0)
+
+
+    def test_alias_config_table_drift_during_initial_acquisition_grants_no_mutation(self):
+        self.full_fake_runner(); self.generated_alias_fixture(); original = self.runner.run.side_effect
+        kil = next(row for row in self.native.ACCEPTED_IMAGES if row.role == 'kil'); changed = []
+        def running(command):
+            result = original(command)
+            if getattr(command,'operation',None) == 'inspect' and command.role == 'kil' and not changed:
+                self.generated_node_aliases['imports']['kil'].clear(); changed.append(True)
+            return result
+        self.runner.run.side_effect = running
+        report = self.execute_ssh_double()
+        self.assertTrue(changed)
+        self.assertEqual(report['status'],'inconclusive'); self.assertTrue(report['owned_teardown'],report['error'])
+        self.assertFalse(any(getattr(call.args[0],'operation',None) in ('tag','remove') for call in self.runner.run.call_args_list))
+        self.assertEqual(report['request_intent_count'],0)
 
     def test_node_roster_is_retained_before_cri_lookup_failure(self):
         from kil.v3b2_proofs import node_images_argv

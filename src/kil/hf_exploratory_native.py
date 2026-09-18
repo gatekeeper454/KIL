@@ -18,7 +18,7 @@ import time
 from kil import hf_exploratory_case as case
 from kil.hf_exploratory_inputs import read_regular, verify_bytes, TOOL_VERSION_ARGUMENTS
 from kil.hf_exploratory_io import capture_process
-from kil.hf_exploratory_runtime import RuntimeAuthority, ExploratoryColimaCommand, ExploratoryEnvoyPlatformCommand
+from kil.hf_exploratory_runtime import RuntimeAuthority, ExploratoryColimaCommand, ExploratoryEnvoyPlatformCommand, ExploratoryNodeAliasCommand
 from kil.hf_exploratory_ssh import SSHControls
 from kil.hf_exploratory_profile import ProfilePaths, creation_binding, unchanged, absent
 from kil.hf_exploratory_evidence import snapshot_runtime, observe_runtime_leftovers
@@ -207,14 +207,17 @@ class ExploratoryLifecycle:
         self.kind_config_identity = None
         self.loaded_kil_source = self.loaded_kil_stdout = self.loaded_kil_stdout_name = None
         self.envoy_platform_pull_ready = False
+        self.node_alias_states = None
 
     def observe(self, command, allow_failure=False, *, _global_inventory=False):
-        if type(command) not in (Command, ExploratoryColimaCommand, ExploratoryEnvoyPlatformCommand):
+        if type(command) not in (Command, ExploratoryColimaCommand, ExploratoryEnvoyPlatformCommand, ExploratoryNodeAliasCommand):
             raise ValueError('closed_command_required')
         command.__post_init__()
         self.runtime.guard()
-        if type(command) in (ExploratoryColimaCommand,ExploratoryEnvoyPlatformCommand) and command.authority is not self.runtime:
+        if type(command) in (ExploratoryColimaCommand,ExploratoryEnvoyPlatformCommand,ExploratoryNodeAliasCommand) and command.authority is not self.runtime:
             raise ValueError('foreign_colima_runtime_authority')
+        if type(command) is ExploratoryNodeAliasCommand and command.identity is not self.identity:
+            raise ValueError('node_alias_command_identity_not_current_owned_node')
         if _global_inventory:
             if (type(command) is not Command or command.argv != ('colima','list','--json')
                     or command.env or command.mutating):
@@ -234,8 +237,9 @@ class ExploratoryLifecycle:
             self.authorize_mutation(command)
         self.require_dispatch_unchanged(command,dispatch)
         self.sequence += 1
-        name = 'command-%04d' % self.sequence
-        self.store.record('command_intent', {'sequence': self.sequence, 'argv': list(command.argv),
+        sequence = self.sequence
+        name = 'command-%04d' % sequence
+        self.store.record('command_intent', {'sequence': sequence, 'argv': list(command.argv),
             'env': dict(command.env), 'mutating': command.mutating, 'timeout_s':command.timeout_s,
             'stdin_sha256': None if command.stdin is None else sha256(command.stdin).hexdigest()})
         if command.mutating and command.argv[:2] == ('kind','create'):
@@ -247,7 +251,7 @@ class ExploratoryLifecycle:
         out_hash = self.store.write(name + '.stdout', result.stdout_bytes)
         err_hash = self.store.write(name + '.stderr', result.stderr_bytes)
         self.command_checksums[name] = {'stdout': out_hash, 'stderr': err_hash}
-        self.store.record('command_terminal', {'sequence': self.sequence, 'returncode': result.returncode,
+        self.store.record('command_terminal', {'sequence': sequence, 'returncode': result.returncode,
                                                'stdout_sha256': out_hash, 'stderr_sha256': err_hash})
         if result.returncode == 0 and command.mutating:
             if command.argv == colima_start_command().argv: self.profile_start_succeeded = True
@@ -259,10 +263,10 @@ class ExploratoryLifecycle:
 
     def require_dispatch_unchanged(self, command, dispatch):
         """Join fresh grammar/authority to the authorized durable intent bytes."""
-        if type(command) not in (Command,ExploratoryColimaCommand,ExploratoryEnvoyPlatformCommand):
+        if type(command) not in (Command,ExploratoryColimaCommand,ExploratoryEnvoyPlatformCommand,ExploratoryNodeAliasCommand):
             raise ValueError('closed_command_required')
         command.__post_init__()
-        if type(command) in (ExploratoryColimaCommand,ExploratoryEnvoyPlatformCommand) and command.authority is not self.runtime:
+        if type(command) in (ExploratoryColimaCommand,ExploratoryEnvoyPlatformCommand,ExploratoryNodeAliasCommand) and command.authority is not self.runtime:
             raise ValueError('foreign_colima_runtime_authority')
         self.runtime.guard()
         if self.ssh.state in ('binding','stopping','deleting') and (
@@ -278,9 +282,20 @@ class ExploratoryLifecycle:
             raise ValueError('command_changed_during_native_authorization_or_intent')
         if type(command) is ExploratoryEnvoyPlatformCommand:
             command.__post_init__()
+        if type(command) is ExploratoryNodeAliasCommand:
+            if command.identity is not self.identity:
+                raise ValueError('node_alias_command_identity_not_current_owned_node')
+            if command.mutating:
+                self.require_node_alias_unchanged(command)
+                command.__post_init__()
+                self.runtime.guard()
+                self.ssh.guard()
+                self.require_retained_ssh_controls()
         if command.argv[:2] == ('docker','tag'):
             if command.argv[2] != self.require_loaded_kil_source():
                 raise ValueError('docker_tag_not_exact_loaded_accepted_source')
+        if dispatch != (command.argv,command.env,command.stdin,command.timeout_s,command.mutating):
+            raise ValueError('command_changed_during_final_native_checks')
 
     def authorize_mutation(self, command):
         """Validate dispatch eligibility without claiming a runner handoff."""
@@ -361,7 +376,15 @@ class ExploratoryLifecycle:
         """The exploratory table is narrower than the reusable strict grammar."""
         argv = command.argv
         accepted = {row.role:row for row in ACCEPTED_IMAGES}
-        if type(command) is ExploratoryEnvoyPlatformCommand:
+        if type(command) is ExploratoryNodeAliasCommand:
+            command.__post_init__()
+            if (command.authority is not self.runtime or command.identity is not self.identity
+                    or self.node_alias_states is None or not command.mutating):
+                raise ValueError('node_alias_mutation_requires_initial_owned_config_proof')
+            if command.operation == 'remove' and command.import_ref not in {
+                    row[0] for row in self.node_alias_states[command.role].import_rows}:
+                raise ValueError('node_alias_remove_not_initially_associated')
+        elif type(command) is ExploratoryEnvoyPlatformCommand:
             command.__post_init__()
             if command.authority is not self.runtime or not self.envoy_platform_pull_ready:
                 raise ValueError('envoy_platform_pull_requires_initial_accepted_host_proof')
@@ -1026,6 +1049,61 @@ class ExploratoryLifecycle:
             raise ValueError('native_application_image_references_not_accepted')
         return modern
 
+    def capture_node_alias_state(self, role, table=None):
+        from kil.hf_exploratory_node_aliases import analyse_aliases
+        from kil.v3b2_proofs import node_images_argv
+        def capture(supplied):
+            inspection = self.observe(ExploratoryNodeAliasCommand(self.runtime,self.identity,role,'inspect'))
+            if len(inspection.stdout_bytes)+len(inspection.stderr_bytes)>16384 or inspection.stderr_bytes:
+                raise ValueError('node_alias_config_inspection_bound_or_stderr')
+            if supplied is None:
+                result = self.observe(Command(node_images_argv(self.identity.node_container_id),10,env=self.docker_env))
+                if len(result.stdout_bytes)+len(result.stderr_bytes)>262144 or result.stderr_bytes:
+                    raise ValueError('node_alias_table_bound_or_stderr')
+                supplied = result.stdout_bytes
+            return analyse_aliases(supplied,inspection.stdout_bytes,role)
+        first = capture(table)
+        second = capture(None)
+        if first != second:
+            raise ValueError('node_alias_config_table_changed_during_capture')
+        return second
+
+    def repair_node_application_aliases(self, table):
+        states = {role:self.capture_node_alias_state(role,table) for role in ('kil','envoy')}
+        names = [row[0] for state in states.values() for row in state.import_rows]
+        if len(names) != len(set(names)):
+            raise ValueError('node_alias_import_association_ambiguous')
+        self.node_alias_states = states
+        self.store.write('node-alias-repair.initial.json',canonical({
+            'schema':'kil.hf-node-alias-repair.v1','run_digest':self.run_digest,
+            'node_container_id':self.identity.node_container_id,
+            'cluster_incarnation_uid':self.identity.cluster_incarnation_uid,
+            'initial_table_sha256':sha256(table).hexdigest(),
+            'states':{role:asdict(state) for role,state in states.items()}}))
+        for role,state in states.items():
+            if not state.canonical_present:
+                self.observe(ExploratoryNodeAliasCommand(self.runtime,self.identity,role,'tag'))
+        for role,state in states.items():
+            for row in state.import_rows:
+                self.observe(ExploratoryNodeAliasCommand(self.runtime,self.identity,role,'remove',row[0]))
+
+    def require_node_alias_unchanged(self, command):
+        if self.node_alias_states is None:
+            raise ValueError('node_alias_initial_config_proof_unavailable')
+        self.guard_cluster()
+        state = self.capture_node_alias_state(command.role)
+        initial = self.node_alias_states[command.role]
+        if state.config_row != initial.config_row:
+            raise ValueError('node_alias_config_target_changed')
+        if command.operation == 'tag':
+            if state.canonical_present:
+                raise ValueError('node_alias_tag_destination_already_present')
+        else:
+            expected = next(row for row in initial.import_rows if row[0] == command.import_ref)
+            if (expected not in state.import_rows or not state.canonical_present
+                    or not state.canonical_reported):
+                raise ValueError('node_alias_import_association_changed_or_canonical_unproved')
+
     def prove_node_application_aliases(self):
         from kil.v3b2_node_image_references import ExpectedNodeImage, node_image_inspect_argv, validate_node_image_references
         from kil.v3b2_proofs import RawObservation, node_images_argv
@@ -1036,10 +1114,15 @@ class ExploratoryLifecycle:
             row.config_digest) for row in ACCEPTED_IMAGES)
         command = Command(node_images_argv(self.identity.node_container_id), 10, env=self.docker_env)
         result = self.observe(command)
-        if len(result.stdout_bytes)+len(result.stderr_bytes)>262144:
-            raise ValueError('node_images_bound')
-        observation = RawObservation('node_images', command.argv, command.env, result.returncode,
-                                     result.stdout_bytes, result.stderr_bytes)
+        if len(result.stdout_bytes)+len(result.stderr_bytes)>262144 or result.stderr_bytes:
+            raise ValueError('node_images_bound_or_stderr')
+        self.repair_node_application_aliases(result.stdout_bytes)
+        command = Command(node_images_argv(self.identity.node_container_id),10,env=self.docker_env)
+        result = self.observe(command)
+        if len(result.stdout_bytes)+len(result.stderr_bytes)>262144 or result.stderr_bytes:
+            raise ValueError('node_images_bound_or_stderr')
+        observation = RawObservation('node_images',command.argv,command.env,result.returncode,
+                                     result.stdout_bytes,result.stderr_bytes)
         inspections = []
         for index, image in enumerate(expected):
             command = Command(node_image_inspect_argv(self.identity.node_container_id, image.query_reference),

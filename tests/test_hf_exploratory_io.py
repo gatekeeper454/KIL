@@ -59,6 +59,44 @@ class IOTests(unittest.TestCase):
         self.addCleanup(authority.close)
         return authority
 
+    def test_node_alias_routes_use_pinned_docker_and_current_private_environment(self):
+        from kil.hf_exploratory_runtime import ExploratoryNodeAliasCommand
+        from kil.v3b2_journal import OwnedIdentity
+        authority = self.runtime_authority()
+        identity = OwnedIdentity('kil-v3-lab','unix://'+str(authority.colima/'kil-v3-lab/docker.sock'),
+                                 'kil-v3-lab',str(authority.kubeconfig),'cluster-uid','b'*64)
+        inputs, colima, verify = self.dependency_fixture()
+        for operation, reference in [('inspect',None),('tag',None),('remove','import-2026-09-18@sha256:'+'a'*64)]:
+            command = ExploratoryNodeAliasCommand(authority,identity,'kil',operation,reference)
+            with self.subTest(operation=operation), patch.dict(os.environ,{'PATH':str(colima.parent)}), \
+                    patch.object(self.io,'verify_bytes',side_effect=verify), patch.object(self.io,'capture_process') as capture:
+                self.io.BoundedRunner(Path.cwd(),inputs).run(command)
+                argv, env, stdin, timeout, _, _ = capture.call_args.args
+                self.assertEqual(argv,(str(inputs.tools/'docker'),*command.argv[1:]))
+                self.assertEqual({key:env[key] for key,_ in command.env},dict(command.env))
+                self.assertEqual(env['PATH'],str(colima.parent)); self.assertIsNone(stdin); self.assertEqual(timeout,10)
+
+    def test_node_alias_route_refuses_late_runtime_or_node_substitution(self):
+        from kil.hf_exploratory_runtime import ExploratoryNodeAliasCommand
+        from kil.v3b2_journal import OwnedIdentity
+        authority = self.runtime_authority()
+        for changed in ('runtime','node'):
+            identity = OwnedIdentity('kil-v3-lab','unix://'+str(authority.colima/'kil-v3-lab/docker.sock'),
+                                     'kil-v3-lab',str(authority.kubeconfig),'cluster-uid','b'*64)
+            command = ExploratoryNodeAliasCommand(authority,identity,'kil','tag')
+            inputs, _, verify = self.dependency_fixture()
+            def changing(data,digest,size):
+                value = verify(data,digest,size)
+                if data == b'inert fixture: docker':
+                    if changed == 'runtime': object.__setattr__(authority,'_digest','b'*64)
+                    else: object.__setattr__(identity,'node_container_id','f'*64)
+                return value
+            with self.subTest(changed=changed), patch.object(self.io,'verify_bytes',side_effect=changing), \
+                    patch.object(self.io,'capture_process') as capture:
+                with self.assertRaises(ValueError): self.io.BoundedRunner(Path.cwd(),inputs).run(command)
+            capture.assert_not_called()
+            object.__setattr__(authority,'_digest','a'*64)
+
     def test_envoy_platform_command_uses_authenticated_docker_and_owned_environment(self):
         from kil import hf_exploratory_runtime as runtime
         command_type = getattr(runtime,'ExploratoryEnvoyPlatformCommand',None)

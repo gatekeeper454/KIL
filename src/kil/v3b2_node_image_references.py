@@ -268,6 +268,16 @@ def _node_rows(payload: bytes) -> dict[str, tuple[str, ...]]:
         if len(line) > 2048:
             raise NodeImageReferenceError("ctr row is oversized")
         parts = tuple(line.split())
+        if len(parts) == 9:
+            # New ctr prints downloaded/total SIZE, e.g. 66.8 MiB/66.8 MiB.
+            # Validate both exact values/units before internal column projection;
+            # the retained RawObservation and its commitment remain untouched.
+            decimal = r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?"
+            pair = re.fullmatch(r"(B|KiB|MiB|GiB|TiB|PiB|EiB)/(" + decimal + r")", parts[6])
+            if (re.fullmatch(decimal, parts[5]) is None or pair is None
+                    or pair[2] != parts[5] or pair[1] != parts[7]):
+                raise NodeImageReferenceError("ctr dual size is malformed or unequal")
+            parts = (*parts[:6], pair[1], parts[8])
         if len(parts) != 8 or parts[0] in rows:
             raise NodeImageReferenceError("ctr table row is malformed or duplicated")
         _text(parts[0], "ctr reference")
