@@ -237,6 +237,26 @@ class DeploymentOwnershipTest(unittest.TestCase):
         changed[0]["namespace"] = self.pods[-1]["namespace"]
         self.assert_invalid(pods=changed)
 
+    def test_native_variable_length_hash_keeps_complete_owner_name_graph(self) -> None:
+        for hash_value in ('d8cb8bc6b', '5', '5c9bdbff57'):
+            replicas = deepcopy(self.replica_sets)
+            pods = deepcopy(self.pods)
+            old_name = replicas[0]['name']
+            name = replicas[0]['ownerReference']['name'] + '-' + hash_value
+            replicas[0].update(name=name, podTemplateHash=hash_value)
+            for pod in pods:
+                if pod['ownerReference']['name'] == old_name:
+                    pod['name'] = name + '-' + pod['name'].rsplit('-', 1)[1]
+                    pod['podTemplateHash'] = hash_value
+                    pod['ownerReference']['name'] = name
+            proof = validate(self.deployments, replicas, pods)
+            self.assertEqual(len(proof.bindings), 12)
+            self.assert_invalid(replica_sets=replicas)  # old Pods cannot join
+        for hash_value in ('', 'd8cb8bc6b99', 'D8CB8BC6B', 'd8cb8bc6_'):
+            replicas = deepcopy(self.replica_sets)
+            replicas[0]['podTemplateHash'] = hash_value
+            self.assert_invalid(replica_sets=replicas)
+
     def test_hash_replica_set_name_and_pod_suffix_are_exact(self) -> None:
         for field, value in (
             ("podTemplateHash", "SHORT"),

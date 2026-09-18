@@ -26,7 +26,9 @@ _OWNER_KEYS = frozenset({
     "apiVersion", "kind", "name", "uid", "controller", "blockOwnerDeletion",
 })
 _DNS_LABEL = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?")
-_HASH = re.compile(r"[a-z0-9]{10}")
+# Pinned Kubernetes ComputeHash safely encodes a decimal uint32: 1-10 chars.
+# Owner names and every Pod label/reference still bind the exact same value.
+_HASH = re.compile(r"[a-z0-9]{1,10}")
 _POD_SUFFIX = re.compile(r"[a-z0-9]{5}")
 _UINT64_MAX = 18_446_744_073_709_551_615
 
@@ -171,7 +173,7 @@ class DeploymentBinding:
                 max_chars=10, max_bytes=10,
             )
             if _HASH.fullmatch(hash_value) is None:
-                raise DeploymentOwnershipError("pod template hash must be 10 lowercase alphanumerics")
+                raise DeploymentOwnershipError("pod template hash must be 1-10 lowercase alphanumerics")
             if self.replica_set_name != f"{self.deployment_name}-{hash_value}":
                 raise DeploymentOwnershipError("ReplicaSet name is not Deployment-hash bound")
             pods = _pod_tuple(self.pods, expected_count=self.replicas)
