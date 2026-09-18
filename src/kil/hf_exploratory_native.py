@@ -208,6 +208,7 @@ class ExploratoryLifecycle:
         self.loaded_kil_source = self.loaded_kil_stdout = self.loaded_kil_stdout_name = None
         self.envoy_platform_pull_ready = False
         self.node_alias_states = None
+        self.node_alias_removals = ()
 
     def observe(self, command, allow_failure=False, *, _global_inventory=False):
         if type(command) not in (Command, ExploratoryColimaCommand, ExploratoryEnvoyPlatformCommand, ExploratoryNodeAliasCommand):
@@ -253,6 +254,10 @@ class ExploratoryLifecycle:
         self.command_checksums[name] = {'stdout': out_hash, 'stderr': err_hash}
         self.store.record('command_terminal', {'sequence': sequence, 'returncode': result.returncode,
                                                'stdout_sha256': out_hash, 'stderr_sha256': err_hash})
+        if (result.returncode == 0 and type(command) is ExploratoryNodeAliasCommand
+                and command.operation == 'remove'):
+            row = next(row for row in self.node_alias_states[command.role].import_rows if row[0] == command.import_ref)
+            self.node_alias_removals += ((command.role,row,sequence,dispatch,result.stdout_bytes,result.stderr_bytes),)
         if result.returncode == 0 and command.mutating:
             if command.argv == colima_start_command().argv: self.profile_start_succeeded = True
             elif command.argv == ('colima','stop','--profile','kil-v3-lab'): self.profile_stop_succeeded = True
@@ -381,6 +386,8 @@ class ExploratoryLifecycle:
             if (command.authority is not self.runtime or command.identity is not self.identity
                     or self.node_alias_states is None or not command.mutating):
                 raise ValueError('node_alias_mutation_requires_initial_owned_config_proof')
+            if command.operation == 'restart' and not self.node_alias_removals:
+                raise ValueError('node_alias_restart_without_successful_removals')
             if command.operation == 'remove' and command.import_ref not in {
                     row[0] for row in self.node_alias_states[command.role].import_rows}:
                 raise ValueError('node_alias_remove_not_initially_associated')
@@ -1049,6 +1056,53 @@ class ExploratoryLifecycle:
             raise ValueError('native_application_image_references_not_accepted')
         return modern
 
+    def require_node_alias_removal_receipts(self):
+        """Authenticate exact durable zero terminals before explaining cache copies."""
+        if not self.node_alias_removals: return ()
+        keys = ('st_dev','st_ino','st_mode','st_uid','st_nlink','st_size','st_mtime_ns','st_ctime_ns')
+        def identity(row):
+            if (row.st_mode != stat.S_IFREG|0o600 or row.st_uid != os.geteuid()
+                    or row.st_nlink != 1 or not 0 <= row.st_size <= 8*1024*1024):
+                raise ValueError('node_alias_removal_receipt_not_private_regular')
+            return tuple(getattr(row,key) for key in keys)
+        proofs = self.node_alias_removals
+        with ExitStack() as owned:
+            receipts = []
+            self.store._bound(b'',1)
+            def read(name):
+                fd = os.open(name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=self.store._directory)
+                owned.callback(os.close,fd)
+                before = identity(os.fstat(fd)); raw = self.private_read(name)
+                receipts.append((name,fd,before,raw)); return raw
+            for role,row,sequence,dispatch,stdout,stderr in proofs:
+                if row not in self.node_alias_states[role].import_rows:
+                    raise ValueError('node_alias_removal_not_original_association')
+                expected = ExploratoryNodeAliasCommand(self.runtime,self.identity,role,'remove',row[0])
+                if dispatch != (expected.argv,expected.env,None,10,True):
+                    raise ValueError('node_alias_removal_dispatch_changed')
+                name = 'command-%04d'%sequence
+                if read(name+'.stdout') != stdout or read(name+'.stderr') != stderr:
+                    raise ValueError('node_alias_removal_receipt_bytes_changed')
+            journal = [decode(line) for line in read('journal.jsonl').split(b'\n')[:-1]]
+            for role,row,sequence,dispatch,stdout,stderr in proofs:
+                expected_intent = {'sequence':sequence,'argv':list(dispatch[0]),'env':dict(dispatch[1]),
+                                   'mutating':True,'timeout_s':10,'stdin_sha256':None}
+                expected_terminal = {'sequence':sequence,'returncode':0,
+                                     'stdout_sha256':sha256(stdout).hexdigest(),'stderr_sha256':sha256(stderr).hexdigest()}
+                intents = [entry['details'] for entry in journal if entry['event']=='command_intent' and entry['details'].get('sequence')==sequence]
+                terminals = [entry['details'] for entry in journal if entry['event']=='command_terminal' and entry['details'].get('sequence')==sequence]
+                if (intents != [expected_intent] or terminals != [expected_terminal]
+                        or type(terminals[0]['returncode']) is not int):
+                    raise ValueError('node_alias_removal_requires_durable_zero_terminal')
+            self.store._bound(b'',1)
+            for name,fd,before,raw in receipts:
+                if os.pread(fd,len(raw)+1,0) != raw: raise ValueError('node_alias_removal_receipt_drift')
+            for name,fd,before,raw in receipts:
+                if (identity(os.fstat(fd)) != before or identity(os.stat(name,dir_fd=self.store._directory,follow_symlinks=False)) != before):
+                    raise ValueError('node_alias_removal_receipt_identity_drift')
+            if self.node_alias_removals != proofs: raise ValueError('node_alias_removal_binding_changed')
+            return tuple((role,row) for role,row,*rest in proofs)
+
     def capture_node_alias_state(self, role, table=None):
         from kil.hf_exploratory_node_aliases import analyse_aliases
         from kil.v3b2_proofs import node_images_argv
@@ -1061,7 +1115,8 @@ class ExploratoryLifecycle:
                 if len(result.stdout_bytes)+len(result.stderr_bytes)>262144 or result.stderr_bytes:
                     raise ValueError('node_alias_table_bound_or_stderr')
                 supplied = result.stdout_bytes
-            return analyse_aliases(supplied,inspection.stdout_bytes,role)
+            removed = self.require_node_alias_removal_receipts()
+            return analyse_aliases(supplied,inspection.stdout_bytes,role,removed=tuple(row for owner,row in removed if owner == role))
         first = capture(table)
         second = capture(None)
         if first != second:
@@ -1086,11 +1141,29 @@ class ExploratoryLifecycle:
         for role,state in states.items():
             for row in state.import_rows:
                 self.observe(ExploratoryNodeAliasCommand(self.runtime,self.identity,role,'remove',row[0]))
+        if self.node_alias_removals:
+            self.observe(ExploratoryNodeAliasCommand(self.runtime,self.identity,'envoy','restart'))
 
     def require_node_alias_unchanged(self, command):
         if self.node_alias_states is None:
             raise ValueError('node_alias_initial_config_proof_unavailable')
         self.guard_cluster()
+        if command.operation == 'restart':
+            expected = {(role,row) for role,initial in self.node_alias_states.items() for row in initial.import_rows}
+            if set(self.require_node_alias_removal_receipts()) != expected or not expected:
+                raise ValueError('node_alias_restart_requires_all_successful_owned_removals')
+            captures = []
+            for _ in range(2):
+                states = {role:self.capture_node_alias_state(role) for role in self.node_alias_states}
+                for role,state in states.items():
+                    if (state.config_row != self.node_alias_states[role].config_row or state.import_rows
+                            or not state.canonical_present or not state.canonical_reported):
+                        raise ValueError('node_alias_restart_owned_targets_not_closed')
+                captures.append(states)
+            if captures[0] != captures[1]:
+                raise ValueError('node_alias_restart_targets_changed_during_capture')
+            self.require_node_alias_removal_receipts()
+            return
         state = self.capture_node_alias_state(command.role)
         initial = self.node_alias_states[command.role]
         if state.config_row != initial.config_row:

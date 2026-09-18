@@ -67,3 +67,17 @@ class NodeAliasesTests(unittest.TestCase):
         state = self.analyse(table.replace(b'46.4 MiB true',b'46.4 MiB/46.4 MiB true'),status,'envoy')
         self.assertEqual(state.config_row[2],image.target_digest)
         self.assertEqual(state.import_rows[0][0],imported)
+
+    def test_only_exact_removed_absent_import_can_explain_cache_copy(self):
+        from kil.hf_exploratory_node_aliases import analyse_aliases
+        image, imported, table, status = fixture('envoy',True)
+        initial = self.analyse(table,status,'envoy')
+        absent = b'\n'.join(line for line in table.split(b'\n') if not line.startswith(imported.encode()+b' '))
+        raw = json.dumps(status).encode()
+        with self.assertRaises(ValueError): analyse_aliases(absent,raw,'envoy')
+        state = analyse_aliases(absent,raw,'envoy',removed=initial.import_rows)
+        self.assertEqual(state.import_rows,()); self.assertTrue(state.canonical_reported)
+        with self.assertRaisesRegex(ValueError,'removed_source_reappeared'):
+            analyse_aliases(table,raw,'envoy',removed=initial.import_rows)
+        foreign = deepcopy(status); foreign['status']['repoDigests'].append('docker.io/library/import-2026-09-18@sha256:'+'c'*64)
+        with self.assertRaises(ValueError): analyse_aliases(absent,json.dumps(foreign).encode(),'envoy',removed=initial.import_rows)

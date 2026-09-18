@@ -518,8 +518,10 @@ class ExploratoryNodeAliasCommand:
                 or self.identity.colima_profile != 'kil-v3-lab' or self.identity.kind_cluster != 'kil-v3-lab'
                 or self.identity.kubeconfig != str(self.authority.kubeconfig)
                 or self.identity.docker_host != 'unix://'+str(self.authority.colima/'kil-v3-lab/docker.sock')
-                or type(self.operation) is not str or self.operation not in ('inspect','tag','remove')):
+                or type(self.operation) is not str or self.operation not in ('inspect','tag','remove','restart')):
             raise ValueError('node_alias_command_not_current_owned_node')
+        if self.operation == 'restart' and self.role != 'envoy':
+            raise ValueError('node_alias_restart_role_not_exact')
         if self.operation == 'remove': validate_import_ref(self.import_ref)
         elif self.import_ref is not None: raise ValueError('node_alias_command_has_unexpected_reference')
         self.authority.guard()
@@ -529,6 +531,7 @@ class ExploratoryNodeAliasCommand:
         from kil.hf_exploratory_node_aliases import accepted_image, canonical_alias
         image = accepted_image(self.role)
         base = ('docker','exec',self.identity.node_container_id)
+        if self.operation == 'restart': return (*base,'/bin/systemctl','restart','containerd')
         if self.operation == 'inspect':
             return (*base,'/usr/local/bin/crictl','--runtime-endpoint','unix:///run/containerd/containerd.sock',
                     '--image-endpoint','unix:///run/containerd/containerd.sock','--timeout','10s',

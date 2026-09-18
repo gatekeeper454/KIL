@@ -77,6 +77,18 @@ class RuntimeTests(unittest.TestCase):
         with self.assertRaises(ValueError): command_type(authority,replace(identity,node_container_id=None),'kil','tag')
         with self.assertRaises(ValueError): command_type(authority,replace(identity,docker_host='unix:///tmp/foreign/docker.sock'),'kil','tag')
 
+    def test_owned_containerd_restart_has_one_fixed_node_route(self):
+        from dataclasses import replace
+        from kil.v3b2_journal import OwnedIdentity
+        authority = self.authority()
+        identity = OwnedIdentity('kil-v3-lab','unix://'+str(authority.colima/'kil-v3-lab/docker.sock'),
+                                 'kil-v3-lab',str(authority.kubeconfig),'cluster-uid','b'*64)
+        command = self.runtime.ExploratoryNodeAliasCommand(authority,identity,'envoy','restart')
+        self.assertEqual(command.argv,('docker','exec','b'*64,'/bin/systemctl','restart','containerd'))
+        self.assertTrue(command.mutating); self.assertEqual(command.timeout_s,10)
+        for fault in [{'role':'kil'},{'import_ref':'import-2026-09-18@sha256:'+'a'*64}]:
+            with self.assertRaises(ValueError): replace(command,**fault)
+
     def test_fresh_derived_private_runtime(self):
         authority = self.authority()
         self.assertEqual(authority.path, self.registry / ('r' + self.digest[:16]))

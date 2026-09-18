@@ -644,6 +644,7 @@ class NativeTests(unittest.TestCase):
                 return result(canonical({'status':{'id':image.config_digest,'repoTags':[image.requested_image] if image.role=='kil' else [],
                     'repoDigests':['kil.local/kil-v3b2@'+image.target_digest] if image.role=='kil' else [image.requested_image],
                     'size':'1048576','username':'','pinned':False}}))
+            if getattr(command,'operation',None) == 'restart': return result()
             if executable=='docker' and 'ctr' in argv[3]:
                 generated = getattr(self,'generated_node_aliases',None)
                 if len(argv)>9 and argv[9] == 'tag':
@@ -1011,6 +1012,69 @@ class NativeTests(unittest.TestCase):
             terminal = next(row['details'] for row in rows if row['event']=='command_terminal' and row['details']['sequence']==intent['sequence'])
             self.assertEqual(terminal['returncode'],0)
             self.assertEqual(terminal['stdout_sha256'],sha256(self.life.private_read('command-%04d.stdout'%intent['sequence'])).hexdigest())
+
+    def cache_lag_runner(self, *, fail_restart=False, foreign=False):
+        self.full_fake_runner(); self.generated_alias_fixture()
+        original = self.runner.run.side_effect
+        stale = {'kil':[],'envoy':[]}
+        def dispatch(command):
+            operation = getattr(command,'operation',None)
+            if operation == 'restart':
+                self.assertFalse(any(self.generated_node_aliases['imports'].values()))
+                if fail_restart: return CommandResult(1,'','restart failed',b'',b'restart failed')
+                stale['kil'].clear(); stale['envoy'].clear()
+                return CommandResult(0,'','',b'',b'')
+            result = original(command)
+            if operation == 'remove' and result.returncode == 0:
+                stale[command.role].append(command.import_ref)
+            if operation == 'inspect' and stale[command.role]:
+                document = json.loads(result.stdout_bytes)
+                document['status']['repoDigests'] += ['docker.io/library/'+name for name in stale[command.role]]
+                if foreign: document['status']['repoDigests'].append('docker.io/library/import-2026-09-18@sha256:'+'c'*64)
+                raw = canonical(document)
+                return CommandResult(0,raw.decode(),'',raw,b'')
+            return result
+        self.runner.run.side_effect = dispatch
+
+    def test_persistent_removed_import_cri_cache_restarts_once_then_strict_proof(self):
+        self.cache_lag_runner()
+        report = self.execute_ssh_double()
+        self.assertEqual(report['status'],'complete',report['error']); self.assertTrue(report['owned_teardown'])
+        mutations = [call.args[0] for call in self.runner.run.call_args_list if getattr(call.args[0],'operation',None) in ('remove','restart')]
+        self.assertEqual([row.operation for row in mutations],['remove','remove','remove','restart'])
+        self.assertEqual(len({row.argv for row in mutations}),4)
+        self.assertEqual(set(self.life.aliases),{'kil','envoy'}); self.assertEqual(report['request_intent_count'],0)
+
+    def test_owned_cache_restart_failure_is_once_and_no_hf(self):
+        self.cache_lag_runner(fail_restart=True)
+        report = self.execute_ssh_double()
+        self.assertEqual(report['status'],'inconclusive'); self.assertTrue(report['owned_teardown'],report['error'])
+        restarts = [call.args[0] for call in self.runner.run.call_args_list if getattr(call.args[0],'operation',None)=='restart']
+        self.assertEqual(len(restarts),1); self.assertEqual(report['request_intent_count'],0)
+
+    def test_unknown_stale_cri_import_never_grants_restart_or_further_removal(self):
+        self.cache_lag_runner(foreign=True)
+        report = self.execute_ssh_double()
+        self.assertEqual(report['status'],'inconclusive'); self.assertTrue(report['owned_teardown'],report['error'])
+        operations = [getattr(call.args[0],'operation',None) for call in self.runner.run.call_args_list]
+        self.assertEqual(operations.count('remove'),2); self.assertNotIn('restart',operations)
+        self.assertEqual(report['request_intent_count'],0)
+
+    def test_durable_removed_terminal_rewrite_never_grants_restart(self):
+        self.cache_lag_runner(); original = self.store.record; changed = []
+        def recording(event,details):
+            result = original(event,details)
+            if event == 'command_intent' and details['argv'][-3:] == ['/bin/systemctl','restart','containerd'] and not changed:
+                sequence = self.life.node_alias_removals[0][2]
+                rows = [json.loads(line) for line in self.store.journal.read_bytes().splitlines()]
+                terminal = next(row for row in rows if row['event']=='command_terminal' and row['details']['sequence']==sequence)
+                terminal['details']['returncode'] = 1
+                self.store.journal.write_bytes(b''.join(canonical(row) for row in rows)); changed.append(True)
+            return result
+        with patch.object(self.store,'record',side_effect=recording): report = self.execute_ssh_double()
+        self.assertTrue(changed); self.assertEqual(report['status'],'inconclusive')
+        self.assertTrue(report['owned_teardown'],report['error']); self.assertEqual(report['request_intent_count'],0)
+        self.assertFalse(any(getattr(call.args[0],'operation',None)=='restart' for call in self.runner.run.call_args_list))
 
     def test_generated_import_association_drift_after_intent_refuses_runner_and_retry(self):
         self.full_fake_runner(); self.generated_alias_fixture(); original = self.store.record

@@ -44,11 +44,14 @@ class AliasState:
     import_rows: tuple
 
 
-def analyse_aliases(table, inspection, role):
+def analyse_aliases(table, inspection, role, *, removed=()):
     image = accepted_image(role)
     if type(table) is not bytes or len(table)>262144 or type(inspection) is not bytes or len(inspection)>16384:
         raise ValueError('node_alias_observation_bound')
     rows = _node_rows(table)
+    removed_names = {row[0] for row in removed}
+    if len(removed_names) != len(removed) or any(name in rows for name in removed_names):
+        raise ValueError('node_alias_removed_source_reappeared')
     document = json.loads(inspection,object_pairs_hook=_pairs,parse_int=_reject_number,
                           parse_float=_reject_number,parse_constant=_reject_number)
     status = _closed(document,frozenset({'status'}))['status']
@@ -85,5 +88,12 @@ def analyse_aliases(table, inspection, role):
         name = reference[len(prefix):]
         digest = validate_import_ref(name)
         row_media = media if digest == image.target_digest else 'application/vnd.oci.image.index.v1+json'
+        if name in removed_names:
+            # Only authenticated current-run zero-success removals may explain
+            # a CRI cache copy. This never changes the final strict CRI proof.
+            complete_row(next(row for row in removed if row[0] == name),digest,row_media)
+            if not present or canonical not in status['repoDigests']:
+                raise ValueError('node_alias_stale_copy_without_canonical')
+            continue
         imported.append(complete_row(rows.get(name),digest,row_media))
     return AliasState(config,present,canonical in status['repoDigests'],tuple(sorted(imported)))
