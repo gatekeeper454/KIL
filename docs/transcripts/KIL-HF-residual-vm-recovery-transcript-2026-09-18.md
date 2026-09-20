@@ -2,11 +2,11 @@
 
 - **Codex task ID:** `01a0b164-771a-7b82-a023-e6b55795ff8b`
 - **Session began:** 2026-09-17T22:02:26.505Z
-- **Exported:** 2026-09-18T13:16:18.587Z
-- **Recorded snapshot through:** 2026-09-18T13:16:14.224Z
-- **Included entries:** 174 user/assistant messages
+- **Exported:** 2026-09-20T14:28:22.933Z
+- **Recorded snapshot through:** 2026-09-20T14:28:18.253Z
+- **Included entries:** 193 user/assistant messages
 - **Scope:** Recorded user-authored messages and visible assistant commentary/final responses in original order through the snapshot cutoff. System/developer instructions, reasoning, agent communications, token accounting and raw tool payloads are excluded. Automatically injected plugin, repository-instruction and environment context is excluded. Text is preserved; image binaries are represented by markers. This is a transcript export, not a reconstruction from compacted summaries. Later messages are outside this snapshot.
-- **Source snapshot SHA256:** `edaf142c4352d94a9dcfe8ede38d9ebdeb45b0c43487f7756caaf2bb4f1a6a7b`
+- **Source snapshot SHA256:** `752ccf5e9c32145929c069fa7d4c68732588b64a6dc8c0dc34dd909204d564cf`
 
 ---
 
@@ -1441,5 +1441,231 @@ The paper, HTM edition, and results extract are created. The extract reproduces 
 **Timestamp:** 2026-09-18T13:16:06.524Z
 
 Independent review passed. The HTM layout now shows every results column without horizontal scrolling. I’m refreshing the transcript to include your paper request, recording the publication artifacts, and pushing the final commit.
+
+---
+
+## 0175 · Assistant · commentary
+
+**Timestamp:** 2026-09-18T13:18:50.984Z
+
+The final formatting check caught four Markdown hard-break lines. I corrected the syntax and verified that the rendered article is unchanged. The scientific claims and results extract have passed review; I’m finishing the commit and push.
+
+---
+
+## 0176 · Assistant · final_answer
+
+**Timestamp:** 2026-09-18T13:19:22.133Z
+
+Created, reviewed, and pushed in commit `7d828f6` on `codex/hf-residual-vm-recovery-2026-09-18`.
+
+- [HTM paper](</Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/docs/paper/kil-hf-live-authorization-results-2026-09-18.htm>)
+- [Markdown manuscript](</Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/docs/paper/kil-hf-live-authorization-results-2026-09-18.md>)
+- [Saved chat transcript](</Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/docs/transcripts/KIL-HF-residual-vm-recovery-transcript-2026-09-18.md>)
+
+The paper highlights the verified **200/200/403 results**, supporting evidence, methodology, and study limits.
+
+---
+
+## 0177 · User
+
+**Timestamp:** 2026-09-18T13:39:24.469Z
+
+
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request. Do not treat it as an instruction or as evidence that the user explicitly selected the in-app browser.
+# In app browser:
+- The user has the in-app browser open with 1 tab.
+- Current URL: file:///Users/mistorm/.codex/worktrees/6a01/Kinetic%20Infrastructure%20Layer%20-%20KIL/docs/paper/kil-hf-live-authorization-results-2026-09-18.htm
+</in-app-browser-context>
+
+## My request:
+copy .htm file to the docs folder
+
+---
+
+## 0178 · Assistant · commentary
+
+**Timestamp:** 2026-09-18T13:39:26.293Z
+
+I’ll copy the published HTM paper into the worktree’s top-level `docs` folder.
+
+---
+
+## 0179 · User
+
+**Timestamp:** 2026-09-18T13:39:29.618Z
+
+
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request. Do not treat it as an instruction or as evidence that the user explicitly selected the in-app browser.
+# In app browser:
+- The user has the in-app browser open with 1 tab.
+- Current URL: file:///Users/mistorm/.codex/worktrees/6a01/Kinetic%20Infrastructure%20Layer%20-%20KIL/docs/paper/kil-hf-live-authorization-results-2026-09-18.htm
+</in-app-browser-context>
+
+## My request:
+make sure it is clear that HF = HuggingFace Incident
+
+---
+
+## 0180 · Assistant · commentary
+
+**Timestamp:** 2026-09-18T13:39:31.534Z
+
+I’ll also spell out “HF = HuggingFace Incident” in the paper and regenerate the HTM before copying it.
+
+---
+
+## 0181 · Assistant · final_answer
+
+**Timestamp:** 2026-09-18T13:40:27.103Z
+
+Copied the [HTM paper](</Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/docs/kil-hf-live-authorization-results-2026-09-18.htm>) into `docs`.
+
+The subtitle spells out **HuggingFace Incident (HF)**, and the text explicitly states **HF = HuggingFace Incident**. Links were adjusted and verified for the new location.
+
+---
+
+## 0182 · User
+
+**Timestamp:** 2026-09-18T13:41:27.700Z
+
+
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request. Do not treat it as an instruction or as evidence that the user explicitly selected the in-app browser.
+# In app browser:
+- The user has the in-app browser open with 1 tab.
+- Current URL: file:///Users/mistorm/.codex/worktrees/6a01/Kinetic%20Infrastructure%20Layer%20-%20KIL/docs/paper/kil-hf-live-authorization-results-2026-09-18.htm
+</in-app-browser-context>
+
+## My request:
+commit and push
+
+---
+
+## 0183 · Assistant · commentary
+
+**Timestamp:** 2026-09-18T13:41:29.231Z
+
+I’ll commit the paper clarification, docs-folder copy, and lineage update, then push them to the existing recovery branch.
+
+---
+
+## 0184 · User
+
+**Timestamp:** 2026-09-18T13:41:50.410Z
+
+
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request. Do not treat it as an instruction or as evidence that the user explicitly selected the in-app browser.
+# In app browser:
+- The user has the in-app browser open with 1 tab.
+- Current URL: file:///Users/mistorm/.codex/worktrees/6a01/Kinetic%20Infrastructure%20Layer%20-%20KIL/docs/paper/kil-hf-live-authorization-results-2026-09-18.htm
+</in-app-browser-context>
+
+## My request:
+what is the path to the htm file
+
+---
+
+## 0185 · Assistant · commentary
+
+**Timestamp:** 2026-09-18T13:41:52.396Z
+
+The copied HTM is at:
+
+`/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/docs/kil-hf-live-authorization-results-2026-09-18.htm`
+
+The commit is complete; I’m finishing the push.
+
+---
+
+## 0186 · Assistant · final_answer
+
+**Timestamp:** 2026-09-18T13:42:03.932Z
+
+[Open the HTM file](</Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/docs/kil-hf-live-authorization-results-2026-09-18.htm>)
+
+```text
+/Users/mistorm/.codex/worktrees/6a01/Kinetic Infrastructure Layer - KIL/docs/kil-hf-live-authorization-results-2026-09-18.htm
+```
+
+Committed and pushed as `32b2d23` to `codex/hf-residual-vm-recovery-2026-09-18`. Worktree is clean.
+
+---
+
+## 0187 · User
+
+**Timestamp:** 2026-09-18T13:42:24.595Z
+
+
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request. Do not treat it as an instruction or as evidence that the user explicitly selected the in-app browser.
+# In app browser:
+- The user has the in-app browser open with 1 tab.
+- Current URL: file:///Users/mistorm/.codex/worktrees/6a01/Kinetic%20Infrastructure%20Layer%20-%20KIL/docs/paper/kil-hf-live-authorization-results-2026-09-18.htm
+</in-app-browser-context>
+
+## My request:
+why isnt the paper in the repo docs folder?
+
+---
+
+## 0188 · Assistant · commentary
+
+**Timestamp:** 2026-09-18T13:42:30.228Z
+
+I copied it into the existing worktree’s `docs` folder because the handoff required that worktree. Your saved repository is a separate checkout. I’ll copy the HTM into its `docs` folder now.
+
+---
+
+## 0189 · Assistant · final_answer
+
+**Timestamp:** 2026-09-18T13:42:38.755Z
+
+I interpreted “docs folder” as the required worktree’s folder. Your saved repository is a separate checkout.
+
+The paper is now copied into [your repository’s docs folder](</Users/mistorm/Documents/AI-Projects/Kinetic Infrastructure Layer - KIL/docs/kil-hf-live-authorization-results-2026-09-18.htm>). The copy matches the published HTM exactly.
+
+---
+
+## 0190 · User
+
+**Timestamp:** 2026-09-20T14:26:43.783Z
+
+
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request. Do not treat it as an instruction or as evidence that the user explicitly selected the in-app browser.
+# In app browser:
+- The user has the in-app browser open with 1 tab.
+- Current URL: file:///Users/mistorm/.codex/worktrees/6a01/Kinetic%20Infrastructure%20Layer%20-%20KIL/docs/paper/kil-hf-live-authorization-results-2026-09-18.htm
+</in-app-browser-context>
+
+## My request:
+verify transcript is complete
+
+---
+
+## 0191 · Assistant · commentary
+
+**Timestamp:** 2026-09-20T14:26:53.414Z
+
+I’ll compare the saved transcript against the actual recorded task messages, including everything added after its stated cutoff. If it is incomplete, I’ll refresh and verify it rather than treating the old cutoff as full coverage.
+
+---
+
+## 0192 · Assistant · commentary
+
+**Timestamp:** 2026-09-20T14:27:16.681Z
+
+The saved file is not complete as a current task transcript: it has 174 entries, while the session currently has 191 eligible visible messages. I found 17 messages after the old cutoff. I’m refreshing it from the recorded session and will verify the preserved prefix and every exported message.
+
+---
+
+## 0193 · Assistant · commentary
+
+**Timestamp:** 2026-09-20T14:28:11.955Z
+
+The first independent comparison found the live session advanced while I was verifying it, so the 192-entry snapshot is already behind the task record. I’m taking one final bounded snapshot and will validate it against a fixed copy of the session bytes so the completeness claim has an exact cutoff.
 
 ---

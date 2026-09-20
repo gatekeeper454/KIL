@@ -25469,3 +25469,25 @@ KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob
 **Decision status, unresolved questions and next gate:** Confirmed requested editorial change and copied reader. No remaining gate for this copy/clarification; broader experimental and platform acceptance limitations remain those stated in the paper. This turn does not claim an additional commit or push.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T472 — 2026-09-20, transcript completeness verification and refresh
+
+**Input and interpretation:** User asks to verify that the saved recovery/HF transcript is complete. Compare the published transcript against the actual recorded Codex task session rather than relying on its earlier declared cutoff. If newer eligible visible messages exist, refresh the transcript from that same bounded source and preserve its existing message prefix exactly.
+
+**Confirmed finding and correction:** The committed transcript contained 174 user/assistant entries through 2026-09-18T13:16:14.224Z. The current session contained additional visible messages after that cutoff, so the file was accurate for its stated snapshot but incomplete as a current task transcript. Refreshed it to 192 entries: 16 user messages and 176 visible assistant commentary/final messages, through the recorded snapshot cutoff 2026-09-20T14:27:17.939Z. The exporter verified that all prior 174 message blocks remained byte-for-byte unchanged before appending the later entries.
+
+**Evidence, affected artifacts and rationale:** Source remained the task's original bounded local JSONL session record for task `01a0b164-771a-7b82-a023-e6b55795ff8b`, read as a regular owner-held no-follow file within the existing 256 MiB bound. The export continues to exclude system/developer instructions, reasoning, agent communications, token accounting, raw tool payloads and automatically injected context. It records user-authored messages and visible assistant responses in original order; later messages after the explicit cutoff remain outside the snapshot by definition. Updated transcript Markdown SHA256 `85e4d8e490007685f2ed38e543986859b7583600fa695ae25b5f4097d5465f6a` and deterministic HTM reader SHA256 `8c309673364f0ddc4849e04ac1c993a61ce407d75a5a1204d6e244b6f467045c`. No runtime evidence, paper claims, source engineering or HF execution changed.
+
+**Decision status, unresolved questions and next gate:** Confirmed the prior snapshot limitation and corrected the saved transcript through the stated current cutoff. A live task can receive later messages, so completeness is always bounded by the recorded cutoff rather than claiming inclusion of future turns. Commit and publication status must be verified separately before being asserted.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+## T473 — 2026-09-20, transcript refresh final snapshot correction
+
+**Input and interpretation:** During independent verification of T472, the live task record advanced by one visible assistant commentary message. Do not claim the intermediate 192-entry artifact as the final saved snapshot; refresh again while preserving the entire existing prefix and record the superseding artifact identity explicitly.
+
+**Confirmed correction and evidence:** The final saved transcript snapshot now contains 193 eligible visible messages: 16 user messages and 177 assistant commentary/final messages, through cutoff 2026-09-20T14:28:18.253Z. The refresh verifier confirmed that every previously saved message block remained byte-for-byte unchanged and the newly eligible message was appended in original recorded order. Final transcript Markdown SHA256 is `975105f328fcd3301567b863598f819e9219aca99d6936e4ade50867d480d447`; deterministic HTM reader SHA256 is `c2f718aedf52fac16032a824ac6555fbc045684445d4746fd67f4db1d10c0d1e`. These values supersede T472's intermediate 192-entry artifact values without rewriting that audit entry.
+
+**Decision status, affected artifacts and next gate:** Confirmed exact bounded completeness through the final stated cutoff. Transcript Markdown/HTM and this lineage append/reader are the only affected artifacts. Since the task is live, subsequent user or assistant messages are necessarily later than the saved cutoff; they do not make the stated snapshot internally incomplete. No runtime, experiment, paper result or source implementation changed. Commit and remote publication remain to be verified before assertion.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
