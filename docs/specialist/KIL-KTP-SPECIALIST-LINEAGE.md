@@ -12482,3 +12482,127 @@ component design approval and deployment acceptance gates remain with the
 independent owners. Verify clean local/hosted synchronization after publication.
 
 KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-283 — 2026-09-20 — GitHub completion audit and founder update
+
+**Input and interpretation:** Audit `gatekeeper454/KIL` and `nmcitra/ktp-rfc`
+for incomplete issue, pull-request and comment work, complete verified items,
+and update the KTP founder/maintainer.
+
+**Confirmed decisions and actions:** KIL #18 was verified complete on `main`
+at `7248082` and closed. KTP PR #133 was amended to remove the maintainer-owned
+`DECISIONS.md` hunk, rebased on `main`, and force-updated to `82f605b`; the
+founder/maintainer was updated on the PR. Fresh GitHub checks were pending at
+the recorded time.
+
+**Rationale and limits:** The ledger is maintainer-owned. The local KTP gate
+could not finish because this environment could not install its pinned
+`jsonschema==4.26.0`; this is an environment limitation, not a source-pass
+claim. No KIL runtime, protocol formula or accepted evidence claim changed.
+
+**Affected artifacts:** KIL #18, KTP PR #133 and its founder update; this
+append-only lineage entry. The pre-existing untracked KIL HTML artifact was not
+modified.
+
+**Unresolved questions and next gate:** PR #133 check/maintainer disposition;
+PR #131 future-floor additions; PR #122 maintainer decision; and KIL #26 reuse
+reconciliation. Handle those gates separately without claiming adoption,
+conformance or an accessible KIL release.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-284 — 2026-09-20 — Clarified remaining GitHub gates
+
+**Input and interpretation:** Clarify whether open KIL/KTP items mean immediate
+work. Live state showed different owners and timing.
+
+**Confirmed decision status:** KIL #26 is active reconciliation work. KTP PR
+#131 is an open draft with a future floor; PR #122 is maintainer-gated;
+proposal #129 depends on profile sequencing; and #130 awaits an accessible,
+pinned, reproducible KIL release.
+
+**Rationale, affected artifacts and next gate:** Open status alone does not
+make every item immediate implementation work. No source or evidence changed.
+Work #26 first if active implementation is desired; preserve founder clocks and
+do not claim profile adoption or KIL conformance.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-285 — 2026-09-20 — KIL #26 design intake
+
+**Input and interpretation:** The user requested work on KIL #26. The issue
+requires R1–R9 source-backed reuse decisions, transport/protocol/adapter
+separation, latency/evidence-class boundaries and justified missing interfaces,
+while forbidding new KIL runtime engineering.
+
+**Decision status and rationale:** No existing R1–R9 matrix was found. The
+canonical, decay, engine, evidence, Q-state, replay, gateway, transport and
+deployment-validation surfaces must be mapped before an acceptance claim.
+
+**Affected artifacts, unresolved question and next gate:** No runtime or issue
+content changed. Confirm a documentation/report-only matrix and issue update,
+then obtain design approval before executing the reconciliation.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-286 — 2026-09-21 — KIL #26 ownership and evolution boundary clarified
+
+**Input and interpretation:** The user asked whether #26 constrains future KIL
+evolution or preserves authorship while enabling reuse.
+
+**Confirmed interpretation:** #26 is a source-pinned reuse and evidence-boundary
+record, not a public-API freeze, ownership transfer, upstreaming commitment or
+authority delegation. It should distinguish an assessed reuse seam from a
+future stable interface.
+
+**License/evidence boundary:** KIL's Apache-2.0 license permits reuse and
+derivatives subject to license, change-notice and attribution/NOTICE conditions;
+it does not surrender authorship attribution. #26 must not be presented as an
+additional license grant. Separate contributor, copyright and trademark terms
+remain owner/legal questions.
+
+**Affected artifacts and next gate:** This append-only entry only. If #26
+proceeds, include a versioned source pin, ownership/attribution preservation,
+compatibility/non-commitment language and explicit per-decision limits.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
+
+### T-287 — 2026-09-21 — KIL #26 R1–R9 reuse-contract reconciliation
+
+**Input and interpretation:** The user approved a committed repository-local
+R1–R9 reuse/contract matrix and a GitHub issue update, explicitly excluding
+runtime changes. The matrix reconciles KIL's actual assessed source with the
+canonical KTP v2.1.0 contract set and the deployment-owned Blue Zone inventory.
+
+**Confirmed decisions:** The assessed pin is
+`da686bbc9f1360f6a806f78d3449184d1e3a8e99`. R1 authorization service, R2
+signed-state verification, R3 reducing-only evaluation, R6 evidence/recording
+patterns and R7 fixtures are candidates subject to explicit compatibility gates.
+R5 is reference/test-only; R8 Envoy is optional transport, not protocol
+enforcement; R4 has no live attribution/trajectory provider; and R9 has no
+completed external supplier connector. No KIL interface is declared stable,
+owned by another project, or qualified for production by this record.
+
+**Evidence and timing rationale:** Signed-state refresh and faster per-action
+evaluation remain separate clocks; local evidence may only restrict or withhold
+authority, and deployed timing must be measured. Historical replay remains
+modeled. The accepted V3B-1 result remains observed, local-Envoy-bound and
+`not_promoted`; it establishes neither historical prevention, production
+durability, Kind/Calico validation nor deployed swarm containment.
+
+**Affected artifacts:** `docs/transition/KIL-R1-R9-REUSE-CONTRACTS.md`, its
+generated reader, the #26 execution plan/reader and this append-only lineage
+entry. No KIL runtime, experiment input, source evidence bundle, license,
+NOTICE or KTP normative text changed.
+
+**Unresolved questions:** The consuming deployment must choose its exact
+source/provider/target contracts, demonstrate R1–R9 compatibility and name
+any genuine mismatch. Real actor/trajectory input, target-effect reconciliation,
+durable reservation/recorder semantics and external provider connectors remain
+deployment-level gates, not assumed Component Dev work.
+
+**Next gate:** Generate/check readers, run focused and full repository
+validation, commit only the scoped documentation artifacts, then update issue
+#26 without closing deployment-readiness work.
+
+KTP citation: [canonical `CITATION.cff`](https://github.com/nmcitra/ktp-rfc/blob/main/CITATION.cff).
